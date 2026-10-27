@@ -1,0 +1,17 @@
+/* Apply the existing OS theme only inside the reused task panel. */
+.team-workspace-tasks { min-width: 0; display: grid; gap: 0.75rem; }
+.team-workspace-tasks h2 { font-size: 1.125rem; font-weight: 600; }
+.team-workspace-tasks h3, .team-workspace-tasks summary { font-weight: 600; }
+.team-workspace-tasks section { border-top: 1px solid hsl(var(--border)); padding-block: 1rem; display: grid; gap: 0.75rem; }
+.team-workspace-tasks article, .team-workspace-tasks details { border: 1px solid hsl(var(--border)); border-radius: var(--radius); padding: 0.75rem; margin-block: 0.5rem; }
+.team-workspace-tasks p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.875rem; line-height: 1.5; }
+.team-workspace-tasks label { font-size: 0.875rem; font-weight: 500; }
+.team-workspace-tasks select, .team-workspace-tasks textarea { width: 100%; min-width: 0; border: 1px solid hsl(var(--input)); border-radius: var(--radius); background: hsl(var(--background)); color: hsl(var(--foreground)); padding: 0.625rem; font-size: 0.875rem; }
+.team-workspace-tasks button { width: fit-content; max-width: 100%; border: 1px solid hsl(var(--input)); border-radius: var(--radius); background: hsl(var(--background)); color: hsl(var(--foreground)); padding: 0.5rem 0.875rem; font-size: 0.875rem; font-weight: 500; min-height: 2.5rem; }
+.team-workspace-tasks button:hover { background: hsl(var(--accent)); }
+.team-workspace-tasks button:disabled { opacity: 0.5; cursor: not-allowed; }
+.team-workspace-tasks input[type="checkbox"] { width: 1.125rem; height: 1.125rem; margin-inline-end: 0.5rem; vertical-align: middle; }
+.team-workspace-tasks #tasks-status { padding: 0.75rem; border-radius: var(--radius); background: hsl(var(--muted)); }
+.team-workspace-tasks :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.team-workspace-tasks details > summary { cursor: pointer; }
+@media (max-width: 600px) { .team-workspace-tasks button { width: 100%; } }

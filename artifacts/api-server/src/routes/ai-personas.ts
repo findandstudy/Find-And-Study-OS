@@ -28,6 +28,13 @@ import { aiRetryDelaySeconds, classifyAiFailure } from "../lib/aiFailurePolicy";
 const router: IRouter = Router();
 const personaConfigBody = json({ limit: "256kb" });
 
+// Legacy records have no trustworthy project ownership. Do not expose their
+// list/history, review, configuration or retry paths while adopting scoped flow.
+// No role (including Super Admin), body field or Guardian caller bypasses this.
+router.use("/ai-personas", requireAuth, requireRole(...ADMIN_ROLES), function personaLegacyScopeQuarantine(_req, res) {
+  res.status(409).json({ error: "PERSONA_OWNERSHIP_ADOPTION_REQUIRED", executed: false });
+});
+
 const personaSchema = z.object({
   name: z.string().min(1).max(200),
   slug: z
@@ -499,6 +506,14 @@ router.post(
       "portal_fix_proposal",
       "portal_deploy_proposal",
     ].includes(current.actionType);
+
+    // Legacy generic actions lack an immutable project/account/target/version
+    // binding and authoritative maker/checker identity. Rejection is still safe;
+    // never turn a model-authored or unbound payload into an approval receipt.
+    if (parsed.data.decision === "approved" && !isPortalAction) {
+      res.status(409).json({ error: "PERSONA_VERSIONED_APPROVAL_REQUIRED", executed: false });
+      return;
+    }
 
     if (
       parsed.data.decision === "approved" &&

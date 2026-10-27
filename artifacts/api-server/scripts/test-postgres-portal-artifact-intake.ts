@@ -12,6 +12,7 @@ import {
   db,
   pipelineStagesTable,
   pool,
+  portalLifecycleProposalsTable,
   portalSubmissionsTable,
   studentsTable,
 } from "@workspace/db";
@@ -21,6 +22,7 @@ import { recordPortalLifecycleObservation } from "../src/lib/portalLifecycleObse
 import { persistPortalStatusArtifacts } from "../src/lib/portalArtifactIntake.js";
 import { PORTAL_GUARDIAN_SLUG } from "../src/lib/portalAiGuardian.js";
 import { queuePortalLifecycleReview } from "../src/lib/portalLifecycleGuardian.js";
+import { planPortalLifecycle } from "../src/lib/portalLifecycleContract.js";
 
 const tempRoot = await mkdtemp(join(tmpdir(), "fas-portal-artifact-db-"));
 const previousDriver = process.env.STORAGE_DRIVER;
@@ -157,10 +159,34 @@ test("verified portal artifacts persist once and remain bound to observation, su
       identityVerified: observation.identityVerified,
       applicationReferenceSync: "unchanged",
     });
-    assert.equal(review.queued, true);
-    assert.equal(review.decision?.action, "review_stage_transition");
-    assert.equal(review.decision?.targetStage, "offer_received");
-    assert.equal(review.decision?.artifactVerified, true);
+    assert.deepEqual(review, {
+      queued: false,
+      reason: "PERSONA_SCOPE_AND_BUDGET_BINDING_REQUIRED",
+    });
+    const [proposalCount] = await db.select({ value: count() })
+      .from(portalLifecycleProposalsTable)
+      .where(eq(portalLifecycleProposalsTable.applicationId, application.id));
+    assert.equal(proposalCount?.value, 0);
+    const [actionCount] = await db.select({ value: count() })
+      .from(aiActionQueueTable).where(eq(aiActionQueueTable.personaId, persona.id));
+    assert.equal(actionCount?.value, 0);
+    const [unchangedApplication] = await db.select({ stage: applicationsTable.stage })
+      .from(applicationsTable).where(eq(applicationsTable.id, application.id));
+    assert.equal(unchangedApplication?.stage, "submitted");
+
+    // Persisted artifact facts can still inform the pure lifecycle planner.
+    // The quarantined Guardian cannot turn that plan into a durable proposal.
+    assert.equal(stored?.stage, "offer_received");
+    const decision = planPortalLifecycle({
+      rawStatus: observation.rawStatus,
+      currentStage: "submitted",
+      identityVerified: observation.identityVerified,
+      artifacts: ["offer_letter"],
+      availableStages: ["offer_received"],
+    });
+    assert.equal(decision.action, "review_stage_transition");
+    assert.equal(decision.targetStage, "offer_received");
+    assert.equal(decision.artifactVerified, true);
 
     await assert.rejects(
       persistPortalStatusArtifacts({

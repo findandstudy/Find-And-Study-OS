@@ -8,14 +8,14 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 890,
-    "requireAuth": 771,
-    "requireRole": 495,
+    "routeRegistrations": 928,
+    "requireAuth": 772,
+    "requireRole": 496,
     "requirePermission": 78,
     "requireScope": 0,
     "directRoleChecks": 32,
     "authOnlyRouteCandidates": 129,
-    "publicRouteCandidates": 198
+    "publicRouteCandidates": 236
   },
   "files": [
     {
@@ -170,10 +170,10 @@
     },
     {
       "path": "artifacts/api-server/src/routes/ai-personas.ts",
-      "sha256": "340ac597411a25c9cb866df4fe8df75f9d6f9afa97f627f89304ae87b1a6b91d",
+      "sha256": "8af3a904c5c02e1aebc12960498351cfccddcb2defea66c154cd7a571b2cabf6",
       "routeRegistrations": 12,
-      "requireAuth": 13,
-      "requireRole": 12,
+      "requireAuth": 14,
+      "requireRole": 13,
       "requirePermission": 0,
       "requireScope": 0,
       "directRoleChecks": 1,
@@ -767,6 +767,36 @@
       "enforcement": "legacy_quarantine",
       "owner": "Operations",
       "note": "Unified work actions remain quarantined until signed active-context authorization replaces route-local role checks."
+    },
+    {
+      "path": "artifacts/api-server/src/routes/persona-local-panel.ts",
+      "sha256": "89dc89a75f74c18c8bda243ac26da0795b69ff73cad9918d0034cf9d9dbb4986",
+      "routeRegistrations": 7,
+      "requireAuth": 0,
+      "requireRole": 0,
+      "requirePermission": 0,
+      "requireScope": 0,
+      "directRoleChecks": 0,
+      "authOnlyRouteCandidates": 0,
+      "publicRouteCandidates": 7,
+      "enforcement": "legacy_quarantine",
+      "owner": "Platform Engineering",
+      "note": "Route-local review required before corridor migration."
+    },
+    {
+      "path": "artifacts/api-server/src/routes/persona-scoped-mock.ts",
+      "sha256": "15ee590bc118d1236495a628091bd121d82b705b5c87b112bd9bf534551f6ee1",
+      "routeRegistrations": 31,
+      "requireAuth": 0,
+      "requireRole": 0,
+      "requirePermission": 0,
+      "requireScope": 0,
+      "directRoleChecks": 0,
+      "authOnlyRouteCandidates": 0,
+      "publicRouteCandidates": 31,
+      "enforcement": "legacy_quarantine",
+      "owner": "Platform Engineering",
+      "note": "Route-local review required before corridor migration."
     },
     {
       "path": "artifacts/api-server/src/routes/persona-team-preview.ts",

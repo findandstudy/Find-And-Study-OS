@@ -10,6 +10,7 @@ import { getAllowedOrigins, isCredentialedCorsOriginAllowed } from "./lib/reques
 import router from "./routes";
 import webhooksRouter from "./routes/webhooks";
 import { requestPerformanceMiddleware } from "./lib/requestPerformance";
+import { createPersonaWorkspaceFromEnvironment } from "./lib/personaWorkspaceBootstrap";
 import { createPersonaTeamPreviewAccess, isPersonaTeamPreviewEnabled } from "./lib/personaTeamPreviewAccess";
 import { createPersonaTeamPreview } from "./routes/persona-team-preview";
 
@@ -188,6 +189,10 @@ app.use((req, res, next) => {
 // for HMAC signature verification. These endpoints do not require auth or CSRF.
 app.use("/api", webhooksRouter);
 
+// Default closed; explicit staging mock workspace uses current Admin/Super Admin
+// sessions. The legacy persona runner stays quarantined.
+app.use("/api/persona-workspace", createPersonaWorkspaceFromEnvironment());
+
 // Default body limit is intentionally small to reduce DoS surface on
 // unauthenticated public/embed/webhook routes. Bulk-import endpoints that
 // genuinely need larger payloads (e.g. /api/programs/bulk with 7000+ rows ×
@@ -256,7 +261,7 @@ app.use(authMiddleware);
 
 app.use(csrfProtection);
 
-// Staging-only visual fixture. No persona/workspace business API is mounted.
+// Existing staging visual fixture remains separate from the opt-in mock workspace above.
 if (isPersonaTeamPreviewEnabled()) {
   app.use("/admin/agent-team-preview", createPersonaTeamPreviewAccess(), createPersonaTeamPreview());
 }

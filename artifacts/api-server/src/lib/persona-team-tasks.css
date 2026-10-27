@@ -1,0 +1,84 @@
+.persona-tasks {
+  min-width: 0;
+}
+.persona-tasks section {
+  margin-block: 16px;
+}
+.persona-tasks article,
+.persona-tasks details {
+  background: #f7f9fd;
+  border: 1px solid #dce3ef;
+  border-radius: 10px;
+  padding: 14px;
+  margin-block: 10px;
+  overflow-wrap: anywhere;
+}
+.persona-tasks h3 {
+  font-size: 1rem;
+  margin: 0 0 10px;
+}
+.persona-tasks p {
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.persona-tasks label {
+  line-height: 1.5;
+}
+.persona-tasks input[type="checkbox"] {
+  width: auto;
+  min-width: 20px;
+  min-height: 20px;
+  margin-inline-end: 10px;
+  vertical-align: middle;
+}
+.persona-tasks button {
+  max-width: 100%;
+  white-space: normal;
+  border: 1px solid #bac6d9;
+  border-radius: 8px;
+  background: white;
+  color: #183558;
+}
+.persona-tasks button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.persona-tasks summary {
+  cursor: pointer;
+  min-height: 30px;
+  font-weight: 600;
+}
+.persona-tasks select,
+.persona-tasks textarea {
+  max-width: 100%;
+  border: 1px solid #bac6d9;
+  border-radius: 8px;
+}
+.persona-tasks #tasks-status {
+  padding: 12px;
+  background: #edf3fe;
+  border-radius: 8px;
+}
+.persona-tasks #tasks-review:not(:empty) {
+  padding: 16px;
+  border: 2px solid #9bb5e5;
+  border-radius: 10px;
+}
+.persona-tasks:focus-visible,
+.persona-tasks :focus-visible {
+  outline: 3px solid #235fce;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .persona-tasks section {
+    padding: 14px;
+  }
+  .persona-tasks button {
+    width: 100%;
+    margin-inline: 0;
+  }
+  .persona-tasks article {
+    padding: 12px;
+  }
+}

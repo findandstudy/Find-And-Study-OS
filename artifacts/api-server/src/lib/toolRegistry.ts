@@ -35,7 +35,7 @@ const notificationTool: ToolDef = {
   key: "notification",
   label: "In-app notification",
   description: "Posts the LLM result as an in-app notification to admins.",
-  sideEffect: false,
+  sideEffect: true,
   async run({ personaName, llmOutput, adminUserIds }) {
     if (adminUserIds.length === 0) {
       return { ok: false, detail: "No admin recipients found" };
@@ -55,7 +55,7 @@ const internalMsgTool: ToolDef = {
   key: "internal_msg",
   label: "Internal message (digest)",
   description: "Dispatches the result as an internal admin digest notification.",
-  sideEffect: false,
+  sideEffect: true,
   async run({ personaName, llmOutput, adminUserIds }) {
     if (adminUserIds.length === 0) {
       return { ok: false, detail: "No admin recipients found" };
@@ -75,7 +75,7 @@ const blogDraftTool: ToolDef = {
   key: "blog_draft",
   label: "Blog draft (no publish)",
   description: "Inserts the LLM output as a draft blog post — never publishes.",
-  sideEffect: false,
+  sideEffect: true,
   async run({ personaName, llmOutput }) {
     const firstLine = llmOutput.split("\n").find((l) => l.trim().length > 0) || "AI draft";
     const title = firstLine.replace(/^#+\s*/, "").slice(0, 180) || `Draft by ${personaName}`;

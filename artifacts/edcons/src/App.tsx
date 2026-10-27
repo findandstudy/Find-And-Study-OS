@@ -15,6 +15,7 @@ import { useI18nContext } from "@/lib/i18n/use-i18n-context";
 import { isValidLanguage, DEFAULT_LANGUAGE, type Language } from "@/lib/i18n/index";
 import { useGetMe } from "@workspace/api-client-react";
 import { useAgencyBranding } from "@/hooks/use-agency-branding";
+import { isPersonaWorkspaceLocation } from "@/lib/personaWorkspaceNavigation";
 
 function lazyRetry<T extends { default: React.ComponentType<any> }>(
   factory: () => Promise<T>,
@@ -119,6 +120,8 @@ const AdminCatalog = lazyRetry(() => import("@/pages/admin/Catalog"));
 const AdminCampaigns = lazyRetry(() => import("@/pages/admin/Campaigns"));
 const AdminAiPersonas = lazyRetry(() => import("@/pages/admin/AiPersonas"));
 const AdminTeamDesigner = lazyRetry(() => import("@/pages/admin/TeamDesigner"));
+const TeamWorkspace = lazyRetry(() => import("@/pages/admin/TeamWorkspace"));
+const TeamWorkspaceEntry = lazyRetry(() => import("@/pages/admin/TeamWorkspaceEntry"));
 const AdminAiPersonaDetail = lazyRetry(() => import("@/pages/admin/AiPersonaDetail"));
 const AdminAiActionQueue = lazyRetry(() => import("@/pages/admin/AiActionQueue"));
 const AdminAiExtractors = lazyRetry(() => import("@/pages/admin/AiExtractors"));
@@ -361,6 +364,8 @@ function StaffAdminShell() {
         <Suspense fallback={<ShellLoader />}>
         <Switch>
           {/* Admin routes */}
+          {isPersonaWorkspaceLocation(window.location.protocol, window.location.hostname) && <Route path="/admin/agent-team-workspace/:project">{(params) => <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><TeamWorkspace project={params.project} /></ProtectedRoute>}</Route>}
+          {isPersonaWorkspaceLocation(window.location.protocol, window.location.hostname) && <Route path="/admin/agent-team-workspace"><ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><TeamWorkspaceEntry /></ProtectedRoute></Route>}
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/admin/dashboard" component={AdminDashboard} />
           <Route path="/admin/users">

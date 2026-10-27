@@ -12,6 +12,7 @@ import { SCOPE_REGISTRY } from "./scopeRegistry";
 import { TOOL_REGISTRY } from "./toolRegistry";
 import { redactPII, redactString } from "./piiRedaction";
 import { classifyAiFailure } from "./aiFailurePolicy";
+import { legacyPersonaExecutionBlock } from "./personaSafety";
 
 const ADMIN_ROLES = ["super_admin", "admin"];
 
@@ -130,6 +131,12 @@ export async function runPersona(opts: RunPersonaOptions): Promise<RunPersonaRes
 
   if (!persona) throw new Error("Persona not found");
   if (!persona.isActive) throw new Error("Persona is not active");
+  // Fail closed BEFORE scope queries, provider calls, or any tool execution.
+  // Legacy personas have no persisted tenant/project authority or reservation.
+  const safetyBlock = legacyPersonaExecutionBlock(persona.provider);
+  if (safetyBlock) {
+    return { runId: 0, status: "blocked", warnings: [], toolResults: [], error: safetyBlock };
+  }
   if (persona.slug === "portal-automation-guardian") {
     if (typeof actionContext?.submissionId !== "number") {
       throw new Error(

@@ -21,6 +21,7 @@ let failAudit = false;
 let hasRun = false;
 let hasAction = false;
 let hasMessage = false;
+let reviewAction: Row | null = null;
 let nextId = 10;
 
 const chain = (read: () => Row[]) => {
@@ -31,7 +32,7 @@ const chain = (read: () => Row[]) => {
 mock.method(db, "select", () => ({ from: (table: unknown) => chain(() => {
   if (table === schema.aiPersonasTable) return rows;
   if (table === schema.aiPersonaRunsTable) return hasRun ? [{ id: 70 }] : [];
-  if (table === schema.aiActionQueueTable) return hasAction ? [{ id: 80 }] : [];
+  if (table === schema.aiActionQueueTable) return reviewAction ? [reviewAction] : hasAction ? [{ id: 80 }] : [];
   if (table === schema.aiPersonaMessagesTable) return hasMessage ? [{ id: 90 }] : [];
   return [];
 }) }));
@@ -54,9 +55,16 @@ mock.method(db, "transaction", async (callback: (tx: typeof db) => Promise<unkno
 });
 
 const app = express();
+app.use(express.json({ limit: "256kb" }));
 app.use((req, _res, next) => { req.user = { id: 7, role: "super_admin", isActive: true } as any; next(); });
 const router = (await import("../src/routes/ai-personas")).default;
-app.use("/api", router);
+// Exercise the actual router separately, including its unconditional quarantine.
+app.use("/api/quarantined", router);
+// Keep regression coverage of the now-unmounted legacy handlers. This fixture
+// alone omits the unconditional quarantine; production router has NO bypass.
+const handlerRegressionRouter = express.Router();
+handlerRegressionRouter.stack = router.stack.filter((layer: any) => layer.name !== "personaLegacyScopeQuarantine");
+app.use("/api", handlerRegressionRouter);
 app.use((_error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => res.status(500).json({ error: "fixture_failure" }));
 const server = app.listen(0, "127.0.0.1"); await once(server, "listening");
 const port = (server.address() as { port: number }).port;
@@ -76,9 +84,35 @@ const existing = () => ({ id: 1, name: "Existing", slug: "existing", personaType
   toolsEnabled: ["send_email"], triggerMode: "manual", scheduleCron: null, eventSubscriptions: null, outputTargets: [],
   monthlyCostCapUsd: null, isActive: false, createdAt: new Date(), updatedAt: new Date() });
 const createBody = { name: "New", slug: "new", personaType: "advisor", provider: "anthropic", model: "model",
-  systemPrompt: "confidential prompt", toolsEnabled: ["notification"] };
-beforeEach(() => { rows = [existing()]; audits = []; failAudit = false; hasRun = false; hasAction = false; hasMessage = false; nextId = 10; });
+  systemPrompt: "confidential prompt", toolsEnabled: [] };
+beforeEach(() => { rows = [existing()]; audits = []; failAudit = false; hasRun = false; hasAction = false; hasMessage = false; reviewAction = null; nextId = 10; });
 after(async () => { await new Promise<void>(resolve => server.close(() => resolve())); await pool.end(); mock.restoreAll(); });
+
+test("actual legacy router denies list/history/mutations before any persona DB access, even for super admin", async () => {
+  const reads = (db.select as any).mock.calls.length;
+  const executes = (db.execute as any).mock.calls.length;
+  for (const [method,path] of [["GET",""],["GET","/1/runs"],["GET","/queue"],["POST",""],["POST","/1/run"],["POST","/queue/1/approve"],["PUT","/1"],["DELETE","/1"]]) {
+    const result = await request(method, `/quarantined/ai-personas${path}`, {});
+    assert.equal(result.status,409);
+    assert.equal(result.data.error,"PERSONA_OWNERSHIP_ADOPTION_REQUIRED");
+    assert.equal(result.data.executed,false);
+  }
+  assert.equal((db.select as any).mock.calls.length, reads);
+  assert.equal((db.execute as any).mock.calls.length, executes);
+  assert.equal(rows.length,1); assert.equal(audits.length,0);
+});
+
+test("Guardian manual, scanner and lifecycle entry points cannot read around quarantine", async () => {
+  const { diagnosePortalSubmission, runPortalAiGuardianTick } = await import("../src/lib/portalAiGuardian");
+  const { queuePortalLifecycleReview } = await import("../src/lib/portalLifecycleGuardian");
+  const reads = (db.select as any).mock.calls.length;
+  await assert.rejects(diagnosePortalSubmission(1,{triggeredBy:"manual"}), /GUARDIAN_INACTIVE/);
+  await runPortalAiGuardianTick();
+  const result = await queuePortalLifecycleReview({submissionId:1,applicationId:1,rawStatus:"synthetic",observationId:1,observationHash:"synthetic",identityVerified:true});
+  assert.equal(result.queued,false);
+  assert.equal(result.reason,"PERSONA_SCOPE_AND_BUDGET_BINDING_REQUIRED");
+  assert.equal((db.select as any).mock.calls.length,reads);
+});
 
 test("create rolls back persona when audit fails", async () => {
   failAudit = true; const result = await request("POST", "/ai-personas", createBody);
@@ -104,4 +138,36 @@ test("successful create writes bounded metadata without prompt content", async (
   const result = await request("POST", "/ai-personas", createBody);
   assert.equal(result.status, 201, JSON.stringify(result.data)); assert.equal(rows.length, 2); assert.equal(audits.length, 1);
   assert.equal(audits[0].action, "create_ai_persona"); assert.equal(JSON.stringify(audits[0]).includes("confidential prompt"), false);
+});
+
+test("advisor cannot acquire notification writes through persona configuration", async () => {
+  const result = await request("POST", "/ai-personas", { ...createBody, toolsEnabled: ["notification"] });
+  assert.equal(result.status, 400);
+  assert.equal(rows.length, 1);
+});
+
+test("legacy execution rejects forged scope before provider or tool calls", async () => {
+  rows[0].isActive = true;
+  const { runPersona } = await import("../src/lib/personaService");
+  const result = await runPersona({ personaId: 1, triggeredBy: "manual", triggerActor: 7,
+    actionContext: { tenantId: "forged", projectId: "forged", approved: true } });
+  assert.equal(result.status, "blocked");
+  assert.equal(result.error, "PERSONA_SCOPE_AND_BUDGET_BINDING_REQUIRED");
+  assert.deepEqual(result.toolResults, []);
+  assert.equal(rows.length, 1);
+});
+
+test("unsupported persona provider is denied before global context loading", async () => {
+  rows[0].isActive = true; rows[0].provider = "openai";
+  const { runPersona } = await import("../src/lib/personaService");
+  assert.equal((await runPersona({ personaId: 1, triggeredBy: "manual" })).error, "PERSONA_PROVIDER_UNSUPPORTED");
+});
+
+test("generic approval route cannot approve an unbound or model-approved payload", async () => {
+  reviewAction = { id: 80, status: "pending_approval", actionType: "blog_draft", payload: { approved: true, context: { projectId: "forged" } } };
+  const result = await request("POST", "/ai-personas/queue/actions/80/review", { decision: "approved" });
+  assert.equal(result.status, 409);
+  assert.equal(result.data.error, "PERSONA_VERSIONED_APPROVAL_REQUIRED");
+  assert.equal(reviewAction.status, "pending_approval");
+  assert.deepEqual(audits, []);
 });
