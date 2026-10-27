@@ -916,7 +916,7 @@ export function createPersonaScopedMock(
         async (t) =>
           (
             await t.client.query(
-              "SELECT i.id,i.draft_id,i.status,d.document,m.member_key,m.parent_key,m.persona_id FROM ai_persona_team_instances i JOIN ai_persona_team_drafts d ON d.action_id=i.draft_id JOIN ai_persona_team_members m ON m.team_id=i.id WHERE i.project_id=$1 ORDER BY i.created_at,m.persona_id LIMIT 1000",
+              "SELECT i.id,i.draft_id,i.status,d.document,d.digest AS source_digest,d.reviewer AS source_reviewer,m.member_key,m.parent_key,m.persona_id FROM ai_persona_team_instances i JOIN ai_persona_team_drafts d ON d.action_id=i.draft_id JOIN ai_persona_team_members m ON m.team_id=i.id WHERE i.project_id=$1 ORDER BY i.created_at,m.persona_id LIMIT 1000",
               [projectId],
             )
           ).rows,

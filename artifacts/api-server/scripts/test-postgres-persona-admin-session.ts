@@ -14,6 +14,8 @@ import { createPersonaWorkspaceApplication } from "../src/lib/personaWorkspaceAp
 import { createPersonaAdminSession } from "../src/lib/personaAdminSession";
 import { createPersonaScopedMock } from "../src/lib/personaScopedMock";
 import { socialMockTeamTemplate } from "../src/lib/personaTeamDraft";
+// @ts-ignore Existing browser projection is a plain JavaScript module.
+import { installedTeamChoices } from "../src/lib/persona-team-tasks.client.js";
 import type { Request } from "express";
 
 // A separate database is the sole mutation target. No .env, real accounts,
@@ -465,6 +467,26 @@ test("admin sessions use the durable persona workspace without a KMS/signing ser
         assert.equal(unpaused.status, 200);
         assert.equal(unpaused.data.status, "MOCK_READY");
         assert.equal(unpaused.data.providerActivation, false);
+        // The recent-version endpoint remains bounded to 50. An older
+        // installed team's own reviewed source must still bind its members.
+        for (let index = 0; index < 51; index++) {
+          const later = await post("/team-drafts", {
+            document: { ...socialMockTeamTemplate, name: `Synthetic later version ${index}` },
+          });
+          assert.equal(later.status, 200, JSON.stringify(later.data));
+        }
+        const recentDrafts = await call("/team-drafts");
+        const installedRows = await call("/teams");
+        assert.equal(recentDrafts.status, 200);
+        assert.equal(installedRows.status, 200);
+        assert.equal(recentDrafts.data.length, 50);
+        assert.equal(recentDrafts.data.some((draft: any) => draft.action_id === draftId), false);
+        assert.ok(installedRows.data.every((row: any) => row.source_digest === hash && row.source_reviewer === id(12)));
+        const choices = installedTeamChoices(installedRows.data, recentDrafts.data);
+        assert.equal(choices.length, 1, "installed team survives the recent draft window");
+        const selectedMember = choices[0].members.find((member: any) => member.key === "copy");
+        assert.equal(selectedMember?.personaId, taskPersonaId);
+        taskBody.personaId = selectedMember.personaId;
         const task = await post("/proposals", taskBody);
         assert.equal(task.status, 200, JSON.stringify(task.data));
         assert.equal((await post(`/approvals/${task.data.actionId}`, { digest: task.data.digest }, checkerSid)).status, 200);

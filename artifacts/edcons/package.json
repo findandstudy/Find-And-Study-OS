@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:persona-team-integration": "tsx --test ./scripts/test-persona-team-integration.ts ./scripts/test-persona-team-designer.ts ./scripts/test-persona-team-workspace.ts ./scripts/test-persona-workspace-navigation.ts",
+    "test:persona-team-integration": "tsx --test ./scripts/test-persona-team-integration.ts ./scripts/test-persona-team-designer.ts ./scripts/test-persona-team-workspace.ts ./scripts/test-persona-workspace-navigation.ts ./scripts/test-persona-team-ui-state.ts",
     "test:contract-editor": "tsx --test ./scripts/test-contract-editor-mode.ts",
     "test:email-automation": "tsx --test ./scripts/test-email-automation-ui.ts",
     "test:email-automation-browser": "node ./scripts/test-email-automation-browser.mjs",

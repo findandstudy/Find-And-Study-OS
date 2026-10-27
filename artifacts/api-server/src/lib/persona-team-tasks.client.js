@@ -33,8 +33,29 @@ export function installedTeamChoices(rows, drafts) {
     const sources = drafts.filter(
       (draft) => Number(draft.action_id) === Number(first.draft_id),
     );
-    if (sources.length !== 1) continue;
-    const source = sources[0];
+    if (sources.length > 1) continue;
+    let source = sources[0];
+    // Installed teams retain their exact reviewed source even after that draft
+    // leaves the bounded recent-version list. Use explicit server bindings,
+    // never the member names or an inferred approval from an installed status.
+    const hasInstalledSource = members.some(
+      (row) => row.source_digest !== undefined || row.source_reviewer !== undefined,
+    );
+    if (hasInstalledSource) {
+      if (!hash(first.source_digest) || !uuid(first.source_reviewer) ||
+          members.some((row) => row.source_digest !== first.source_digest ||
+            row.source_reviewer !== first.source_reviewer)) continue;
+      if (source && (source.digest !== first.source_digest ||
+          source.reviewer !== first.source_reviewer ||
+          canonical(source.document) !== canonical(first.document))) continue;
+      source ??= {
+        action_id: first.draft_id,
+        document: first.document,
+        digest: first.source_digest,
+        reviewer: first.source_reviewer,
+      };
+    }
+    if (!source) continue;
     const definitions = source.document?.members;
     if (
       !positiveId(first.draft_id) ||

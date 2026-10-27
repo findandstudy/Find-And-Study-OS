@@ -38,7 +38,9 @@ export async function assertPersonaAdminWorkspaceBrowser(options: Options) {
     await page.goto(`${options.origin}/admin/agent-team-workspace`);
     assert.equal((await (await auth).json()).id, userId);
     assert.equal(await page.locator("#persona-local-project").count(), 0, "discovery must not ask an admin to enter a UUID");
-    await page.locator(`a[href="${route}"]`).click();
+    // The authenticated discovery endpoint supplies one project; the normal
+    // entry screen now opens it directly without a redundant project picker.
+    await page.waitForURL(`${options.origin}${route}`);
     await page.getByTestId("workspace-first-team-help").waitFor();
     await panelReady(page);
     return { page, context };
@@ -119,6 +121,16 @@ export async function assertPersonaAdminWorkspaceBrowser(options: Options) {
     await page.locator("#tasks-member").selectOption(specialist);
     const content = "Sentetik ilk takım tarayıcı kabul görevi";
     await page.locator("#tasks-brief").fill(content);
+    // Saving the hierarchy/layout must not discard an unfinished task form or
+    // its explicitly selected installed team/member while records refresh.
+    await page.getByTestId("team-zoom-out").click();
+    const savedWhileWriting = page.waitForResponse((response: any) => response.url() === `${api}/team-workspace` && response.request().method() === "PUT");
+    await page.getByTestId("workspace-save").click();
+    assert.equal((await savedWhileWriting).status(), 200);
+    await panelReady(page);
+    assert.equal(await page.locator("#tasks-brief").inputValue(), content);
+    assert.equal(await page.locator("#tasks-team").inputValue(), team.id);
+    assert.equal(await page.locator("#tasks-member").inputValue(), specialist);
     const task = await mutate(page, "#tasks-propose", "/proposals");
     assert.equal(task.status, "pending_approval");
     await refresh(reviewer.page);

@@ -283,8 +283,10 @@ export default function TeamDesigner({
   const notifyPending = useRef(onPendingChange);
   notifyPending.current = onPendingChange;
   const pendingMemberFields = useRef(false);
+  const [hasPendingMemberFields, setHasPendingMemberFields] = useState(false);
   const reportPending = useCallback((pending: boolean) => {
     pendingMemberFields.current = pending;
+    setHasPendingMemberFields(pending);
     notifyPending.current?.(pending);
   }, []);
   const { lang, dir } = useI18n();
@@ -294,7 +296,13 @@ export default function TeamDesigner({
   const [compactInspector, setCompactInspector] = useState(
     () => window.innerWidth < 1100,
   );
-  const mobile = smallScreen || compactInspector;
+  const requestedMobile = smallScreen || compactInspector;
+  const [mobile, setMobile] = useState(requestedMobile);
+  // Keep the current editor mounted while its fields are still unapplied.
+  // Moving it between the sidebar and the Sheet would discard local inputs.
+  useEffect(() => {
+    if (!hasPendingMemberFields) setMobile(requestedMobile);
+  }, [requestedMobile, hasPendingMemberFields]);
   useEffect(() => {
     const query = window.matchMedia("(max-width: 1099px)");
     const update = () => setCompactInspector(query.matches);
@@ -567,6 +575,13 @@ export default function TeamDesigner({
     if (mobile) setSheetOpen(true);
   };
   const startConnect = (key: string) => {
+    if (durable && pendingMemberFields.current) {
+      setNotice(copy(
+        "Önce karttaki alanları Uygula düğmesiyle taslağa aktarın.",
+        "Apply the current member's fields before changing its connection.",
+      ));
+      return;
+    }
     setConnectingKey(key);
     setSheetOpen(false);
     setNotice(
@@ -1283,7 +1298,16 @@ export default function TeamDesigner({
         </div>
       </Card>
       {mobile && (
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <Sheet open={sheetOpen} onOpenChange={(open) => {
+          if (!open && durable && pendingMemberFields.current) {
+            setNotice(copy(
+              "Alanlar henüz uygulanmadı. Kapatmadan önce Uygula düğmesini kullanın.",
+              "Your fields have not been applied. Use Apply changes before closing.",
+            ));
+            return;
+          }
+          setSheetOpen(open);
+        }}>
           <SheetContent
             side={dir === "rtl" ? "left" : "right"}
             className="w-[min(92vw,380px)] overflow-y-auto"
@@ -1293,6 +1317,7 @@ export default function TeamDesigner({
                 {copy("Üye ayrıntıları", "Member details")}
               </SheetTitle>
             </SheetHeader>
+            {notice && <p role="status" className="mb-3 text-sm">{notice}</p>}
             {editor}
           </SheetContent>
         </Sheet>

@@ -92,6 +92,34 @@ test("same names or member keys cannot connect a different draft to an installed
   );
 });
 
+test("installed teams remain assignable beyond the recent draft window only with exact reviewed server source", () => {
+  const { drafts, teams } = makeFixtures();
+  const reviewer = "0199ad70-0000-7000-8000-000000000124";
+  const source = { ...drafts[0], reviewer };
+  const bound = teams.map(row => ({ ...row, source_digest: source.digest, source_reviewer: reviewer }));
+  const choices = installedTeamChoices(bound, []);
+  assert.equal(choices.length, 1);
+  assert.equal(choices[0].draftId, 71);
+  assert.equal(choices[0].members.find((member: any) => member.key === "research").personaId, 102);
+  assert.equal(installedTeamChoices(bound, [source]).length, 1);
+
+  for (const patch of [
+    { source_digest: undefined }, { source_digest: "invalid" },
+    { source_digest: "b".repeat(64) }, { source_reviewer: undefined },
+    { source_reviewer: null }, { source_reviewer: "invented-reviewer" },
+    { source_reviewer: "0199ad70-0000-7000-8000-000000000125" },
+  ]) {
+    const changed = bound.map((row, index) => index ? row : { ...row, ...patch });
+    assert.equal(installedTeamChoices(changed, []).length, 0);
+    assert.equal(installedTeamChoices(changed, [source]).length, 0);
+  }
+  assert.equal(installedTeamChoices(bound, [{ ...source, digest: "b".repeat(64) }]).length, 0);
+  assert.equal(installedTeamChoices(bound, [{ ...source, reviewer: null }]).length, 0);
+  assert.equal(installedTeamChoices(bound, [{ ...source, document: { ...source.document, name: "Changed" } }]).length, 0);
+  assert.equal(installedTeamChoices(bound, [source, source]).length, 0);
+  assert.equal(installedTeamChoices(bound.slice(1), []).length, 0);
+});
+
 test("version comparison reports instructions, hierarchy, deletion and constraints without mutation", () => {
   const before = structuredClone(socialMockTeamTemplate),
     after = structuredClone(before);
