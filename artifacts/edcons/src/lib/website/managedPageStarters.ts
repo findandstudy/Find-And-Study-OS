@@ -379,6 +379,7 @@ const LEGACY_MANAGED_TYPES: Record<Exclude<ManagedTemplate, "home">, string[][]>
   about: [
     ["hero", "stats_strip", "rich_text", "icon_cards", "team_grid", "office_list", "cta_banner"],
     ["hero", "counter_grid", "media_text", "grid_box", "team_grid", "logo_marquee", "office_list", "cta_banner"],
+    ["global_block", "team_grid", "catalog_grid", "section_title"],
   ],
   countries: [
     ["hero", "catalog_grid", "cta_banner"],

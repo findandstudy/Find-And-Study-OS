@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { catalogLimit, catalogLayoutClass, catalogParameters } from "../src/lib/website/catalogPresentation";
+import { enrichManagedPageBlocks } from "../src/lib/website/managedPageStarters";
 const source = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
 
 test("legacy limits cannot create an out-of-range preview request", () => {
@@ -53,4 +54,23 @@ test("source-specific selectors load live definitions and show unmatched legacy 
   assert.match(preview, /validPreview\(result\)/);
   assert.doesNotMatch(preview, /error\.message|error.*data.*error/);
   assert.match(source("pages/admin/website/PageEditor.tsx"), /window.confirm/);
+});
+
+test("the exact legacy staging About composition upgrades without replacing arbitrary custom pages", () => {
+  const legacy = ["global_block", "team_grid", "catalog_grid", "section_title"].map((blockType, sortOrder) => ({
+    blockType,
+    content: {},
+    settings: {},
+    sortOrder,
+    isVisible: true,
+  }));
+  const upgraded = enrichManagedPageBlocks("about", legacy, "en");
+  assert.equal(upgraded.length, 10);
+  assert.deepEqual(upgraded.map(block => block.blockType), [
+    "hero", "counter_grid", "media_text", "grid_box", "process_steps",
+    "team_grid", "logo_marquee", "office_list", "faq", "cta_banner",
+  ]);
+
+  const custom = [{ blockType: "html", content: { html: "<p>Custom</p>" }, settings: {}, sortOrder: 0, isVisible: true }];
+  assert.deepEqual(enrichManagedPageBlocks("about", custom, "en"), custom);
 });
