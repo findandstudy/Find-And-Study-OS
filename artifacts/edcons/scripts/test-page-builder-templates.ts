@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { catalogLimit, catalogLayoutClass, catalogParameters } from "../src/lib/website/catalogPresentation";
-import { enrichManagedPageBlocks } from "../src/lib/website/managedPageStarters";
+import { enrichManagedHomePageBlocks, enrichManagedPageBlocks } from "../src/lib/website/managedPageStarters";
 import { pageEditorPreviewGeometry, samePageEditorPreviewGeometry } from "../src/pages/admin/website/pageEditorPreviewGeometry";
 const source = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
 
@@ -48,6 +48,7 @@ test("Home and About reuse published blocks while preserving static fallbacks an
   assert.match(home, /HomeBlocks/);
   assert.match(home, /managedHomePageBlocks/);
   assert.match(home, /<CmsBlock/);
+  assert.match(home, /<CmsPageCanvas className="home-future-page">/);
   assert.match(about, /<ManagedPublicPage/);
   assert.match(source("pages/public/About.tsx"), /\/api\/cms\/team-members\?lang=/);
   assert.match(source("pages/public/About.tsx"), /\/api\/cms\/offices\?lang=/);
@@ -58,8 +59,20 @@ test("Home and About reuse published blocks while preserving static fallbacks an
   assert.match(source("App.tsx"), /segment === "about"/);
 });
 
+test("the explicit system Home fallback is completed without reviving custom one-block pages", () => {
+  const singleton = [{ blockType: "home_fallback_hero", content: { title: "Fallback hero" }, settings: {}, sortOrder: 0, isVisible: true }];
+  const completed = enrichManagedHomePageBlocks(singleton, "/en/programs", { completeSystemFallback: true });
+  assert.deepEqual(completed.map(block => block.blockType), [
+    "home_fallback_hero", "home_fallback_stats", "home_fallback_features", "catalog_grid",
+    "process_steps", "feature_cards", "faq", "cta_banner",
+  ]);
+  assert.equal(completed[0].content.title, "Fallback hero");
+  assert.deepEqual(enrichManagedHomePageBlocks(singleton, "/en/programs"), singleton);
+});
+
 test("managed editor previews collection-backed blocks with the same data contract as public pages", () => {
   const editor = source("pages/admin/website/PageEditor.tsx");
+  assert.match(editor, /<CmsPageCanvas className="home-future-page cms-editor-preview">/);
   assert.match(editor, /hydrateCollectionBlock/);
   assert.match(editor, /\/api\/cms\/team-members\?lang=/);
   assert.match(editor, /\/api\/cms\/offices\?lang=/);

@@ -170,12 +170,18 @@ export function managedHomePageBlocks(
  */
 type ManagedHomeBlockInput = Omit<PageBlock, "isVisible"> & { isVisible?: boolean };
 
-export function enrichManagedHomePageBlocks(blocks: ManagedHomeBlockInput[], programsPath = "/en/programs"): PageBlock[] {
+export function enrichManagedHomePageBlocks(
+  blocks: ManagedHomeBlockInput[],
+  programsPath = "/en/programs",
+  options: { completeSystemFallback?: boolean } = {},
+): PageBlock[] {
   const visibleTypes = blocks.map(block => block.blockType);
+  const systemFallbackTypes = ["home_fallback_hero"];
   const legacyTypes = ["home_fallback_hero", "home_fallback_stats", "home_fallback_features"];
   const previousTypes = ["home_fallback_hero", "home_fallback_stats", "home_fallback_features", "process_steps", "feature_cards", "faq", "cta_banner"];
   const matches = (types: string[]) => blocks.length === types.length && types.every((type, index) => visibleTypes[index] === type);
-  if (!matches(legacyTypes) && !matches(previousTypes)) return blocks.map((entry, index) => ({ ...entry, isVisible: entry.isVisible ?? true, sortOrder: index }));
+  const isSystemFallback = options.completeSystemFallback === true && matches(systemFallbackTypes);
+  if (!isSystemFallback && !matches(legacyTypes) && !matches(previousTypes)) return blocks.map((entry, index) => ({ ...entry, isVisible: entry.isVisible ?? true, sortOrder: index }));
   const current = new Map(blocks.map(entry => [entry.blockType, { ...entry, isVisible: entry.isVisible ?? true }]));
   return managedHomePageBlocks(DEFAULT_HOME_COPY, programsPath).map((starter, index) => ({
     ...(current.get(starter.blockType) || starter),

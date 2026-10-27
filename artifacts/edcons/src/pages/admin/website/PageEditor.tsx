@@ -1335,7 +1335,7 @@ function BlockPreview({ blocks, locale, template, pageTitle, pageSlug, teamMembe
     ? String(template)
     : null;
   return isExactHome
-    ? <div className="home-future-page">{preview}</div>
+    ? <CmsPageCanvas className="home-future-page cms-editor-preview">{preview}</CmsPageCanvas>
     : <CmsPageCanvas className={`cms-editor-preview${managedTemplate ? ` managed-agency-page managed-agency-page--${managedTemplate}` : ""}`}>
         <div data-managed-template={managedTemplate || undefined}>{preview}</div>
       </CmsPageCanvas>;

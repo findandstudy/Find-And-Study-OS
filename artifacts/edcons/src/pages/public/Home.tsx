@@ -4,13 +4,11 @@ import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
 import { CmsBlock, CmsPageCanvas } from "./PublicPage";
 import type { PageBlock } from "@/lib/website/blockTypes";
 import { useJsonLd, SITE_URL, SITE_NAME, ORG_SCHEMA } from "@/hooks/use-json-ld";
-import { enrichManagedHomePageBlocks, managedHomePageBlocks, MANAGED_HOME_BLOCK_TYPES } from "@/lib/website/managedPageStarters";
+import { enrichManagedHomePageBlocks, managedHomePageBlocks } from "@/lib/website/managedPageStarters";
 
 function HomeBlocks({ blocks, version, pageTitle, locale }: { blocks: PageBlock[]; version?: number; pageTitle: string; locale: string }) {
   const content = <div data-public-page-version={version}>{blocks.map((block, index) => <CmsBlock block={block} index={index} variables={{ siteName: SITE_NAME, pageTitle, pageSlug: "home", pageLocale: locale }} key={`${block.blockType}-${index}`} />)}</div>;
-  return blocks.every(block => MANAGED_HOME_BLOCK_TYPES.has(block.blockType))
-    ? <div className="home-future-page">{content}</div>
-    : <CmsPageCanvas className="home-future-page">{content}</CmsPageCanvas>;
+  return <CmsPageCanvas className="home-future-page">{content}</CmsPageCanvas>;
 }
 
 export default function Home() {
@@ -41,7 +39,9 @@ export default function Home() {
     },
   ]);
 
-  if (page) return <HomeBlocks blocks={enrichManagedHomePageBlocks(page.data.blocks, localePath("/programs"))} version={page.data.versionNumber} pageTitle={page.data.title} locale={lang} />;
+  if (page) return <HomeBlocks blocks={enrichManagedHomePageBlocks(page.data.blocks, localePath("/programs"), {
+    completeSystemFallback: page.data.id === 0 && page.data.versionNumber === 0,
+  })} version={page.data.versionNumber} pageTitle={page.data.title} locale={lang} />;
 
   const fallbackBlocks = managedHomePageBlocks({
     badge: t("hero.badge"),
