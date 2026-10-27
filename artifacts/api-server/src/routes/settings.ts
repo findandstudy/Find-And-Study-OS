@@ -353,17 +353,23 @@ router.get("/settings/branding/logo", async (req, res): Promise<void> => {
     const isHeaderDerivative = requestedVariant === "header" || requestedVariant === "header-dark";
     const variantKey = requestedVariant === "dark" || requestedVariant === "header-dark"
       ? "logoDarkUrl"
-      : req.query.variant === "square"
+      : requestedVariant === "square"
         ? "logoSquareUrl"
-        : req.query.variant === "email"
+        : requestedVariant === "favicon"
+          ? "faviconUrl"
+          : requestedVariant === "apple-touch"
+            ? "appleTouchIconUrl"
+        : requestedVariant === "email"
           ? "emailLogoUrl"
-          : req.query.variant === "pdf"
+          : requestedVariant === "pdf"
             ? "pdfLogoUrl"
           : "logoUrl";
     const [settings] = await db.select({
       logoUrl: settingsTable.logoUrl,
       logoDarkUrl: settingsTable.logoDarkUrl,
       logoSquareUrl: settingsTable.logoSquareUrl,
+      faviconUrl: settingsTable.faviconUrl,
+      appleTouchIconUrl: settingsTable.appleTouchIconUrl,
       emailLogoUrl: settingsTable.emailLogoUrl,
       pdfLogoUrl: settingsTable.pdfLogoUrl,
     }).from(settingsTable);
@@ -373,6 +379,10 @@ router.get("/settings/branding/logo", async (req, res): Promise<void> => {
       ? (settings?.emailLogoUrl || settings?.logoSquareUrl || settings?.logoUrl)
       : variantKey === "pdfLogoUrl"
         ? (settings?.pdfLogoUrl || settings?.logoSquareUrl || settings?.logoUrl)
+      : variantKey === "faviconUrl"
+        ? (settings?.faviconUrl || settings?.logoSquareUrl || settings?.logoUrl)
+      : variantKey === "appleTouchIconUrl"
+        ? (settings?.appleTouchIconUrl || settings?.logoSquareUrl || settings?.logoUrl)
       : (settings?.[variantKey as keyof typeof settings] || settings?.logoUrl);
     if (!url) { res.status(404).json({ error: "No logo configured" }); return; }
 

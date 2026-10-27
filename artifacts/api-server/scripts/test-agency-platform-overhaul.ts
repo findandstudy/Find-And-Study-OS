@@ -190,6 +190,9 @@ test("academy and agency favicon branding are tenant capability scoped", async (
   const agents = await api("routes/agents.ts");
   const layout = await ui("components/layout/DashboardLayout.tsx");
   const brandingHook = await ui("hooks/use-agency-branding.ts");
+  const publicLayout = await ui("components/layout/PublicLayout.tsx");
+  const settingsRoute = await api("routes/settings.ts");
+  const websiteRoute = await api("routes/website.ts");
   const html = await uiRoot("index.html");
   const favicon = await uiRoot("public/favicon.svg");
   assert.match(sso, /tenantAcademyEnabled/);
@@ -208,9 +211,17 @@ test("academy and agency favicon branding are tenant capability scoped", async (
   assert.doesNotMatch(layout, /agentIcon/);
   assert.match(brandingHook, /queryKey:\s*\["agent-me"\]/);
   assert.match(brandingHook, /link\[rel="icon"\]/);
-  assert.match(html, /%BASE_URL%favicon\.svg/);
-  assert.match(html, /%BASE_URL%apple-touch-icon\.png/);
-  assert.match(favicon, /F&amp;S/);
+  assert.match(brandingHook, /branding\/logo\?variant=favicon/);
+  assert.match(brandingHook, /branding\/logo\?variant=apple-touch/);
+  assert.match(publicLayout, /fetchPriority="high"/);
+  assert.doesNotMatch(publicLayout, /setHeaderLogoReady|5_000/);
+  assert.match(settingsRoute, /requestedVariant === "favicon"/);
+  assert.match(settingsRoute, /requestedVariant === "apple-touch"/);
+  assert.match(websiteRoute, /router\.get\("\/public\/web\/theme"/);
+  assert.match(websiteRoute, /PUBLIC_THEME_TOKEN_KEYS\.has\(key\)/);
+  assert.match(html, /api\/settings\/branding\/logo\?variant=favicon/);
+  assert.match(html, /api\/settings\/branding\/logo\?variant=apple-touch/);
+  assert.match(favicon, /Graduation cap brand mark|<path/);
 });
 
 test("agent dashboard prioritizes deadlines and follow-ups before growth", async () => {

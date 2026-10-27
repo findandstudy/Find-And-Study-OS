@@ -72,6 +72,55 @@ import { inspectWebsitePageBlockLinks, inspectWebsitePageTranslations, type Publ
 const router = Router();
 router.use("/website/detail-content", detailContentRouter);
 router.get("/website/pages/:slug", readWebsitePublishedPage);
+
+const PUBLIC_THEME_TOKEN_KEYS = new Set([
+  "colors.primary", "colors.secondary", "colors.accent", "colors.background", "colors.card",
+  "colors.border", "colors.text", "colors.muted", "colors.heroStart", "colors.heroEnd",
+  "colors.heroText", "colors.heroOverlay", "buttons.primaryBg", "buttons.primaryText",
+  "buttons.borderRadius", "buttons.fontWeight", "typography.headingFont", "typography.bodyFont",
+  "typography.fontScale", "spacing.sectionPadding", "spacing.cardPadding", "spacing.containerMax",
+  "spacing.gridGap",
+]);
+
+// Public pages must consume the same saved design tokens as Theme Builder.
+// Keep this projection allowlisted: the settings row also contains credentials
+// and integration configuration that must never be exposed to visitors.
+router.get("/public/web/theme", async (_req, res): Promise<void> => {
+  try {
+    const [rows, settingsRows] = await Promise.all([
+      db.select({
+        tokenGroup: websiteThemeTokensTable.tokenGroup,
+        tokenKey: websiteThemeTokensTable.tokenKey,
+        tokenValue: websiteThemeTokensTable.tokenValue,
+      }).from(websiteThemeTokensTable),
+      db.select({
+        themePrimary: settingsTable.themePrimary,
+        themeSecondary: settingsTable.themeSecondary,
+        themeAccent: settingsTable.themeAccent,
+        themeButton: settingsTable.themeButton,
+      }).from(settingsTable).limit(1),
+    ]);
+    const branding = settingsRows[0];
+    const tokens: Record<string, string> = {};
+    const brandingDefaults: Record<string, string | null | undefined> = {
+      "colors.primary": branding?.themePrimary,
+      "colors.secondary": branding?.themeSecondary,
+      "colors.accent": branding?.themeAccent,
+      "buttons.primaryBg": branding?.themeButton || branding?.themePrimary,
+    };
+    for (const [key, value] of Object.entries(brandingDefaults)) {
+      if (value) tokens[key] = value;
+    }
+    for (const row of rows) {
+      const key = `${row.tokenGroup}.${row.tokenKey}`;
+      if (PUBLIC_THEME_TOKEN_KEYS.has(key) && row.tokenValue) tokens[key] = row.tokenValue;
+    }
+    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+    res.json({ tokens });
+  } catch {
+    res.status(503).json({ error: "Public website theme is temporarily unavailable" });
+  }
+});
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
 const adminOnly = [requireAuth, requireRole(...WEBSITE_ROLES)] as const;
 

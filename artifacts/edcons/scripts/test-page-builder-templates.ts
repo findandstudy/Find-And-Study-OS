@@ -41,6 +41,8 @@ test("page editor preview geometry is stable across scrollbar changes", () => {
 test("Home and About reuse published blocks while preserving static fallbacks and managed collection fetches", () => {
   const home = source("pages/public/Home.tsx");
   const about = source("pages/public/About.tsx");
+  const publicPage = source("pages/public/PublicPage.tsx");
+  const editorialCss = source("pages/public/cmsEditorial.css");
   for (const code of [home, about]) {
     assert.match(code, /useTemplatePage\(/);
     assert.match(code, /useTemplatePageSeo\(page\)/);
@@ -49,6 +51,12 @@ test("Home and About reuse published blocks while preserving static fallbacks an
   assert.match(home, /managedHomePageBlocks/);
   assert.match(home, /<CmsBlock/);
   assert.match(home, /<CmsPageCanvas className="home-future-page">/);
+  assert.match(publicPage, /safeHeroTextColor/);
+  assert.match(publicPage, /safeSurfaceTextColor/);
+  assert.match(publicPage, /queryKey: \["public-cms-theme"\]/);
+  assert.match(editorialCss, /--home-night: var\(--cms-secondary/);
+  assert.match(editorialCss, /--home-electric: var\(--cms-blue/);
+  assert.match(editorialCss, /--home-paper: var\(--cms-paper/);
   assert.match(about, /<ManagedPublicPage/);
   assert.match(source("pages/public/About.tsx"), /\/api\/cms\/team-members\?lang=/);
   assert.match(source("pages/public/About.tsx"), /\/api\/cms\/offices\?lang=/);

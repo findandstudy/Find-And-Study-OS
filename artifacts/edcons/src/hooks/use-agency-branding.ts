@@ -10,18 +10,18 @@ const BASE_URL = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 const STATIC_FAVICON = `${BASE_URL}/favicon.svg`;
 const STATIC_TITLE = "Find And Study";
 
-function setIcon(href: string, type?: string) {
+function setIcons(faviconHref: string, faviconType?: string, appleTouchHref = faviconHref) {
   document.querySelectorAll<HTMLLinkElement>(
     'link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'
   ).forEach((el) => el.remove());
   const link = document.createElement("link");
   link.rel = "icon";
-  if (type) link.type = type;
-  link.href = href;
+  if (faviconType) link.type = faviconType;
+  link.href = faviconHref;
   document.head.appendChild(link);
   const apple = document.createElement("link");
   apple.rel = "apple-touch-icon";
-  apple.href = href;
+  apple.href = appleTouchHref;
   document.head.appendChild(apple);
 }
 
@@ -66,19 +66,22 @@ export function useAgencyBranding() {
   useEffect(() => {
     // Tenant defaults — same for super_admin, admin, staff, student, public.
     const tenantTitle = (tenantBranding?.publicBrandName || tenantBranding?.companyName || "").trim() || STATIC_TITLE;
-    const tenantFaviconRaw =
-      tenantBranding?.faviconUrl ||
-      tenantBranding?.logoSquareUrl ||
-      tenantBranding?.appleTouchIconUrl ||
-      tenantBranding?.logoUrl ||
-      "";
-    const tenantFavicon = tenantFaviconRaw || STATIC_FAVICON;
-    const tenantFaviconType = tenantFaviconRaw ? undefined : "image/svg+xml";
+    const hasTenantFavicon = Boolean(
+      tenantBranding?.faviconUrl || tenantBranding?.logoSquareUrl ||
+      tenantBranding?.appleTouchIconUrl || tenantBranding?.logoUrl,
+    );
+    const tenantFavicon = hasTenantFavicon
+      ? `${BASE_URL}/api/settings/branding/logo?variant=favicon`
+      : STATIC_FAVICON;
+    const tenantAppleTouch = hasTenantFavicon
+      ? `${BASE_URL}/api/settings/branding/logo?variant=apple-touch`
+      : `${BASE_URL}/apple-touch-icon.png`;
+    const tenantFaviconType = hasTenantFavicon ? undefined : "image/svg+xml";
 
     if (!isAgent) {
       setActiveAgencyBusinessName(null);
       document.title = tenantTitle;
-      setIcon(tenantFavicon, tenantFaviconType);
+      setIcons(tenantFavicon, tenantFaviconType, tenantAppleTouch);
       return;
     }
 
@@ -94,9 +97,9 @@ export function useAgencyBranding() {
       document.title = tenantTitle;
     }
     if (agentProfile.logoUrl) {
-      setIcon(agentProfile.logoUrl);
+      setIcons(agentProfile.logoUrl);
     } else {
-      setIcon(tenantFavicon, tenantFaviconType);
+      setIcons(tenantFavicon, tenantFaviconType, tenantAppleTouch);
     }
   }, [
     isAgent,
@@ -116,7 +119,7 @@ export function useAgencyBranding() {
     return () => {
       setActiveAgencyBusinessName(null);
       document.title = STATIC_TITLE;
-      setIcon(STATIC_FAVICON, "image/svg+xml");
+      setIcons(STATIC_FAVICON, "image/svg+xml", `${BASE_URL}/apple-touch-icon.png`);
     };
   }, []);
 }

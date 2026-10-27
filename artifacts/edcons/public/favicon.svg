@@ -1,4 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
-  <rect width="48" height="48" rx="10" fill="#2563EB"/>
-  <text x="24" y="33" font-family="Georgia, serif" font-size="22" font-weight="bold" fill="white" text-anchor="middle" letter-spacing="-1">F&amp;S</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="15" fill="#174A7E"/>
+  <path d="M12 25.5 32 15l20 10.5L32 36 12 25.5Z" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M21 31v10.5c6.7 5.3 15.3 5.3 22 0V31" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M52 27v13" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="52" cy="45" r="4" fill="#E53935"/>
 </svg>

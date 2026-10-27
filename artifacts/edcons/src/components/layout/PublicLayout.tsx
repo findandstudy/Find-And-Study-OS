@@ -14,7 +14,6 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const [, setLocation] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
-  const [headerLogoReady, setHeaderLogoReady] = useState(false);
   const [headerLogoLoaded, setHeaderLogoLoaded] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
 
@@ -25,6 +24,9 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const logoUrl = hasLogo
     ? `${BASE_URL}/api/settings/branding/logo?variant=${resolvedTheme === "dark" && settings.logoDarkUrl ? "header-dark" : "header"}`
     : null;
+  const squareLogoUrl = settings.logoSquareUrl
+    ? `${BASE_URL}/api/settings/branding/logo?variant=square`
+    : logoUrl;
   const companyName = settings.companyName || "Find And Study OS";
 
   useEffect(() => {
@@ -39,30 +41,6 @@ export function PublicLayout({ children }: { children: ReactNode }) {
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
-    let disposed = false;
-    const reveal = () => {
-      if (!disposed) setHeaderLogoReady(true);
-    };
-    const schedule = () => {
-      // The configured logo can be a comparatively large tenant asset. It is
-      // decorative during the initial public-page paint because the reserved
-      // brand mark and company name are already visible. An idle callback can
-      // run while critical route/locale chunks are still crossing a throttled
-      // connection, so use an explicit post-load delay instead of competing
-      // with the page's factual content and primary actions.
-      timeoutId = globalThis.setTimeout(reveal, 5_000);
-    };
-    if (document.readyState === "complete") schedule();
-    else window.addEventListener("load", schedule, { once: true });
-    return () => {
-      disposed = true;
-      window.removeEventListener("load", schedule);
-      if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
-    };
   }, []);
 
   const currentMeta = LANGUAGE_META[lang];
@@ -92,7 +70,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
       </a>
       <header className="sticky top-0 z-[100] w-full glass border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <Link href={localePath("/")} className="group relative flex h-10 w-[160px] min-w-0 items-center gap-2 sm:w-[180px]">
+          <Link href={localePath("/")} className="group relative flex h-12 w-11 min-w-0 items-center gap-2 sm:w-[220px]">
             <div className="flex min-w-0 items-center gap-2" aria-hidden={headerLogoLoaded}>
               <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform duration-300">
                 <GraduationCap className="w-6 h-6" />
@@ -101,15 +79,18 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 {companyName}
               </span>
             </div>
-            {logoUrl && headerLogoReady ? (
-              <img
-                src={logoUrl}
-                alt={companyName}
-                decoding="async"
-                fetchPriority="low"
-                className={`absolute inset-0 h-10 w-full bg-background/80 object-contain object-left transition-opacity duration-200 group-hover:scale-105 rtl:object-right ${headerLogoLoaded ? "opacity-100" : "opacity-0"}`}
-                onLoad={() => setHeaderLogoLoaded(true)}
-              />
+            {logoUrl ? (
+              <picture className={`absolute inset-0 flex h-12 w-full items-center bg-background/95 transition-opacity duration-200 ${headerLogoLoaded ? "opacity-100" : "opacity-0"}`}>
+                {squareLogoUrl ? <source media="(max-width: 639px)" srcSet={squareLogoUrl} /> : null}
+                <img
+                  src={logoUrl}
+                  alt={companyName}
+                  decoding="async"
+                  fetchPriority="high"
+                  className="h-12 w-full object-contain object-left transition-transform duration-300 group-hover:scale-[1.02] rtl:object-right"
+                  onLoad={() => setHeaderLogoLoaded(true)}
+                />
+              </picture>
             ) : null}
           </Link>
 

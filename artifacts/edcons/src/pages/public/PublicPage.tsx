@@ -58,6 +58,10 @@ function safeHeroTextColor(start: string, end: string, requested: string | null)
   if (requested && score(requested) >= 4.5) return requested;
   return ["#ffffff", "#071321"].sort((first, second) => score(second) - score(first))[0];
 }
+function safeSurfaceTextColor(background: string, requested: string | null): string {
+  if (requested && contrastRatio(requested, background) >= 4.5) return requested;
+  return ["#ffffff", "#071321"].sort((first, second) => contrastRatio(second, background) - contrastRatio(first, background))[0];
+}
 function safeNumberToken(value: unknown, minimum: number, maximum: number): string | null {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum ? String(parsed) : null;
@@ -68,6 +72,21 @@ function themeStyle(tokens: Record<string, string> | undefined): CmsStyle {
   for (const [key, variable] of Object.entries(colors)) {
     const value = safeColor(tokens?.[key]);
     if (value) style[variable as `--cms-${string}`] = value;
+  }
+  const heroStart = safeColor(tokens?.["colors.heroStart"]);
+  const heroEnd = safeColor(tokens?.["colors.heroEnd"]);
+  const requestedHeroText = safeColor(tokens?.["colors.heroText"]);
+  if (heroStart || heroEnd || requestedHeroText) {
+    style["--cms-hero-text"] = safeHeroTextColor(heroStart || "#081727", heroEnd || "#102b48", requestedHeroText);
+  }
+  const secondary = safeColor(tokens?.["colors.secondary"]);
+  if (secondary) style["--cms-secondary-text"] = safeSurfaceTextColor(secondary, null);
+  const accent = safeColor(tokens?.["colors.accent"]);
+  if (accent) style["--cms-accent-text"] = safeSurfaceTextColor(accent, null);
+  const buttonBackground = safeColor(tokens?.["buttons.primaryBg"]);
+  const requestedButtonText = safeColor(tokens?.["buttons.primaryText"]);
+  if (buttonBackground || requestedButtonText) {
+    style["--cms-button-text"] = safeSurfaceTextColor(buttonBackground || "#174a7e", requestedButtonText);
   }
   const allowedFonts = new Set(["Inter", "Poppins", "Roboto", "Open Sans", "Lato", "Montserrat", "Playfair Display", "Merriweather", "Nunito", "Raleway", "Source Sans Pro", "DM Sans"]);
   const headingFont = text(tokens?.["typography.headingFont"], 40);
@@ -99,6 +118,12 @@ function blockStyle(block: PageBlock): CmsStyle {
     if (["760px", "960px", "1260px", "100%"].includes(width)) style["--cms-section-max"] = width;
     const padding = Number(appearance.sectionPadding);
     if (Number.isFinite(padding)) style["--cms-section-padding"] = `${Math.min(160, Math.max(0, padding))}px`;
+    if (block.blockType === "cta_banner") {
+      const background = safeColor(appearance.sectionBackgroundColor);
+      const buttonBackground = safeColor(appearance.sectionButtonColor);
+      if (background) style["--cms-section-text"] = safeSurfaceTextColor(background, safeColor(appearance.sectionTextColor));
+      if (buttonBackground) style["--cms-section-button-text"] = safeSurfaceTextColor(buttonBackground, safeColor(appearance.sectionButtonTextColor));
+    }
   }
   if (!["hero", "home_fallback_hero"].includes(block.blockType)) return style;
   if (appearance.useThemeColors !== false) return appearance.overlay === false ? { ...style, "--cms-hero-overlay-opacity": "0" } : style;
