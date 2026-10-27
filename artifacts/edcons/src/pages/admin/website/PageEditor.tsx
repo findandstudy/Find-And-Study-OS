@@ -32,6 +32,7 @@ import { BlockFieldEditor, GlobalBlockSelector } from "./PageEditorFields";
 import { CmsBlock, CmsPageCanvas } from "../../public/PublicPage";
 import { isSystemManagedPage, managedPagePublicPath } from "@/lib/website/managedPageRoutes";
 import { enrichManagedPageBlocks, managedPageStarterBlocks, managedPageStarterTranslations, MANAGED_HOME_BLOCK_TYPES } from "@/lib/website/managedPageStarters";
+import { pageEditorPreviewGeometry, samePageEditorPreviewGeometry } from "./pageEditorPreviewGeometry";
 import { SITE_NAME } from "@/hooks/use-json-ld";
 
 const ALLOWED_TAGS = ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "code", "pre", "span", "div", "img", "hr"];
@@ -160,6 +161,7 @@ function PageEditorSession({ id }: { id: number }) {
   const previewCanvasRef = useRef<HTMLDivElement | null>(null);
   const [previewScale, setPreviewScale] = useState(1);
   const [previewHeight, setPreviewHeight] = useState(400);
+  const previewGeometryRef = useRef({ scale: 1, height: 400 });
   const [mobilePane, setMobilePane] = useState<"blocks" | "editor" | "preview">("preview");
   const [showAddBlock, setShowAddBlock] = useState(false);
   const [blockSearch, setBlockSearch] = useState("");
@@ -207,20 +209,33 @@ function PageEditorSession({ id }: { id: number }) {
     const canvas = previewCanvasRef.current;
     if (!host || !canvas) return;
 
+    let frame: number | null = null;
     const updatePreviewGeometry = () => {
-      const targetWidth = PREVIEW_WIDTHS[previewSize];
-      const availableWidth = Math.max(280, host.clientWidth - 32);
-      setPreviewScale(Math.min(1, availableWidth / targetWidth));
-      setPreviewHeight(Math.max(400, canvas.scrollHeight));
+      frame = null;
+      const next = pageEditorPreviewGeometry(
+        host.getBoundingClientRect().width,
+        PREVIEW_WIDTHS[previewSize],
+        canvas.scrollHeight,
+      );
+      if (samePageEditorPreviewGeometry(previewGeometryRef.current, next)) return;
+      previewGeometryRef.current = next;
+      setPreviewScale(current => Math.abs(current - next.scale) < 0.001 ? current : next.scale);
+      setPreviewHeight(current => current === next.height ? current : next.height);
+    };
+    const schedulePreviewGeometry = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(updatePreviewGeometry);
     };
 
-    const observer = new ResizeObserver(updatePreviewGeometry);
+    const observer = new ResizeObserver(schedulePreviewGeometry);
     observer.observe(host);
     observer.observe(canvas);
-    const frame = window.requestAnimationFrame(updatePreviewGeometry);
+    window.addEventListener("resize", schedulePreviewGeometry);
+    schedulePreviewGeometry();
     return () => {
-      window.cancelAnimationFrame(frame);
+      if (frame !== null) window.cancelAnimationFrame(frame);
       observer.disconnect();
+      window.removeEventListener("resize", schedulePreviewGeometry);
     };
   }, [mobilePane, previewSize]);
   function leaveEditor() {
@@ -1218,7 +1233,7 @@ function PageEditorSession({ id }: { id: number }) {
             </ScrollArea>
           </section>
 
-          <section ref={previewHostRef} className={`${mobilePane === "preview" ? "flex" : "hidden"} min-h-0 min-w-0 flex-1 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.08),transparent_38%)] lg:flex flex-col items-center p-4 overflow-auto overscroll-contain`}>
+          <section ref={previewHostRef} style={{ scrollbarGutter: "stable" }} className={`${mobilePane === "preview" ? "flex" : "hidden"} min-h-0 min-w-0 flex-1 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.08),transparent_38%)] lg:flex flex-col items-center p-4 overflow-auto overscroll-contain`}>
             <div className="mb-3 flex w-full max-w-7xl shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border bg-card/95 p-3 text-xs shadow-sm" role="status" aria-label={copy("Preview context", "Önizleme bağlamı")}>
               <div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.flag} {editLocale.toUpperCase()}</Badge><span>{copy("DRAFT PREVIEW", "TASLAK ÖNİZLEME")}</span><span className="text-muted-foreground">{editLocale === sourceLocale ? copy("Native source", "Kaynak dil") : (translationsRef.current[editLocale]?.length ?? 0) > 0 ? copy("Translation draft", "Çeviri taslağı") : copy("Source fallback · noindex", "Kaynak fallback · noindex")}</span></div>
               <div className="flex min-w-0 flex-wrap items-center gap-2 text-muted-foreground"><span className="truncate">{managedPagePublicPath({ ...page, locale: editLocale, slug: seo.slug || page.slug })}</span><span>{previewSize}</span><span>{copy("Not public", "Public değil")}</span></div>

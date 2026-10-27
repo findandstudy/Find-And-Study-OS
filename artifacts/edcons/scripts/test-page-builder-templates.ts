@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { catalogLimit, catalogLayoutClass, catalogParameters } from "../src/lib/website/catalogPresentation";
 import { enrichManagedPageBlocks } from "../src/lib/website/managedPageStarters";
+import { pageEditorPreviewGeometry, samePageEditorPreviewGeometry } from "../src/pages/admin/website/pageEditorPreviewGeometry";
 const source = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
 
 test("legacy limits cannot create an out-of-range preview request", () => {
@@ -24,6 +25,18 @@ test("all layouts have responsive defaults and keyboard scroll semantics", () =>
     assert.match(source(path), /catalogLayoutClass\(content\)/);
     assert.match(source(path), /tabIndex=\{content.layout === "carousel" \? 0/);
   }
+});
+
+test("page editor preview geometry is stable across scrollbar changes", () => {
+  const beforeScrollbar = pageEditorPreviewGeometry(620, 1440, 2400);
+  const afterScrollbar = pageEditorPreviewGeometry(620, 1440, 2400);
+  assert.deepEqual(afterScrollbar, beforeScrollbar);
+  assert.equal(samePageEditorPreviewGeometry(beforeScrollbar, afterScrollbar), true);
+  assert.deepEqual(beforeScrollbar, { scale: 588 / 1440, height: 2400 });
+
+  const subPixelResize = { scale: beforeScrollbar.scale + 0.0005, height: beforeScrollbar.height };
+  assert.equal(samePageEditorPreviewGeometry(beforeScrollbar, subPixelResize), true);
+  assert.deepEqual(pageEditorPreviewGeometry(Number.NaN, 0, Number.NaN), { scale: 1, height: 400 });
 });
 test("Home and About reuse published blocks while preserving static fallbacks and team fetch", () => {
   const home = source("pages/public/Home.tsx");
