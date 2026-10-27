@@ -1,7 +1,7 @@
 # Staging Pages Birleşim ve Yayın Planı — 27 Ekim 2026
 
-Durum: Uygulama ve staging doğrulaması için yürütülüyor  
-Hedef: Yalnız `staging.findandstudy.com`  
+Durum: Uygulama ve staging doğrulaması için yürütülüyor
+Hedef: Yalnız `staging.findandstudy.com`
 Production ve `Find-And-Study-OS-Next`: Kapsam dışı
 
 ## 1. Doğrulanmış tabanlar
