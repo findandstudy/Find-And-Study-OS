@@ -37,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/hooks/use-i18n";
+import { useToast } from "@/hooks/use-toast";
 import { LANGUAGE_META, SUPPORTED_LANGUAGES } from "@/lib/i18n";
 import DetailContentEditor, {
   type DetailContentTarget,
@@ -151,6 +152,7 @@ const csv = (value: unknown) =>
   `"${String(value ?? "").replaceAll('"', '""')}"`;
 export default function CatalogPagesInventory() {
   const { lang, t } = useI18n();
+  const { toast } = useToast();
   const tr = lang === "tr";
   const initial = useMemo(urlParams, []);
   const label = (key: string) =>
@@ -274,6 +276,17 @@ export default function CatalogPagesInventory() {
       setGenerationReport(result);
       await query.refetch();
     },
+    onError: (error) =>
+      toast({
+        title: tr ? "AI üretimi başlatılamadı" : "AI generation could not start",
+        description:
+          error instanceof Error
+            ? error.message
+            : tr
+              ? "AI sağlayıcısı kullanılamıyor. Ayarlar > Entegrasyonlar alanını kontrol edin."
+              : "The AI provider is unavailable. Check Settings > Integrations.",
+        variant: "destructive",
+      }),
   });
   const toggle = (id: number) =>
     setSelected((old) =>
