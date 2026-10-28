@@ -19,6 +19,7 @@ import {
 import { readPublishedDetailLayout } from "./websiteDetailLayouts";
 import { detailTemplateSectionsForLocale } from "./websiteDetailLayoutContract";
 import { translateStructuredDetailContent } from "./websiteDetailTranslation";
+import { detailGenerationSources, detailSectionReviewedOn, detailSectionSources } from "./websiteDetailSources";
 
 export type DetailRegenerationResult = {
   entityId: number;
@@ -80,6 +81,7 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
         return Object.keys(compact).length ? [compact] : [];
       })
     : [];
+  const officialSources = detailGenerationSources(kind, payload);
   if (kind === "city") {
     const external = record(entity.externalFacts) ?? {};
     return {
@@ -90,6 +92,7 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
       housingSummary: external.housingSummary, housingFormats: external.housingFormats,
       universities: compactRecords(entity.universities, ["name", "type"]),
       programs: compactRecords(entity.programs, ["name", "degree", "field", "language", "university"]),
+      officialSources,
     };
   }
   if (kind === "destination") return {
@@ -99,6 +102,7 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
     cities: compactRecords(root.cities, ["name"]),
     universities: compactRecords(root.universities, ["name", "city", "type"]),
     programs: compactRecords(root.programs, ["name", "degree", "field", "language", "university"]),
+    officialSources,
   };
   if (kind === "university") return {
     university: text(entity.name), country: text(entity.country), city: text(entity.city), description: text(entity.description),
@@ -106,6 +110,7 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
     timesRanking: entity.timesRanking, shanghaiRanking: entity.shanghaiRanking, leidenRanking: entity.cwtsLeidenRanking,
     programCount: positiveCount(record(root.meta)?.programCount),
     programs: compactRecords(root.programs, ["name", "degree", "field", "language", "duration"]),
+    officialSources,
   };
   return {
     program: text(entity.programName), description: text(entity.description), degree: text(entity.degree), field: text(entity.field),
@@ -113,6 +118,7 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
     discountedFee: entity.discountedFee, currency: text(entity.currency), scholarship: entity.scholarship,
     intakes: entity.intakesText, requirements: entity.requirements, quota: entity.quota,
     university: text(entity.universityName), city: text(entity.universityCity), country: text(entity.universityCountry),
+    officialSources,
   };
 }
 
@@ -140,6 +146,7 @@ function buildEnglishSeo(kind: DetailContentKind, facts: ReturnType<typeof entit
 
 function buildEnglishSource(kind: DetailContentKind, entityId: number, payload: unknown, layout: Awaited<ReturnType<typeof readPublishedDetailLayout>>): DetailContent {
   const facts = entityFacts(kind, payload, entityId);
+  const catalogSources = detailGenerationSources(kind, payload);
   const shared = new Map(detailTemplateSectionsForLocale(layout, "en").map(section => [section.key, section]));
   const reviewedOn = new Date().toISOString().slice(0, 10);
   const sections: DetailContentSection[] = DETAIL_CONTENT_KEYS[kind].map(key => {
@@ -151,13 +158,14 @@ function buildEnglishSource(kind: DetailContentKind, entityId: number, payload: 
         ? `Current ${title.toLocaleLowerCase("en-US")} for ${facts.name} is supplied from the connected source records.`
         : `Review and customize the ${title.toLocaleLowerCase("en-US")} information for ${facts.name} before publishing.`);
     const layoutKey = DETAIL_CONTENT_LAYOUT_KEYS[kind].find(candidate => (candidate.startsWith("editorial-") ? candidate.slice(10) : candidate) === key);
+    const fallbackSource = { label: facts.sourceUrl === "https://findandstudy.com" ? "Find & Study source record" : "Official website", url: facts.sourceUrl };
     return {
       key,
       title,
       body,
       ...(layoutKey && layout.presentation[layoutKey] ? { presentation: layout.presentation[layoutKey] } : {}),
-      sources: [{ label: facts.sourceUrl === "https://findandstudy.com" ? "Find & Study source record" : "Official website", url: facts.sourceUrl }],
-      reviewedOn,
+      sources: detailSectionSources(key, catalogSources, fallbackSource),
+      reviewedOn: detailSectionReviewedOn(key, catalogSources, reviewedOn),
     };
   });
   return { version: 1, kind, entityId, locale: "en", seoMode: "auto", seo: buildEnglishSeo(kind, facts), sectionOrder: [...DETAIL_CONTENT_LAYOUT_KEYS[kind]], sections };
