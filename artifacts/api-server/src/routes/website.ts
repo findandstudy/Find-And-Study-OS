@@ -2,7 +2,7 @@ import express, { Router, json, type Request, type Response, type RequestHandler
 import { publicFormLimiter } from "../lib/limiters";
 import { getClientIp } from "../lib/clientIp";
 import { db } from "@workspace/db";
-import { eq, asc, desc, inArray, and, ne } from "drizzle-orm";
+import { eq, asc, desc, inArray, and, ne, gte } from "drizzle-orm";
 import type { AnyPgTable, AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   websitePagesTable,
@@ -28,6 +28,7 @@ import {
   integrationsTable,
   leadsTable,
   pipelineStagesTable,
+  auditLogsTable,
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
@@ -70,7 +71,7 @@ import detailContentRouter from "./website-detail-content";
 import { inspectWebsitePageBlockLinks, inspectWebsitePageTranslations, type PublicationPreflightIssue } from "../lib/websitePagePublicationPreflight";
 import { regenerateDetailContentDraft } from "../lib/websiteDetailRegeneration";
 import { resolveWebsiteAiIntegration } from "../lib/websiteAiIntegration";
-import { DEFAULT_WEBSITE_AI_SETTINGS } from "../lib/websiteAiContentPolicy";
+import { mergeWebsiteAiSettings, parseWebsiteAiSettings, readWebsiteAiSettings } from "../lib/websiteAiContentPolicy";
 
 const router = Router();
 router.use("/website/detail-content", detailContentRouter);
@@ -126,6 +127,57 @@ router.get("/public/web/theme", async (_req, res): Promise<void> => {
 });
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
 const adminOnly = [requireAuth, requireRole(...WEBSITE_ROLES)] as const;
+
+async function requireDirectSuperAdmin(req: Request, res: Response): Promise<boolean> {
+  if (req.user?.role !== "super_admin") { res.status(403).json({ error: "Super Admin access required" }); return false; }
+  const sid = getSessionId(req);
+  const session = sid && !req.apiTokenAuth && !req.headers.authorization ? await getSession(sid) : null;
+  if (!session || session.originalSid || session.user.id !== req.user.id) { res.status(403).json({ error: "Direct human session required" }); return false; }
+  return true;
+}
+
+async function loadWebsiteAiSettings() {
+  const [row] = await db.select({ featureFlags: settingsTable.featureFlags }).from(settingsTable).limit(1);
+  return readWebsiteAiSettings(row?.featureFlags);
+}
+
+async function readWebsiteAiUsage(days = 30) {
+  const since = new Date(Date.now() - Math.max(1, Math.min(days, 90)) * 86_400_000);
+  const rows = await db.select({ changes: auditLogsTable.changes }).from(auditLogsTable)
+    .where(and(eq(auditLogsTable.action, "website_ai_content_execute"), gte(auditLogsTable.createdAt, since)));
+  let requests = 0, estimatedTokens = 0, succeeded = 0, failed = 0;
+  for (const row of rows) {
+    try {
+      const value = JSON.parse(row.changes || "{}") as Record<string, unknown>;
+      requests += Number(value.requests ?? 1); estimatedTokens += Number(value.estimatedTokens ?? 0);
+      succeeded += Number(value.succeeded ?? 0); failed += Number(value.failed ?? 0);
+    } catch { requests += 1; }
+  }
+  return { requests, estimatedTokens, succeeded, failed, since: since.toISOString() };
+}
+
+router.get("/website/ai/content-settings", ...adminOnly, async (_req, res) => {
+  res.setHeader("Cache-Control", "private, no-store");
+  try { res.json({ settings: await loadWebsiteAiSettings(), usage: await readWebsiteAiUsage(30) }); }
+  catch { res.status(503).json({ error: "AI content settings are temporarily unavailable" }); }
+});
+
+router.put("/website/ai/content-settings", ...adminOnly, async (req, res) => {
+  try {
+    if (!(await requireDirectSuperAdmin(req, res))) return;
+    const settings = parseWebsiteAiSettings(req.body);
+    if (!settings) return void res.status(400).json({ error: "Invalid AI content settings" });
+    await db.transaction(async tx => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('website-ai-content-settings'))`);
+      const [existing] = await tx.select().from(settingsTable).limit(1).for("update");
+      const featureFlags = mergeWebsiteAiSettings(existing?.featureFlags, settings);
+      if (existing) await tx.update(settingsTable).set({ featureFlags }).where(eq(settingsTable.id, existing.id));
+      else await tx.insert(settingsTable).values({ featureFlags });
+      await tx.insert(auditLogsTable).values({ userId: req.user!.id, action: "website_ai_content_settings_update", resource: "settings", resourceId: existing?.id, changes: JSON.stringify({ provider: settings.provider, enabled: settings.enabled, allowedKinds: settings.allowedKinds, allowedLocales: settings.allowedLocales, limits: { requests: settings.dailyRequestLimit, tokens: settings.dailyEstimatedTokenLimit }, publicationPolicy: settings.publicationPolicy }) });
+    });
+    res.json({ settings });
+  } catch { res.status(503).json({ error: "AI content settings could not be saved" }); }
+});
 
 function managedPagePublicPath(page: Pick<typeof websitePagesTable.$inferSelect, "locale" | "slug" | "template">): string {
   const locale = page.locale || "en";
@@ -228,7 +280,17 @@ router.post("/website/catalog-pages/reapply", ...adminOnly, async (req, res) => 
     if (!session || session.originalSid || session.user.id !== req.user!.id) {
       res.status(403).json({ error: "Direct human session required" }); return;
     }
-    const aiConfig = await resolveWebsiteAiIntegration(DEFAULT_WEBSITE_AI_SETTINGS);
+    const policy = await loadWebsiteAiSettings();
+    if (!policy.enabled || !policy.allowedKinds.includes(kind) || locales.some(locale => !policy.allowedLocales.includes(locale)) || sourceIds.length * locales.length > policy.maxPairsPerRequest) {
+      res.status(403).json({ error: "This page type, language or batch size is not allowed by AI Content & Translation settings" }); return;
+    }
+    const usage = await readWebsiteAiUsage(1);
+    const reservedTokens = sourceIds.length * locales.length * (mode === "regenerate" ? 10_000 : 4_000);
+    const reservedRequests = sourceIds.length * locales.length + (mode === "regenerate" && locales.includes("en") ? sourceIds.length * 3 : 0);
+    if (usage.requests + reservedRequests > policy.dailyRequestLimit || usage.estimatedTokens + reservedTokens > policy.dailyEstimatedTokenLimit) {
+      res.status(429).json({ error: "Daily AI content budget has been reached" }); return;
+    }
+    const aiConfig = await resolveWebsiteAiIntegration(policy);
     if ((mode === "regenerate" || locales.some(locale => locale !== "en")) && !aiConfig) {
       res.status(409).json({ error: "AI_PROVIDER_UNAVAILABLE", message: "Enable and test OpenAI or Anthropic Claude in Settings > Integrations." }); return;
     }
@@ -240,6 +302,9 @@ router.post("/website/catalog-pages/reapply", ...adminOnly, async (req, res) => 
     }
     invalidatePublicCatalogRenderCache({ detailTemplate: layoutKind });
     const summary = results.reduce((acc, item) => { acc[item.status] += 1; return acc; }, { created: 0, completed: 0, preserved: 0, failed: 0 });
+    const generatedImages = results.reduce((sum, item) => sum + (item.generatedImages ?? 0), 0);
+    const imageFailures = results.reduce((sum, item) => sum + (item.imageFailures ?? 0), 0);
+    await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "website_ai_content_execute", resource: "website_page", changes: JSON.stringify({ operation: "reapply", mode, kind, locales, requests: results.length + generatedImages + imageFailures, estimatedTokens: reservedTokens, generatedImages, imageFailures, succeeded: summary.created + summary.completed + summary.preserved, failed: summary.failed, provider: aiConfig?.provider || "none", publication: "draft_only" }) });
     res.setHeader("Cache-Control", "private, no-store");
     res.json({ kind, locales, sourceIds, requested: results.length, summary, results, publication: "draft_review_required", completedAt: new Date().toISOString() });
   } catch (error) {
