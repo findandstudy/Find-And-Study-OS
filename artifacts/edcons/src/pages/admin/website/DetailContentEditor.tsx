@@ -326,6 +326,25 @@ export function hydrateDetailContentForEditor(
     nonEmpty(entity?.shortDescription) ||
     nonEmpty(entity?.summary);
   const sourceUrl = editorSourceUrl(payload, content.locale);
+  const metadata = asRecord(entity?.sourceMetadata);
+  const sourceKeys: Record<string, string[]> = {
+    hero: ["heroMedia", "name", "website"], overview: ["description", "shortDescription", "name"],
+    facts: ["keyFacts", "name", "country", "city"], weather: ["climate"], climate: ["climate"],
+    housing: ["housing"], fees: ["fees", "tuitionFee", "currency"], intakes: ["intakes", "intakeGuide"],
+    admission: ["admission", "admissionProcess", "admissionRules"], requirements: ["requirements", "admissionRules"],
+    programs: ["programs"], universities: ["universities"], cities: ["cities"], gallery: ["gallery"],
+    services: ["services", "support"], education: ["education", "curriculum"], recognition: ["recognition"],
+    living: ["living", "livingCost"], scholarships: ["scholarships"], faq: ["faq"],
+  };
+  const sourcesFor = (key: string) => {
+    const rows = (sourceKeys[key] ?? [key]).flatMap((field) => {
+      const entry = asRecord(metadata?.[field]);
+      const url = nonEmpty(entry?.sourceUrl); if (!url || !/^https?:\/\//i.test(url)) return [];
+      return [{ label: nonEmpty(entry?.sourceName) || (content.locale === "tr" ? "Resmî kaynak" : "Official source"), url }];
+    });
+    const unique = rows.filter((row, index) => rows.findIndex(candidate => candidate.url === row.url) === index).slice(0, 8);
+    return unique.length ? unique : [{ label: sourceUrl.includes("findandstudy.com") ? (content.locale === "tr" ? "Find & Study kaynak kaydı" : "Find & Study source record") : (content.locale === "tr" ? "Resmî web sitesi" : "Official website"), url: sourceUrl }];
+  };
   const reviewedOn = new Date().toISOString().slice(0, 10);
   const existing = new Map(content.sections.map((section) => [section.key, section]));
   const heroContext = detailHeroEditorContext(
@@ -363,19 +382,7 @@ export function hydrateDetailContentForEditor(
       body,
       ...(hero && Object.keys(hero).length ? { hero } : {}),
       reviewedOn,
-      sources: [
-        {
-          label:
-            sourceUrl.includes("findandstudy.com")
-              ? content.locale === "tr"
-                ? "Find & Study kaynak kaydı"
-                : "Find & Study source record"
-              : content.locale === "tr"
-                ? "Resmî web sitesi"
-                : "Official website",
-          url: sourceUrl,
-        },
-      ],
+      sources: sourcesFor(key),
     } satisfies DetailContentSection;
   });
   return ensureDetailSeo({

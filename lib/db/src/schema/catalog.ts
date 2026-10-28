@@ -2,12 +2,23 @@ import { pgTable, text, serial, timestamp, integer, boolean, index, jsonb } from
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
+export type CatalogFieldSource = {
+  sourceName?: string;
+  sourceUrl?: string;
+  verifiedAt?: string;
+  validUntil?: string;
+  notes?: string;
+};
+
+export type CatalogSourceMetadata = Record<string, CatalogFieldSource>;
+
 export const countriesTable = pgTable("countries", {
   id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
   code: text("code").notNull().unique(),
   flagEmoji: text("flag_emoji"),
   dialCode: text("dial_code"),
+  sourceMetadata: jsonb("source_metadata").notNull().default({}).$type<CatalogSourceMetadata>(),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -17,6 +28,7 @@ export const citiesTable = pgTable("cities", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   countryId: integer("country_id").notNull().references(() => countriesTable.id, { onDelete: "cascade" }),
+  sourceMetadata: jsonb("source_metadata").notNull().default({}).$type<CatalogSourceMetadata>(),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

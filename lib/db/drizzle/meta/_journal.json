@@ -939,6 +939,13 @@
       "when": 1792972800000,
       "tag": "0133_persona_admin_workspace",
       "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1793174400000,
+      "tag": "0134_catalog_field_sources",
+      "breakpoints": true
     }
   ]
 }

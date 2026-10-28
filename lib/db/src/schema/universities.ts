@@ -1,6 +1,7 @@
 import { pgTable, text, serial, timestamp, integer, boolean, real, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import type { CatalogSourceMetadata } from "./catalog";
 
 export const universitiesTable = pgTable("universities", {
   id: serial("id").primaryKey(),
@@ -10,6 +11,7 @@ export const universitiesTable = pgTable("universities", {
   website: text("website"),
   logoUrl: text("logo_url"),
   description: text("description"),
+  sourceMetadata: jsonb("source_metadata").notNull().default({}).$type<CatalogSourceMetadata>(),
   ranking: integer("ranking"),
   isActive: boolean("is_active").notNull().default(true),
 
@@ -104,6 +106,7 @@ export const programsTable = pgTable("programs", {
   admissionVerifiedAt: timestamp("admission_verified_at", { withTimezone: true }),
   admissionValidUntil: timestamp("admission_valid_until", { withTimezone: true }),
   quota: integer("quota"),
+  sourceMetadata: jsonb("source_metadata").notNull().default({}).$type<CatalogSourceMetadata>(),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

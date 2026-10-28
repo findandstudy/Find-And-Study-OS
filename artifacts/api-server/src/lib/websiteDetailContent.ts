@@ -5,6 +5,7 @@ import { ensureDetailSeo, inheritEnglishDetailStructure, parseDetailContent, typ
 import { countryAliases, countryMatches } from "./websiteCatalogFilters";
 import { readPublishedDetailLayout } from "./websiteDetailLayouts";
 import { detailTemplateSectionsForLocale } from "./websiteDetailLayoutContract";
+import { publicCatalogSources } from "./catalogSourceMetadata";
 
 export const detailContentSlug = (kind: DetailContentKind, entityId: number, locale: string) => `_detail-content-${kind}-${entityId}-${locale}`;
 export const detailContentDigest = (pageId: number, updatedAt: string, content: DetailContent) => createHash("sha256").update(JSON.stringify({ pageId, updatedAt, content })).digest("hex");
@@ -35,6 +36,7 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
       id: countriesTable.id,
       name: countriesTable.name,
       code: countriesTable.code,
+      sourceMetadata: countriesTable.sourceMetadata,
     }).from(countriesTable).where(eq(countriesTable.id, entityId)).limit(1);
     if (!country) return null;
     const destinations = await db.select({
@@ -71,6 +73,7 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
         language: destination?.language ?? null,
         currency: destination?.currency ?? null,
         climate: destination?.climate ?? null,
+        sourceMetadata: publicCatalogSources(country.sourceMetadata),
       },
       stats: { universityCount: Number(universityCount.count), programCount: Number(programCount.count) },
       cities: cityList, universities: universityList, programs: programList, meta,
@@ -80,6 +83,7 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
     const [city] = await db.select({
       id: citiesTable.id, name: citiesTable.name, country: countriesTable.name,
       countryCode: countriesTable.code,
+      sourceMetadata: citiesTable.sourceMetadata,
     }).from(citiesTable).innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id))
       .where(eq(citiesTable.id, entityId)).limit(1);
     if (!city) return null;
@@ -102,7 +106,7 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
         .where(scope).orderBy(asc(programsTable.name)).limit(32),
     ]);
     return { data: {
-      ...city, filterCountry: city.country, filterCity: city.name,
+      ...city, sourceMetadata: publicCatalogSources(city.sourceMetadata), filterCountry: city.country, filterCity: city.name,
       universityCount: Number(universityCount.count), programCount: Number(programCount.count),
       programLanguages: languages.map(row => row.language),
       universities: universityList, programs: programList,
@@ -144,6 +148,7 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
       assignedStaffIds: universitiesTable.assignedStaffIds,
       createdAt: universitiesTable.createdAt,
       updatedAt: universitiesTable.updatedAt,
+      sourceMetadata: universitiesTable.sourceMetadata,
     }).from(universitiesTable).where(eq(universitiesTable.id, entityId)).limit(1);
     if (!university) return null;
     const [[programCount], programList] = await Promise.all([
@@ -151,7 +156,7 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
       db.select({ id: programsTable.id, name: programsTable.name, degree: programsTable.degree, field: programsTable.field, language: programsTable.language, duration: programsTable.duration })
         .from(programsTable).where(eq(programsTable.universityId, entityId)).orderBy(asc(programsTable.name)).limit(32),
     ]);
-    return { data: university, programs: programList, meta: { ...meta, programCount: Number(programCount.count) } };
+    return { data: { ...university, sourceMetadata: publicCatalogSources(university.sourceMetadata) }, programs: programList, meta: { ...meta, programCount: Number(programCount.count) } };
   }
   const [row] = await db.select({
     programId: programsTable.id,
@@ -181,6 +186,7 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
     isActive: programsTable.isActive,
     createdAt: programsTable.createdAt,
     updatedAt: programsTable.updatedAt,
+    sourceMetadata: programsTable.sourceMetadata,
     universityName: universitiesTable.name,
     universityCountry: universitiesTable.country,
     universityCity: universitiesTable.city,
@@ -217,6 +223,7 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
       isActive: row.isActive,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      sourceMetadata: publicCatalogSources(row.sourceMetadata),
       universityName: row.universityName,
       universityCountry: row.universityCountry,
       universityCity: row.universityCity,

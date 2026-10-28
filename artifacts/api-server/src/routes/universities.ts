@@ -20,6 +20,7 @@ import {
 import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
 import { invalidatePublicWebDiscoveryCache } from "../lib/publicWebDiscoveryReadModel";
 import { parseUniversityBulkStatus } from "../lib/universityBulkStatus";
+import { normalizeCatalogSourceMetadata } from "../lib/catalogSourceMetadata";
 
 const router: IRouter = Router();
 
@@ -33,6 +34,7 @@ const UNI_PATCH_FIELDS = [
   "defaultRequiredEducationLevel", "defaultMinGradeValue", "defaultGradeScale",
   "defaultLanguageRequirements", "defaultConditionalAdmission",
   "admissionSourceUrl", "admissionVerifiedAt", "admissionValidUntil",
+  "sourceMetadata",
 ];
 
 const CONTACT_FIELDS = ["contactPersonName", "contactPersonPhone", "contactPersonEmail"];
@@ -62,6 +64,7 @@ const PROG_PATCH_FIELDS = [
   "minGpa", "minLanguageScore", "quota", "isActive", "requiredEducationLevel",
   "minGradeValue", "gradeScale", "languageRequirements", "conditionalAdmission",
   "admissionSourceUrl", "admissionVerifiedAt", "admissionValidUntil",
+  "sourceMetadata",
 ];
 
 function normalizeAdmissionUrl(value: unknown): string | null {
@@ -127,6 +130,7 @@ function maskContacts(uni: Record<string, any>, userRole?: string): Record<strin
     delete masked[f];
   }
   if (userRole === "super_admin") return masked;
+  delete masked.sourceMetadata;
   for (const f of CONTACT_FIELDS) {
     delete masked[f];
   }
@@ -253,7 +257,7 @@ router.post("/universities", requireAuth, requireRole(...MANAGER_ROLES), async (
     nationalityPolicy = "unknown", acceptedNationalityCodes = [],
     defaultRequiredEducationLevel, defaultMinGradeValue, defaultGradeScale,
     defaultLanguageRequirements = [], defaultConditionalAdmission = false,
-    admissionSourceUrl, admissionVerifiedAt, admissionValidUntil,
+    admissionSourceUrl, admissionVerifiedAt, admissionValidUntil, sourceMetadata,
   } = req.body;
   if (!name || !country) { res.status(400).json({ error: "name and country are required" }); return; }
   let normalizedNationalities: string[];
@@ -261,12 +265,14 @@ router.post("/universities", requireAuth, requireRole(...MANAGER_ROLES), async (
   let normalizedUniversityVerifiedAt: Date | null;
   let normalizedUniversityValidUntil: Date | null;
   let normalizedDefaultLanguages: Array<{ test: string; overall: number }>;
+  let normalizedSourceMetadata;
   try {
     normalizedNationalities = normalizeNationalityPolicy(nationalityPolicy, acceptedNationalityCodes);
     normalizedUniversitySource = normalizeAdmissionUrl(admissionSourceUrl);
     normalizedUniversityVerifiedAt = normalizeAdmissionDate(admissionVerifiedAt);
     normalizedUniversityValidUntil = normalizeAdmissionDate(admissionValidUntil, "admissionValidUntil");
     normalizedDefaultLanguages = normalizeLanguageRequirements(defaultLanguageRequirements);
+    normalizedSourceMetadata = normalizeCatalogSourceMetadata("university", sourceMetadata);
     requireCurrentAdmissionEvidence({
       source: normalizedUniversitySource,
       verifiedAt: normalizedUniversityVerifiedAt,
@@ -304,6 +310,7 @@ router.post("/universities", requireAuth, requireRole(...MANAGER_ROLES), async (
     admissionSourceUrl: normalizedUniversitySource,
     admissionVerifiedAt: normalizedUniversityVerifiedAt,
     admissionValidUntil: normalizedUniversityValidUntil,
+    sourceMetadata: normalizedSourceMetadata,
   }).returning();
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
   invalidatePublicWebDiscoveryCache();
@@ -372,6 +379,9 @@ router.patch("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), as
       catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
     } else if (key === "defaultLanguageRequirements") {
       try { updates[key] = normalizeLanguageRequirements(req.body[key]); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+    } else if (key === "sourceMetadata") {
+      try { updates[key] = normalizeCatalogSourceMetadata("university", req.body[key]); }
       catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
     } else {
       updates[key] = req.body[key];
@@ -566,7 +576,7 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee,
     feeType, minGpa, minLanguageScore, quota, isActive = true,
     requiredEducationLevel, minGradeValue, gradeScale, languageRequirements,
-    conditionalAdmission, admissionSourceUrl, admissionVerifiedAt, admissionValidUntil,
+    conditionalAdmission, admissionSourceUrl, admissionVerifiedAt, admissionValidUntil, sourceMetadata,
   } = req.body;
   if (!universityId || !name) { res.status(400).json({ error: "universityId and name are required" }); return; }
   const n = (v: any) => (v !== undefined && v !== "" && v !== null ? Number(v) : null);
@@ -580,11 +590,13 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
   let normalizedProgramSource: string | null;
   let normalizedProgramVerifiedAt: Date | null;
   let normalizedProgramValidUntil: Date | null;
+  let normalizedSourceMetadata;
   try {
     normalizedProgramLanguages = normalizeLanguageRequirements(languageRequirements);
     normalizedProgramSource = normalizeAdmissionUrl(admissionSourceUrl);
     normalizedProgramVerifiedAt = normalizeAdmissionDate(admissionVerifiedAt);
     normalizedProgramValidUntil = normalizeAdmissionDate(admissionValidUntil, "admissionValidUntil");
+    normalizedSourceMetadata = normalizeCatalogSourceMetadata("program", sourceMetadata);
     requireCurrentAdmissionEvidence({
       source: normalizedProgramSource,
       verifiedAt: normalizedProgramVerifiedAt,
@@ -616,6 +628,7 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     admissionSourceUrl: normalizedProgramSource,
     admissionVerifiedAt: normalizedProgramVerifiedAt,
     admissionValidUntil: normalizedProgramValidUntil,
+    sourceMetadata: normalizedSourceMetadata,
     quota: quotaVal,
     isActive,
   }).returning();
@@ -852,6 +865,7 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
     if (updates.admissionSourceUrl !== undefined) updates.admissionSourceUrl = normalizeAdmissionUrl(updates.admissionSourceUrl);
     if (updates.admissionVerifiedAt !== undefined) updates.admissionVerifiedAt = normalizeAdmissionDate(updates.admissionVerifiedAt);
     if (updates.admissionValidUntil !== undefined) updates.admissionValidUntil = normalizeAdmissionDate(updates.admissionValidUntil, "admissionValidUntil");
+    if (updates.sourceMetadata !== undefined) updates.sourceMetadata = normalizeCatalogSourceMetadata("program", updates.sourceMetadata);
   } catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
   if (updates.quota !== undefined) {
     if (updates.quota === null || updates.quota === "") {

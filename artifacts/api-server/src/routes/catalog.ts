@@ -10,6 +10,7 @@ import { normalizeProgramImportRows, collectUniversitiesToCreate } from "../lib/
 import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
 import { invalidatePublicWebDiscoveryCache } from "../lib/publicWebDiscoveryReadModel";
 import * as XLSX from "xlsx";
+import { isCatalogSourceMetadataColumn, normalizeCatalogSourceMetadata, normalizeCatalogSourceMetadataFromRow, omitCatalogSourceMetadata } from "../lib/catalogSourceMetadata";
 
 // Catalog bulk-import endpoints accept JSON arrays of thousands of rows
 // (Excel imports). The global body limit is intentionally small (1mb) for
@@ -64,7 +65,8 @@ router.get("/countries", async (req, res): Promise<void> => {
   const data = await db.select().from(countriesTable).where(where)
     .orderBy(countriesTable.name).limit(limitNum).offset(offset);
 
-  res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum } });
+  const visible = req.user && (MANAGER_ROLES as readonly string[]).includes(req.user.role) ? data : data.map(row => omitCatalogSourceMetadata(row));
+  res.json({ data: visible, meta: { total: Number(count), page: pageNum, limit: limitNum } });
 });
 
 // Public (no-auth) country list for embed/web-to-lead/public-apply phone and
@@ -97,10 +99,10 @@ router.get("/public/countries", async (req, res): Promise<void> => {
 });
 
 router.post("/countries", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { name, code, flagEmoji, dialCode, isActive = true } = req.body;
+  const { name, code, flagEmoji, dialCode, sourceMetadata, isActive = true } = req.body;
   if (!name || !code) { res.status(400).json({ error: "name and code are required" }); return; }
   try {
-    const [country] = await db.insert(countriesTable).values({ name, code: code.toUpperCase(), flagEmoji, dialCode: normalizeDialCode(dialCode), isActive }).returning();
+    const [country] = await db.insert(countriesTable).values({ name, code: code.toUpperCase(), flagEmoji, dialCode: normalizeDialCode(dialCode), sourceMetadata: normalizeCatalogSourceMetadata("country", sourceMetadata), isActive }).returning();
     invalidatePublicCatalogRenderCache({ entityType: "catalog" });
     invalidatePublicWebDiscoveryCache();
     await logAudit(req.user!.id, "create_country", "country", country.id, { name, code }, req.ip);
@@ -111,7 +113,7 @@ router.post("/countries", requireAuth, requireRole(...MANAGER_ROLES), async (req
 router.post("/countries/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const rows: { name: string; code: string; flagEmoji?: string; dialCode?: string }[] = req.body;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
-  const values = rows.map(r => ({ name: r.name, code: r.code.toUpperCase(), flagEmoji: r.flagEmoji ?? null, dialCode: normalizeDialCode(r.dialCode), isActive: true }));
+  const values = rows.map(r => ({ name: r.name, code: r.code.toUpperCase(), flagEmoji: r.flagEmoji ?? null, dialCode: normalizeDialCode(r.dialCode), sourceMetadata: normalizeCatalogSourceMetadataFromRow("country", r as Record<string, unknown>), isActive: true }));
   const inserted = await db.insert(countriesTable).values(values).onConflictDoNothing().returning();
   if (inserted.length > 0) {
     invalidatePublicCatalogRenderCache({ entityType: "catalog" });
@@ -130,6 +132,10 @@ router.patch("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), async
   if (flagEmoji !== undefined) updates.flagEmoji = flagEmoji;
   if (dialCode !== undefined) updates.dialCode = normalizeDialCode(dialCode);
   if (isActive !== undefined) updates.isActive = isActive;
+  if (req.body.sourceMetadata !== undefined) {
+    try { updates.sourceMetadata = normalizeCatalogSourceMetadata("country", req.body.sourceMetadata); }
+    catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+  }
   const [country] = await db.update(countriesTable).set(updates).where(eq(countriesTable.id, id)).returning();
   if (!country) { res.status(404).json({ error: "Not found" }); return; }
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
@@ -166,13 +172,16 @@ router.get("/cities", async (req, res): Promise<void> => {
   const data = await db.select().from(citiesTable).where(where)
     .orderBy(citiesTable.name).limit(limitNum).offset(offset);
 
-  res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum } });
+  const visible = req.user && (MANAGER_ROLES as readonly string[]).includes(req.user.role) ? data : data.map(row => omitCatalogSourceMetadata(row));
+  res.json({ data: visible, meta: { total: Number(count), page: pageNum, limit: limitNum } });
 });
 
 router.post("/cities", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { name, countryId, isActive = true } = req.body;
+  const { name, countryId, sourceMetadata, isActive = true } = req.body;
   if (!name || !countryId) { res.status(400).json({ error: "name and countryId are required" }); return; }
-  const [city] = await db.insert(citiesTable).values({ name, countryId, isActive }).returning();
+  let normalizedSources; try { normalizedSources = normalizeCatalogSourceMetadata("city", sourceMetadata); }
+  catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+  const [city] = await db.insert(citiesTable).values({ name, countryId, sourceMetadata: normalizedSources, isActive }).returning();
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
   invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "create_city", "city", city.id, { name, countryId }, req.ip);
@@ -189,8 +198,8 @@ router.post("/cities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES)
   const values = rows.map(r => {
     const cid = r.countryId ?? (r.countryCode ? codeMap[r.countryCode.toUpperCase()] : undefined);
     if (!cid) return null;
-    return { name: r.name, countryId: cid, isActive: true };
-  }).filter(Boolean) as { name: string; countryId: number; isActive: boolean }[];
+    return { name: r.name, countryId: cid, sourceMetadata: normalizeCatalogSourceMetadataFromRow("city", r as Record<string, unknown>), isActive: true };
+  }).filter(Boolean) as (typeof citiesTable.$inferInsert)[];
 
   if (values.length === 0) { res.status(400).json({ error: "No valid rows (countryId or countryCode required)" }); return; }
   const inserted = await db.insert(citiesTable).values(values).returning();
@@ -209,6 +218,10 @@ router.patch("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   if (name !== undefined) updates.name = name;
   if (countryId !== undefined) updates.countryId = countryId;
   if (isActive !== undefined) updates.isActive = isActive;
+  if (req.body.sourceMetadata !== undefined) {
+    try { updates.sourceMetadata = normalizeCatalogSourceMetadata("city", req.body.sourceMetadata); }
+    catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+  }
   const [city] = await db.update(citiesTable).set(updates).where(eq(citiesTable.id, id)).returning();
   if (!city) { res.status(404).json({ error: "Not found" }); return; }
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
@@ -262,6 +275,7 @@ router.post("/universities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_
     contactPersonPhone: r.contactPersonPhone ?? null,
     contactPersonEmail: r.contactPersonEmail ?? null,
     status: r.status ?? "open",
+    sourceMetadata: normalizeCatalogSourceMetadataFromRow("university", r as Record<string, unknown>),
     isActive: r.isActive === false || (typeof r.isActive === "string" && ["no", "false", "0"].includes(r.isActive.toLowerCase().trim())) ? false : true,
   }));
 
@@ -432,7 +446,7 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     "duration", "tuitionFee", "currency", "scholarship", "intakes",
     "requirements", "commissionRate", "applicationFee", "advancedFee",
     "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
-    "feeType", "minGpa", "minLanguageScore", "quota", "isActive", "country",
+    "feeType", "minGpa", "minLanguageScore", "quota", "isActive", "country", "sourceMetadata", "sourceMetadataJson",
   ]);
 
   const docColsByRowIdx = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined>();
@@ -466,6 +480,7 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     // membership with `docKeySet` so unknown keys never land in the DB.
     for (const colKey of Object.keys(r)) {
       if (NON_DOC_COLUMNS.has(colKey)) continue;
+      if (isCatalogSourceMetadataColumn(colKey)) continue;
       if (docKeySet.has(colKey)) {
         sawAnyDocCol = true;
         const { value, invalid } = parseDocCellValue((r as Record<string, unknown>)[colKey]);
@@ -512,6 +527,7 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
       minGpa: r.minGpa ? Number(r.minGpa) : null,
       minLanguageScore: r.minLanguageScore ? Number(r.minLanguageScore) : null,
       quota: r.quota ? (isNaN(Number(r.quota)) || Math.round(Number(r.quota)) < 1 ? null : Math.round(Number(r.quota))) : null,
+      sourceMetadata: normalizeCatalogSourceMetadataFromRow("program", r as Record<string, unknown>),
       isActive: r.isActive === false || (typeof r.isActive === "string" && ["no", "false", "0"].includes(r.isActive.toLowerCase().trim())) ? false : true,
     };
   }).filter(Boolean) as (typeof programsTable.$inferInsert)[];

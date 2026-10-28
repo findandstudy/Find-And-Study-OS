@@ -175,8 +175,10 @@ function useDebounce<T>(value: T, delay = 300): T {
 
 /* ─── types ─────────────────────────────────────────────────── */
 
-type Country = { id: number; name: string; code: string; flagEmoji?: string | null; dialCode?: string | null; isActive: boolean };
-type City = { id: number; name: string; countryId: number; isActive: boolean };
+type CatalogFieldSource = { sourceName?: string; sourceUrl?: string; verifiedAt?: string; validUntil?: string; notes?: string };
+type CatalogSourceMetadata = Record<string, CatalogFieldSource>;
+type Country = { id: number; name: string; code: string; flagEmoji?: string | null; dialCode?: string | null; sourceMetadata?: CatalogSourceMetadata; isActive: boolean };
+type City = { id: number; name: string; countryId: number; sourceMetadata?: CatalogSourceMetadata; isActive: boolean };
 type University = {
   id: number; name: string; country: string; city?: string | null; website?: string | null;
   description?: string | null; ranking?: number | null; logoUrl?: string | null; isActive: boolean;
@@ -190,11 +192,42 @@ type University = {
   defaultRequiredEducationLevel?: string | null; defaultMinGradeValue?: number | null; defaultGradeScale?: string | null;
   defaultLanguageRequirements?: Array<{ test: string; overall: number }>; defaultConditionalAdmission?: boolean;
   admissionSourceUrl?: string | null; admissionVerifiedAt?: string | null; admissionValidUntil?: string | null;
+  sourceMetadata?: CatalogSourceMetadata;
   status: string;
 };
 type UniversityOption = Pick<University, "id" | "name">;
 type ProgramTranslationSummary = { total: number; published: number; pending: number; failed: number; manual: number; target: number };
-type Program = { id: number; universityId: number; universityName?: string | null; name: string; description?: string | null; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; quota?: number | null; isActive: boolean; requiredEducationLevel?: string | null; minGradeValue?: number | null; gradeScale?: string | null; languageRequirements?: Array<{ test: string; overall: number }> | null; conditionalAdmission?: boolean | null; admissionSourceUrl?: string | null; admissionVerifiedAt?: string | null; admissionValidUntil?: string | null; translationSummary?: ProgramTranslationSummary };
+type Program = { id: number; universityId: number; universityName?: string | null; name: string; description?: string | null; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; quota?: number | null; isActive: boolean; requiredEducationLevel?: string | null; minGradeValue?: number | null; gradeScale?: string | null; languageRequirements?: Array<{ test: string; overall: number }> | null; conditionalAdmission?: boolean | null; admissionSourceUrl?: string | null; admissionVerifiedAt?: string | null; admissionValidUntil?: string | null; sourceMetadata?: CatalogSourceMetadata; translationSummary?: ProgramTranslationSummary };
+
+type SourceFieldOption = readonly [key: string, label: string, group: string];
+const SOURCE_FIELDS = {
+  country: [["name","Country name","Identity"],["code","ISO code","Identity"],["flagEmoji","Flag","Identity"],["dialCode","Dial code","Identity"],["description","Description","Overview"],["languages","Languages","Key facts"],["currency","Currency","Key facts"],["climate","Climate and weather","Planning"],["livingCost","Living costs","Planning"],["visaInfo","Visa information","Planning"],["workPermit","Work rights","Planning"],["heroMedia","Hero media","Media"],["gallery","Gallery","Media"],["education","Education system","Sections"],["keyFacts","Country facts","Sections"],["admission","Admissions","Sections"],["requirements","Entry requirements","Sections"],["scholarships","Scholarships","Sections"],["housing","Housing","Sections"],["services","Student services","Sections"],["cities","Featured cities","Sections"],["universities","Featured universities","Sections"],["faq","FAQ","Sections"]],
+  city: [["name","City name","Identity"],["country","Country","Identity"],["description","Description","Overview"],["coordinates","Coordinates","Location"],["transportModes","Transport","Planning"],["campusGeography","Campus geography","Planning"],["programLanguages","Teaching languages","Study data"],["climate","Climate and weather","Planning"],["housing","Housing","Planning"],["heroMedia","Hero media","Media"],["gallery","Gallery","Media"],["education","Studying in the city","Sections"],["keyFacts","City facts","Sections"],["living","Daily life and budgeting","Sections"],["requirements","Entry requirements","Sections"],["visa","Visa guidance","Sections"],["services","Student services","Sections"],["universities","Universities","Sections"],["programs","Programs","Sections"],["faq","FAQ","Sections"]],
+  university: [["name","University name","Identity"],["country","Country","Location"],["city","City","Location"],["address","Address","Location"],["website","Official website","Identity"],["logoUrl","Logo","Media"],["description","Description","Overview"],["universityType","University type","Overview"],["ranking","Ranking","Rankings"],["fees","Fees","Admissions"],["admissionProcess","Admission process","Admissions"],["admissionRules","Admission rules","Admissions"],["heroMedia","Hero media","Media"],["gallery","Gallery","Media"],["highlights","Highlights","Sections"],["programs","Programs","Sections"],["admission","Admissions","Sections"],["scholarships","Scholarships","Sections"],["keyFacts","University facts","Sections"],["support","Student support","Sections"],["services","Student services","Sections"],["campus","Campus","Sections"],["housing","Housing","Sections"],["recognition","Recognition","Sections"],["living","Living and budgeting","Sections"],["faq","FAQ","Sections"]],
+  program: [["name","Program name","Identity"],["description","Description","Overview"],["degree","Degree","Academics"],["field","Field","Academics"],["language","Teaching language","Academics"],["duration","Duration","Academics"],["tuitionFee","Tuition fee","Fees"],["discountedFee","Discounted fee","Fees"],["scholarship","Scholarship","Fees"],["currency","Currency","Fees"],["depositFee","Deposit fee","Fees"],["applicationFee","Application fee","Fees"],["intakes","Intakes","Admissions"],["requirements","Requirements","Admissions"],["quota","Quota","Admissions"],["admissionRules","Admission rules","Admissions"],["heroMedia","Hero media","Media"],["gallery","Gallery","Media"],["curriculum","Curriculum","Sections"],["admission","Admissions","Sections"],["fees","Fees overview","Sections"],["living","Living costs","Sections"],["campus","Campus","Sections"],["housing","Housing","Sections"],["services","Student services","Sections"],["faq","FAQ","Sections"]],
+} as const satisfies Record<string, readonly SourceFieldOption[]>;
+
+const SOURCE_PROPERTIES = [["sourceName","Source / institution"],["sourceUrl","Source URL"],["verifiedAt","Last verified"],["validUntil","Valid until"],["notes","Internal note"]] as const;
+function catalogSourceColumns(value: CatalogSourceMetadata | undefined, fields: readonly SourceFieldOption[]) {
+  const columns: Record<string,string> = { "Source Metadata JSON": JSON.stringify(value ?? {}) };
+  for (const [field,label] of fields) for (const [property,propertyLabel] of SOURCE_PROPERTIES) {
+    const raw = value?.[field]?.[property] ?? "";
+    columns[`Source · ${label} [${field}] · ${propertyLabel}`] = (property === "verifiedAt" || property === "validUntil") && raw ? raw.slice(0,10) : raw;
+  }
+  return columns;
+}
+
+function SourceMetadataEditor({ value, fields, onChange }: { value?: CatalogSourceMetadata; fields: readonly SourceFieldOption[]; onChange: (value: CatalogSourceMetadata) => void }) {
+  const metadata = value ?? {}; const [selectedField,setSelectedField] = useState("");
+  const available = fields.filter(([key]) => !metadata[key]);
+  const setEntry = (key:string, patch:Partial<CatalogFieldSource>) => onChange({ ...metadata, [key]: { ...metadata[key], ...patch } });
+  return <details className="rounded-lg border bg-muted/20 p-3" open>
+    <summary className="cursor-pointer text-sm font-medium">External sources & verification <span className="font-normal text-muted-foreground">({Object.keys(metadata).length} added)</span></summary>
+    <p className="mt-2 text-xs text-muted-foreground">Add the official evidence used for catalogue facts and dynamic page sections. Internal notes remain admin-only.</p>
+    <div className="mt-3 flex gap-2"><Select value={selectedField} onValueChange={setSelectedField}><SelectTrigger className="flex-1"><SelectValue placeholder="Choose a field" /></SelectTrigger><SelectContent className="max-h-80">{available.map(([key,label,group]) => <SelectItem key={key} value={key}>{group} · {label}</SelectItem>)}</SelectContent></Select><Button type="button" variant="outline" disabled={!selectedField} onClick={() => { if(selectedField){ onChange({...metadata,[selectedField]:{}}); setSelectedField(""); } }}><Plus className="mr-1 h-4 w-4"/>Add source</Button></div>
+    <div className="mt-3 space-y-3">{Object.entries(metadata).map(([key,entry]) => { const option=fields.find(([field])=>field===key); return <div key={key} className="space-y-2 rounded-md border bg-background p-3"><div className="flex items-center justify-between"><span className="text-sm font-semibold">{option?.[1] ?? key}</span><Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => { const next={...metadata}; delete next[key]; onChange(next); }}><Trash2 className="h-3.5 w-3.5"/></Button></div><div className="grid gap-2 sm:grid-cols-2"><div><Label className="text-xs">Source / institution</Label><Input className="mt-1" value={entry.sourceName ?? ""} onChange={e=>setEntry(key,{sourceName:e.target.value})}/></div><div><Label className="text-xs">Source URL</Label><Input className="mt-1" type="url" value={entry.sourceUrl ?? ""} onChange={e=>setEntry(key,{sourceUrl:e.target.value})} placeholder="https://..."/></div><div><Label className="text-xs">Last verified</Label><Input className="mt-1" type="date" value={entry.verifiedAt?.slice(0,10) ?? ""} onChange={e=>setEntry(key,{verifiedAt:e.target.value})}/></div><div><Label className="text-xs">Valid until</Label><Input className="mt-1" type="date" value={entry.validUntil?.slice(0,10) ?? ""} onChange={e=>setEntry(key,{validUntil:e.target.value})}/></div></div><div><Label className="text-xs">Internal verification note</Label><Input className="mt-1" value={entry.notes ?? ""} onChange={e=>setEntry(key,{notes:e.target.value})}/></div></div>; })}</div>
+  </details>;
+}
 
 type ProgramTranslationRow = {
   programId: number;
@@ -593,6 +626,7 @@ function CountriesTab() {
         Name: c.name, "ISO Code": c.code, "Flag Emoji": c.flagEmoji ?? "",
         "Dial Code": c.dialCode ?? "",
         Status: c.isActive ? "Active" : "Inactive",
+        ...catalogSourceColumns(c.sourceMetadata, SOURCE_FIELDS.country),
       }));
       await exportToExcel(rows, "Countries", `countries-${new Date().toISOString().slice(0, 10)}.xlsx`);
     } catch {}
@@ -608,8 +642,8 @@ function CountriesTab() {
   };
 
   const templateRows = [
-    { name: "Türkiye", code: "TR", flagEmoji: "🇹🇷", dialCode: "+90" },
-    { name: "United Kingdom", code: "GB", flagEmoji: "🇬🇧", dialCode: "+44" },
+    { name: "Türkiye", code: "TR", flagEmoji: "🇹🇷", dialCode: "+90", ...catalogSourceColumns(undefined, SOURCE_FIELDS.country) },
+    { name: "United Kingdom", code: "GB", flagEmoji: "🇬🇧", dialCode: "+44", ...catalogSourceColumns(undefined, SOURCE_FIELDS.country) },
     { name: "Germany", code: "DE", flagEmoji: "🇩🇪", dialCode: "+49" },
     { name: "France", code: "FR", flagEmoji: "🇫🇷", dialCode: "+33" },
   ];
@@ -699,7 +733,7 @@ function CountriesTab() {
 
       {/* Add/Edit Modal */}
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{form?.id ? t("catalogPage.editCountry") : t("catalogPage.newCountry")}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>{t("catalogPage.countryNameReq")}</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
@@ -710,6 +744,7 @@ function CountriesTab() {
               <Label>{t("common.active")}</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
+            <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.country} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
@@ -720,7 +755,7 @@ function CountriesTab() {
 
       {/* Single delete confirm */}
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{t("catalogPage.deleteCountry")}</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">{t("catalogPage.confirmDeleteCountry")}</p>
           <DialogFooter>
@@ -871,6 +906,7 @@ function CitiesTab() {
       const rows = list.map((c: City) => ({
         Name: c.name, Country: cMap[c.countryId]?.name ?? "", "Country Code": cMap[c.countryId]?.code ?? "",
         Status: c.isActive ? "Active" : "Inactive",
+        ...catalogSourceColumns(c.sourceMetadata, SOURCE_FIELDS.city),
       }));
       await exportToExcel(rows, "Cities", `cities-${new Date().toISOString().slice(0, 10)}.xlsx`);
     } catch {}
@@ -886,9 +922,9 @@ function CitiesTab() {
   };
 
   const templateRows = [
-    { name: "İstanbul", countryCode: "TR" },
-    { name: "Ankara", countryCode: "TR" },
-    { name: "London", countryCode: "GB" },
+    { name: "İstanbul", countryCode: "TR", ...catalogSourceColumns(undefined, SOURCE_FIELDS.city) },
+    { name: "Ankara", countryCode: "TR", ...catalogSourceColumns(undefined, SOURCE_FIELDS.city) },
+    { name: "London", countryCode: "GB", ...catalogSourceColumns(undefined, SOURCE_FIELDS.city) },
     { name: "Berlin", countryCode: "DE" },
   ];
 
@@ -1010,6 +1046,7 @@ function CitiesTab() {
               <Label>{t("common.active")}</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
+            <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.city} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
@@ -1194,6 +1231,7 @@ function UniversitiesTab() {
         "Initial Deposit Options": u.initialDepositOptions ?? "", "Admission Process": u.admissionProcess ?? "",
         "Contact Person": u.contactPersonName ?? "", "Contact Phone": u.contactPersonPhone ?? "",
         "Contact Email": u.contactPersonEmail ?? "", Description: u.description ?? "",
+        ...catalogSourceColumns(u.sourceMetadata, SOURCE_FIELDS.university),
       }));
       await exportToExcel(rows, "Universities", `universities-${new Date().toISOString().slice(0, 10)}.xlsx`);
     } catch {}
@@ -1282,7 +1320,7 @@ function UniversitiesTab() {
     { name: "Istanbul University", country: "Turkey", city: "Istanbul", website: "https://www.istanbul.edu.tr", description: "Leading state university", ranking: 351, universityType: "Public", taxType: "KDV", taxPercent: 18, qsRanking: 501, timesRanking: 601, shanghaiRanking: 401, cwtsLeidenRanking: 0, address: "Beyazıt, 34452 Fatih/İstanbul", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Bank Transfer", admissionProcess: "Online application via portal", contactPersonName: "Ahmet Yılmaz", contactPersonPhone: "+90 212 440 0000", contactPersonEmail: "intl@istanbul.edu.tr", status: "open", isActive: "Yes" },
     { name: "Middle East Technical University", country: "Turkey", city: "Ankara", website: "https://www.metu.edu.tr", description: "Top technical university", ranking: 601, universityType: "Public", taxType: "KDV", taxPercent: 18, qsRanking: 336, timesRanking: 401, shanghaiRanking: 501, cwtsLeidenRanking: 0, address: "Üniversiteler Mah. Dumlupınar Blv. No:1, 06800 Çankaya/Ankara", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Credit Card, Bank Transfer", admissionProcess: "Apply through international office", contactPersonName: "Elif Demir", contactPersonPhone: "+90 312 210 2000", contactPersonEmail: "intl@metu.edu.tr", status: "open", isActive: "Yes" },
     { name: "King's College London", country: "United Kingdom", city: "London", website: "https://www.kcl.ac.uk", description: "Russell Group university", ranking: 35, universityType: "Private", taxType: "VAT", taxPercent: 20, qsRanking: 40, timesRanking: 35, shanghaiRanking: 47, cwtsLeidenRanking: 55, address: "Strand, London WC2R 2LS, UK", logoUrl: "", onlinePaymentUrl: "https://pay.kcl.ac.uk", cricosLink: "", documentsLink: "https://docs.kcl.ac.uk", currentFeeListLink: "https://www.kcl.ac.uk/study/fees", initialDepositOptions: "Credit Card, Bank Transfer", admissionProcess: "UCAS application required", contactPersonName: "James Smith", contactPersonPhone: "+44 20 7836 5454", contactPersonEmail: "admissions@kcl.ac.uk", status: "open", isActive: "Yes" },
-  ];
+  ].map(row => ({ ...row, ...catalogSourceColumns(undefined, SOURCE_FIELDS.university) }));
 
   return (
     <>
@@ -1663,6 +1701,7 @@ function UniversitiesTab() {
                 </div>
               </div>
             )}
+            <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.university} onChange={sourceMetadata => setF({ sourceMetadata })} />
           </div>
 
           <DialogFooter className="mt-4">
@@ -1904,6 +1943,7 @@ function ProgramsTab() {
         "Min Language Score": p.minLanguageScore ?? "", "Quota": p.quota ?? "",
         Active: p.isActive ? "Yes" : "No",
         Requirements: p.requirements ?? "",
+        ...catalogSourceColumns(p.sourceMetadata, SOURCE_FIELDS.program),
       }));
       await exportToExcel(rows, "Programs", `programs-${new Date().toISOString().slice(0, 10)}.xlsx`);
     } catch {}
@@ -2017,6 +2057,7 @@ function ProgramsTab() {
       advancedFee: 0, depositFee: 1000, serviceFeeAmount: 0, discountedFee: 2340,
       languageFee: 0, feeType: "Per Year", minGpa: 0, minLanguageScore: 0, quota: "",
       isActive: "Yes",
+      ...catalogSourceColumns(undefined, SOURCE_FIELDS.program),
       ...docColumnsAll(""),
       passport: "mandatory", high_school_diploma_translation: "mandatory",
       class_12th_hsc_marks_sheet: "mandatory", photo: "mandatory",
@@ -2030,6 +2071,7 @@ function ProgramsTab() {
       commissionRate: 9, applicationFee: 0, advancedFee: 0, depositFee: 2000,
       serviceFeeAmount: 0, discountedFee: 11900, languageFee: 0, feeType: "Per Year",
       minGpa: 0, minLanguageScore: 0, quota: "", isActive: "Yes",
+      ...catalogSourceColumns(undefined, SOURCE_FIELDS.program),
       ...docColumnsAll(""),
       passport: "mandatory", high_school_diploma_translation: "mandatory",
       class_12th_hsc_marks_sheet: "mandatory", photo: "mandatory",
@@ -2044,6 +2086,7 @@ function ProgramsTab() {
       commissionRate: 13, applicationFee: 0, advancedFee: 0, depositFee: 1000,
       serviceFeeAmount: 0, discountedFee: 4590, languageFee: 0, feeType: "Per Year",
       minGpa: 0, minLanguageScore: 0, quota: "", isActive: "Yes",
+      ...catalogSourceColumns(undefined, SOURCE_FIELDS.program),
       ...docColumnsAll(""),
       passport: "mandatory", bachelors_certificate: "mandatory",
       bachelors_transcript: "mandatory", photo: "mandatory",
@@ -2072,6 +2115,7 @@ function ProgramsTab() {
     { Column: "minLanguageScore", Required: "No", Notes: "Numeric — IELTS / TOEFL / Duolingo equivalent." },
     { Column: "quota", Required: "No", Notes: "Integer — number of seats per intake." },
     { Column: "isActive", Required: "No", Notes: "Yes / No (defaults to Yes)." },
+    { Column: "Source · …", Required: "No", Notes: "Field-level official source, URL, verification date, validity and internal note. Internal notes are never public." },
     { Column: "— Document columns —", Required: "", Notes: "Every column from 'passport' onwards is a required-document marker." },
     { Column: "Allowed cell values", Required: "", Notes: "'mandatory' = student MUST upload before applying. 'optional' = shown but not required. (blank) = not requested." },
     { Column: "Removed columns", Required: "", Notes: "Any document column that you delete from the sheet is left UNCHANGED on existing programs (only filled cells overwrite)." },
@@ -2563,6 +2607,7 @@ function ProgramsTab() {
               <Label>{t("common.active")}</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
+            <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.program} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
