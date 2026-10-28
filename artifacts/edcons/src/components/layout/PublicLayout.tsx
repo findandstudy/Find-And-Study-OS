@@ -14,7 +14,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const [, setLocation] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
-  const [headerLogoLoaded, setHeaderLogoLoaded] = useState(false);
+  const [headerLogoFailed, setHeaderLogoFailed] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
 
   const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -30,7 +30,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const companyName = settings.companyName || "Find And Study OS";
 
   useEffect(() => {
-    setHeaderLogoLoaded(false);
+    setHeaderLogoFailed(false);
   }, [logoUrl]);
 
   useEffect(() => {
@@ -71,7 +71,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-[100] w-full glass border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <Link href={localePath("/")} className="group relative flex h-12 w-11 min-w-0 items-center gap-2 sm:w-[220px]">
-            <div className="flex min-w-0 items-center gap-2" aria-hidden={headerLogoLoaded}>
+            <div className={`flex min-w-0 items-center gap-2 ${logoUrl && !headerLogoFailed ? "invisible" : ""}`} aria-hidden={Boolean(logoUrl && !headerLogoFailed)}>
               <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform duration-300">
                 <GraduationCap className="w-6 h-6" />
               </div>
@@ -79,8 +79,8 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 {companyName}
               </span>
             </div>
-            {logoUrl ? (
-              <picture className={`absolute inset-0 flex h-12 w-full items-center bg-background/95 transition-opacity duration-200 ${headerLogoLoaded ? "opacity-100" : "opacity-0"}`}>
+            {logoUrl && !headerLogoFailed ? (
+              <picture className="absolute inset-0 flex h-12 w-full items-center">
                 {squareLogoUrl ? <source media="(max-width: 639px)" srcSet={squareLogoUrl} /> : null}
                 <img
                   src={logoUrl}
@@ -88,7 +88,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                   decoding="async"
                   fetchPriority="high"
                   className="h-12 w-full object-contain object-left transition-transform duration-300 group-hover:scale-[1.02] rtl:object-right"
-                  onLoad={() => setHeaderLogoLoaded(true)}
+                  onError={() => setHeaderLogoFailed(true)}
                 />
               </picture>
             ) : null}

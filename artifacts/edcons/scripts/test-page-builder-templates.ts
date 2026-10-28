@@ -53,6 +53,8 @@ test("Home and About reuse published blocks while preserving static fallbacks an
   assert.match(home, /<CmsPageCanvas className="home-future-page">/);
   assert.match(publicPage, /safeHeroTextColor/);
   assert.match(publicPage, /safeSurfaceTextColor/);
+  assert.match(publicPage, /cta_banner[\s\S]*--cms-section-bg[\s\S]*linear-gradient\(125deg/);
+  assert.doesNotMatch(publicPage, /home-future-cta[^\n]*text-white/);
   assert.match(publicPage, /queryKey: \["public-cms-theme"\]/);
   assert.match(editorialCss, /--home-night: var\(--cms-secondary/);
   assert.match(editorialCss, /--home-electric: var\(--cms-blue/);

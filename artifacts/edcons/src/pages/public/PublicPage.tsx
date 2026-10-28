@@ -111,6 +111,10 @@ function themeStyle(tokens: Record<string, string> | undefined): CmsStyle {
 function blockStyle(block: PageBlock): CmsStyle {
   const style: CmsStyle = {};
   const appearance = { ...block.content, ...block.settings };
+  if (block.blockType === "cta_banner" && appearance.useThemeColors !== false) {
+    style["--cms-section-bg"] = "linear-gradient(125deg, var(--cms-hero-start), var(--cms-hero-end))";
+    style["--cms-section-text"] = "#ffffff";
+  }
   if (appearance.useThemeColors === false) {
     const pairs: Array<[string, unknown]> = [["--cms-section-bg", appearance.sectionBackgroundColor], ["--cms-section-text", appearance.sectionTextColor], ["--cms-section-accent", appearance.sectionAccentColor], ["--cms-card-bg", appearance.cardBackgroundColor], ["--cms-section-border", appearance.sectionBorderColor], ["--cms-section-button-bg", appearance.sectionButtonColor], ["--cms-section-button-text", appearance.sectionButtonTextColor]];
     Object.assign(style, Object.fromEntries(pairs.flatMap(([key, value]) => safeColor(value) ? [[key, safeColor(value)!]] : [])));
@@ -395,7 +399,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
       return <section className="mx-auto max-w-6xl px-4 py-16"><blockquote className="relative overflow-hidden rounded-[2rem] bg-slate-950 px-8 py-12 text-white md:px-14"><div className="absolute -end-8 -top-16 text-[14rem] font-serif leading-none text-white/5" aria-hidden="true">“</div><div className="relative flex flex-col gap-8 md:flex-row md:items-center">{portrait ? <img src={portrait} alt="" className="h-20 w-20 shrink-0 rounded-full object-cover ring-4 ring-white/10" loading="lazy" /> : null}<div><p className="max-w-4xl font-display text-2xl font-semibold leading-relaxed md:text-4xl">“{text(content.quote, 4_000)}”</p>{content.author || content.role ? <footer className="mt-6 text-sm text-white/70"><strong className="text-white">{text(content.author, 200)}</strong>{content.role ? ` · ${text(content.role, 300)}` : ""}</footer> : null}</div></div></blockquote></section>;
     }
     case "cta_banner":
-      return <section className="home-future-cta mx-auto my-12 max-w-6xl overflow-hidden rounded-[2rem] px-6 py-16 text-center text-white"><Sparkles className="mx-auto mb-6 h-7 w-7" /><h2 className="text-3xl font-bold md:text-5xl">{text(content.title, 500)}</h2><p className="mx-auto mt-5 max-w-2xl text-lg text-white/70">{text(content.subtitle)}</p><div className="cms-action-row mt-9 flex flex-wrap justify-center gap-3"><ActionLink href={content.ctaUrl} label={content.ctaLabel} secondary /><ActionLink href={content.secondaryUrl} label={content.secondaryLabel} secondary /></div></section>;
+      return <section className="home-future-cta mx-auto my-12 max-w-6xl overflow-hidden rounded-[2rem] px-6 py-16 text-center"><Sparkles className="mx-auto mb-6 h-7 w-7" /><h2 className="text-3xl font-bold md:text-5xl">{text(content.title, 500)}</h2><p className="mx-auto mt-5 max-w-2xl text-lg">{text(content.subtitle)}</p><div className="cms-action-row mt-9 flex flex-wrap justify-center gap-3"><ActionLink href={content.ctaUrl} label={content.ctaLabel} secondary /><ActionLink href={content.secondaryUrl} label={content.secondaryLabel} secondary /></div></section>;
     case "faq":
       return <section className="mx-auto max-w-3xl px-4 py-14"><h2 className="text-3xl font-bold">{text(content.title, 500)}</h2>{content.subtitle ? <p className="mt-3 text-muted-foreground">{text(content.subtitle)}</p> : null}<div className="mt-8 space-y-3">{items(content.items, 50).map((item, index) => <details key={index} className="rounded-xl border p-5"><summary className="cursor-pointer font-semibold">{text(item.question, 500)}</summary><p className="mt-3 text-muted-foreground">{text(item.answer, 4_000)}</p></details>)}</div></section>;
     case "team_grid": {

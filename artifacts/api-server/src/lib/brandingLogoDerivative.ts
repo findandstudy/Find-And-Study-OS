@@ -11,6 +11,29 @@ export type HeaderLogoDerivative = {
   etag: string;
 };
 
+export async function isEffectivelyBlankBrandingImage(source: Buffer): Promise<boolean> {
+  if (source.length <= 0 || source.length > MAX_BRANDING_SOURCE_BYTES) return true;
+  const { data, info } = await sharp(source, {
+    animated: false,
+    failOn: "warning",
+    limitInputPixels: MAX_BRANDING_SOURCE_PIXELS,
+  })
+    .rotate()
+    .ensureAlpha()
+    .resize({ width: 64, height: 64, fit: "contain", background: { r: 255, g: 255, b: 255, alpha: 0 } })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  let meaningfulPixels = 0;
+  const totalPixels = info.width * info.height;
+  for (let offset = 0; offset < data.length; offset += info.channels) {
+    const alpha = data[offset + 3] ?? 255;
+    if (alpha < 24) continue;
+    const distanceFromWhite = (255 - data[offset]) + (255 - data[offset + 1]) + (255 - data[offset + 2]);
+    if (distanceFromWhite >= 36) meaningfulPixels += 1;
+  }
+  return meaningfulPixels < Math.max(8, Math.ceil(totalPixels * 0.005));
+}
+
 export async function createHeaderLogoDerivative(source: Buffer): Promise<HeaderLogoDerivative> {
   if (source.length <= 0 || source.length > MAX_BRANDING_SOURCE_BYTES) {
     throw new Error("BRANDING_LOGO_SOURCE_SIZE_INVALID");

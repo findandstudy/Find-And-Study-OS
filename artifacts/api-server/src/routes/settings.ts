@@ -9,7 +9,7 @@ import { invalidateSuppressAutomationCache } from "../lib/notificationDispatcher
 import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
 import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
-import { createHeaderLogoDerivative, type HeaderLogoDerivative } from "../lib/brandingLogoDerivative";
+import { createHeaderLogoDerivative, isEffectivelyBlankBrandingImage, type HeaderLogoDerivative } from "../lib/brandingLogoDerivative";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -375,7 +375,7 @@ router.get("/settings/branding/logo", async (req, res): Promise<void> => {
     }).from(settingsTable);
     // email variant falls back through logoSquareUrl → logoUrl so emails always
     // show *something* even when no dedicated email logo has been uploaded yet.
-    const url = variantKey === "emailLogoUrl"
+    let url = variantKey === "emailLogoUrl"
       ? (settings?.emailLogoUrl || settings?.logoSquareUrl || settings?.logoUrl)
       : variantKey === "pdfLogoUrl"
         ? (settings?.pdfLogoUrl || settings?.logoSquareUrl || settings?.logoUrl)
@@ -385,6 +385,20 @@ router.get("/settings/branding/logo", async (req, res): Promise<void> => {
         ? (settings?.appleTouchIconUrl || settings?.logoSquareUrl || settings?.logoUrl)
       : (settings?.[variantKey as keyof typeof settings] || settings?.logoUrl);
     if (!url) { res.status(404).json({ error: "No logo configured" }); return; }
+
+    if (variantKey === "faviconUrl" && settings?.faviconUrl && settings?.logoSquareUrl && settings.faviconUrl !== settings.logoSquareUrl) {
+      try {
+        const faviconMatch = settings.faviconUrl.match(/\/api\/storage\/objects\/(.+)$/);
+        if (faviconMatch) {
+          const faviconFile = await objectStorageService.getObjectEntityFile(`/objects/${faviconMatch[1]}`);
+          const [faviconBytes] = await faviconFile.download();
+          if (await isEffectivelyBlankBrandingImage(faviconBytes)) url = settings.logoSquareUrl;
+        }
+      } catch {
+        // A broken dedicated favicon must not hide an otherwise valid square brand mark.
+        url = settings.logoSquareUrl;
+      }
+    }
 
     const match = url.match(/\/api\/storage\/objects\/(.+)$/);
     if (!match) { res.status(404).json({ error: "Invalid logo path" }); return; }
