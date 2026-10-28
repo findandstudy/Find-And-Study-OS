@@ -47,14 +47,21 @@ export function clearPublicCatalogPolicyCache(): void {
   cachedPolicy = undefined;
 }
 
+export function publicUniversityTypeAliases(values: string[]): string[] {
+  return [...new Set(values.flatMap((value) => {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "private") return [value, "Foundation", "Foundation University", "Vakıf", "Vakıf Üniversitesi"];
+    if (normalized === "public") return [value, "State", "State University", "Devlet", "Devlet Üniversitesi"];
+    return [value];
+  }).map(value => value.trim()).filter(Boolean))];
+}
+
 function universityTypeCondition(values: string[]): any | undefined {
   if (values.length === 0) return undefined;
-  if (values.length === 1) {
-    return ilike(universitiesTable.universityType, values[0]);
-  }
-  return or(...values.map((value) =>
-    ilike(universitiesTable.universityType, value)
-  ))!;
+  const aliases = publicUniversityTypeAliases(values);
+  return aliases.length === 1
+    ? ilike(universitiesTable.universityType, aliases[0])
+    : or(...aliases.map(value => ilike(universitiesTable.universityType, value)))!;
 }
 
 /** Add the canonical anonymous-visibility predicate to a Drizzle WHERE list. */

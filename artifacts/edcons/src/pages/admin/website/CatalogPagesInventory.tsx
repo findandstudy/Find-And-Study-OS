@@ -103,6 +103,10 @@ const labels: Record<string, [string, string]> = {
     "Katalog kuralıyla gizli",
   ],
   COUNTRY_ROUTE_UNAVAILABLE: ["No public route", "Halka açık rota yok"],
+  PUBLIC_OFFERINGS_UNAVAILABLE: [
+    "No public institutions yet",
+    "Henüz public kurum yok",
+  ],
   DESCRIPTION_MISSING: ["Description missing", "Açıklama eksik"],
   MEDIA_MISSING: ["Media missing", "Medya eksik"],
   TRANSLATION_FALLBACK: ["Source-language fallback", "Kaynak dil gösteriliyor"],

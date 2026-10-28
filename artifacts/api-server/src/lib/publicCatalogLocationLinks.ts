@@ -9,6 +9,10 @@ import { readPublishedLocalizedEntity } from "./publicWebDiscoveryReadModel";
 type Country = { id: number; name: string; code: string; isActive: boolean };
 type Destination = { id: number; country: string; slug: string; isActive: boolean };
 
+export function catalogCountryRouteAccessible(input: { catalogEligible: boolean; editorialPublished: boolean }): boolean {
+  return input.catalogEligible || input.editorialPublished;
+}
+
 /** Match only a unique existing identity; never guess among aliases or duplicate slugs. */
 export function matchCatalogCountry(value: string, countries: Country[]): Country | null {
   const matches = countries.filter(country => countryMatches(value, country) || publicCatalogSlug(country.name) === value);
@@ -77,7 +81,21 @@ export async function resolvePublicCatalogLocationLinks(input: { locale: unknown
 /** Catalogue-only country projection; does not manufacture a destination/publication record. */
 export async function readCatalogCountryFallback(localeInput: unknown, slug: string) {
   const directory = await readPublicCatalogCountryDirectory(localeInput);
-  const entry = directory.entries.find(row => !row.destination && publicCatalogSlug(row.country.name) === slug);
+  const listedEntry = directory.entries.find(row => !row.destination && publicCatalogSlug(row.country.name) === slug);
+  const routeOnlyCandidates = listedEntry ? [] : directory.countries.filter(country => {
+    if (!country.isActive || publicCatalogSlug(country.name) !== slug) return false;
+    return catalogCountryRoute(country, directory.countries, directory.destinations, directory.locale)
+      === `/${directory.locale}/countries/${slug}`;
+  });
+  const routeOnlyCountry = routeOnlyCandidates.length === 1 ? routeOnlyCandidates[0] : null;
+  const entry = listedEntry ?? (routeOnlyCountry ? {
+    country: routeOnlyCountry,
+    canonicalPath: `/${directory.locale}/countries/${slug}`,
+    destination: null,
+    sourceCountryNames: countryAliases(routeOnlyCountry),
+    universityCount: 0,
+    programCount: 0,
+  } : null);
   if (!entry) return null;
   const conditions: any[] = [inArray(universitiesTable.country, entry.sourceCountryNames)];
   addPublicCatalogConditions(conditions, await getPublicCatalogPolicy());
@@ -105,6 +123,7 @@ export async function readCatalogCountryFallback(localeInput: unknown, slug: str
     universities: universities.map(university => ({ ...university, programCount: countsByUniversity.get(university.id) ?? 0, canonicalPath: publicCatalogPath({ locale: directory.locale, entityType: "university", id: university.id, name: university.name }) })),
     programs: [], cities: cityLinks,
     stats: { universityCount: entry.universityCount, programCount: entry.programCount },
-    meta: { locale: directory.locale, indexable: false, canonicalPath: entry.canonicalPath, alternatePaths: {}, contentPolicy: "CATALOG_SOURCE_FALLBACK" },
+    meta: { locale: directory.locale, indexable: false, canonicalPath: entry.canonicalPath, alternatePaths: {},
+      contentPolicy: "CATALOG_SOURCE_FALLBACK", catalogEligible: Boolean(listedEntry) },
   };
 }

@@ -242,6 +242,11 @@ async function readPublishedDetailContentRecord(kind: DetailContentKind, entityI
   return content?.kind === kind && content.entityId === entityId && content.locale === locale ? content : null;
 }
 
+/** Exact-locale authored publication check; shared templates alone never open a public entity route. */
+export async function hasPublishedDetailContent(kind: DetailContentKind, entityId: number, locale: string): Promise<boolean> {
+  return Boolean(await readPublishedDetailContentRecord(kind, entityId, locale));
+}
+
 export async function readPublishedDetailContent(kind: DetailContentKind, entityId: number, locale: string): Promise<DetailContent | null> {
   const [localized, english] = await Promise.all([
     readPublishedDetailContentRecord(kind, entityId, locale),

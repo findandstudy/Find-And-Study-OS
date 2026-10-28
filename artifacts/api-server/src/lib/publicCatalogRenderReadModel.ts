@@ -39,8 +39,8 @@ import { parsePublicCatalogPageBlockSource } from "./publicCatalogRenderContract
 import { invalidatePublishedDetailLayout, readPublishedDetailLayout } from "./websiteDetailLayouts";
 import { DETAIL_LAYOUT_KINDS, type DetailLayoutKind } from "./websiteDetailLayoutContract";
 import { websiteCatalogTaxonomy, countryMatches, countryAliases, catalogName } from "./websiteCatalogFilters";
-import { readCatalogCountryFallback, matchCatalogCountry, readPublicCatalogCountryDirectory, resolvePublicCatalogLocationLinks } from "./publicCatalogLocationLinks";
-import { readPublishedDetailContent } from "./websiteDetailContent";
+import { catalogCountryRouteAccessible, readCatalogCountryFallback, matchCatalogCountry, readPublicCatalogCountryDirectory, resolvePublicCatalogLocationLinks } from "./publicCatalogLocationLinks";
+import { hasPublishedDetailContent, readPublishedDetailContent } from "./websiteDetailContent";
 import { readPublicCatalogPrices } from "./publicCatalogPriceReadModel";
 import { projectPublicTuition } from "./publicCatalogTuition";
 import { projectPublicProgramBrief } from "./publicCatalogProgramBrief";
@@ -1015,7 +1015,10 @@ async function readDestinationDetail(
     .limit(1);
   if (!destination) {
     const fallback = await readCatalogCountryFallback(route.locale, route.slug);
-    if (fallback) return {
+    const editorialPublished = fallback
+      ? await hasPublishedDetailContent("destination", fallback.destination.catalogCountryId, route.locale)
+      : false;
+    if (fallback && catalogCountryRouteAccessible({ catalogEligible: fallback.meta.catalogEligible, editorialPublished })) return {
       kind: "destination_detail", locale: route.locale,
       canonicalPath: fallback.meta.canonicalPath, title: fallback.destination.name,
       description: `Study opportunities in ${fallback.destination.name}`,

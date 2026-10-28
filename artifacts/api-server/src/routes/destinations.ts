@@ -7,8 +7,8 @@ import {
 } from "../lib/publicCatalogQueryPolicy";
 import { courseFinderUniversityLogoUrl } from "../lib/courseFinderVisibility";
 import { normalizeProgramLocale } from "../lib/programTranslationContract";
-import { readPublicCatalogCountryDirectory, readCatalogCountryFallback, matchCatalogCountry } from "../lib/publicCatalogLocationLinks";
-import { readPublishedDetailContent } from "../lib/websiteDetailContent";
+import { catalogCountryRouteAccessible, readPublicCatalogCountryDirectory, readCatalogCountryFallback, matchCatalogCountry } from "../lib/publicCatalogLocationLinks";
+import { hasPublishedDetailContent, readPublishedDetailContent } from "../lib/websiteDetailContent";
 import { countryAliases } from "../lib/websiteCatalogFilters";
 import {
   parsePublicWebInternalLinkMode,
@@ -154,11 +154,15 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
 
   if (!destination) {
     const fallback = await readCatalogCountryFallback(locale, slug);
-    if (fallback) {
+    const editorialPublished = fallback
+      ? await hasPublishedDetailContent("destination", fallback.destination.catalogCountryId, locale)
+      : false;
+    if (fallback && catalogCountryRouteAccessible({ catalogEligible: fallback.meta.catalogEligible, editorialPublished })) {
+      const editorial = await readPublishedDetailContent("destination", fallback.destination.catalogCountryId, locale);
       res.setHeader("Cache-Control", "public, max-age=60");
       res.setHeader("X-Robots-Tag", "noindex, follow");
       res.setHeader("Content-Location", fallback.meta.canonicalPath);
-      res.json({ ...fallback, editorial: await readPublishedDetailContent("destination", fallback.destination.catalogCountryId, locale) });
+      res.json({ ...fallback, editorial });
       return;
     }
     res.status(404).json({ error: "Destination not found" });

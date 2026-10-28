@@ -32,7 +32,7 @@ export function catalogSourceEditPath(kind: CatalogPageKind, id: number, sourceN
   return `/admin/catalog?${params}`;
 }
 
-export type CatalogInventoryIssue = "SOURCE_INACTIVE" | "PARENT_INACTIVE" | "CATALOG_POLICY_HIDDEN" | "COUNTRY_ROUTE_UNAVAILABLE" | "DESCRIPTION_MISSING" | "MEDIA_MISSING" | "TRANSLATION_FALLBACK";
+export type CatalogInventoryIssue = "SOURCE_INACTIVE" | "PARENT_INACTIVE" | "CATALOG_POLICY_HIDDEN" | "COUNTRY_ROUTE_UNAVAILABLE" | "PUBLIC_OFFERINGS_UNAVAILABLE" | "DESCRIPTION_MISSING" | "MEDIA_MISSING" | "TRANSLATION_FALLBACK";
 
 export type CatalogEditorialState = "LIVE" | "LIVE_WITH_DRAFT" | "DRAFT" | "TEMPLATE_ONLY";
 

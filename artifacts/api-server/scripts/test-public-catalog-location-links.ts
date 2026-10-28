@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { catalogCountryRoute, matchCatalogCountry } from "../src/lib/publicCatalogLocationLinks";
+import { catalogCountryRoute, catalogCountryRouteAccessible, matchCatalogCountry } from "../src/lib/publicCatalogLocationLinks";
+import { publicUniversityTypeAliases } from "../src/lib/publicCatalogQueryPolicy";
 const gb = { id: 1, name: "United Kingdom", code: "GB", isActive: true };
 const tr = { id: 2, name: "Türkiye", code: "TR", isActive: true };
 test("country matching reuses code/name/normalized slug and known catalog aliases", () => {
@@ -17,4 +18,14 @@ test("inactive destinations and ambiguous names/slugs fail closed", () => {
   assert.equal(matchCatalogCountry("GB", [gb, { ...gb, id: 3 }]), null);
   assert.equal(catalogCountryRoute(gb, [gb], [{ id: 9, country: "Turkey", slug: "united-kingdom", isActive: true }], "en"), null);
   assert.equal(catalogCountryRoute({ ...gb, isActive: false }, [gb], [], "en"), null);
+});
+test("authored country pages can open independently while empty catalogue records stay closed", () => {
+  assert.equal(catalogCountryRouteAccessible({ catalogEligible: true, editorialPublished: false }), true);
+  assert.equal(catalogCountryRouteAccessible({ catalogEligible: false, editorialPublished: true }), true);
+  assert.equal(catalogCountryRouteAccessible({ catalogEligible: false, editorialPublished: false }), false);
+});
+test("public university type policy maps regional foundation/state labels without guessing unrelated values", () => {
+  assert.deepEqual(publicUniversityTypeAliases(["Private"]), ["Private", "Foundation", "Foundation University", "Vakıf", "Vakıf Üniversitesi"]);
+  assert.deepEqual(publicUniversityTypeAliases(["Public"]), ["Public", "State", "State University", "Devlet", "Devlet Üniversitesi"]);
+  assert.deepEqual(publicUniversityTypeAliases(["College"]), ["College"]);
 });

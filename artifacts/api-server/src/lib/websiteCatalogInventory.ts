@@ -134,8 +134,13 @@ export async function readWebsiteCatalogInventory(query: CatalogInventoryQuery) 
       ? entry?.canonicalPath ?? (sourceCountry ? catalogCountryRoute(sourceCountry, directory!.countries, directory!.destinations, query.locale) : null)
       : query.kind === "city" ? `/${query.locale}/cities/${publicCatalogRouteKey(row.id, title)}`
         : publicCatalogPath({ locale: query.locale, entityType: query.kind, id: row.id, name: title }));
-    const availability = catalogAvailability({ kind: query.kind, active: row.active, parentActive: row.parentActive, policyVisible: row.policyVisible, ...(query.kind === "country" ? { countryRoute: Boolean(entry) } : {}) });
+    const editorialPage = detailPageBySlug.get(detailContentSlug(detailKind, row.id, query.locale));
+    const editorialVersion = editorialPage ? latestPublishedVersion.get(editorialPage.id) : undefined;
+    const authoredCountryRoute = query.kind === "country" && Boolean(canonicalPath && editorialVersion);
+    const availability = catalogAvailability({ kind: query.kind, active: row.active, parentActive: row.parentActive, policyVisible: row.policyVisible,
+      ...(query.kind === "country" ? { countryRoute: Boolean(entry) || authoredCountryRoute } : {}) });
     const issues: CatalogInventoryIssue[] = [...availability.issues];
+    if (query.kind === "country" && !entry) issues.push("PUBLIC_OFFERINGS_UNAVAILABLE");
     const hasDescription = row.hasDescription || [snapshot?.summary, snapshot?.content.description, snapshot?.content.body, destination?.description, destination?.shortDescription].some(value => typeof value === "string" && value.trim().length > 0);
     const hasMedia = Boolean(destination?.heroImageUrl || destination?.thumbnailUrl || row.hasMedia);
     if (!hasDescription) issues.push("DESCRIPTION_MISSING");
@@ -143,8 +148,6 @@ export async function readWebsiteCatalogInventory(query: CatalogInventoryQuery) 
     const contentDelivery = query.kind === "program" && row.translationStatus === "published" ? "PUBLISHED_TRANSLATION" : snapshot ? "PUBLISHED_REVISION" : query.locale === "en" ? "SOURCE_CATALOG" : "SOURCE_FALLBACK";
     if (contentDelivery === "SOURCE_FALLBACK") issues.push("TRANSLATION_FALLBACK");
     const state = entityId === null ? undefined : publication.entries.get(entityId);
-    const editorialPage = detailPageBySlug.get(detailContentSlug(detailKind, row.id, query.locale));
-    const editorialVersion = editorialPage ? latestPublishedVersion.get(editorialPage.id) : undefined;
     return {
       kind: query.kind, sourceId: row.id, title, sourceTitle: row.sourceName, canonicalPath,
       sourceEditPath: catalogSourceEditPath(query.kind, row.id, row.sourceName, row.countryId), locale: query.locale,
@@ -164,7 +167,7 @@ export async function readWebsiteCatalogInventory(query: CatalogInventoryQuery) 
         publishedAt: editorialVersion?.publishedAt?.toISOString() ?? null,
         updatedAt: editorialPage?.updatedAt.toISOString() ?? null,
       },
-      seo: !publication.evaluated ? "NOT_EVALUATED" : entityId !== null && seo.get(entityId)?.indexable ? "INDEX_ELIGIBLE" : "NOINDEX",
+      seo: entityId === null && editorialVersion ? "NOINDEX" : !publication.evaluated ? "NOT_EVALUATED" : entityId !== null && seo.get(entityId)?.indexable ? "INDEX_ELIGIBLE" : "NOINDEX",
     };
   });
   return { items, pagination: { page: query.page, pageSize: query.pageSize, total, totalPages: Math.ceil(total / query.pageSize) }, publicationEvaluated: publication.evaluated };

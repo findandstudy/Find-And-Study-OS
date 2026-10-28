@@ -253,15 +253,13 @@ test("identity uses a supplied logo or an explicitly decorative entity icon", ()
   assert.match(university, /<DetailIdentity src=\{university\.logoUrl\}/);
 });
 
-test("public header reserves brand space and defers the large tenant logo beyond critical paint", () => {
-  assert.match(publicLayout, /document\.readyState === "complete"/);
-  assert.match(publicLayout, /window\.addEventListener\("load", schedule/);
-  assert.match(publicLayout, /setTimeout\(reveal, 5_000\)/);
-  assert.doesNotMatch(publicLayout, /requestIdleCallback\(reveal/);
-  assert.match(publicLayout, /h-10 w-\[160px\].*sm:w-\[180px\]/);
-  assert.match(publicLayout, /headerLogoLoaded \? "opacity-100" : "opacity-0"/);
+test("public header reserves stable brand space and prioritizes the visible tenant logo", () => {
+  assert.match(publicLayout, /group relative flex h-12 w-11.*sm:w-\[220px\]/);
+  assert.match(publicLayout, /<picture className="absolute inset-0 flex h-12 w-full items-center">/);
+  assert.match(publicLayout, /<source media="\(max-width: 639px\)" srcSet=\{squareLogoUrl\}/);
   assert.match(publicLayout, /decoding="async"/);
-  assert.match(publicLayout, /fetchPriority="low"/);
+  assert.match(publicLayout, /fetchPriority="high"/);
+  assert.match(publicLayout, /onError=\{\(\) => setHeaderLogoFailed\(true\)\}/);
 });
 
 test("public language menu stays above the sticky detail section navigation", () => {
