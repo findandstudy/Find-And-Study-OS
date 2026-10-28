@@ -20,8 +20,11 @@
   --cms-button-bg: #174a7e;
   --cms-button-text: #ffffff;
   --cms-line: #d8dde3;
-  --cms-heading-font: Manrope;
-  --cms-body-font: "Source Sans 3";
+  /* Inter is bundled with the public app. Keep the no-token fallback on a
+     font that is actually available so the CMS preview and live banner do
+     not silently render with different operating-system fonts. */
+  --cms-heading-font: Inter;
+  --cms-body-font: Inter;
   --cms-font-scale: 1;
   --cms-button-radius: 1px;
   --cms-button-weight: 600;
