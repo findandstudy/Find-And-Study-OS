@@ -59,6 +59,7 @@ test("Home and About reuse published blocks while preserving static fallbacks an
   assert.match(editorialCss, /--home-night: var\(--cms-secondary/);
   assert.match(editorialCss, /--home-electric: var\(--cms-blue/);
   assert.match(editorialCss, /--home-paper: var\(--cms-paper/);
+  assert.match(editorialCss, /cta_banner[^}]*\.home-future-cta[^}]*a:not\(:first-child\)[\s\S]*--cms-section-text/);
   assert.match(editorialCss, /@media \(min-width: 761px\) and \(max-width: 1024px\)[\s\S]*\.home-future-page \.home-bento-card:first-child \{ grid-column: 1 \/ -1; \}/);
   assert.match(editorialCss, /cms-preview-viewport\[data-preview-size="tablet"\] \.home-bento-card:first-child \{ grid-column: 1 \/ -1; \}/);
   assert.match(editorialCss, /\.cms-editorial-block \.cms-responsive-grid > \* \{ min-width: 0; max-width: 100%; \}/);

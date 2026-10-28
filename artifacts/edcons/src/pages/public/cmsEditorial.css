@@ -511,6 +511,11 @@
 .home-future-cta::before { content: ""; position: absolute; z-index: -1; width: 500px; aspect-ratio: 1; inset: -330px auto auto -100px; border: 1px solid color-mix(in srgb, var(--home-cyan) 28%, transparent); border-radius: 50%; box-shadow: 0 0 0 80px color-mix(in srgb, var(--home-cyan) 5%, transparent), 0 0 0 160px color-mix(in srgb, var(--home-cyan) 3%, transparent); }
 .home-future-cta .cms-action-row a { border-color: color-mix(in srgb, currentColor 32%, transparent); color: inherit; background: color-mix(in srgb, currentColor 8%, transparent); backdrop-filter: blur(12px); }
 .home-future-cta .cms-action-row a:first-child { color: var(--cms-section-button-text, var(--cms-button-text)); border-color: var(--cms-section-button-bg, var(--cms-button-bg)); background: var(--cms-section-button-bg, var(--cms-button-bg)); }
+.public-cms-page [data-cms-block="cta_banner"] .home-future-cta .cms-action-row a:not(:first-child) {
+  color: var(--cms-section-text, #ffffff);
+  border-color: color-mix(in srgb, var(--cms-section-text, #ffffff) 42%, transparent);
+  background: color-mix(in srgb, var(--cms-section-text, #ffffff) 9%, transparent);
+}
 
 @media (max-width: 900px) {
   .home-future-page .home-future-hero-grid { grid-template-columns: 1fr; }
