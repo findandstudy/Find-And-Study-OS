@@ -68,6 +68,9 @@ import { parseCatalogInventoryQuery } from "../lib/websiteCatalogInventoryContra
 import { readWebsiteCatalogInventory } from "../lib/websiteCatalogInventory";
 import detailContentRouter from "./website-detail-content";
 import { inspectWebsitePageBlockLinks, inspectWebsitePageTranslations, type PublicationPreflightIssue } from "../lib/websitePagePublicationPreflight";
+import { regenerateDetailContentDraft } from "../lib/websiteDetailRegeneration";
+import { resolveWebsiteAiIntegration } from "../lib/websiteAiIntegration";
+import { DEFAULT_WEBSITE_AI_SETTINGS } from "../lib/websiteAiContentPolicy";
 
 const router = Router();
 router.use("/website/detail-content", detailContentRouter);
@@ -197,6 +200,52 @@ router.get("/website/catalog-pages", ...adminOnly, async (req, res) => {
   catch { res.status(400).json({ error: "Invalid catalogue inventory filters" }); return; }
   try { res.json(await readWebsiteCatalogInventory(query)); }
   catch { res.status(503).json({ error: "Catalogue inventory is temporarily unavailable" }); }
+});
+
+// Local authoring parity: rebuilds a bounded, reviewable page draft from the
+// current catalogue facts and the published shared template. It never
+// publishes automatically.
+router.post("/website/catalog-pages/reapply", ...adminOnly, async (req, res) => {
+  const kind = req.body?.kind;
+  const locales = req.body?.locales;
+  const sourceIds = req.body?.sourceIds;
+  const mode = req.body?.mode ?? "fill_missing";
+  const allowedKinds = ["country", "city", "university", "program"] as const;
+  const allowedLocales = ["en","tr","ar","fr","ru","fa","zh","hi","es","id","ur","tk","ky","kk","uz","tg","bn","pt","ne","vi","ko","uk","it"] as const;
+  if (!allowedKinds.includes(kind) || !Array.isArray(locales) || locales.length < 1 || locales.length > allowedLocales.length
+      || new Set(locales).size !== locales.length || !locales.every(value => allowedLocales.includes(value))
+      || !Array.isArray(sourceIds) || sourceIds.length < 1 || sourceIds.length > 50
+      || new Set(sourceIds).size !== sourceIds.length
+      || !sourceIds.every(value => Number.isSafeInteger(value) && value > 0 && value <= 2147483647)
+      || sourceIds.length * locales.length > 50
+      || !["fill_missing", "regenerate"].includes(mode)
+      || !["kind,locales,sourceIds", "kind,locales,mode,sourceIds"].includes(Object.keys(req.body ?? {}).sort().join())) {
+    res.status(400).json({ error: "Invalid page reapply selection" }); return;
+  }
+  try {
+    const sid = getSessionId(req);
+    const session = sid && !req.apiTokenAuth && !req.headers.authorization ? await getSession(sid) : null;
+    if (!session || session.originalSid || session.user.id !== req.user!.id) {
+      res.status(403).json({ error: "Direct human session required" }); return;
+    }
+    const aiConfig = await resolveWebsiteAiIntegration(DEFAULT_WEBSITE_AI_SETTINGS);
+    if ((mode === "regenerate" || locales.some(locale => locale !== "en")) && !aiConfig) {
+      res.status(409).json({ error: "AI_PROVIDER_UNAVAILABLE", message: "Enable and test OpenAI or Anthropic Claude in Settings > Integrations." }); return;
+    }
+    const ai = aiConfig ? new (await import("../lib/aiService")).AiContentService(aiConfig) : null;
+    const layoutKind = (kind === "country" ? "destination" : kind) as "destination" | "city" | "university" | "program";
+    const results = [];
+    for (const sourceId of sourceIds) for (const locale of locales) {
+      results.push(await regenerateDetailContentDraft({ kind: layoutKind, entityId: sourceId, locale, actorId: req.user!.id, ai, mode }));
+    }
+    invalidatePublicCatalogRenderCache({ detailTemplate: layoutKind });
+    const summary = results.reduce((acc, item) => { acc[item.status] += 1; return acc; }, { created: 0, completed: 0, preserved: 0, failed: 0 });
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ kind, locales, sourceIds, requested: results.length, summary, results, publication: "draft_review_required", completedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error("[website-reapply] Page regeneration failed", error);
+    res.status(503).json({ error: "Page regeneration is temporarily unavailable" });
+  }
 });
 
 router.get("/website/detail-layouts", ...adminOnly, async (_req, res) => {

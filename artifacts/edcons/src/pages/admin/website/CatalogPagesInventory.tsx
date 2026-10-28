@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import {
   AlertTriangle,
@@ -41,6 +41,7 @@ import { LANGUAGE_META, SUPPORTED_LANGUAGES } from "@/lib/i18n";
 import DetailContentEditor, {
   type DetailContentTarget,
 } from "./DetailContentEditor";
+import { reapplyDetailPages, type ReapplyDetailPagesResponse } from "./reapplyDetailPages";
 
 type Kind = "country" | "city" | "university" | "program";
 type Sort =
@@ -187,6 +188,7 @@ export default function CatalogPagesInventory() {
   );
   const [selected, setSelected] = useState<number[]>([]);
   const [editing, setEditing] = useState<DetailContentTarget | null>(null);
+  const [generationReport, setGenerationReport] = useState<ReapplyDetailPagesResponse | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebounced(search.trim());
@@ -265,6 +267,14 @@ export default function CatalogPagesInventory() {
   const selectedRows = rows.filter((item) => selected.includes(item.sourceId));
   const allSelected =
     rows.length > 0 && rows.every((item) => selected.includes(item.sourceId));
+  const reapply = useMutation({
+    mutationFn: ({ sourceIds, locales, mode = "fill_missing" }: { sourceIds: number[]; locales: string[]; mode?: "fill_missing" | "regenerate" }) =>
+      reapplyDetailPages(kind, locales, sourceIds, mode),
+    onSuccess: async (result) => {
+      setGenerationReport(result);
+      await query.refetch();
+    },
+  });
   const toggle = (id: number) =>
     setSelected((old) =>
       old.includes(id) ? old.filter((value) => value !== id) : [...old, id],
@@ -426,6 +436,15 @@ export default function CatalogPagesInventory() {
                 <LayoutGrid className="me-2 h-4 w-4" />
                 {tr ? "Şablon önizlemesi" : "Template preview"}
               </a>
+            </DropdownMenuItem>
+          )}
+          {item.locale === "en" && (
+            <DropdownMenuItem
+              disabled={reapply.isPending}
+              onSelect={() => reapply.mutate({ sourceIds: [item.sourceId], locales: ["en"], mode: "regenerate" })}
+            >
+              <RefreshCw className={`me-2 h-4 w-4 ${reapply.isPending ? "animate-spin" : ""}`} />
+              {tr ? "İçerik + SEO + görsel taslağı üret" : "Generate content + SEO + image draft"}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
@@ -592,6 +611,20 @@ export default function CatalogPagesInventory() {
       </div>
 
       <div className="space-y-5 p-4 sm:p-6">
+        {generationReport && (
+          <div role="status" className={`rounded-xl border p-4 text-sm ${generationReport.summary.failed ? "border-amber-300 bg-amber-50 text-amber-950" : "border-emerald-200 bg-emerald-50 text-emerald-950"}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <strong>{tr ? "AI üretim raporu" : "AI generation report"}</strong>
+                <p className="mt-1">{tr
+                  ? `${generationReport.summary.created + generationReport.summary.completed} taslak hazır, ${generationReport.summary.failed} başarısız. Otomatik yayın yapılmadı.`
+                  : `${generationReport.summary.created + generationReport.summary.completed} draft(s) ready, ${generationReport.summary.failed} failed. Nothing was auto-published.`}</p>
+                {generationReport.results[0]?.error && <p className="mt-1 text-xs">{generationReport.results[0].error}</p>}
+              </div>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setGenerationReport(null)} aria-label={tr ? "Raporu kapat" : "Dismiss report"}><X className="h-4 w-4" /></Button>
+            </div>
+          </div>
+        )}
         <div className="rounded-xl border bg-muted/20 p-3 sm:p-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
             <SlidersHorizontal className="h-4 w-4 text-primary" />

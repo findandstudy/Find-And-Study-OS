@@ -121,6 +121,7 @@ const ALLOWLIST_EXACT = new Set([
 const ALLOWLIST_PREFIX = [
   "/storage/public-objects/",
   "/storage/public-branding/",
+  "/storage/public-website-assets/",
   "/auth/",
   "/contracts/me/session/",
 ];

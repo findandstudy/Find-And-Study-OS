@@ -10,12 +10,13 @@ test("catalogue deep links validate stable source IDs and supported tabs", () =>
   assert.equal(parseCatalogEntryNavigation(`?q=${"x".repeat(500)}`).q.length, 200);
 });
 
-test("Pages retains CMS and shared templates next to read-only catalogue inventory", () => {
+test("Pages retains CMS and shared templates next to reviewable AI catalogue drafts", () => {
   const pages = readFileSync(new URL("../src/pages/admin/website/Pages.tsx", import.meta.url), "utf8");
   assert.match(pages, /<CatalogPagesInventory \/>/);
   assert.match(pages, /<DetailTemplates\b[^>]*\/>/);
   assert.match(pages, /customFetch\("\/api\/website\/pages"\)/);
   const inventory = readFileSync(new URL("../src/pages/admin/website/CatalogPagesInventory.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(inventory, /useMutation|method: "(?:POST|PUT|PATCH|DELETE)"/);
+  assert.match(inventory, /reapplyDetailPages/);
+  assert.match(inventory, /Generate content \+ SEO \+ image draft/);
   for (const word of ["kind", "locale", "pageSize", "sourceId", "sourceEditPath", "revisionNumber", "NOT_EVALUATED", "admissionsOpen", "role=\"alert\"", "role=\"status\"", "noopener noreferrer"]) assert.ok(inventory.includes(word), word);
 });

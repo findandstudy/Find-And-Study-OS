@@ -275,6 +275,46 @@ export async function readDetailContentDraft(kind: DetailContentKind, entityId: 
     published: await readPublishedDetailContent(kind, entityId, locale) };
 }
 
+/**
+ * Persists a machine-prepared draft behind the same binding and optimistic
+ * concurrency rules as the interactive editor. AI output is never published
+ * automatically; an administrator must review and publish the exact draft.
+ */
+export async function saveGeneratedDetailContentDraft(
+  content: DetailContent,
+  actorId: number,
+  expectedUpdatedAt: string | null,
+) {
+  const parsedInput = parseDetailContent(content);
+  if (!parsedInput) throw new Error("INVALID_CONTENT");
+  const parsed = ensureDetailSeo(parsedInput);
+  await db.transaction(async tx => {
+    await tx.execute(sql`SET LOCAL lock_timeout = '2s'`);
+    await tx.execute(sql`SET LOCAL statement_timeout = '10s'`);
+    if (!(await detailContentEntityExists(parsed.kind, parsed.entityId, tx))) throw new Error("CONFLICT");
+    const slug = detailContentSlug(parsed.kind, parsed.entityId, parsed.locale);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${slug}))`);
+    const [existing] = await tx.select().from(pages).where(eq(pages.slug, slug)).for("update");
+    if ((existing?.updatedAt.toISOString() ?? null) !== expectedUpdatedAt
+      || (existing && existing.template !== `detail-content:${parsed.kind}`)) throw new Error("CONFLICT");
+    const values = {
+      title: `${parsed.kind} supplemental content`,
+      template: `detail-content:${parsed.kind}`,
+      locale: parsed.locale,
+      status: "draft",
+      robotsIndex: false,
+      updatedBy: actorId,
+      updatedAt: new Date(),
+    };
+    const [page] = existing
+      ? await tx.update(pages).set(values).where(eq(pages.id, existing.id)).returning()
+      : await tx.insert(pages).values({ ...values, slug, createdBy: actorId }).returning();
+    await tx.delete(blocks).where(eq(blocks.pageId, page.id));
+    await tx.insert(blocks).values({ pageId: page.id, blockType: "detail_content", content: parsed, sortOrder: 0 });
+  });
+  return readDetailContentDraft(parsed.kind, parsed.entityId, parsed.locale);
+}
+
 /** Publishes one exact reviewed draft. Shared by the editor and bulk review queue. */
 export async function publishDetailContentDraft(pageId: number, digest: string, reviewerId: number, reviewerIsSuperAdmin: boolean) {
   const content = await db.transaction(async tx => {

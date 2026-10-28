@@ -520,6 +520,39 @@ router.get("/storage/public-branding/*filePath", async (req: Request, res: Respo
   }
 });
 
+// Public detail pages may reference only immutable AI-generated WebP files
+// written under the dedicated website-ai namespace. This deliberately does
+// not expose the general private object tree.
+router.get("/storage/public-website-assets/*filePath", async (req: Request, res: Response) => {
+  try {
+    const raw = req.params.filePath;
+    const filePath = Array.isArray(raw) ? raw.join("/") : raw;
+    if (!/^detail-pages\/(?:destination|city|university|program)\/\d+\/(?:hero|gallery)-\d+\/[0-9a-f]{64}\.webp$/.test(filePath)) {
+      res.status(400).json({ error: "Invalid website asset path" });
+      return;
+    }
+    const objectFile = await objectStorageService.getObjectEntityFile(`/objects/website-ai/${filePath}`);
+    const [metadata] = await objectFile.getMetadata();
+    if (String(metadata.contentType ?? "").toLowerCase() !== "image/webp") {
+      res.status(415).json({ error: "Website asset is not a supported image" });
+      return;
+    }
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+    await objectStorageService.streamObjectToResponse(req, res, objectFile, {
+      contentType: "image/webp",
+      cacheControl: "public, max-age=31536000, immutable",
+    });
+  } catch (error) {
+    if (error instanceof ObjectNotFoundError) {
+      res.status(404).json({ error: "File not found" });
+      return;
+    }
+    console.error("Error serving generated website asset:", error);
+    res.status(500).json({ error: "Failed to serve website asset" });
+  }
+});
+
 router.get("/storage/objects/*path", requireAuth, async (req: Request, res: Response) => {
   try {
     const raw = req.params.path;

@@ -103,8 +103,9 @@ test("every inventory kind opens the editor without remapping country IDs to des
   );
 });
 
-test("detail editor keeps SEO review inside the normal save and publication corridor", () => {
-  assert.doesNotMatch(inventory, /Generate content \+ SEO \+ image draft/);
+test("detail regeneration creates a review draft before the normal publication corridor", () => {
+  assert.match(inventory, /Generate content \+ SEO \+ image draft/);
+  assert.match(inventory, /Nothing was auto-published/);
   assert.doesNotMatch(editor, /Regenerate from page content/);
   assert.match(editor, /Save changes/);
 });
