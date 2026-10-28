@@ -60,7 +60,7 @@ import { invalidatePublicWebDiscoveryCache } from "../lib/publicWebDiscoveryRead
 import { invalidatePublicCatalogRenderCache, readPublicCatalogBlockItems } from "../lib/publicCatalogRenderReadModel";
 import { parseWebsitePageDraft, parseWebsiteCatalogPreview } from "../lib/websitePageAuthoring";
 import { createHash } from "node:crypto";
-import { detailLayoutSlug, parseDetailLayout, readDetailLayoutDraft } from "../lib/websiteDetailLayouts";
+import { detailLayoutSlug, invalidatePublishedDetailLayout, parseDetailLayout, readDetailLayoutDraft } from "../lib/websiteDetailLayouts";
 import { DETAIL_LAYOUT_KINDS } from "../lib/websiteDetailLayoutContract";
 import { getSession, getSessionId } from "../lib/replitAuth";
 import { readWebsitePublishedPage } from "../lib/websitePublishedPage";
@@ -68,63 +68,18 @@ import { readWebsiteCatalogFilters } from "../lib/websiteCatalogFilters";
 import { parseCatalogInventoryQuery } from "../lib/websiteCatalogInventoryContract";
 import { readWebsiteCatalogInventory } from "../lib/websiteCatalogInventory";
 import detailContentRouter from "./website-detail-content";
+import translationJobsRouter from "./website-translation-jobs";
 import { inspectWebsitePageBlockLinks, inspectWebsitePageTranslations, type PublicationPreflightIssue } from "../lib/websitePagePublicationPreflight";
+import { BLOG_AI_LIMITS, parseBlogAiDraft, readBlogAiSources } from "../lib/blogAiDraft";
 import { regenerateDetailContentDraft } from "../lib/websiteDetailRegeneration";
-import { resolveWebsiteAiIntegration } from "../lib/websiteAiIntegration";
-import { mergeWebsiteAiSettings, parseWebsiteAiSettings, readWebsiteAiSettings } from "../lib/websiteAiContentPolicy";
+import { decryptConfig, isEncrypted } from "../lib/encryption";
+import { DEFAULT_WEBSITE_AI_SETTINGS, mergeWebsiteAiSettings, parseWebsiteAiSettings, readWebsiteAiSettings } from "../lib/websiteAiContentPolicy";
+import { applyGeneratedSeoFields, buildWebsiteSeoDraft, enrichWebsiteTranslationSeo } from "../lib/websiteSeoDraft";
 
 const router = Router();
 router.use("/website/detail-content", detailContentRouter);
+router.use("/website/translation-jobs", translationJobsRouter);
 router.get("/website/pages/:slug", readWebsitePublishedPage);
-
-const PUBLIC_THEME_TOKEN_KEYS = new Set([
-  "colors.primary", "colors.secondary", "colors.accent", "colors.background", "colors.card",
-  "colors.border", "colors.text", "colors.muted", "colors.heroStart", "colors.heroEnd",
-  "colors.heroText", "colors.heroOverlay", "buttons.primaryBg", "buttons.primaryText",
-  "buttons.borderRadius", "buttons.fontWeight", "typography.headingFont", "typography.bodyFont",
-  "typography.fontScale", "spacing.sectionPadding", "spacing.cardPadding", "spacing.containerMax",
-  "spacing.gridGap",
-]);
-
-// Public pages must consume the same saved design tokens as Theme Builder.
-// Keep this projection allowlisted: the settings row also contains credentials
-// and integration configuration that must never be exposed to visitors.
-router.get("/public/web/theme", async (_req, res): Promise<void> => {
-  try {
-    const [rows, settingsRows] = await Promise.all([
-      db.select({
-        tokenGroup: websiteThemeTokensTable.tokenGroup,
-        tokenKey: websiteThemeTokensTable.tokenKey,
-        tokenValue: websiteThemeTokensTable.tokenValue,
-      }).from(websiteThemeTokensTable),
-      db.select({
-        themePrimary: settingsTable.themePrimary,
-        themeSecondary: settingsTable.themeSecondary,
-        themeAccent: settingsTable.themeAccent,
-        themeButton: settingsTable.themeButton,
-      }).from(settingsTable).limit(1),
-    ]);
-    const branding = settingsRows[0];
-    const tokens: Record<string, string> = {};
-    const brandingDefaults: Record<string, string | null | undefined> = {
-      "colors.primary": branding?.themePrimary,
-      "colors.secondary": branding?.themeSecondary,
-      "colors.accent": branding?.themeAccent,
-      "buttons.primaryBg": branding?.themeButton || branding?.themePrimary,
-    };
-    for (const [key, value] of Object.entries(brandingDefaults)) {
-      if (value) tokens[key] = value;
-    }
-    for (const row of rows) {
-      const key = `${row.tokenGroup}.${row.tokenKey}`;
-      if (PUBLIC_THEME_TOKEN_KEYS.has(key) && row.tokenValue) tokens[key] = row.tokenValue;
-    }
-    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
-    res.json({ tokens });
-  } catch {
-    res.status(503).json({ error: "Public website theme is temporarily unavailable" });
-  }
-});
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
 const adminOnly = [requireAuth, requireRole(...WEBSITE_ROLES)] as const;
 
@@ -143,14 +98,16 @@ async function loadWebsiteAiSettings() {
 
 async function readWebsiteAiUsage(days = 30) {
   const since = new Date(Date.now() - Math.max(1, Math.min(days, 90)) * 86_400_000);
-  const rows = await db.select({ changes: auditLogsTable.changes }).from(auditLogsTable)
-    .where(and(eq(auditLogsTable.action, "website_ai_content_execute"), gte(auditLogsTable.createdAt, since)));
+  const rows = await db.select({ changes: auditLogsTable.changes, createdAt: auditLogsTable.createdAt })
+    .from(auditLogsTable).where(and(eq(auditLogsTable.action, "website_ai_content_execute"), gte(auditLogsTable.createdAt, since)));
   let requests = 0, estimatedTokens = 0, succeeded = 0, failed = 0;
   for (const row of rows) {
     try {
       const value = JSON.parse(row.changes || "{}") as Record<string, unknown>;
-      requests += Number(value.requests ?? 1); estimatedTokens += Number(value.estimatedTokens ?? 0);
-      succeeded += Number(value.succeeded ?? 0); failed += Number(value.failed ?? 0);
+      requests += Number(value.requests ?? 1);
+      estimatedTokens += Number(value.estimatedTokens ?? 0);
+      succeeded += Number(value.succeeded ?? 0);
+      failed += Number(value.failed ?? 0);
     } catch { requests += 1; }
   }
   return { requests, estimatedTokens, succeeded, failed, since: since.toISOString() };
@@ -173,7 +130,7 @@ router.put("/website/ai/content-settings", ...adminOnly, async (req, res) => {
       const featureFlags = mergeWebsiteAiSettings(existing?.featureFlags, settings);
       if (existing) await tx.update(settingsTable).set({ featureFlags }).where(eq(settingsTable.id, existing.id));
       else await tx.insert(settingsTable).values({ featureFlags });
-      await tx.insert(auditLogsTable).values({ userId: req.user!.id, action: "website_ai_content_settings_update", resource: "settings", resourceId: existing?.id, changes: JSON.stringify({ provider: settings.provider, enabled: settings.enabled, allowedKinds: settings.allowedKinds, allowedLocales: settings.allowedLocales, limits: { requests: settings.dailyRequestLimit, tokens: settings.dailyEstimatedTokenLimit }, publicationPolicy: settings.publicationPolicy }) });
+      await tx.insert(auditLogsTable).values({ userId: req.user!.id, action: "website_ai_content_settings_update", resource: "settings", resourceId: existing?.id, changes: JSON.stringify({ provider: settings.provider, enabled: settings.enabled, allowedKinds: settings.allowedKinds, allowedLocales: settings.allowedLocales, limits: { requests: settings.dailyRequestLimit, tokens: settings.dailyEstimatedTokenLimit }, automation: settings.automaticTranslationEnabled, publicationPolicy: settings.publicationPolicy }) });
     });
     res.json({ settings });
   } catch { res.status(503).json({ error: "AI content settings could not be saved" }); }
@@ -254,14 +211,15 @@ router.get("/website/catalog-pages", ...adminOnly, async (req, res) => {
   catch { res.status(503).json({ error: "Catalogue inventory is temporarily unavailable" }); }
 });
 
-// Local authoring parity: rebuilds a bounded, reviewable page draft from the
-// current catalogue facts and the published shared template. It never
-// publishes automatically.
+// Rebuilds reviewable page-local drafts from the latest authoritative facts
+// and shared layout. Existing locale-owned copy always wins. Generated copy is
+// intentionally never auto-published.
 router.post("/website/catalog-pages/reapply", ...adminOnly, async (req, res) => {
   const kind = req.body?.kind;
   const locales = req.body?.locales;
   const sourceIds = req.body?.sourceIds;
   const mode = req.body?.mode ?? "fill_missing";
+  const requestKeys = Object.keys(req.body ?? {}).sort().join();
   const allowedKinds = ["country", "city", "university", "program"] as const;
   const allowedLocales = ["en","tr","ar","fr","ru","fa","zh","hi","es","id","ur","tk","ky","kk","uz","tg","bn","pt","ne","vi","ko","uk","it"] as const;
   if (!allowedKinds.includes(kind) || !Array.isArray(locales) || locales.length < 1 || locales.length > allowedLocales.length
@@ -271,14 +229,14 @@ router.post("/website/catalog-pages/reapply", ...adminOnly, async (req, res) => 
       || !sourceIds.every(value => Number.isSafeInteger(value) && value > 0 && value <= 2147483647)
       || sourceIds.length * locales.length > 50
       || !["fill_missing", "regenerate"].includes(mode)
-      || !["kind,locales,sourceIds", "kind,locales,mode,sourceIds"].includes(Object.keys(req.body ?? {}).sort().join())) {
+      || !["kind,locales,sourceIds", "kind,locales,mode,sourceIds"].includes(requestKeys)) {
     res.status(400).json({ error: "Invalid page reapply selection" }); return;
   }
   try {
     const sid = getSessionId(req);
     const session = sid && !req.apiTokenAuth && !req.headers.authorization ? await getSession(sid) : null;
     if (!session || session.originalSid || session.user.id !== req.user!.id) {
-      res.status(403).json({ error: "Direct human session required" }); return;
+      res.status(403).json({ error: "Direct human session required for content generation" }); return;
     }
     const policy = await loadWebsiteAiSettings();
     if (!policy.enabled || !policy.allowedKinds.includes(kind) || locales.some(locale => !policy.allowedLocales.includes(locale)) || sourceIds.length * locales.length > policy.maxPairsPerRequest) {
@@ -286,13 +244,18 @@ router.post("/website/catalog-pages/reapply", ...adminOnly, async (req, res) => 
     }
     const usage = await readWebsiteAiUsage(1);
     const reservedTokens = sourceIds.length * locales.length * (mode === "regenerate" ? 10_000 : 4_000);
+    // English full regeneration can add one hero and two gallery images. Count
+    // those provider calls conservatively even when existing images later make
+    // the actual total smaller.
     const reservedRequests = sourceIds.length * locales.length + (mode === "regenerate" && locales.includes("en") ? sourceIds.length * 3 : 0);
     if (usage.requests + reservedRequests > policy.dailyRequestLimit || usage.estimatedTokens + reservedTokens > policy.dailyEstimatedTokenLimit) {
       res.status(429).json({ error: "Daily AI content budget has been reached" }); return;
     }
-    const aiConfig = await resolveWebsiteAiIntegration(policy);
+    const aiStatus = await inspectAiIntegration(policy);
+    const aiConfig = aiStatus.config;
     if ((mode === "regenerate" || locales.some(locale => locale !== "en")) && !aiConfig) {
-      res.status(409).json({ error: "AI_PROVIDER_UNAVAILABLE", message: "Enable and test OpenAI or Anthropic Claude in Settings > Integrations." }); return;
+      res.status(409).json({ error: "AI_PROVIDER_UNAVAILABLE", message: aiIntegrationMessage(aiStatus.reason), settingsPath: "/admin/settings?tab=integrations#ai-provider-integrations" });
+      return;
     }
     const ai = aiConfig ? new (await import("../lib/aiService")).AiContentService(aiConfig) : null;
     const layoutKind = (kind === "country" ? "destination" : kind) as "destination" | "city" | "university" | "program";
@@ -300,13 +263,15 @@ router.post("/website/catalog-pages/reapply", ...adminOnly, async (req, res) => 
     for (const sourceId of sourceIds) for (const locale of locales) {
       results.push(await regenerateDetailContentDraft({ kind: layoutKind, entityId: sourceId, locale, actorId: req.user!.id, ai, mode }));
     }
-    invalidatePublicCatalogRenderCache({ detailTemplate: layoutKind });
+    invalidatePublishedDetailLayout(layoutKind);
+    const evicted = invalidatePublicCatalogRenderCache({ detailTemplate: layoutKind });
     const summary = results.reduce((acc, item) => { acc[item.status] += 1; return acc; }, { created: 0, completed: 0, preserved: 0, failed: 0 });
+    res.setHeader("Cache-Control", "private, no-store");
+    const estimatedTokens = reservedTokens;
     const generatedImages = results.reduce((sum, item) => sum + (item.generatedImages ?? 0), 0);
     const imageFailures = results.reduce((sum, item) => sum + (item.imageFailures ?? 0), 0);
-    await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "website_ai_content_execute", resource: "website_page", changes: JSON.stringify({ operation: "reapply", mode, kind, locales, requests: results.length + generatedImages + imageFailures, estimatedTokens: reservedTokens, generatedImages, imageFailures, succeeded: summary.created + summary.completed + summary.preserved, failed: summary.failed, provider: aiConfig?.provider || "none", publication: "draft_only" }) });
-    res.setHeader("Cache-Control", "private, no-store");
-    res.json({ kind, locales, sourceIds, requested: results.length, summary, results, publication: "draft_review_required", completedAt: new Date().toISOString() });
+    await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "website_ai_content_execute", resource: "website_page", changes: JSON.stringify({ operation: "reapply", mode, kind, locales, requests: results.length + generatedImages + imageFailures, reservedProviderRequests: reservedRequests, estimatedTokens, generatedImages, imageFailures, succeeded: summary.created + summary.completed + summary.preserved, failed: summary.failed, provider: aiConfig?.provider || "none", publication: "draft_only" }) });
+    res.json({ kind, locales, sourceIds, requested: results.length, summary, results, evicted, publication: "draft_review_required", completedAt: new Date().toISOString() });
   } catch (error) {
     console.error("[website-reapply] Page regeneration failed", error);
     res.status(503).json({ error: "Page regeneration is temporarily unavailable" });
@@ -1300,6 +1265,7 @@ router.post("/website/pages/seed", ...adminOnly, async (req: Request, res: Respo
             createdBy: req.user?.id,
             robotsIndex: false,
             robotsFollow: true,
+            ...buildWebsiteSeoDraft({ title: page.title, locale: "en" }),
           })),
         ).returning()
       : [];
@@ -1340,8 +1306,16 @@ router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Reque
 
       const pageUpdate: Record<string, unknown> = { status: "draft" };
       if (meta) Object.assign(pageUpdate, meta);
+      const currentBlocks = await tx.select().from(websitePageBlocksTable)
+        .where(eq(websitePageBlocksTable.pageId, pageId))
+        .orderBy(asc(websitePageBlocksTable.sortOrder));
+      const nextTitle = typeof pageUpdate.title === "string" ? pageUpdate.title : current.title;
+      const nextBlocks = Array.isArray(blocks) ? blocks : currentBlocks;
+      const previousGeneratedSeo = buildWebsiteSeoDraft({ title: current.title, locale: current.locale, blocks: currentBlocks });
+      const nextGeneratedSeo = buildWebsiteSeoDraft({ title: nextTitle, locale: current.locale, blocks: nextBlocks });
+      Object.assign(pageUpdate, applyGeneratedSeoFields({ ...current, ...pageUpdate } as Record<string, unknown>, previousGeneratedSeo, nextGeneratedSeo));
       if (translationsJson !== undefined) {
-        pageUpdate.translationsJson = translationsJson;
+        pageUpdate.translationsJson = enrichWebsiteTranslationSeo(translationsJson, current.translationsJson, nextTitle);
       }
       const [page] = await tx.update(websitePagesTable)
         .set({ ...pageUpdate, updatedBy: req.user?.id, updatedAt: new Date() })
@@ -1772,27 +1746,73 @@ router.put("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Res
   }
 });
 
-async function resolveAiIntegration(): Promise<{ provider: "openai" | "anthropic"; apiKey: string; model?: string } | null> {
+async function resolveAiIntegration(policy = DEFAULT_WEBSITE_AI_SETTINGS): Promise<{ provider: "openai" | "anthropic"; apiKey: string; model?: string; temperature?: number; guidance?: string; qualityMode?: "fast" | "balanced" | "premium" } | null> {
   const integrations = await db.select().from(integrationsTable)
     .where(inArray(integrationsTable.key, ["openai", "claude"]));
-  for (const integ of integrations) {
+  // Provider selection is deterministic while a dedicated content-AI selector
+  // does not yet exist: enabled OpenAI first, then the default Claude row.
+  const keys = policy.provider === "openai" ? ["openai"] as const : policy.provider === "claude" ? ["claude"] as const : ["openai", "claude"] as const;
+  for (const key of keys) {
+    const integ = integrations.find(item => item.key === key);
+    if (!integ) continue;
     if (!integ.isEnabled) continue;
-    const config = integ.config as Record<string, string>;
-    if (!config?.apiKey) continue;
+    const config = decryptConfig(integ.config as Record<string, string>);
+    // decryptConfig intentionally preserves ciphertext when the runtime key is
+    // absent or wrong. Never forward that stored ciphertext to a provider as
+    // though it were an API credential.
+    if (!config?.apiKey || isEncrypted(config.apiKey)) continue;
     return {
       provider: integ.key === "openai" ? "openai" : "anthropic",
       apiKey: config.apiKey,
-      model: config.model || undefined,
+      model: policy.modelOverride || config.model || undefined,
+      temperature: policy.temperature,
+      guidance: policy.editorialGuidance || undefined,
+      qualityMode: policy.qualityMode,
     };
   }
   return null;
 }
 
+async function inspectAiIntegration(policy = DEFAULT_WEBSITE_AI_SETTINGS): Promise<{
+  configured: boolean;
+  reason: "ready" | "policy_disabled" | "provider_disabled" | "credential_missing" | "credential_reset_required";
+  config: Awaited<ReturnType<typeof resolveAiIntegration>>;
+}> {
+  if (!policy.enabled) return { configured: false, reason: "policy_disabled", config: null };
+  const integrations = await db.select().from(integrationsTable)
+    .where(inArray(integrationsTable.key, ["openai", "claude"]));
+  const keys = policy.provider === "openai" ? ["openai"] : policy.provider === "claude" ? ["claude"] : ["openai", "claude"];
+  const selected = keys.map(key => integrations.find(item => item.key === key)).filter(Boolean);
+  if (!selected.some(item => item?.isEnabled)) return { configured: false, reason: "provider_disabled", config: null };
+  let missing = false;
+  for (const integration of selected) {
+    if (!integration?.isEnabled) continue;
+    const decrypted = decryptConfig(integration.config as Record<string, string>);
+    if (isEncrypted(decrypted.apiKey)) return { configured: false, reason: "credential_reset_required", config: null };
+    if (!decrypted.apiKey) missing = true;
+  }
+  const config = await resolveAiIntegration(policy);
+  return config
+    ? { configured: true, reason: "ready", config }
+    : { configured: false, reason: missing ? "credential_missing" : "provider_disabled", config: null };
+}
+
+function aiIntegrationMessage(reason: Awaited<ReturnType<typeof inspectAiIntegration>>["reason"]): string {
+  if (reason === "credential_reset_required") return "The saved AI credential cannot be decrypted after the local API restart. Open Settings > Integrations, enter the API key once more, save it, and test the connection.";
+  if (reason === "credential_missing") return "The enabled AI provider has no API key. Open Settings > Integrations and save the provider credential.";
+  if (reason === "provider_disabled") return "No AI provider is enabled. Enable OpenAI or Anthropic Claude in Settings > Integrations.";
+  if (reason === "policy_disabled") return "AI content features are disabled in Settings > AI Content & Translation.";
+  return "AI is ready.";
+}
+
 router.post("/website/ai/generate", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
-    const aiConfig = await resolveAiIntegration();
+    const policy = await loadWebsiteAiSettings();
+    if (!policy.enabled || !policy.allowedKinds.includes("managed")) return void res.status(403).json({ error: "AI writing is disabled for managed pages" });
+    const status = await inspectAiIntegration(policy);
+    const aiConfig = status.config;
     if (!aiConfig) {
-      return void res.status(400).json({ error: "AI not configured. Enable OpenAI or Anthropic Claude in Settings > Integrations." });
+      return void res.status(409).json({ error: "AI_PROVIDER_UNAVAILABLE", message: aiIntegrationMessage(status.reason), settingsPath: "/admin/settings?tab=integrations#ai-provider-integrations" });
     }
 
     const { action, context, locale } = req.body;
@@ -1811,11 +1831,212 @@ router.post("/website/ai/generate", ...adminOnly, async (req: Request, res: Resp
 
 router.get("/website/ai/status", ...adminOnly, async (_req: Request, res: Response): Promise<void> => {
   try {
-    const aiConfig = await resolveAiIntegration();
-    res.json({ configured: !!aiConfig, provider: aiConfig?.provider || null });
+    const settings = await loadWebsiteAiSettings();
+    const status = await inspectAiIntegration(settings);
+    res.json({ configured: status.configured, enabled: settings.enabled, provider: status.config?.provider || null, reason: status.reason, message: aiIntegrationMessage(status.reason), settingsPath: "/admin/settings?tab=integrations#ai-provider-integrations", reviewRequired: true, publicationPolicy: "draft_only" });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
     res.status(500).json({ error: msg });
+  }
+});
+
+router.post("/website/ai/translate", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
+  res.setHeader("Cache-Control", "private, no-store");
+  try {
+    const policy = await loadWebsiteAiSettings();
+    if (!policy.enabled) return void res.status(403).json({ error: "AI content features are disabled" });
+    const status = await inspectAiIntegration(policy);
+    const aiConfig = status.config;
+    if (!aiConfig) return void res.status(409).json({ error: "AI_PROVIDER_UNAVAILABLE", message: aiIntegrationMessage(status.reason), settingsPath: "/admin/settings?tab=integrations#ai-provider-integrations" });
+    const sourceLocale = typeof req.body?.sourceLocale === "string" && /^[a-z]{2,5}$/i.test(req.body.sourceLocale) ? req.body.sourceLocale.toLowerCase() : "";
+    const targetLocale = typeof req.body?.targetLocale === "string" && /^[a-z]{2,5}$/i.test(req.body.targetLocale) ? req.body.targetLocale.toLowerCase() : "";
+    const input = req.body?.texts;
+    if (!sourceLocale || !targetLocale || sourceLocale === targetLocale || !input || typeof input !== "object" || Array.isArray(input)) {
+      return void res.status(400).json({ error: "A different source and target language plus a text map are required" });
+    }
+    if (!policy.allowedLocales.includes(targetLocale)) return void res.status(403).json({ error: "Target language is not enabled for AI translation" });
+    const entries = Object.entries(input as Record<string, unknown>);
+    if (entries.length < 1 || entries.length > 500) return void res.status(400).json({ error: "Translate between 1 and 500 text fields at a time" });
+    let total = 0;
+    const texts: Record<string, string> = {};
+    for (const [key, value] of entries) {
+      if (!/^[A-Za-z0-9_.:[\]-]{1,160}$/.test(key) || typeof value !== "string" || value.length < 1 || value.length > 12_000 || /__FAS_PROTECTED_\d+__/.test(value)) {
+        return void res.status(400).json({ error: "Invalid translation field" });
+      }
+      total += value.length;
+      texts[key] = value;
+    }
+    if (total > 80_000) return void res.status(413).json({ error: "Translation draft is too large" });
+    const usage = await readWebsiteAiUsage(1);
+    const estimatedTokens = Math.ceil(total / 4);
+    if (usage.requests >= policy.dailyRequestLimit || usage.estimatedTokens + estimatedTokens > policy.dailyEstimatedTokenLimit) return void res.status(429).json({ error: "Daily AI content budget has been reached" });
+    const { AiContentService } = await import("../lib/aiService");
+    const aiService = new AiContentService(aiConfig);
+    const translations = await aiService.translateTextMap({ sourceLocale, targetLocale, texts });
+    await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "website_ai_content_execute", resource: "website_page", changes: JSON.stringify({ operation: "translate", sourceLocale, targetLocale, requests: 1, estimatedTokens, succeeded: 1, failed: 0, provider: aiService.getProvider(), publication: "draft_only" }) });
+    res.json({ translations, provider: aiService.getProvider(), sourceLocale, targetLocale });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Translation draft could not be generated";
+    res.status(502).json({ error: msg });
+  }
+});
+
+router.post("/website/ai/write", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
+  res.setHeader("Cache-Control", "private, no-store");
+  try {
+    const policy = await loadWebsiteAiSettings();
+    if (!policy.enabled || !policy.allowedKinds.includes("managed")) return void res.status(403).json({ error: "AI writing is disabled for managed pages" });
+    const status = await inspectAiIntegration(policy);
+    const aiConfig = status.config;
+    if (!aiConfig) return void res.status(409).json({ error: "AI_PROVIDER_UNAVAILABLE", message: aiIntegrationMessage(status.reason), settingsPath: "/admin/settings?tab=integrations#ai-provider-integrations" });
+    const action = ["generate", "improve", "shorten", "expand"].includes(req.body?.action) ? req.body.action : "";
+    const locale = typeof req.body?.locale === "string" && /^[a-z]{2,5}$/i.test(req.body.locale) ? req.body.locale.toLowerCase() : "";
+    const fieldLabel = typeof req.body?.fieldLabel === "string" ? req.body.fieldLabel.trim() : "";
+    const context = typeof req.body?.context === "string" ? req.body.context.trim() : "";
+    const currentText = typeof req.body?.currentText === "string" ? req.body.currentText : "";
+    const instruction = typeof req.body?.instruction === "string" ? req.body.instruction.trim() : "";
+    const format = req.body?.format === "html" ? "html" : req.body?.format === "plain" ? "plain" : "";
+    const maxLength = Number(req.body?.maxLength);
+    const allowedVariables = Array.isArray(req.body?.allowedVariables) ? req.body.allowedVariables : [];
+    if (!action || !locale || !fieldLabel || fieldLabel.length > 160 || context.length > 6_000 || currentText.length > 12_000 || instruction.length > 1_000 || !format || !Number.isInteger(maxLength) || maxLength < 20 || maxLength > 12_000) {
+      return void res.status(400).json({ error: "Invalid AI writing request" });
+    }
+    if (allowedVariables.length > 200 || allowedVariables.some((value: unknown) => typeof value !== "string" || !/^[A-Za-z][A-Za-z0-9_.]*$/.test(value))) {
+      return void res.status(400).json({ error: "Invalid template variable list" });
+    }
+    if (action !== "generate" && !currentText.trim()) return void res.status(400).json({ error: "Existing text is required for this action" });
+    const { AiContentService } = await import("../lib/aiService");
+    const aiService = new AiContentService(aiConfig);
+    const result = await aiService.writeText({ action, locale, fieldLabel, context, currentText, instruction, format, maxLength, allowedVariables });
+    res.json({ result, action, provider: aiService.getProvider(), locale, fieldLabel });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "AI writing suggestion could not be generated";
+    res.status(502).json({ error: msg });
+  }
+});
+
+router.post("/website/ai/generate-blog-post", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
+  res.setHeader("Cache-Control", "private, no-store");
+  try {
+    const policy = await loadWebsiteAiSettings();
+    if (!policy.enabled || !policy.allowedKinds.includes("blog")) return void res.status(403).json({ error: "AI writing is disabled for blog pages" });
+    const status = await inspectAiIntegration(policy);
+    const aiConfig = status.config;
+    if (!aiConfig) {
+      return void res.status(409).json({ error: "AI_PROVIDER_UNAVAILABLE", message: aiIntegrationMessage(status.reason), settingsPath: "/admin/settings?tab=integrations#ai-provider-integrations" });
+    }
+
+    const topic = typeof req.body?.topic === "string" ? req.body.topic.trim().slice(0, 500) : "";
+    const sourceNotes = typeof req.body?.sourceNotes === "string" ? req.body.sourceNotes.trim().slice(0, BLOG_AI_LIMITS.maxNotes) : "";
+    const instructions = typeof req.body?.instructions === "string" ? req.body.instructions.trim().slice(0, BLOG_AI_LIMITS.maxInstructions) : "";
+    const audience = typeof req.body?.audience === "string" ? req.body.audience.trim().slice(0, 500) : "prospective international students";
+    const locale = typeof req.body?.locale === "string" && /^[a-z]{2,5}$/i.test(req.body.locale) ? req.body.locale.toLowerCase() : "en";
+    const tone = ["authoritative", "helpful", "practical", "inspiring"].includes(req.body?.tone) ? req.body.tone : "helpful";
+    const length = ["short", "standard", "deep"].includes(req.body?.length) ? req.body.length : "standard";
+    const sourceUrls = Array.isArray(req.body?.sourceUrls)
+      ? req.body.sourceUrls.filter((value: unknown): value is string => typeof value === "string").slice(0, BLOG_AI_LIMITS.maxSources)
+      : [];
+    if (!topic) return void res.status(400).json({ error: "Article topic is required" });
+    if (!sourceNotes && sourceUrls.length === 0) return void res.status(400).json({ error: "Add at least one source URL or source note" });
+
+    const [sources, categories, tags] = await Promise.all([
+      readBlogAiSources(sourceUrls),
+      db.select({ id: websiteBlogCategoriesTable.id, name: websiteBlogCategoriesTable.name, slug: websiteBlogCategoriesTable.slug }).from(websiteBlogCategoriesTable).orderBy(asc(websiteBlogCategoriesTable.sortOrder)),
+      db.select({ id: websiteBlogTagsTable.id, name: websiteBlogTagsTable.name, slug: websiteBlogTagsTable.slug }).from(websiteBlogTagsTable).orderBy(asc(websiteBlogTagsTable.name)),
+    ]);
+    const availableSources = sources.filter(source => source.text);
+    if (!sourceNotes && availableSources.length === 0) {
+      return void res.status(422).json({ error: "None of the supplied source URLs could be read", sources });
+    }
+
+    const desiredWords = length === "short" ? "700-900" : length === "deep" ? "1600-2200" : "1000-1400";
+    const sourceEvidence = availableSources.map((source, index) => ({
+      source: index + 1,
+      url: source.url,
+      title: source.title,
+      description: source.description,
+      text: source.text,
+    }));
+    const context = [
+      `EDITORIAL_BRIEF=${JSON.stringify({ topic, locale, audience, tone, desiredWords, instructions })}`,
+      `ALLOWED_CATEGORIES=${JSON.stringify(categories.map(category => ({ name: category.name, slug: category.slug })))}`,
+      `ALLOWED_TAGS=${JSON.stringify(tags.map(tag => ({ name: tag.name, slug: tag.slug })))}`,
+      `SOURCE_NOTES=${JSON.stringify(sourceNotes)}`,
+      `SOURCE_EVIDENCE=${JSON.stringify(sourceEvidence)}`,
+    ].join("\n");
+
+    const { AiContentService } = await import("../lib/aiService");
+    const aiService = new AiContentService(aiConfig);
+    const raw = await aiService.generate({ action: "generateBlogPost", context, locale });
+    const draft = parseBlogAiDraft(raw, categories.map(item => item.slug), tags.map(item => item.slug));
+    const category = categories.find(item => item.slug === draft.categorySlug);
+    const tagIds = tags.filter(item => draft.tagSlugs.includes(item.slug)).map(item => item.id);
+    const featuredImageUrl = availableSources.find(source => source.imageUrl)?.imageUrl ?? null;
+    const [slugHit] = await db.select({ id: websiteBlogPostsTable.id }).from(websiteBlogPostsTable).where(eq(websiteBlogPostsTable.slug, draft.slug));
+    const finalSlug = slugHit
+      ? await nextAvailableSlug(draft.slug, async candidate => {
+          const [hit] = await db.select({ id: websiteBlogPostsTable.id }).from(websiteBlogPostsTable).where(eq(websiteBlogPostsTable.slug, candidate));
+          return !!hit;
+        })
+      : draft.slug;
+    const articleText = draft.bodyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const post = await db.transaction(async tx => {
+      const [created] = await tx.insert(websiteBlogPostsTable).values({
+        title: draft.title,
+        slug: finalSlug,
+        excerpt: draft.excerpt || null,
+        content: {
+          body: draft.bodyHtml,
+          featured: false,
+          readTime: Math.max(1, Math.ceil(articleText.split(" ").filter(Boolean).length / 200)),
+          sources: sources.filter(source => source.text).map(source => ({ url: source.url, title: source.title })),
+          aiGeneration: { provider: aiService.getProvider(), sourceCount: availableSources.length, generatedAt: new Date().toISOString() },
+          seo: {
+            robotsIndex: true,
+            robotsFollow: true,
+            ogTitle: draft.ogTitle,
+            ogDescription: draft.ogDescription,
+            ogImageUrl: featuredImageUrl ?? undefined,
+            twitterTitle: draft.twitterTitle,
+            twitterDescription: draft.twitterDescription,
+            twitterImageUrl: featuredImageUrl ?? undefined,
+          },
+        },
+        featuredImageUrl,
+        status: "draft",
+        authorId: req.user?.id ?? null,
+        categoryId: category?.id ?? null,
+        locale,
+        metaTitle: draft.metaTitle,
+        metaDescription: draft.metaDescription,
+        translationsJson: {},
+        publishedAt: null,
+      }).returning();
+      if (tagIds.length) await tx.insert(websiteBlogPostTagsTable).values(tagIds.map(tagId => ({ postId: created.id, tagId })));
+      return created;
+    });
+    invalidateArticlePublicationCaches(post.id);
+
+    res.json({
+      post,
+      draft: {
+        ...draft,
+        slug: finalSlug,
+        categoryId: category?.id ?? null,
+        authorId: req.user?.id ?? null,
+        tagIds,
+        featuredImageUrl,
+        ogImageUrl: featuredImageUrl,
+        twitterImageUrl: featuredImageUrl,
+        status: "draft",
+      },
+      sources: sources.map(source => ({ url: source.url, title: source.title, used: !!source.text, warning: source.warning })),
+      provider: aiService.getProvider(),
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Blog draft could not be generated";
+    const status = msg.startsWith("AI_BLOG_") ? 422 : 500;
+    res.status(status).json({ error: msg });
   }
 });
 
@@ -1858,9 +2079,13 @@ router.get("/website/translations/status", ...adminOnly, async (_req: Request, r
 
 router.put("/website/pages/:id/translations", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
+    const pageId = Number(req.params.id);
+    const [current] = await db.select().from(websitePagesTable).where(eq(websitePagesTable.id, pageId)).limit(1);
+    if (!current) return void res.status(404).json({ error: "Not found" });
+    const translationsJson = enrichWebsiteTranslationSeo(req.body.translations || {}, current.translationsJson, current.title);
     const [page] = await db.update(websitePagesTable)
-      .set({ translationsJson: req.body.translations || {}, status: "draft", publishedAt: null })
-      .where(eq(websitePagesTable.id, Number(req.params.id)))
+      .set({ translationsJson, status: "draft", publishedAt: null })
+      .where(eq(websitePagesTable.id, pageId))
       .returning();
     if (!page) return void res.status(404).json({ error: "Not found" });
     invalidatePublicCatalogRenderCache({ entityType: "page", entityId: page.id });

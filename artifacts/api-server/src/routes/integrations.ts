@@ -1,24 +1,48 @@
-import { Router, type IRouter, type Request } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { db, integrationsTable, auditLogsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { clearConfigCache } from "@workspace/integrations-anthropic-ai";
 import { createSmtpTransporter, invalidateSmtpCache } from "../lib/email";
 import crypto from "crypto";
 import { isLiveIntegrationsEnabled, liveModeReason } from "../lib/inbox/liveMode";
 import { resolveZernioWhatsAppAccount, listZernioWhatsAppTemplates } from "../lib/inbox/zernioTemplates";
-import { encryptConfig, decryptConfig } from "../lib/encryption";
+import { EncryptionKeyUnavailableError, encryptConfig, decryptConfig, isEncrypted } from "../lib/encryption";
 import { maskSecrets, mergeConfig } from "../lib/configMasking";
 import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
 import { clearDocumentAiConnectionCache, isAnthropicConnectionKey } from "../lib/documentAiConnection";
 import { simulatedIntegrationTestResult, unsupportedIntegrationTestResult } from "../lib/integrationTestResult";
+import { cityWeatherOutboundEnabled, testOpenWeatherConnection } from "../lib/cityWeather";
 
 const router: IRouter = Router();
 
 const LIVE_GATED_KEYS = new Set(["whatsapp", "web_form", "facebook_messenger", "instagram", "zernio"]);
 type IntegrationTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+function encryptionFailureResponse(res: Response, error: unknown): boolean {
+  if (!(error instanceof EncryptionKeyUnavailableError)) return false;
+  res.status(503).json({
+    error: error.code,
+    message:
+      "Secure integration storage is not configured for this local API. Set ENCRYPTION_KEY or SESSION_SECRET, restart the API, then save the key again.",
+  });
+  return true;
+}
+
+function publicIntegrationConfig(config: Record<string, any> | null | undefined): {
+  config: Record<string, any>;
+  requiresCredentialReset: boolean;
+} {
+  const decrypted = decryptConfig(config);
+  const requiresCredentialReset = Object.values(decrypted).some(isEncrypted);
+  const safeConfig = Object.fromEntries(
+    Object.entries(decrypted).map(([key, value]) => [key, isEncrypted(value) ? "" : value]),
+  );
+  return { config: maskSecrets(safeConfig), requiresCredentialReset };
+}
 
 async function writeIntegrationAudit(
   tx: IntegrationTransaction,
@@ -47,10 +71,7 @@ router.get("/integrations", requireAuth, requireRole(...ADMIN_ROLES), async (_re
     .from(integrationsTable)
     .orderBy(integrationsTable.category, integrationsTable.name);
 
-  const masked = integrations.map((i) => ({
-    ...i,
-    config: maskSecrets(decryptConfig(i.config as Record<string, any>)),
-  }));
+  const masked = integrations.map((i) => ({ ...i, ...publicIntegrationConfig(i.config as Record<string, any>) }));
 
   res.json({ data: masked });
 });
@@ -66,10 +87,7 @@ router.get("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
     return;
   }
 
-  res.json({
-    ...integration,
-    config: maskSecrets(decryptConfig(integration.config as Record<string, any>)),
-  });
+  res.json({ ...integration, ...publicIntegrationConfig(integration.config as Record<string, any>) });
 });
 
 router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
@@ -126,9 +144,23 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
     // Decrypt the stored config before merging so masked-incoming detection works on plaintext.
     const existingPlain = decryptConfig(existing.config as Record<string, any>);
     const mergedConfig = mergeConfig(existingPlain, config || {});
+    if (Object.values(mergedConfig).some(isEncrypted)) {
+      res.status(409).json({
+        error: "integration_credential_reset_required",
+        message:
+          "The saved credential was encrypted with a different local key. Enter the API key again, then save the connection.",
+      });
+      return;
+    }
     if (key === "web_form" && !mergedConfig.formId) mergedConfig.formId = crypto.randomUUID();
     if (key === "web_form" && !mergedConfig.secret) mergedConfig.secret = crypto.randomBytes(24).toString("hex");
-    const toStore = encryptConfig(mergedConfig);
+    let toStore;
+    try {
+      toStore = encryptConfig(mergedConfig);
+    } catch (error) {
+      if (encryptionFailureResponse(res, error)) return;
+      throw error;
+    }
     result = await db.transaction(async (tx) => {
       const [updated] = await tx
         .update(integrationsTable)
@@ -138,7 +170,7 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
           isEnabled: isEnabled ?? existing.isEnabled,
           config: toStore,
         })
-        .where(and(eq(integrationsTable.key, key), eq(integrationsTable.updatedAt, existing.updatedAt)))
+        .where(and(eq(integrationsTable.id, existing.id), eq(integrationsTable.key, key)))
         .returning();
       if (!updated) return null;
       await writeIntegrationAudit(tx, req, "update_integration", updated.id, { key, isEnabled: updated.isEnabled });
@@ -150,7 +182,13 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
       if (!initialConfig.formId) initialConfig.formId = crypto.randomUUID();
       if (!initialConfig.secret) initialConfig.secret = crypto.randomBytes(24).toString("hex");
     }
-    const toStore = encryptConfig(initialConfig);
+    let toStore;
+    try {
+      toStore = encryptConfig(initialConfig);
+    } catch (error) {
+      if (encryptionFailureResponse(res, error)) return;
+      throw error;
+    }
     result = await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(integrationsTable)
@@ -171,7 +209,7 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
     clearDocumentAiConnectionCache();
   }
   if (key === "smtp") invalidateSmtpCache();
-  res.json({ ...result, config: maskSecrets(decryptConfig(result.config as Record<string, any>)) });
+  res.json({ ...result, ...publicIntegrationConfig(result.config as Record<string, any>) });
 });
 
 router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
@@ -212,7 +250,7 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
     const [updated] = await tx
       .update(integrationsTable)
       .set({ isEnabled: willEnable })
-      .where(and(eq(integrationsTable.key, integrationKey), eq(integrationsTable.updatedAt, existing.updatedAt)))
+      .where(and(eq(integrationsTable.id, existing.id), eq(integrationsTable.key, integrationKey)))
       .returning();
     if (!updated) return null;
     await writeIntegrationAudit(tx, req, "toggle_integration", updated.id, { key: integrationKey, isEnabled: updated.isEnabled });
@@ -244,17 +282,74 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
     return;
   }
 
-  // Credential checks also contact providers (SMTP verify and Anthropic test
-  // prompts included). Stop before decrypting credentials, DNS or SDK creation.
+  // Side-effecting provider checks remain behind the live-integration gate.
+  // OpenAI and Anthropic use their read-only Models APIs below: an explicit
+  // admin click verifies key + model access without generating content.
+  const outboundCheckAllowed = integrationKey === "openweather"
+    ? cityWeatherOutboundEnabled()
+    : isLiveIntegrationsEnabled();
   if (
-    (LIVE_GATED_KEYS.has(integrationKey) || integrationKey === "smtp" || isAnthropicConnectionKey(integrationKey))
-    && !isLiveIntegrationsEnabled()
+    (LIVE_GATED_KEYS.has(integrationKey) || integrationKey === "smtp" || integrationKey === "openweather")
+    && !outboundCheckAllowed
   ) {
     res.json(simulatedIntegrationTestResult("Live credential check was skipped; simulated mode is not health evidence."));
     return;
   }
 
   const config = decryptConfig(integration.config as Record<string, any>);
+
+  if (Object.values(config).some(isEncrypted)) {
+    res.status(409).json({
+      success: false,
+      error: "integration_credential_reset_required",
+      message: "This API instance cannot decrypt the saved credential. Enter the API key again and save the connection before testing it.",
+    });
+    return;
+  }
+
+  if (integrationKey === "openai") {
+    if (!config.apiKey) {
+      res.json({ success: false, message: "OpenAI API key is not configured" });
+      return;
+    }
+    try {
+      const client = new OpenAI({ apiKey: String(config.apiKey), timeout: 15_000, maxRetries: 0 });
+      await client.models.retrieve(String(config.model || "gpt-6.1-sol"));
+      res.json({ success: true, message: "Connection test passed — OpenAI API key and selected model are available" });
+    } catch (err: any) {
+      const msg = err?.status === 401
+        ? "Invalid OpenAI API key"
+        : err?.status === 429
+          ? "Rate limited — but the OpenAI API key was accepted"
+          : err?.status === 404
+            ? "The selected OpenAI model is not available to this project"
+            : `Connection failed: ${err?.message || "Unknown error"}`;
+      res.json({ success: err?.status === 429, message: msg });
+    }
+    return;
+  }
+
+  if (integrationKey === "openweather") {
+    if (!config.apiKey) {
+      res.json({ success: false, message: "OpenWeather API key is not configured" });
+      return;
+    }
+    try {
+      await testOpenWeatherConnection(String(config.apiKey));
+      res.json({ success: true, message: "OpenWeather connection verified successfully" });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "weather_sync_failed";
+      const message = code === "weather_provider_http_401"
+        ? "OpenWeather rejected the API key"
+        : code === "weather_provider_http_429"
+          ? "OpenWeather rate limit reached; try again later"
+          : code === "weather_hourly_quota_exhausted"
+            ? "The local hourly OpenWeather quota is full; try again after the rolling window resets"
+          : "OpenWeather connection could not be verified";
+      res.json({ success: false, message, code });
+    }
+    return;
+  }
 
   if (isAnthropicConnectionKey(String(req.params.key).trim().toLowerCase())) {
     if (!config.apiKey) {
@@ -263,17 +358,15 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
     }
     try {
       const client = new Anthropic({ apiKey: config.apiKey, timeout: 15_000, maxRetries: 0 });
-      await client.messages.create({
-        model: config.model || "claude-sonnet-4-6",
-        max_tokens: 5,
-        messages: [{ role: "user", content: "Hi" }],
-      });
-      res.json({ success: true, message: "Connection test passed — Anthropic API key is valid" });
+      await client.models.retrieve(String(config.model || "claude-sonnet-5-5"));
+      res.json({ success: true, message: "Connection test passed — Anthropic API key and selected model are available" });
     } catch (err: any) {
       const msg = err?.status === 401
         ? "Invalid API key"
         : err?.status === 429
-          ? "Rate limited — but API key is valid"
+          ? "Rate limited — but the Anthropic API key was accepted"
+          : err?.status === 404
+            ? "The selected Anthropic model is not available to this workspace"
           : `Connection failed: ${err?.message || "Unknown error"}`;
       const success = err?.status === 429;
       res.json({ success, message: msg });

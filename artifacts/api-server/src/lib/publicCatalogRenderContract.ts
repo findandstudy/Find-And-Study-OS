@@ -1,8 +1,9 @@
 import { projectPublicTuition, publicMinorAmount, publicCurrency } from "./publicCatalogTuition";
 import { JSDOM } from "jsdom";
 import { publicCatalogRequirements } from "./publicCatalogRequirements";
-import { detailContentPresentationOverrides, parseDetailContent, resolveDetailTemplateContent, type DetailContent } from "./websiteDetailContentContract";
+import { detailContentPresentationOverrides, parseDetailContent, resolveDetailTemplateContent, type DetailContent, type DetailContentSection } from "./websiteDetailContentContract";
 import type { DetailSectionPresentation } from "./websiteDetailLayoutContract";
+import type { PublicCityWeatherSnapshot } from "./cityWeather";
 import {
   PROGRAM_SUPPORTED_LOCALES,
   type ProgramSupportedLocale,
@@ -234,6 +235,7 @@ type PublicCatalogRenderModelData =
         country: string;
         city: string | null;
         universityType: string | null;
+        weather?: PublicCityWeatherSnapshot | null;
         programCount: number;
         programs: Array<{
           id: number;
@@ -291,9 +293,28 @@ type PublicCatalogRenderModelData =
         name: string;
         country: string;
         countryCode: string;
+        filterCountry?: string;
+        filterCity?: string;
         description: string | null;
         universityCount: number;
         programCount: number;
+        programLanguages: string[];
+        transportModes?: string[];
+        campusGeography?: string | null;
+        weather?: PublicCityWeatherSnapshot | null;
+        externalFacts?: {
+          climateProvider: string | null;
+          climateSourceUrl: string | null;
+          climateSummary: string | null;
+          climateAnnualAverageC: number | null;
+          climateMonths: Array<{ month: string; highC?: number; lowC?: number; condition?: string }>;
+          climateVerifiedAt: string | null;
+          housingProvider: string | null;
+          housingSourceUrl: string | null;
+          housingSummary: string | null;
+          housingFormats: Array<{ name: string; area?: string; priceFrom?: number; currency?: string; billingPeriod?: string; url?: string }>;
+          housingVerifiedAt: string | null;
+        } | null;
         universities: Array<{
           id: number;
           name: string;
@@ -332,6 +353,15 @@ type PublicCatalogRenderModelData =
       description: string;
       indexable: boolean;
       alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
+      social: {
+        robotsFollow: boolean;
+        ogTitle: string | null;
+        ogDescription: string | null;
+        ogImageUrl: string | null;
+        twitterTitle: string | null;
+        twitterDescription: string | null;
+        twitterImageUrl: string | null;
+      };
       relatedArticles: Array<{
         id: number;
         title: string;
@@ -558,90 +588,97 @@ function safeJson(value: unknown): string {
     .replace(/&/g, "\\u0026");
 }
 
+const HYBRID_CONTENT_KEYS: Record<DetailContent["kind"], ReadonlySet<string>> = {
+  program: new Set(["hero", "overview", "requirements"]),
+  university: new Set(["hero", "overview"]),
+  destination: new Set(["hero", "overview"]),
+  city: new Set(["hero", "overview"]),
+};
 const templateNumber = (value: unknown, locale: string) => typeof value === "number" && Number.isFinite(value) ? new Intl.NumberFormat(locale).format(value) : null;
-
+const templateList = (value: unknown) => Array.isArray(value) ? value.map(item => typeof item === "string" ? item : item && typeof item === "object" && "name" in item ? String(item.name) : "").filter(Boolean).join(" · ") || null : null;
+const templateWeather = (weather: PublicCityWeatherSnapshot | null | undefined, locale: string): Record<string, string | null> => ({
+  "weather.temperature": weather ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(weather.temperatureC)}°C` : null,
+  "weather.feelsLike": weather ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(weather.feelsLikeC)}°C` : null,
+  "weather.description": weather?.description ?? null,
+  "weather.humidity": weather ? `${new Intl.NumberFormat(locale).format(weather.humidityPercent)}%` : null,
+  "weather.windSpeed": weather?.windSpeedMps == null ? null : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(weather.windSpeedMps)} m/s`,
+});
 function detailTemplateVariablesForModel(model: PublicCatalogRenderModel): Record<string, string | null> {
   if (model.kind === "destination_detail") return {
-    "destination.name": model.destination.name,
-    "destination.country": model.destination.country,
-    "destination.shortDescription": model.description,
-    "destination.description": model.description,
-    "destination.language": model.destination.language,
-    "destination.currency": model.destination.currency,
-    "destination.climate": model.destination.climate,
-    "destination.livingCost": model.destination.livingCost,
-    "destination.visaInfo": model.destination.visaInfo,
-    "destination.workPermit": model.destination.workPermit,
+    "destination.name": model.destination.name, "destination.country": model.destination.country,
+    "destination.shortDescription": model.description, "destination.description": model.description,
+    "destination.language": model.destination.language, "destination.currency": model.destination.currency,
+    "destination.climate": model.destination.climate, "destination.livingCost": model.destination.livingCost,
+    "destination.visaInfo": model.destination.visaInfo, "destination.workPermit": model.destination.workPermit,
     "stats.universityCount": templateNumber(model.destination.universityCount, model.locale),
     "stats.programCount": templateNumber(model.destination.programCount, model.locale),
     "stats.cityCount": templateNumber(model.destination.cityLinks?.length ?? model.destination.popularCities.length, model.locale),
   };
   if (model.kind === "city_detail") return {
-    "city.name": model.city.name,
-    "city.country": model.city.country,
-    "city.description": model.city.description,
-    "city.universityCount": templateNumber(model.city.universityCount, model.locale),
-    "city.programCount": templateNumber(model.city.programCount, model.locale),
-    "city.programLanguages": null,
-    "city.transportModes": null,
-    "city.campusGeography": null,
-    "city.climateSummary": null,
-    "city.climateAverage": null,
-    "city.housingSummary": null,
-    "city.housingFormats": null,
+    "city.name": model.city.name, "city.country": model.city.country, "city.description": model.city.description,
+    "city.universityCount": templateNumber(model.city.universityCount, model.locale), "city.programCount": templateNumber(model.city.programCount, model.locale),
+    "city.programLanguages": templateList(model.city.programLanguages), "city.transportModes": templateList(model.city.transportModes),
+    "city.campusGeography": model.city.campusGeography ?? null, "city.climateSummary": model.city.externalFacts?.climateSummary ?? null,
+    "city.climateAverage": model.city.externalFacts?.climateAnnualAverageC == null ? null : `${new Intl.NumberFormat(model.locale, { maximumFractionDigits: 1 }).format(model.city.externalFacts.climateAnnualAverageC)}°C`,
+    "city.housingSummary": model.city.externalFacts?.housingSummary ?? null, "city.housingFormats": templateList(model.city.externalFacts?.housingFormats),
+    ...templateWeather(model.city.weather, model.locale),
   };
   if (model.kind === "university_detail") return {
-    "university.name": model.university.name,
-    "university.country": model.university.country,
-    "university.city": model.university.city,
-    "university.type": model.university.universityType,
-    "stats.programCount": templateNumber(model.university.programCount, model.locale),
+    "university.name": model.university.name, "university.country": model.university.country, "university.city": model.university.city,
+    "university.type": model.university.universityType, "stats.programCount": templateNumber(model.university.programCount, model.locale),
+    ...templateWeather(model.university.weather, model.locale),
   };
   if (model.kind === "program_detail") {
     const tuition = model.program.verifiedTuition ? publicMinorAmount(model.program.verifiedTuition.amountMinor, model.program.verifiedTuition.currencyCode) : model.program.tuitionFee;
     const currency = model.program.verifiedTuition?.currencyCode ?? model.program.currency;
     const money = (value: number | null | undefined) => value == null || !currency ? null : new Intl.NumberFormat(model.locale, { style: "currency", currency }).format(value);
     return {
-      "program.name": model.program.name,
-      "program.degree": model.program.degree,
-      "program.field": model.program.field,
-      "program.language": model.program.language,
-      "program.duration": model.program.duration,
-      "program.tuitionFee": money(tuition),
-      "program.discountedFee": money(model.program.discountedFee),
-      "program.currency": currency,
-      "program.requirements": model.program.requirements ?? null,
-      "university.name": model.program.universityName,
-      "university.country": model.program.country,
-      "university.city": model.program.city,
-      "stats.intakeCount": templateNumber(model.intakes?.length ?? 0, model.locale),
-      "stats.relatedProgramCount": templateNumber(model.relatedPrograms.length, model.locale),
+      "program.name": model.program.name, "program.degree": model.program.degree, "program.field": model.program.field,
+      "program.language": model.program.language, "program.duration": model.program.duration, "program.tuitionFee": money(tuition),
+      "program.discountedFee": money(model.program.discountedFee), "program.currency": currency, "program.requirements": model.program.requirements ?? null,
+      "university.name": model.program.universityName, "university.country": model.program.country, "university.city": model.program.city,
+      "stats.intakeCount": templateNumber(model.intakes?.length ?? 0, model.locale), "stats.relatedProgramCount": templateNumber(model.relatedPrograms.length, model.locale),
     };
   }
   return {};
 }
-
 function detailContentForModel(model: PublicCatalogRenderModel): DetailContent | null {
   const content = parseDetailContent(model.editorial);
   const entityId = model.kind === "program_detail" ? model.program.id : model.kind === "university_detail" ? model.university.id
     : model.kind === "city_detail" ? model.city.id : model.kind === "destination_detail" ? model.destination.catalogCountryId : null;
-  return !content || content.locale !== model.locale || content.entityId !== entityId || `${content.kind}_detail` !== model.kind
-    ? null
-    : resolveDetailTemplateContent(content, detailTemplateVariablesForModel(model));
+  return !content || content.locale !== model.locale || content.entityId !== entityId || `${content.kind}_detail` !== model.kind ? null : resolveDetailTemplateContent(content, detailTemplateVariablesForModel(model));
 }
-
-/** Mirrors the visitor-visible editorial content without authoring state or raw HTML. */
+function renderDetailContentSection(section: DetailContentSection, wrapped: boolean): string {
+  const cardsClass = section.key === "climate" ? "detail-climate-ribbon" : section.key === "housing" ? "detail-housing-strip" : ["services", "support"].includes(section.key) ? "detail-service-grid" : "detail-editorial-cards";
+  const cards = section.cards?.map((card, index) => `<article><span class="detail-editorial-index">${String(index + 1).padStart(2, "0")}</span><h3>${card.href ? `<a href="${escapeHtml(card.href)}" rel="noopener noreferrer">${escapeHtml(card.title)}</a>` : escapeHtml(card.title)}</h3><p>${escapeHtml(card.body)}</p></article>`).join("") || "";
+  const images = section.images?.map(image => `<figure><img loading="lazy" decoding="async" src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt)}" width="800" height="560" />${image.caption ? `<figcaption>${escapeHtml(image.caption)}</figcaption>` : ""}</figure>`).join("") || "";
+  const table = section.table ? `<div class="detail-editorial-table" role="region" aria-label="${escapeHtml(section.title)}" tabindex="0"><table><caption>${escapeHtml(section.title)}</caption><thead><tr>${section.table.columns.map(column => `<th scope="col">${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody>${section.table.rows.map(row => `<tr>${row.map((cell,index) => index ? `<td>${escapeHtml(cell)}</td>` : `<th scope="row">${escapeHtml(cell)}</th>`).join("")}</tr>`).join("")}</tbody></table></div>` : "";
+  const steps = section.steps ? `<ol class="detail-editorial-steps">${section.steps.map((step, index) => `<li><span>${index + 1}</span><div><h3>${escapeHtml(step.title)}</h3><p>${escapeHtml(step.body)}</p></div></li>`).join("")}</ol>` : "";
+  const faq = section.questions?.length ? `<div class="detail-editorial-faq">${section.questions.map(item => `<details><summary>${escapeHtml(item.question)}</summary><p>${escapeHtml(item.answer)}</p></details>`).join("")}</div>` : "";
+  const evidence = section.sources.length > 0 && section.reviewedOn
+    ? `<footer class="detail-editorial-evidence">${section.sources.map(source => `<cite><a href="${escapeHtml(source.url)}" rel="noopener noreferrer">${escapeHtml(source.label)}</a></cite>`).join(" · ")} <time datetime="${section.reviewedOn}">${section.reviewedOn}</time></footer>`
+    : "";
+  const inner = `<div class="detail-wrap detail-editorial-content"><div class="detail-editorial-heading"><h2>${escapeHtml(section.title)}</h2></div>${section.body ? `<p class="detail-prose detail-editorial-intro">${escapeHtml(section.body)}</p>` : ""}${images ? `<div class="detail-editorial-gallery">${images}</div>` : ""}${cards ? `<div class="${cardsClass}">${cards}</div>` : ""}${table}${steps}${faq}${evidence}</div>`;
+  const layoutKey = `editorial-${section.key}`;
+  const band = ["services", "support"].includes(section.key) ? " detail-band" : "";
+  return wrapped ? `<section data-detail-section="${escapeHtml(layoutKey)}" id="${escapeHtml(layoutKey)}" class="detail-section detail-editorial-section is-${escapeHtml(section.key)}${band}">${inner}</section>` : inner;
+}
+/** Mirrors visitor-visible static CMS content without copying catalogue facts. */
 function renderDetailContent(model: PublicCatalogRenderModel): string {
   const content = detailContentForModel(model);
   if (!content) return "";
-  return content.sections.map(section => {
-    const cards = section.cards?.map(card => `<article><h3>${card.href ? `<a href="${escapeHtml(card.href)}" rel="noopener noreferrer">${escapeHtml(card.title)}</a>` : escapeHtml(card.title)}</h3><p>${escapeHtml(card.body)}</p></article>`).join("") || "";
-    const images = section.images?.map(image => `<figure><img loading="lazy" decoding="async" src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt)}" width="800" height="560" />${image.caption ? `<figcaption>${escapeHtml(image.caption)}</figcaption>` : ""}</figure>`).join("") || "";
-    const table = section.table ? `<div role="region" aria-label="${escapeHtml(section.title)}" tabindex="0" style="overflow-x:auto"><table><caption>${escapeHtml(section.title)}</caption><thead><tr>${section.table.columns.map(column => `<th scope="col">${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody>${section.table.rows.map(row => `<tr>${row.map((cell,index) => index ? `<td>${escapeHtml(cell)}</td>` : `<th scope="row">${escapeHtml(cell)}</th>`).join("")}</tr>`).join("")}</tbody></table></div>` : "";
-    const steps = section.steps ? `<ol>${section.steps.map(step => `<li><h3>${escapeHtml(step.title)}</h3><p>${escapeHtml(step.body)}</p></li>`).join("")}</ol>` : "";
-    const faq = section.questions?.map(item => `<details><summary>${escapeHtml(item.question)}</summary><p>${escapeHtml(item.answer)}</p></details>`).join("") || "";
-    return `<section data-detail-section="editorial-${section.key}" id="editorial-${section.key}" class="mt-10"><h2>${escapeHtml(section.title)}</h2>${section.body ? `<p>${escapeHtml(section.body)}</p>` : ""}${images}${cards}${table}${steps}${faq}<footer>${section.sources.map(source => `<cite><a href="${escapeHtml(source.url)}" rel="noopener noreferrer">${escapeHtml(source.label)}</a></cite>`).join(" · ")} <time datetime="${section.reviewedOn}">${section.reviewedOn}</time></footer></section>`;
-  }).join("");
+  return content.sections.filter(section => !HYBRID_CONTENT_KEYS[content.kind].has(section.key))
+    .map(section => renderDetailContentSection(section, true)).join("");
+}
+function mergeHybridDetailContent(shell: string, model: PublicCatalogRenderModel): string {
+  const content = detailContentForModel(model);
+  if (!content) return shell;
+  for (const section of content.sections.filter(entry => HYBRID_CONTENT_KEYS[content.kind].has(entry.key))) {
+    const pattern = new RegExp(`(<section\\s+data-detail-section=["']${section.key}["'][^>]*>[\\s\\S]*?)(<\\/section>)`);
+    if (pattern.test(shell)) shell = shell.replace(pattern, `$1${renderDetailContentSection(section, false)}$2`);
+    else shell = shell.replace("</main>", `<section data-detail-section="${escapeHtml(section.key)}" id="${escapeHtml(section.key)}" class="mt-10">${renderDetailContentSection(section, false)}</section></main>`);
+  }
+  return shell;
 }
 
 function replaceMeta(
@@ -727,6 +764,27 @@ function locationHierarchy(value: { country?: string; city?: string | null; coun
   return [link(value.country, value.countryPath), link(value.city, value.cityPath)].filter(Boolean).join(" / ");
 }
 
+function renderWeatherSnapshot(weather: PublicCityWeatherSnapshot | null | undefined, cityName: string, locale: string): string {
+  if (!weather) return "";
+  const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
+  const copy = locale === "tr"
+    ? { weather: "Hava", stored: "Saklanan şehir hava durumu", stale: "Genel görünüm · saklanan son veri", feels: "Hissedilen", range: "Günün aralığı", humidity: "Nem", wind: "Rüzgâr", source: "Veri kaynağı" }
+    : { weather: "Weather", stored: "Stored city weather", stale: "General outlook · latest stored data", feels: "Feels like", range: "Daily range", humidity: "Humidity", wind: "Wind", source: "Data source" };
+  const metric = (label: string, value: string) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
+  return `<section data-detail-section="weather" id="weather" class="detail-section" aria-label="${escapeHtml(`${copy.weather} · ${cityName}`)}"><div class="detail-wrap">
+    <p class="detail-eyebrow">${escapeHtml(weather.isStale ? copy.stale : copy.stored)}</p>
+    <h2>${escapeHtml(cityName)} · ${escapeHtml(weather.description)}</h2>
+    <p><strong>${escapeHtml(`${number.format(weather.temperatureC)}°C`)}</strong></p>
+    <dl class="detail-weather-metrics">
+      ${metric(copy.feels, `${number.format(weather.feelsLikeC)}°C`)}
+      ${metric(copy.range, `${number.format(weather.minimumC)}°C / ${number.format(weather.maximumC)}°C`)}
+      ${metric(copy.humidity, `${number.format(weather.humidityPercent)}%`)}
+      ${weather.windSpeedMps === null ? "" : metric(copy.wind, `${number.format(weather.windSpeedMps)} m/s`)}
+    </dl>
+    <footer>${escapeHtml(copy.source)}: <a href="https://openweathermap.org/" rel="noopener noreferrer">${escapeHtml(weather.attribution)}</a></footer>
+  </div></section>`;
+}
+
 function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "program_detail" }>): string {
   const program = model.program;
   const requirements = publicCatalogRequirements(program.requirements, { canonicalPath: model.canonicalPath, id: program.id });
@@ -791,8 +849,10 @@ function renderUniversityDetail(model: Extract<PublicCatalogRenderModel, { kind:
         <div><dt>${escapeHtml(copy.institutionType)}</dt><dd>${escapeHtml(university.universityType || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([university.city, university.country].filter(Boolean).join(", "))}</dd></div>
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(university.programCount))}</dd></div>
+        ${university.weather ? `<div><dt>Weather</dt><dd>${escapeHtml(`${Math.round(university.weather.temperatureC)}°C · ${university.weather.description}`)}</dd></div>` : ""}
       </dl></section>
     </article>
+    ${renderWeatherSnapshot(university.weather, university.city || university.country, model.locale)}
     <section data-detail-section="programs" id="programs" class="mt-10"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>
   </main>`;
 }
@@ -830,6 +890,14 @@ function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind
 function renderCityDetail(model: Extract<PublicCatalogRenderModel, { kind: "city_detail" }>): string {
   const city = model.city;
   const copy = RENDER_COPY[model.locale];
+  const sourceFacts = [
+    city.programLanguages?.length ? [copy.language, city.programLanguages.join(" · ")] : null,
+    city.weather ? ["Weather", `${Math.round(city.weather.temperatureC)}°C · ${city.weather.description}`] : null,
+    city.transportModes?.length ? ["Transport", city.transportModes.join(" · ")] : null,
+    city.campusGeography ? ["Campus", city.campusGeography] : null,
+    city.externalFacts?.housingSummary ? ["Housing", city.externalFacts.housingSummary] : null,
+  ].filter((item): item is [string, string] => Boolean(item));
+  const heroFacts = sourceFacts.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
   const universities = city.universities.map((university) => `
       <article class="rounded-2xl border border-border bg-card p-5">
         <h2 class="text-lg font-bold"><a href="${escapeHtml(university.canonicalPath)}">${escapeHtml(university.name)}</a></h2>
@@ -848,6 +916,7 @@ function renderCityDetail(model: Extract<PublicCatalogRenderModel, { kind: "city
         <div class="detail-cover-label"><span>${escapeHtml(copy.location)}</span></div>
         <h1>${escapeHtml(city.name)}</h1>
         ${city.countryPath ? `<a class="detail-hero-link" href="${escapeHtml(city.countryPath)}">${escapeHtml(city.country)}</a>` : `<p class="detail-hero-lead">${escapeHtml(city.country)}</p>`}
+        ${heroFacts ? `<dl class="detail-city-coverstrip">${heroFacts}</dl>` : ""}
       </div><aside class="detail-destination-summary" aria-label="${escapeHtml(copy.programs)}">
         <p class="detail-eyebrow">${escapeHtml(copy.programs)}</p>
         <div class="detail-country-stats"><div><strong>${escapeHtml(String(city.universityCount))}</strong><span>${escapeHtml(copy.institutionType)}</span></div><div><strong>${escapeHtml(String(city.programCount))}</strong><span>${escapeHtml(copy.programs)}</span></div></div>
@@ -861,6 +930,7 @@ function renderCityDetail(model: Extract<PublicCatalogRenderModel, { kind: "city
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(city.programCount))}</dd></div>
       </dl></section></div>
     </article>
+    ${renderWeatherSnapshot(city.weather, city.name, model.locale)}
     ${universities ? `<section data-detail-section="universities" class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.institutionType)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${universities}</div></section>` : ""}
     ${programs ? `<section data-detail-section="programs" class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>` : ""}
   </main>`;
@@ -1130,44 +1200,6 @@ function renderPublicPageBlockBody(block: PublicPageBlock, index: number): strin
       return `<blockquote class="rounded-2xl border border-border bg-card p-6"><p class="text-lg">${quote ? `“${escapeHtml(quote)}”` : ""}</p>${name || role ? `<footer class="mt-4 text-sm text-muted-foreground">${escapeHtml([name, role].filter(Boolean).join(" · "))}</footer>` : ""}</blockquote>`;
     }).join("");
     return `<section class="mx-auto max-w-6xl px-4 py-12"><h2 class="text-center text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-center text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 grid gap-5 md:grid-cols-2">${testimonials}</div></section>`;
-  }
-  if (block.blockType === "grid_box") {
-    const columns = content.columns === "2" ? "sm:grid-cols-2" : content.columns === "4" ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3";
-    const cards = pageItems(content.cards, 24).map((item, itemIndex) => {
-      const image = safePublicImageUrl(item.imageUrl);
-      const href = safePublicUrl(item.linkUrl);
-      const body = `<div class="cms-grid-box-media">${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" />` : `<span aria-hidden="true">${String(itemIndex + 1).padStart(2, "0")}</span>`}</div><div class="cms-grid-box-copy"><h3>${escapeHtml(pageText(item.title, 300))}</h3>${item.description ? `<p>${escapeHtml(pageText(item.description, 2_000))}</p>` : ""}${href && item.linkLabel ? `<span class="cms-inline-link">${escapeHtml(pageText(item.linkLabel, 200))}</span>` : ""}</div>`;
-      return `<article class="cms-grid-box-card">${href ? `<a href="${escapeHtml(href)}">${body}</a>` : body}</article>`;
-    }).join("");
-    return `<section class="cms-layout-section">${content.eyebrow ? `<p class="cms-section-eyebrow">${escapeHtml(pageText(content.eyebrow, 200))}</p>` : ""}<h2>${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p>${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="cms-responsive-grid cms-grid-box-grid grid gap-5 ${columns}">${cards}</div></section>`;
-  }
-  if (block.blockType === "scroll_box" || block.blockType === "carousel_box") {
-    const source = block.blockType === "scroll_box" ? content.items : content.slides;
-    const cards = pageItems(source, 30).map((item, itemIndex) => {
-      const image = safePublicImageUrl(item.imageUrl);
-      const href = safePublicUrl(item.linkUrl);
-      const body = `${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" />` : ""}<div><span>${String(itemIndex + 1).padStart(2, "0")}</span><h3>${escapeHtml(pageText(item.title, 300))}</h3>${item.description ? `<p>${escapeHtml(pageText(item.description, 2_000))}</p>` : ""}${href && item.linkLabel ? `<strong>${escapeHtml(pageText(item.linkLabel, 200))}</strong>` : ""}</div>`;
-      return `<article>${href ? `<a href="${escapeHtml(href)}">${body}</a>` : body}</article>`;
-    }).join("");
-    return `<section class="cms-layout-section ${block.blockType === "scroll_box" ? "cms-scroll-section" : "cms-carousel-section"}"><h2>${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p>${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="${block.blockType === "scroll_box" ? "cms-horizontal-scroll" : "cms-carousel-track"}" tabindex="0">${cards}</div></section>`;
-  }
-  if (block.blockType === "column_layout") {
-    const columns = content.columns === "2" ? "sm:grid-cols-2" : content.columns === "4" ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3";
-    const items = pageItems(content.items, 16).map((item, itemIndex) => `<article><span class="cms-column-number">${String(itemIndex + 1).padStart(2, "0")}</span>${item.eyebrow ? `<p class="cms-section-eyebrow">${escapeHtml(pageText(item.eyebrow, 200))}</p>` : ""}<h3>${escapeHtml(pageText(item.title, 300))}</h3>${item.body ? `<p>${escapeHtml(pageText(item.body, 3_000))}</p>` : ""}</article>`).join("");
-    return `<section class="cms-layout-section"><h2>${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p>${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="cms-responsive-grid cms-column-layout-grid grid gap-5 ${columns}">${items}</div></section>`;
-  }
-  if (block.blockType === "progress_bars") {
-    const items = pageItems(content.items, 20).map((item) => { const value = Math.min(100, Math.max(0, Number(item.value) || 0)); return `<div class="cms-progress-item"><div class="cms-progress-label"><strong>${escapeHtml(pageText(item.label, 300))}</strong><span>${value}%</span></div>${item.note ? `<small>${escapeHtml(pageText(item.note, 500))}</small>` : ""}<progress max="100" value="${value}" aria-label="${escapeHtml(pageText(item.label, 300))}">${value}%</progress></div>`; }).join("");
-    return `<section class="cms-layout-section cms-progress-section"><h2>${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p>${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="cms-progress-list">${items}</div></section>`;
-  }
-  if (block.blockType === "counter_grid") {
-    const columns = content.columns === "2" ? "sm:grid-cols-2" : content.columns === "4" ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3";
-    const items = pageItems(content.items, 16).map((item) => `<article><p class="cms-counter-value"><span>${escapeHtml(pageText(item.prefix, 40))}</span>${escapeHtml(pageText(item.value, 80))}<span>${escapeHtml(pageText(item.suffix, 40))}</span></p><h3>${escapeHtml(pageText(item.label, 300))}</h3>${item.description ? `<p>${escapeHtml(pageText(item.description, 1_000))}</p>` : ""}</article>`).join("");
-    return `<section class="cms-layout-section cms-counter-section"><h2>${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p>${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="cms-responsive-grid cms-counter-grid grid gap-5 ${columns}">${items}</div></section>`;
-  }
-  if (block.blockType === "logo_marquee") {
-    const logos = pageItems(content.items, 40).map((item) => { const image = safePublicImageUrl(item.imageUrl); const href = safePublicUrl(item.linkUrl); const body = image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(pageText(item.name, 200))}" loading="lazy" />` : `<strong>${escapeHtml(pageText(item.name, 200))}</strong>`; return href ? `<a href="${escapeHtml(href)}">${body}</a>` : `<div>${body}</div>`; }).join("");
-    return `<section class="cms-layout-section cms-logo-marquee-section"><h2>${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p>${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="cms-logo-marquee" tabindex="0">${logos}</div></section>`;
   }
   if (block.blockType === "spacer_divider") {
     return `<div aria-hidden="true" class="mx-auto max-w-6xl px-4 ${spacerHeightClass(content.height)}">${content.showDivider ? "<hr />" : ""}</div>`;
@@ -1481,45 +1513,51 @@ export function renderPublicCatalogHtml(input: {
   preloadHrefs?: string[];
 }): string {
   const siteUrl = input.siteUrl.replace(/\/$/, "");
-  const canonicalUrl = `${siteUrl}${input.model.canonicalPath}`;
+  const detailSeo = detailContentForModel(input.model)?.seo;
+  const managedSeo = input.model.kind === "page_detail" ? input.model.page.seo : undefined;
+  const model = detailSeo
+    ? { ...input.model, title: detailSeo.title, description: detailSeo.description } as PublicCatalogRenderModel
+    : input.model;
+  const canonicalUrl = `${siteUrl}${model.canonicalPath}`;
   let html = input.indexHtml
-    .replace(/<html\s+lang=["'][^"']+["']([^>]*)>/i, `<html lang="${input.model.locale}"${["ar", "fa", "ur"].includes(input.model.locale) ? " dir=\"rtl\"" : ""}$1>`)
-    .replace(/<title>[^<]*<\/title>/i, `<title>${escapeHtml(input.model.title)}</title>`)
+    .replace(/<html\s+lang=["'][^"']+["']([^>]*)>/i, `<html lang="${model.locale}"${["ar", "fa", "ur"].includes(model.locale) ? " dir=\"rtl\"" : ""}$1>`)
+    .replace(/<title>[^<]*<\/title>/i, `<title>${escapeHtml(model.title)}</title>`)
     .replace(/<link\s+rel=["']canonical["'][^>]*>/i, `<link rel="canonical" href="${escapeHtml(canonicalUrl)}" />`)
     .replace(/<script\b/g, `<script nonce="${escapeHtml(input.nonce)}"`);
 
   html = html.replace(/\s*<link\s+[^>]*rel=["']alternate["'][^>]*hreflang=["'][^"']+["'][^>]*>/gi, "");
 
-  html = replaceMeta(html, "name", "description", input.model.description);
-  html = replaceMeta(html, "name", "robots", input.model.indexable ? "index, follow" : "noindex, follow");
-  html = replaceMeta(html, "property", "og:title", input.model.title);
-  html = replaceMeta(html, "property", "og:description", input.model.description);
+  html = replaceMeta(html, "name", "description", model.description);
+  html = replaceMeta(html, "name", "robots", model.indexable ? "index, follow" : "noindex, follow");
+  html = replaceMeta(html, "property", "og:title", detailSeo?.ogTitle || (typeof managedSeo?.ogTitle === "string" ? managedSeo.ogTitle : model.title));
+  html = replaceMeta(html, "property", "og:description", detailSeo?.ogDescription || (typeof managedSeo?.ogDescription === "string" ? managedSeo.ogDescription : model.description));
   html = replaceMeta(html, "property", "og:url", canonicalUrl);
-  html = replaceMeta(html, "name", "twitter:title", input.model.title);
-  html = replaceMeta(html, "name", "twitter:description", input.model.description);
+  html = replaceMeta(html, "name", "twitter:title", detailSeo?.twitterTitle || (typeof managedSeo?.twitterTitle === "string" ? managedSeo.twitterTitle : model.title));
+  html = replaceMeta(html, "name", "twitter:description", detailSeo?.twitterDescription || (typeof managedSeo?.twitterDescription === "string" ? managedSeo.twitterDescription : model.description));
 
-  let shell = input.model.kind === "country_list"
-    ? renderCountryList(input.model)
-    : input.model.kind === "program_list"
-      ? renderProgramList(input.model)
-    : input.model.kind === "program_detail"
-      ? renderProgramDetail(input.model)
-      : input.model.kind === "university_detail"
-        ? renderUniversityDetail(input.model)
-        : input.model.kind === "destination_detail"
-          ? renderDestinationDetail(input.model)
-          : input.model.kind === "city_detail"
-            ? renderCityDetail(input.model)
-            : input.model.kind === "article_detail"
-              ? renderArticleDetail(input.model)
-              : input.model.kind === "page_detail"
-                ? renderPageDetail(input.model)
-                : renderNotFound(input.model);
-  shell = shell.replace("</main>", `${renderDetailContent(input.model)}</main>`);
+  let shell = model.kind === "country_list"
+    ? renderCountryList(model)
+    : model.kind === "program_list"
+      ? renderProgramList(model)
+    : model.kind === "program_detail"
+      ? renderProgramDetail(model)
+      : model.kind === "university_detail"
+        ? renderUniversityDetail(model)
+        : model.kind === "destination_detail"
+          ? renderDestinationDetail(model)
+          : model.kind === "city_detail"
+            ? renderCityDetail(model)
+            : model.kind === "article_detail"
+              ? renderArticleDetail(model)
+              : model.kind === "page_detail"
+                ? renderPageDetail(model)
+                : renderNotFound(model);
+  shell = mergeHybridDetailContent(shell, model);
+  shell = shell.replace("</main>", `${renderDetailContent(model)}</main>`);
   const appearanceRules: string[] = [];
-  if (input.model.detailLayout) {
-    const layout = input.model.detailLayout;
-    const pagePresentation = detailContentPresentationOverrides(parseDetailContent(input.model.editorial));
+  if (model.detailLayout) {
+    const layout = model.detailLayout;
+    const pagePresentation = detailContentPresentationOverrides(model.editorial);
     const sections = new Map<string, string>();
     shell = shell.replace(/<section data-detail-section="([a-zA-Z-]+)"[\s\S]*?<\/section>/g, (markup, key) => {
       const setting: DetailSectionPresentation = { ...(layout.presentation?.[key] ?? {}), ...(pagePresentation[key] ?? {}) };
@@ -1549,14 +1587,14 @@ export function renderPublicCatalogHtml(input: {
     for (const key of layout.hidden) shell = shell.replace(new RegExp(`<a href="#${key}"[^>]*>[\\s\\S]*?<\\/a>`, "g"), "");
   }
   const alternatePaths = (
-    input.model.kind === "program_detail"
-    || input.model.kind === "university_detail"
-    || input.model.kind === "destination_detail"
-    || input.model.kind === "city_detail"
-    || input.model.kind === "article_detail"
-    || input.model.kind === "page_detail"
-  ) && input.model.indexable
-    ? input.model.alternatePaths
+    model.kind === "program_detail"
+    || model.kind === "university_detail"
+    || model.kind === "destination_detail"
+    || model.kind === "city_detail"
+    || model.kind === "article_detail"
+    || model.kind === "page_detail"
+  ) && model.indexable
+    ? model.alternatePaths
     : {};
   const hreflangLinks = PROGRAM_SUPPORTED_LOCALES.flatMap((locale) => {
     const path = alternatePaths[locale];
@@ -1572,10 +1610,10 @@ export function renderPublicCatalogHtml(input: {
     .slice(0, 16)
     .map((href) => `  <link rel="modulepreload" crossorigin href="${escapeHtml(href)}" />`);
   const appearanceStyle = appearanceRules.length ? `  <style nonce="${escapeHtml(input.nonce)}" data-detail-appearance>${appearanceRules.join("")}</style>\n` : "";
-  const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${preloadLinks.join("\n")}${preloadLinks.length ? "\n" : ""}${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}${appearanceStyle}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(input.model, siteUrl))}</script>\n`;
+  const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${preloadLinks.join("\n")}${preloadLinks.length ? "\n" : ""}${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}${appearanceStyle}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(model, siteUrl))}</script>\n`;
   return html
-    .replace("</head>", `${extraHead}${input.model.detailLayout ? `<script id="public-detail-layout" nonce="${escapeHtml(input.nonce)}" type="application/json">${safeJson(input.model.detailLayout)}</script>` : ""}</head>`)
-    .replace(/<div\s+id=["']root["']\s*><\/div>/i, `<div id="root" data-public-render-shell-root="true">${shell}${renderConsentShell(input.model)}</div>`);
+    .replace("</head>", `${extraHead}${model.detailLayout ? `<script id="public-detail-layout" nonce="${escapeHtml(input.nonce)}" type="application/json">${safeJson(model.detailLayout)}</script>` : ""}</head>`)
+    .replace(/<div\s+id=["']root["']\s*><\/div>/i, `<div id="root" data-public-render-shell-root="true">${shell}${renderConsentShell(model)}</div>`);
 }
 
 export function publicCatalogCsp(nonce: string): string {

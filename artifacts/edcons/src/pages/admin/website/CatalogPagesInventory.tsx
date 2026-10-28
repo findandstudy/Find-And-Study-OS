@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import {
   AlertTriangle,
@@ -10,6 +10,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  Languages,
   LayoutGrid,
   List,
   MoreHorizontal,
@@ -34,6 +35,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/hooks/use-i18n";
@@ -42,7 +44,15 @@ import { LANGUAGE_META, SUPPORTED_LANGUAGES } from "@/lib/i18n";
 import DetailContentEditor, {
   type DetailContentTarget,
 } from "./DetailContentEditor";
-import { reapplyDetailPages, type ReapplyDetailPagesResponse } from "./reapplyDetailPages";
+import {
+  reapplyDetailPages,
+  type ReapplyDetailPagesResponse,
+} from "./reapplyDetailPages";
+import {
+  TranslationQueuePanel,
+  translationJobSourceEditPath,
+  translationJobTitle,
+} from "./TranslationQueuePanel";
 
 type Kind = "country" | "city" | "university" | "program";
 type Sort =
@@ -105,10 +115,6 @@ const labels: Record<string, [string, string]> = {
     "Katalog kuralıyla gizli",
   ],
   COUNTRY_ROUTE_UNAVAILABLE: ["No public route", "Halka açık rota yok"],
-  PUBLIC_OFFERINGS_UNAVAILABLE: [
-    "No public institutions yet",
-    "Henüz public kurum yok",
-  ],
   DESCRIPTION_MISSING: ["Description missing", "Açıklama eksik"],
   MEDIA_MISSING: ["Media missing", "Medya eksik"],
   TRANSLATION_FALLBACK: ["Source-language fallback", "Kaynak dil gösteriliyor"],
@@ -150,9 +156,32 @@ const urlParams = () =>
     : new URLSearchParams(window.location.search);
 const csv = (value: unknown) =>
   `"${String(value ?? "").replaceAll('"', '""')}"`;
+const generationErrorText = (code: string | undefined, tr: boolean) => {
+  if (code === "AI_NOT_CONFIGURED")
+    return tr
+      ? "AI bağlantısı kullanılamıyor. Entegrasyon anahtarını kontrol edip yeniden kaydedin."
+      : "The AI connection is unavailable. Check and re-save the integration key.";
+  if (code === "SOURCE_NOT_FOUND")
+    return tr
+      ? "Katalog kaydı bulunamadı."
+      : "The catalogue record could not be found.";
+  if (code === "INVALID_GENERATED_CONTENT")
+    return tr
+      ? "AI yanıtı içerik doğrulamasından geçemedi."
+      : "The AI response did not pass content validation.";
+  if (code === "CONFLICT")
+    return tr
+      ? "Sayfa bu sırada değiştirildi. Yenileyip tekrar deneyin."
+      : "The page changed during generation. Refresh and try again.";
+  return tr
+    ? "AI sağlayıcısı veya yerel bağlantı geçici olarak kullanılamıyor."
+    : "The AI provider or local connection is temporarily unavailable.";
+};
+
 export default function CatalogPagesInventory() {
   const { lang, t } = useI18n();
   const { toast } = useToast();
+  const client = useQueryClient();
   const tr = lang === "tr";
   const initial = useMemo(urlParams, []);
   const label = (key: string) =>
@@ -190,7 +219,8 @@ export default function CatalogPagesInventory() {
   );
   const [selected, setSelected] = useState<number[]>([]);
   const [editing, setEditing] = useState<DetailContentTarget | null>(null);
-  const [generationReport, setGenerationReport] = useState<ReapplyDetailPagesResponse | null>(null);
+  const [generationReport, setGenerationReport] =
+    useState<ReapplyDetailPagesResponse | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebounced(search.trim());
@@ -270,21 +300,92 @@ export default function CatalogPagesInventory() {
   const allSelected =
     rows.length > 0 && rows.every((item) => selected.includes(item.sourceId));
   const reapply = useMutation({
-    mutationFn: ({ sourceIds, locales, mode = "fill_missing" }: { sourceIds: number[]; locales: string[]; mode?: "fill_missing" | "regenerate" }) =>
-      reapplyDetailPages(kind, locales, sourceIds, mode),
+    mutationFn: ({
+      sourceIds,
+      locales,
+      mode = "fill_missing",
+    }: {
+      sourceIds: number[];
+      locales: string[];
+      mode?: "fill_missing" | "regenerate";
+    }) => reapplyDetailPages(kind, locales, sourceIds, mode),
     onSuccess: async (result) => {
       setGenerationReport(result);
-      await query.refetch();
+      await client.invalidateQueries({ queryKey: ["website-catalog-pages"] });
+      const allFailed = result.summary.failed === result.requested;
+      const firstFailure = result.results.find(
+        (item) => item.status === "failed",
+      );
+      const generatedImages = result.results.reduce(
+        (sum, item) => sum + (item.generatedImages ?? 0),
+        0,
+      );
+      const imageFailures = result.results.reduce(
+        (sum, item) => sum + (item.imageFailures ?? 0),
+        0,
+      );
+      toast({
+        title: allFailed
+          ? tr
+            ? "AI üretimi başlatılamadı"
+            : "AI generation could not start"
+          : result.summary.failed
+            ? tr
+              ? "Üretim tamamlandı; bazı sayfalar kontrol edilmeli"
+              : "Generation finished with pages to review"
+            : tr
+              ? "AI taslakları hazır"
+              : "AI drafts are ready",
+        description: allFailed
+          ? generationErrorText(firstFailure?.error, tr)
+          : tr
+            ? `${result.summary.created + result.summary.completed} taslak oluşturuldu/tamamlandı, ${generatedImages} görsel eklendi, ${imageFailures} görsel üretilemedi, ${result.summary.preserved} mevcut içerik korundu, ${result.summary.failed} işlem başarısız. Taslaklar otomatik yayınlanmadı.`
+            : `${result.summary.created + result.summary.completed} draft(s) were created/completed, ${generatedImages} image(s) were added, ${imageFailures} image generation(s) were unavailable, ${result.summary.preserved} existing item(s) were preserved, ${result.summary.failed} failed. Drafts were not auto-published.`,
+        ...(result.summary.failed ? { variant: "destructive" as const } : {}),
+      });
     },
     onError: (error) =>
       toast({
-        title: tr ? "AI üretimi başlatılamadı" : "AI generation could not start",
-        description:
-          error instanceof Error
-            ? error.message
-            : tr
-              ? "AI sağlayıcısı kullanılamıyor. Ayarlar > Entegrasyonlar alanını kontrol edin."
-              : "The AI provider is unavailable. Check Settings > Integrations.",
+        title: tr ? "Sayfalar yenilenemedi" : "Pages could not be refreshed",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      }),
+  });
+  const enqueue = useMutation({
+    mutationFn: ({
+      sourceIds,
+      locales,
+    }: {
+      sourceIds: number[];
+      locales: string[];
+    }) =>
+      customFetch<any>("/api/website/translation-jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: kind === "country" ? "destination" : kind,
+          entityIds: sourceIds,
+          locales: locales.filter((value) => value !== "en"),
+        }),
+      }),
+    onSuccess: async (result) => {
+      setSelected([]);
+      await client.invalidateQueries({
+        queryKey: ["website-translation-jobs"],
+      });
+      toast({
+        title: tr
+          ? "Çeviri taslakları kuyruğa alındı"
+          : "Translation drafts queued",
+        description: tr
+          ? `${result.queued} sayfa-dil işi · section metinleri ve SEO birlikte çevrilecek · ${result.batchId.slice(0, 8)}`
+          : `${result.queued} page-language job(s) · sections and SEO will be translated together · ${result.batchId.slice(0, 8)}`,
+      });
+    },
+    onError: (error: Error) =>
+      toast({
+        title: tr ? "Kuyruk oluşturulamadı" : "Queue could not be created",
+        description: error.message,
         variant: "destructive",
       }),
   });
@@ -451,15 +552,71 @@ export default function CatalogPagesInventory() {
               </a>
             </DropdownMenuItem>
           )}
-          {item.locale === "en" && (
+          <DropdownMenuSeparator />
+          {item.locale === "en" ? (
             <DropdownMenuItem
               disabled={reapply.isPending}
-              onSelect={() => reapply.mutate({ sourceIds: [item.sourceId], locales: ["en"], mode: "regenerate" })}
+              onSelect={() =>
+                reapply.mutate({
+                  sourceIds: [item.sourceId],
+                  locales: [item.locale],
+                  mode: "regenerate",
+                })
+              }
             >
-              <RefreshCw className={`me-2 h-4 w-4 ${reapply.isPending ? "animate-spin" : ""}`} />
-              {tr ? "İçerik + SEO + görsel taslağı üret" : "Generate content + SEO + image draft"}
+              <RefreshCw
+                className={`me-2 h-4 w-4 ${reapply.isPending ? "animate-spin" : ""}`}
+              />
+              {tr
+                ? "İçerik + SEO + görsel taslağı üret"
+                : "Generate content + SEO + image draft"}
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              disabled={enqueue.isPending}
+              onSelect={() => {
+                if (
+                  window.confirm(
+                    tr
+                      ? `${item.locale.toUpperCase()} çeviri taslağı güncel İngilizce section ve SEO alanlarından yeniden oluşturulsun mu? Canlı sayfa inceleme ve yayınlama yapılana kadar değişmez.`
+                      : `Regenerate the ${item.locale.toUpperCase()} translation draft from the current English sections and SEO? The live page will not change until review and publication.`,
+                  )
+                )
+                  enqueue.mutate({
+                    sourceIds: [item.sourceId],
+                    locales: [item.locale],
+                  });
+              }}
+            >
+              <Languages className="me-2 h-4 w-4" />
+              {tr
+                ? `${item.locale.toUpperCase()} section + SEO çevirisi`
+                : `Translate ${item.locale.toUpperCase()} sections + SEO`}
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem
+            disabled={enqueue.isPending}
+            onSelect={() => {
+              if (
+                window.confirm(
+                  tr
+                    ? "Tüm dil taslakları güncel İngilizce section ve SEO alanlarından yeniden oluşturulsun mu? Canlı sayfalar inceleme ve yayınlama yapılana kadar değişmez."
+                    : "Regenerate every language draft from the current English sections and SEO? Live pages will not change until review and publication.",
+                )
+              )
+                enqueue.mutate({
+                  sourceIds: [item.sourceId],
+                  locales: SUPPORTED_LANGUAGES.filter(
+                    (value) => value !== "en",
+                  ),
+                });
+            }}
+          >
+            <Languages className="me-2 h-4 w-4" />
+            {tr
+              ? "Tüm dillerde section + SEO"
+              : "Translate sections + SEO to all languages"}
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -625,17 +782,57 @@ export default function CatalogPagesInventory() {
 
       <div className="space-y-5 p-4 sm:p-6">
         {generationReport && (
-          <div role="status" className={`rounded-xl border p-4 text-sm ${generationReport.summary.failed ? "border-amber-300 bg-amber-50 text-amber-950" : "border-emerald-200 bg-emerald-50 text-emerald-950"}`}>
+          <div
+            role="status"
+            className={`rounded-xl border p-4 text-sm ${generationReport.summary.failed ? "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100" : "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100"}`}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <strong>{tr ? "AI üretim raporu" : "AI generation report"}</strong>
-                <p className="mt-1">{tr
-                  ? `${generationReport.summary.created + generationReport.summary.completed} taslak hazır, ${generationReport.summary.failed} başarısız. Otomatik yayın yapılmadı.`
-                  : `${generationReport.summary.created + generationReport.summary.completed} draft(s) ready, ${generationReport.summary.failed} failed. Nothing was auto-published.`}</p>
-                {generationReport.results[0]?.error && <p className="mt-1 text-xs">{generationReport.results[0].error}</p>}
+                <strong>
+                  {tr
+                    ? "Son dil üretim raporu"
+                    : "Latest language generation report"}
+                </strong>
+                <p className="mt-1">
+                  {tr
+                    ? `${generationReport.requested} sayfa-dil işlendi: ${generationReport.summary.created} yeni, ${generationReport.summary.completed} tamamlandı, ${generationReport.summary.preserved} korundu, ${generationReport.summary.failed} başarısız.`
+                    : `${generationReport.requested} page-language pair(s): ${generationReport.summary.created} new, ${generationReport.summary.completed} completed, ${generationReport.summary.preserved} preserved, ${generationReport.summary.failed} failed.`}
+                </p>
+                <p className="mt-1 text-xs opacity-80">
+                  {tr
+                    ? "İçerik, SEO ve eksik görseller tek taslakta hazırlanır; mevcut görseller korunur ve otomatik yayın yapılmaz."
+                    : "Content, SEO and missing images are prepared in one review draft; existing images are preserved. Nothing was auto-published."}
+                </p>
               </div>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setGenerationReport(null)} aria-label={tr ? "Raporu kapat" : "Dismiss report"}><X className="h-4 w-4" /></Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setGenerationReport(null)}
+                aria-label={tr ? "Raporu kapat" : "Dismiss report"}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
+            {generationReport.summary.failed > 0 && (
+              <div className="mt-3 space-y-2">
+                {generationReport.results
+                  .filter((item) => item.status === "failed")
+                  .slice(0, 12)
+                  .map((item) => (
+                    <div
+                      key={`${item.entityId}-${item.locale}`}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      <Badge variant="outline">
+                        #{item.entityId} · {item.locale.toUpperCase()} ·{" "}
+                        {item.error}
+                      </Badge>
+                      <span>{generationErrorText(item.error, tr)}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         )}
         <div className="rounded-xl border bg-muted/20 p-3 sm:p-4">
@@ -850,6 +1047,87 @@ export default function CatalogPagesInventory() {
                         {tr ? "Temizle" : "Clear"}
                       </Button>
                     </div>
+                    {locale === "en" ? (
+                      <Button
+                        size="sm"
+                        disabled={reapply.isPending}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              tr
+                                ? `${selectedRows.length} sayfanın İngilizce içerik, SEO ve eksik görselleri yeniden oluşturulsun mu? Sonuçlar yalnız taslak olur; mevcut görseller korunur.`
+                                : `Regenerate English content, SEO and missing images for ${selectedRows.length} page(s)? Results remain drafts and existing images are preserved.`,
+                            )
+                          )
+                            reapply.mutate({
+                              sourceIds: selectedRows.map(
+                                (item) => item.sourceId,
+                              ),
+                              locales: [locale],
+                              mode: "regenerate",
+                            });
+                        }}
+                      >
+                        <RefreshCw
+                          className={`me-2 h-4 w-4 ${reapply.isPending ? "animate-spin" : ""}`}
+                        />
+                        {tr
+                          ? "İçerik + SEO + görsel üret"
+                          : "Regenerate content + SEO + images"}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        disabled={enqueue.isPending}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              tr
+                                ? `${selectedRows.length} sayfanın ${locale.toUpperCase()} section ve SEO çeviri taslağı yeniden oluşturulsun mu? Canlı sayfalar değişmez.`
+                                : `Regenerate ${locale.toUpperCase()} section and SEO translation drafts for ${selectedRows.length} page(s)? Live pages will not change.`,
+                            )
+                          )
+                            enqueue.mutate({
+                              sourceIds: selectedRows.map(
+                                (item) => item.sourceId,
+                              ),
+                              locales: [locale],
+                            });
+                        }}
+                      >
+                        <Languages className="me-2 h-4 w-4" />
+                        {tr
+                          ? `${locale.toUpperCase()} section + SEO`
+                          : `${locale.toUpperCase()} sections + SEO`}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={enqueue.isPending}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            tr
+                              ? `${selectedRows.length} sayfanın tüm dil taslakları güncel İngilizce section ve SEO alanlarından yeniden oluşturulsun mu? Canlı sayfalar değişmez.`
+                              : `Regenerate every language draft for ${selectedRows.length} page(s) from the current English sections and SEO? Live pages will not change.`,
+                          )
+                        )
+                          enqueue.mutate({
+                            sourceIds: selectedRows.map(
+                              (item) => item.sourceId,
+                            ),
+                            locales: SUPPORTED_LANGUAGES.filter(
+                              (value) => value !== "en",
+                            ),
+                          });
+                      }}
+                    >
+                      <Languages className="me-2 h-4 w-4" />
+                      {tr
+                        ? "Tüm dillerde section + SEO"
+                        : "All languages · sections + SEO"}
+                    </Button>
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
@@ -1175,6 +1453,20 @@ export default function CatalogPagesInventory() {
           </>
         )}
       </div>
+      <div className="p-4 pt-0 sm:p-6 sm:pt-0">
+        <TranslationQueuePanel
+          onReview={(job) =>
+            setEditing({
+              kind: job.kind,
+              entityId: job.entityId,
+              locale: job.locale,
+              title: translationJobTitle(job),
+              sourceEditPath: translationJobSourceEditPath(job),
+              canonicalPath: null,
+            })
+          }
+        />
+      </div>
       {editing && (
         <DetailContentEditor
           key={`${editing.kind}:${editing.entityId}:${editing.locale}`}
@@ -1182,6 +1474,9 @@ export default function CatalogPagesInventory() {
           onClose={() => setEditing(null)}
           onSaved={() => {
             void query.refetch();
+            void client.invalidateQueries({
+              queryKey: ["website-translation-jobs"],
+            });
           }}
         />
       )}

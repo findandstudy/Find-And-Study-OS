@@ -7,6 +7,8 @@
     "test:email-automation": "tsx --test ./scripts/test-email-delivery-policy.ts ./scripts/test-email-queue-delivery.ts ./scripts/test-email-template-library.ts ./scripts/test-stage-email-policy.ts",
     "test:postgres-email-automation": "tsx --test --test-concurrency=1 ./scripts/test-postgres-stage-email.ts ./scripts/test-postgres-email-library.ts",
     "test:system-health": "tsx --test ./scripts/test-system-health.ts ./scripts/test-system-health-performance.ts",
+    "test:city-weather": "tsx --test ./scripts/test-city-weather.ts ./scripts/test-city-weather-quota.ts",
+    "test:website-ai-writing": "tsx --test ./scripts/test-website-ai-writing.ts",
     "dev": "NODE_ENV=development tsx ./src/index.ts",
     "worker:portal-status": "NODE_OPTIONS=--max-old-space-size=512 tsx ./src/workers/portalStatusWorker.ts",
     "worker:portal-lifecycle": "NODE_OPTIONS=--max-old-space-size=384 tsx ./src/workers/portalLifecycleWorker.ts",

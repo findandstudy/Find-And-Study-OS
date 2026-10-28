@@ -1,22 +1,83 @@
 import { Router, type IRouter, json } from "express";
-import { db, countriesTable, citiesTable, universitiesTable, programsTable, catalogOptionsTable, programDocumentRequirementsTable, degreeDocumentRequirementsTable } from "@workspace/db";
+import { db, countriesTable, citiesTable, cityExternalFactsTable, cityWeatherSnapshotsTable, universitiesTable, programsTable, catalogOptionsTable, programDocumentRequirementsTable, degreeDocumentRequirementsTable, integrationsTable, auditLogsTable } from "@workspace/db";
 import { eq, ilike, sql, and, or, asc, inArray, notInArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { MANAGER_ROLES } from "../lib/roles";
+import { ADMIN_ROLES, MANAGER_ROLES } from "../lib/roles";
 import { invalidateDocCatalog as invalidateDocCatalogCache, loadDocCatalog, loadDocCatalogKeySet } from "../lib/docCatalog";
 import { invalidateCurrencyCatalog } from "../lib/currencyCatalog";
 import { normalizeDialCode } from "../lib/dialCodes";
 import { normalizeProgramImportRows, collectUniversitiesToCreate } from "../lib/programImportHeaders";
 import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
 import { invalidatePublicWebDiscoveryCache } from "../lib/publicWebDiscoveryReadModel";
+import { canonicalCountryName } from "../lib/websiteCatalogFilters";
+import { CATALOG_SOURCE_FIELDS, isCatalogSourceMetadataColumn, normalizeCatalogSourceMetadata, normalizeCatalogSourceMetadataFromRow, omitCatalogSourceMetadata } from "../lib/catalogSourceMetadata";
+import {
+  publicCityWeatherRuntime,
+  readCityWeatherAdminStatus,
+  readCityWeatherSnapshot,
+  refreshCityWeather,
+  resolveCityWeatherRuntime,
+  scheduleCityWeatherContinuationAfterManualRun,
+  syncDueCityWeather,
+} from "../lib/cityWeather";
+import { decryptConfig, encryptConfig } from "../lib/encryption";
 import * as XLSX from "xlsx";
-import { isCatalogSourceMetadataColumn, normalizeCatalogSourceMetadata, normalizeCatalogSourceMetadataFromRow, omitCatalogSourceMetadata } from "../lib/catalogSourceMetadata";
 
 // Catalog bulk-import endpoints accept JSON arrays of thousands of rows
 // (Excel imports). The global body limit is intentionally small (1mb) for
 // DoS hardening, so these specific authenticated routes opt-in to a larger
 // limit. They are already gated by requireAuth + MANAGER_ROLES.
 const bulkJson = json({ limit: "20mb" });
+
+const textList = (value: unknown): string[] => Array.isArray(value)
+  ? value.map(String).map(item => item.trim()).filter(Boolean)
+  : String(value ?? "").split(/[,;|]/).map(item => item.trim()).filter(Boolean);
+const optionalNumber = (value: unknown): number | null => value === "" || value == null || !Number.isFinite(Number(value)) ? null : Number(value);
+const optionalDate = (value: unknown): Date | null => { const parsed = value ? new Date(String(value)) : null; return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null; };
+const jsonArray = (value: unknown): unknown[] => { if (Array.isArray(value)) return value; try { const parsed = JSON.parse(String(value ?? "[]")); return Array.isArray(parsed) ? parsed : []; } catch { return []; } };
+const inactiveCell = (value: unknown): boolean => typeof value === "string"
+  ? ["inactive", "no", "false", "0", "closed"].includes(value.trim().toLowerCase())
+  : value === false;
+
+const normalizeImportRow = (
+  row: Record<string, unknown>,
+  aliases: Record<string, string>,
+): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  for (const [rawKey, value] of Object.entries(row)) {
+    const key = rawKey.trim();
+    const normalized = key.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
+    const target = aliases[normalized] ?? key;
+    if (!(target in out) || out[target] === "" || out[target] == null) out[target] = value;
+  }
+  return out;
+};
+
+const COUNTRY_IMPORT_ALIASES = {
+  "name": "name", "iso code": "code", "code": "code", "flag emoji": "flagEmoji",
+  "flagemoji": "flagEmoji", "dial code": "dialCode", "dialcode": "dialCode",
+  "status": "isActive", "active": "isActive", "isactive": "isActive",
+} satisfies Record<string, string>;
+const CITY_IMPORT_ALIASES = {
+  "id": "id", "city id": "id", "cityid": "id",
+  "name": "name", "country": "country", "country code": "countryCode", "countrycode": "countryCode",
+  "country id": "countryId", "countryid": "countryId", "transport modes": "transportModes",
+  "transportmodes": "transportModes", "campus geography": "campusGeography", "campusgeography": "campusGeography",
+  "latitude": "latitude", "longitude": "longitude", "status": "isActive", "active": "isActive", "isactive": "isActive",
+  "source name": "sourceName", "sourcename": "sourceName", "source url": "sourceUrl", "sourceurl": "sourceUrl",
+  "verified at": "verifiedAt", "verifiedat": "verifiedAt", "notes": "notes",
+} satisfies Record<string, string>;
+const UNIVERSITY_IMPORT_ALIASES = {
+  "name": "name", "country": "country", "city": "city", "website": "website", "description": "description",
+  "ranking": "ranking", "type": "universityType", "university type": "universityType", "tax type": "taxType",
+  "tax %": "taxPercent", "qs ranking": "qsRanking", "times ranking": "timesRanking",
+  "shanghai ranking": "shanghaiRanking", "cwts leiden ranking": "cwtsLeidenRanking", "address": "address",
+  "logo url": "logoUrl", "online payment url": "onlinePaymentUrl", "cricos link": "cricosLink",
+  "documents link": "documentsLink", "current fee list link": "currentFeeListLink",
+  "initial deposit options": "initialDepositOptions", "admission process": "admissionProcess",
+  "contact person": "contactPersonName", "contact phone": "contactPersonPhone", "contact email": "contactPersonEmail",
+  "status": "status", "active": "isActive", "isactive": "isActive",
+} satisfies Record<string, string>;
 
 // PROGRAM_DOC_TYPES'ı kaldırdık (Task #179). Belge sütun anahtarları artık
 // admin-managed `catalog_options` (category='documents') tablosundan dinamik
@@ -65,8 +126,7 @@ router.get("/countries", async (req, res): Promise<void> => {
   const data = await db.select().from(countriesTable).where(where)
     .orderBy(countriesTable.name).limit(limitNum).offset(offset);
 
-  const visible = req.user && (MANAGER_ROLES as readonly string[]).includes(req.user.role) ? data : data.map(row => omitCatalogSourceMetadata(row));
-  res.json({ data: visible, meta: { total: Number(count), page: pageNum, limit: limitNum } });
+  res.json({ data: req.user && MANAGER_ROLES.includes(req.user.role) ? data : data.map(row => omitCatalogSourceMetadata(row)), meta: { total: Number(count), page: pageNum, limit: limitNum } });
 });
 
 // Public (no-auth) country list for embed/web-to-lead/public-apply phone and
@@ -99,10 +159,13 @@ router.get("/public/countries", async (req, res): Promise<void> => {
 });
 
 router.post("/countries", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { name, code, flagEmoji, dialCode, sourceMetadata, isActive = true } = req.body;
+  const { name, code, flagEmoji, dialCode, isActive = true } = req.body;
   if (!name || !code) { res.status(400).json({ error: "name and code are required" }); return; }
+  let sourceMetadata: ReturnType<typeof normalizeCatalogSourceMetadata>;
+  try { sourceMetadata = normalizeCatalogSourceMetadata("country", req.body.sourceMetadata); }
+  catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
   try {
-    const [country] = await db.insert(countriesTable).values({ name, code: code.toUpperCase(), flagEmoji, dialCode: normalizeDialCode(dialCode), sourceMetadata: normalizeCatalogSourceMetadata("country", sourceMetadata), isActive }).returning();
+    const [country] = await db.insert(countriesTable).values({ name, code: code.toUpperCase(), flagEmoji, dialCode: normalizeDialCode(dialCode), isActive, sourceMetadata }).returning();
     invalidatePublicCatalogRenderCache({ entityType: "catalog" });
     invalidatePublicWebDiscoveryCache();
     await logAudit(req.user!.id, "create_country", "country", country.id, { name, code }, req.ip);
@@ -111,9 +174,13 @@ router.post("/countries", requireAuth, requireRole(...MANAGER_ROLES), async (req
 });
 
 router.post("/countries/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const rows: { name: string; code: string; flagEmoji?: string; dialCode?: string }[] = req.body;
+  const rawRows: Record<string, unknown>[] = req.body;
+  const rows = Array.isArray(rawRows) ? rawRows.map(row => normalizeImportRow(row, COUNTRY_IMPORT_ALIASES)) : rawRows;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
-  const values = rows.map(r => ({ name: r.name, code: r.code.toUpperCase(), flagEmoji: r.flagEmoji ?? null, dialCode: normalizeDialCode(r.dialCode), sourceMetadata: normalizeCatalogSourceMetadataFromRow("country", r as Record<string, unknown>), isActive: true }));
+  let values: typeof countriesTable.$inferInsert[];
+  try { values = rows.map(r => ({ name: String(r.name ?? "").trim(), code: String(r.code ?? "").trim().toUpperCase(), flagEmoji: String(r.flagEmoji ?? "").trim() || null, dialCode: normalizeDialCode(r.dialCode), isActive: !inactiveCell(r.isActive), sourceMetadata: normalizeCatalogSourceMetadataFromRow("country", r) })); }
+  catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+  if (values.some(value => !value.name || !value.code)) { res.status(400).json({ error: "Every country row requires name and code" }); return; }
   const inserted = await db.insert(countriesTable).values(values).onConflictDoNothing().returning();
   if (inserted.length > 0) {
     invalidatePublicCatalogRenderCache({ entityType: "catalog" });
@@ -153,6 +220,186 @@ router.delete("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), asyn
 
 /* ─── CITIES ─────────────────────────────────────────────────── */
 
+type StoredWeatherSettings = {
+  apiKey?: unknown;
+  automaticSyncEnabled?: unknown;
+  batchSize?: unknown;
+};
+
+function weatherSettingsResponse(integration?: {
+  isEnabled: boolean;
+  config: unknown;
+  updatedAt: Date;
+} | null) {
+  const config = integration
+    ? decryptConfig((integration.config || {}) as Record<string, unknown>) as StoredWeatherSettings
+    : {};
+  return {
+    isEnabled: integration?.isEnabled ?? false,
+    keyConfigured: typeof config.apiKey === "string" && config.apiKey.trim().length > 0,
+    automaticSyncEnabled: config.automaticSyncEnabled === true,
+    batchSize: Math.max(1, Math.min(Number(config.batchSize) || 45, 45)),
+    updatedAt: integration?.updatedAt?.toISOString() ?? null,
+  };
+}
+
+router.get("/catalog/weather/settings", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+  const [integration] = await db.select({
+    isEnabled: integrationsTable.isEnabled,
+    config: integrationsTable.config,
+    updatedAt: integrationsTable.updatedAt,
+  }).from(integrationsTable).where(eq(integrationsTable.key, "openweather")).limit(1);
+  res.json(weatherSettingsResponse(integration));
+});
+
+router.put("/catalog/weather/settings", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const isEnabled = req.body?.isEnabled === true;
+  const automaticSyncEnabled = req.body?.automaticSyncEnabled === true;
+  const batchSize = Number(req.body?.batchSize);
+  const incomingApiKey = typeof req.body?.apiKey === "string" ? req.body.apiKey.trim() : "";
+  if (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 45) {
+    res.status(400).json({ error: "weather_batch_size_invalid" });
+    return;
+  }
+  if (incomingApiKey && (!/^[A-Za-z0-9_-]{16,128}$/.test(incomingApiKey))) {
+    res.status(400).json({ error: "weather_api_key_invalid" });
+    return;
+  }
+
+  const [existing] = await db.select().from(integrationsTable)
+    .where(eq(integrationsTable.key, "openweather")).limit(1);
+  const existingConfig = existing
+    ? decryptConfig((existing.config || {}) as Record<string, unknown>) as StoredWeatherSettings
+    : {};
+  const apiKey = incomingApiKey || (typeof existingConfig.apiKey === "string" ? existingConfig.apiKey.trim() : "");
+  if (isEnabled && !apiKey) {
+    res.status(400).json({ error: "weather_api_key_missing" });
+    return;
+  }
+
+  const encryptedConfig = encryptConfig({ apiKey, automaticSyncEnabled, batchSize });
+  const saved = await db.transaction(async (tx) => {
+    const [integration] = await tx.insert(integrationsTable).values({
+      key: "openweather",
+      name: "OpenWeather",
+      category: "data",
+      isEnabled,
+      config: encryptedConfig,
+    }).onConflictDoUpdate({
+      target: integrationsTable.key,
+      set: {
+        name: "OpenWeather",
+        category: "data",
+        isEnabled,
+        config: encryptedConfig,
+        updatedAt: new Date(),
+      },
+    }).returning();
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "update_weather_settings",
+      resource: "integration",
+      resourceId: integration.id,
+      changes: JSON.stringify({
+        provider: "openweather",
+        isEnabled,
+        automaticSyncEnabled,
+        batchSize,
+        apiKeyChanged: Boolean(incomingApiKey),
+      }),
+      ipAddress: req.ip || null,
+    });
+    return integration;
+  });
+  res.json(weatherSettingsResponse(saved));
+});
+
+router.get("/catalog/weather/status", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+  res.json(await readCityWeatherAdminStatus());
+});
+
+router.get("/catalog/weather/cities", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+  const now = new Date();
+  const rows = await db.select({
+    cityId: citiesTable.id,
+    cityName: citiesTable.name,
+    countryName: countriesTable.name,
+    countryCode: countriesTable.code,
+    latitude: citiesTable.latitude,
+    longitude: citiesTable.longitude,
+    cachedLatitude: cityWeatherSnapshotsTable.latitude,
+    cachedLongitude: cityWeatherSnapshotsTable.longitude,
+    conditionGroup: cityWeatherSnapshotsTable.conditionGroup,
+    description: cityWeatherSnapshotsTable.description,
+    temperatureC: cityWeatherSnapshotsTable.temperatureC,
+    fetchedAt: cityWeatherSnapshotsTable.fetchedAt,
+    staleAfter: cityWeatherSnapshotsTable.staleAfter,
+    lastAttemptAt: cityWeatherSnapshotsTable.lastAttemptAt,
+    lastErrorCode: cityWeatherSnapshotsTable.lastErrorCode,
+    consecutiveFailures: cityWeatherSnapshotsTable.consecutiveFailures,
+  }).from(citiesTable)
+    .innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id))
+    .leftJoin(cityWeatherSnapshotsTable, eq(cityWeatherSnapshotsTable.cityId, citiesTable.id))
+    .where(eq(citiesTable.isActive, true))
+    .orderBy(asc(countriesTable.name), asc(citiesTable.name));
+
+  const data = rows.map(row => {
+    const coordinatesReady = row.latitude != null && row.longitude != null;
+    const coordinatesMatch = coordinatesReady
+      && row.cachedLatitude === row.latitude
+      && row.cachedLongitude === row.longitude;
+    const isFresh = Boolean(row.fetchedAt && row.staleAfter && row.staleAfter > now && coordinatesMatch);
+    const status = !coordinatesReady
+      ? "missing_coordinates"
+      : !row.fetchedAt
+        ? row.lastErrorCode ? "failed" : "never_synced"
+        : row.lastErrorCode
+          ? "stale_error"
+          : isFresh
+            ? "fresh"
+            : "due";
+    return {
+      ...row,
+      status,
+      fetchedAt: row.fetchedAt?.toISOString() || null,
+      staleAfter: row.staleAfter?.toISOString() || null,
+      lastAttemptAt: row.lastAttemptAt?.toISOString() || null,
+    };
+  });
+  res.json({ data, meta: { total: data.length, generatedAt: now.toISOString() } });
+});
+
+router.post("/catalog/weather/refresh-due", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  try {
+    const result = await syncDueCityWeather(process.env, new Date(), { manual: true });
+    if (result.status === "disabled") {
+      const runtime = await resolveCityWeatherRuntime();
+      const code = !runtime.liveIntegrationsAllowed
+        ? "weather_live_integrations_disabled"
+        : !runtime.integrationEnabled
+          ? "weather_integration_disabled"
+          : "weather_api_key_missing";
+      res.status(503).json({ error: code, code });
+      return;
+    }
+    const continuation = await scheduleCityWeatherContinuationAfterManualRun(result);
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    await logAudit(req.user!.id, "refresh_due_city_weather", "catalog", undefined, {
+      provider: "openweather",
+      requested: result.requested,
+      refreshed: result.refreshed,
+      failed: result.failed,
+      skipped: result.skipped,
+      continuationScheduled: continuation.scheduled,
+      continuationNextRunAt: continuation.nextRunAt,
+    }, req.ip);
+    res.json({ ...result, continuation });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "weather_sync_failed";
+    res.status(502).json({ error: code, code });
+  }
+});
+
 router.get("/cities", async (req, res): Promise<void> => {
   const { countryId, search, name, status, page = "1", limit = "500" } = req.query as Record<string, string>;
   const safeInt = (v: string, fallback: number) => /^\d+$/.test(v) ? parseInt(v, 10) : fallback;
@@ -172,16 +419,18 @@ router.get("/cities", async (req, res): Promise<void> => {
   const data = await db.select().from(citiesTable).where(where)
     .orderBy(citiesTable.name).limit(limitNum).offset(offset);
 
-  const visible = req.user && (MANAGER_ROLES as readonly string[]).includes(req.user.role) ? data : data.map(row => omitCatalogSourceMetadata(row));
-  res.json({ data: visible, meta: { total: Number(count), page: pageNum, limit: limitNum } });
+  res.json({ data: req.user && MANAGER_ROLES.includes(req.user.role) ? data : data.map(row => omitCatalogSourceMetadata(row)), meta: { total: Number(count), page: pageNum, limit: limitNum } });
 });
 
 router.post("/cities", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { name, countryId, sourceMetadata, isActive = true } = req.body;
+  const { name, countryId, isActive = true, transportModes, campusGeography, latitude, longitude } = req.body;
   if (!name || !countryId) { res.status(400).json({ error: "name and countryId are required" }); return; }
-  let normalizedSources; try { normalizedSources = normalizeCatalogSourceMetadata("city", sourceMetadata); }
+  let sourceMetadata: ReturnType<typeof normalizeCatalogSourceMetadata>;
+  try { sourceMetadata = normalizeCatalogSourceMetadata("city", req.body.sourceMetadata); }
   catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
-  const [city] = await db.insert(citiesTable).values({ name, countryId, sourceMetadata: normalizedSources, isActive }).returning();
+  const [city] = await db.insert(citiesTable).values({ name, countryId, isActive,
+    transportModes: textList(transportModes),
+    campusGeography: campusGeography || null, latitude: optionalNumber(latitude), longitude: optionalNumber(longitude), sourceMetadata }).returning();
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
   invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "create_city", "city", city.id, { name, countryId }, req.ip);
@@ -189,20 +438,47 @@ router.post("/cities", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
 });
 
 router.post("/cities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const rows: { name: string; countryId?: number; countryCode?: string }[] = req.body;
+  const rawRows: Record<string, unknown>[] = req.body;
+  const rows = (Array.isArray(rawRows) ? rawRows.map(row => normalizeImportRow(row, CITY_IMPORT_ALIASES)) : rawRows) as Array<Record<string, unknown> & { name: string; countryId?: number; countryCode?: string }>;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
 
   const allCountries = await db.select().from(countriesTable);
   const codeMap = Object.fromEntries(allCountries.map(c => [c.code.toUpperCase(), c.id]));
 
-  const values = rows.map(r => {
-    const cid = r.countryId ?? (r.countryCode ? codeMap[r.countryCode.toUpperCase()] : undefined);
-    if (!cid) return null;
-    return { name: r.name, countryId: cid, sourceMetadata: normalizeCatalogSourceMetadataFromRow("city", r as Record<string, unknown>), isActive: true };
-  }).filter(Boolean) as (typeof citiesTable.$inferInsert)[];
+  const sourceRows: Array<{ source: (typeof rows)[number]; value: typeof citiesTable.$inferInsert }> = [];
+  try {
+    rows.forEach(r => {
+      const cid = r.countryId ?? (r.countryCode ? codeMap[String(r.countryCode).toUpperCase()] : undefined);
+      if (!cid) return;
+      sourceRows.push({ source: r, value: { name: String(r.name ?? "").trim(), countryId: Number(cid), isActive: !inactiveCell(r.isActive),
+        transportModes: textList(r.transportModes),
+        campusGeography: String(r.campusGeography ?? "").trim() || null,
+        latitude: optionalNumber(r.latitude), longitude: optionalNumber(r.longitude),
+        sourceMetadata: normalizeCatalogSourceMetadataFromRow("city", r) } });
+    });
+  } catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+  const values = sourceRows.map(row => row.value);
 
   if (values.length === 0) { res.status(400).json({ error: "No valid rows (countryId or countryCode required)" }); return; }
   const inserted = await db.insert(citiesTable).values(values).returning();
+  for (let index = 0; index < inserted.length; index++) {
+    const source = sourceRows[index]?.source;
+    if (!source || !["climateProvider", "climateSourceUrl", "climateSummary", "housingProvider", "housingSourceUrl", "housingSummary", "climateMonthsJson", "housingFormatsJson"].some(key => source[key])) continue;
+    await db.insert(cityExternalFactsTable).values({
+      cityId: inserted[index].id,
+      climateProvider: String(source.climateProvider ?? "").trim() || null,
+      climateSourceUrl: String(source.climateSourceUrl ?? "").trim() || null,
+      climateSummary: String(source.climateSummary ?? "").trim() || null,
+      climateAnnualAverageC: optionalNumber(source.climateAnnualAverageC),
+      climateMonths: jsonArray(source.climateMonthsJson) as Array<{ month: string; highC?: number; lowC?: number; condition?: string }>,
+      climateVerifiedAt: optionalDate(source.climateVerifiedAt),
+      housingProvider: String(source.housingProvider ?? "").trim() || null,
+      housingSourceUrl: String(source.housingSourceUrl ?? "").trim() || null,
+      housingSummary: String(source.housingSummary ?? "").trim() || null,
+      housingFormats: jsonArray(source.housingFormatsJson) as Array<{ name: string; area?: string; priceFrom?: number; currency?: string; billingPeriod?: string; url?: string }>,
+      housingVerifiedAt: optionalDate(source.housingVerifiedAt),
+    });
+  }
   if (inserted.length > 0) {
     invalidatePublicCatalogRenderCache({ entityType: "catalog" });
     invalidatePublicWebDiscoveryCache();
@@ -211,13 +487,97 @@ router.post("/cities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES)
   res.json({ inserted: inserted.length, skipped: rows.length - inserted.length });
 });
 
+router.post("/cities/bulk-coordinates", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const rawRows: Record<string, unknown>[] = req.body;
+  const rows = Array.isArray(rawRows)
+    ? rawRows.map(row => normalizeImportRow(row, CITY_IMPORT_ALIASES))
+    : [];
+  if (rows.length === 0 || rows.length > 500) {
+    res.status(400).json({ error: "Expected 1-500 coordinate rows" });
+    return;
+  }
+
+  const requestedIds = [...new Set(rows.map(row => Number(row.id)).filter(Number.isSafeInteger))];
+  const existing = requestedIds.length > 0
+    ? await db.select({
+      id: citiesTable.id,
+      name: citiesTable.name,
+      countryCode: countriesTable.code,
+      sourceMetadata: citiesTable.sourceMetadata,
+    }).from(citiesTable)
+      .innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id))
+      .where(inArray(citiesTable.id, requestedIds))
+    : [];
+  const cityById = new Map(existing.map(city => [city.id, city]));
+  const cleanIdentity = (value: unknown) => String(value ?? "").trim().toLocaleLowerCase("en-US");
+
+  let updated = 0;
+  let skipped = 0;
+  await db.transaction(async tx => {
+    for (const row of rows) {
+      const id = Number(row.id);
+      const city = Number.isSafeInteger(id) ? cityById.get(id) : undefined;
+      const latitude = optionalNumber(row.latitude);
+      const longitude = optionalNumber(row.longitude);
+      const nameMatches = city && cleanIdentity(row.name) === cleanIdentity(city.name);
+      const countryMatches = city && cleanIdentity(row.countryCode) === cleanIdentity(city.countryCode);
+      if (!city || !nameMatches || !countryMatches || latitude === null || longitude === null
+          || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        skipped += 1;
+        continue;
+      }
+
+      const sourceName = String(row.sourceName ?? "GeoNames").trim() || "GeoNames";
+      const sourceUrl = String(row.sourceUrl ?? "").trim();
+      const rawVerifiedAt = row.verifiedAt;
+      const excelDate = typeof rawVerifiedAt === "number"
+        || /^\d{5}(?:\.\d+)?$/.test(String(rawVerifiedAt ?? "").trim())
+        ? XLSX.SSF.parse_date_code(Number(rawVerifiedAt))
+        : null;
+      const verifiedAt = excelDate
+        ? new Date(Date.UTC(excelDate.y, excelDate.m - 1, excelDate.d)).toISOString()
+        : String(rawVerifiedAt ?? new Date().toISOString()).trim();
+      const notes = String(row.notes ?? "WGS84 city-centre coordinate matched by city and ISO country code.").trim();
+      let sourceMetadata: ReturnType<typeof normalizeCatalogSourceMetadata>;
+      try {
+        sourceMetadata = normalizeCatalogSourceMetadata("city", {
+          ...(city.sourceMetadata || {}),
+          coordinates: { sourceName, sourceUrl, verifiedAt, notes },
+        });
+      } catch {
+        skipped += 1;
+        continue;
+      }
+
+      await tx.update(citiesTable).set({ latitude, longitude, sourceMetadata })
+        .where(eq(citiesTable.id, city.id));
+      updated += 1;
+    }
+  });
+
+  if (updated > 0) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
+  await logAudit(req.user!.id, "bulk_update_city_coordinates", "city", undefined, {
+    requested: rows.length,
+    updated,
+    skipped,
+  }, req.ip);
+  res.json({ inserted: 0, updated, skipped });
+});
+
 router.patch("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
-  const { name, countryId, isActive } = req.body;
+  const { name, countryId, isActive, transportModes, campusGeography, latitude, longitude } = req.body;
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = name;
   if (countryId !== undefined) updates.countryId = countryId;
   if (isActive !== undefined) updates.isActive = isActive;
+  if (transportModes !== undefined) updates.transportModes = textList(transportModes);
+  if (campusGeography !== undefined) updates.campusGeography = campusGeography || null;
+  if (latitude !== undefined) updates.latitude = optionalNumber(latitude);
+  if (longitude !== undefined) updates.longitude = optionalNumber(longitude);
   if (req.body.sourceMetadata !== undefined) {
     try { updates.sourceMetadata = normalizeCatalogSourceMetadata("city", req.body.sourceMetadata); }
     catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
@@ -227,6 +587,79 @@ router.patch("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
   invalidatePublicWebDiscoveryCache();
   res.json(city);
+});
+
+router.get("/cities/:id/external-facts", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  const [facts] = await db.select().from(cityExternalFactsTable).where(eq(cityExternalFactsTable.cityId, id)).limit(1);
+  res.json(facts ?? { cityId: id, climateMonths: [], housingFormats: [] });
+});
+
+router.put("/cities/:id/external-facts", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const cityId = parseInt(String(req.params.id), 10);
+  const [city] = await db.select({ id: citiesTable.id }).from(citiesTable).where(eq(citiesTable.id, cityId)).limit(1);
+  if (!city) { res.status(404).json({ error: "City not found" }); return; }
+  const value = {
+    cityId,
+    climateProvider: String(req.body.climateProvider ?? "").trim() || null,
+    climateSourceUrl: String(req.body.climateSourceUrl ?? "").trim() || null,
+    climateSummary: String(req.body.climateSummary ?? "").trim() || null,
+    climateAnnualAverageC: optionalNumber(req.body.climateAnnualAverageC),
+    climateMonths: Array.isArray(req.body.climateMonths) ? req.body.climateMonths : [],
+    climateVerifiedAt: optionalDate(req.body.climateVerifiedAt),
+    housingProvider: String(req.body.housingProvider ?? "").trim() || null,
+    housingSourceUrl: String(req.body.housingSourceUrl ?? "").trim() || null,
+    housingSummary: String(req.body.housingSummary ?? "").trim() || null,
+    housingFormats: Array.isArray(req.body.housingFormats) ? req.body.housingFormats : [],
+    housingVerifiedAt: optionalDate(req.body.housingVerifiedAt),
+    updatedAt: new Date(),
+  };
+  const [facts] = await db.insert(cityExternalFactsTable).values(value).onConflictDoUpdate({ target: cityExternalFactsTable.cityId, set: value }).returning();
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  await logAudit(req.user!.id, "update_city_external_facts", "city", cityId, { climateProvider: value.climateProvider, housingProvider: value.housingProvider }, req.ip);
+  res.json(facts);
+});
+
+router.get("/cities/:id/weather", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const cityId = parseInt(String(req.params.id), 10);
+  if (!Number.isSafeInteger(cityId) || cityId <= 0) { res.status(400).json({ error: "Invalid city id" }); return; }
+  const [state] = await db.select({
+    latitude: cityWeatherSnapshotsTable.latitude,
+    longitude: cityWeatherSnapshotsTable.longitude,
+    lastAttemptAt: cityWeatherSnapshotsTable.lastAttemptAt,
+    lastErrorCode: cityWeatherSnapshotsTable.lastErrorCode,
+    consecutiveFailures: cityWeatherSnapshotsTable.consecutiveFailures,
+  }).from(cityWeatherSnapshotsTable).where(eq(cityWeatherSnapshotsTable.cityId, cityId)).limit(1);
+  const runtime = await resolveCityWeatherRuntime();
+  res.json({
+    snapshot: await readCityWeatherSnapshot(cityId),
+    sync: state ? {
+      latitude: state.latitude,
+      longitude: state.longitude,
+      lastAttemptAt: state.lastAttemptAt.toISOString(),
+      lastErrorCode: state.lastErrorCode,
+      consecutiveFailures: state.consecutiveFailures,
+    } : null,
+    integration: publicCityWeatherRuntime(runtime),
+  });
+});
+
+router.post("/cities/:id/weather/refresh", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const cityId = parseInt(String(req.params.id), 10);
+  if (!Number.isSafeInteger(cityId) || cityId <= 0) { res.status(400).json({ error: "Invalid city id" }); return; }
+  try {
+    const snapshot = await refreshCityWeather(cityId);
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    await logAudit(req.user!.id, "refresh_city_weather", "city", cityId, { provider: "openweather", fetchedAt: snapshot.fetchedAt }, req.ip);
+    res.json({ snapshot });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "weather_sync_failed";
+    const status = code === "weather_city_not_found" ? 404
+      : code === "weather_city_coordinates_missing" ? 400
+        : code === "weather_hourly_quota_exhausted" ? 429
+        : ["weather_api_key_missing", "weather_integration_disabled", "weather_live_integrations_disabled"].includes(code) ? 503 : 502;
+    res.status(status).json({ error: code, code });
+  }
 });
 
 router.delete("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
@@ -240,7 +673,8 @@ router.delete("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (
 /* ─── UNIVERSITIES BULK ──────────────────────────────────────── */
 
 router.post("/universities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const rows: {
+  const rawRows: Record<string, unknown>[] = req.body;
+  const rows = (Array.isArray(rawRows) ? rawRows.map(row => normalizeImportRow(row, UNIVERSITY_IMPORT_ALIASES)) : rawRows) as unknown as {
     name: string; country: string; city?: string; website?: string;
     description?: string; ranking?: number; logoUrl?: string;
     universityType?: string; taxType?: string; taxPercent?: number;
@@ -249,12 +683,14 @@ router.post("/universities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_
     cricosLink?: string; documentsLink?: string; currentFeeListLink?: string;
     initialDepositOptions?: string; admissionProcess?: string;
     contactPersonName?: string; contactPersonPhone?: string; contactPersonEmail?: string;
-    status?: string; isActive?: string | boolean;
-  }[] = req.body;
+    status?: string; isActive?: string | boolean; sourceMetadata?: unknown; sourceMetadataJson?: unknown;
+  }[];
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
 
-  const values = rows.filter(r => r.name && r.country).map(r => ({
-    name: r.name, country: r.country, city: r.city ?? null,
+  const catalogCountries = await db.select({ name: countriesTable.name, code: countriesTable.code }).from(countriesTable);
+  let values: typeof universitiesTable.$inferInsert[];
+  try { values = rows.filter(r => r.name && r.country).map(r => ({
+    name: r.name, country: canonicalCountryName(r.country, catalogCountries), city: r.city ?? null,
     website: r.website ?? null, description: r.description ?? null,
     ranking: r.ranking ? Number(r.ranking) : null, logoUrl: r.logoUrl ?? null,
     universityType: r.universityType ?? null,
@@ -275,9 +711,9 @@ router.post("/universities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_
     contactPersonPhone: r.contactPersonPhone ?? null,
     contactPersonEmail: r.contactPersonEmail ?? null,
     status: r.status ?? "open",
-    sourceMetadata: normalizeCatalogSourceMetadataFromRow("university", r as Record<string, unknown>),
     isActive: r.isActive === false || (typeof r.isActive === "string" && ["no", "false", "0"].includes(r.isActive.toLowerCase().trim())) ? false : true,
-  }));
+    sourceMetadata: normalizeCatalogSourceMetadataFromRow("university", r as unknown as Record<string, unknown>),
+  })); } catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
 
   if (values.length === 0) { res.status(400).json({ error: "No valid rows" }); return; }
   const inserted = await db.insert(universitiesTable).values(values).onConflictDoNothing().returning();
@@ -311,7 +747,15 @@ const PROGRAM_TEMPLATE_FIXED_COLUMNS = [
   "requirements", "commissionRate", "applicationFee", "advancedFee",
   "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
   "feeType", "minGpa", "minLanguageScore", "quota", "isActive",
+  "sourceMetadataJson",
 ] as const;
+const PROGRAM_TEMPLATE_SOURCE_COLUMNS = CATALOG_SOURCE_FIELDS.program.flatMap(field => [
+  `source.${field}.sourceName`,
+  `source.${field}.sourceUrl`,
+  `source.${field}.verifiedAt`,
+  `source.${field}.validUntil`,
+  `source.${field}.notes`,
+]);
 
 router.get("/programs/import-template", requireAuth, requireRole(...MANAGER_ROLES), async (_req, res): Promise<void> => {
   try {
@@ -322,7 +766,7 @@ router.get("/programs/import-template", requireAuth, requireRole(...MANAGER_ROLE
       return;
     }
 
-    const headerOrder = [...PROGRAM_TEMPLATE_FIXED_COLUMNS, ...docKeys];
+    const headerOrder = [...PROGRAM_TEMPLATE_FIXED_COLUMNS, ...PROGRAM_TEMPLATE_SOURCE_COLUMNS, ...docKeys];
     // json_to_sheet derives headers from the keys of the first object,
     // in insertion order. Build a single blank example row so the XLSX
     // surfaces every column even when no data is provided.
@@ -345,6 +789,11 @@ router.get("/programs/import-template", requireAuth, requireRole(...MANAGER_ROLE
       { Column: "commissionRate / minGpa / minLanguageScore / quota", Required: "No", Notes: "Numeric." },
       { Column: "feeType", Required: "No", Notes: "Free text: 'per year', 'per semester', 'one-time'." },
       { Column: "isActive", Required: "No", Notes: "Yes / No (defaults to Yes)." },
+      { Column: "source.<field>.sourceName", Required: "No", Notes: "Official institution or provider for the catalogue field. The template includes every supported program source field." },
+      { Column: "source.<field>.sourceUrl", Required: "No", Notes: "Public http(s) evidence URL without embedded credentials." },
+      { Column: "source.<field>.verifiedAt / validUntil", Required: "No", Notes: "Use YYYY-MM-DD. validUntil cannot be earlier than verifiedAt." },
+      { Column: "source.<field>.notes", Required: "No", Notes: "Internal verification note; not displayed publicly." },
+      { Column: "sourceMetadataJson", Required: "No", Notes: "Legacy JSON remains supported. Filled source.<field> columns take priority for that field." },
       { Column: "— Document columns —", Required: "", Notes: `Şablon ${docKeys.length} aktif belge sütunu içerir (admin kataloğundan canlı üretilmiştir).` },
       { Column: "Allowed cell values", Required: "", Notes: "'mandatory' = student MUST upload. 'optional' = shown but not required. (blank) = not requested." },
       { Column: "Removed columns", Required: "", Notes: "Sütunları silerseniz mevcut programlarda DEĞİŞMEZ; sadece dolu hücreler yazılır." },
@@ -377,7 +826,7 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     commissionRate?: number; applicationFee?: number; advancedFee?: number;
     depositFee?: number; serviceFeeAmount?: number; discountedFee?: number;
     languageFee?: number; feeType?: string; minGpa?: number; minLanguageScore?: number;
-    quota?: number; isActive?: string | boolean;
+    quota?: number; isActive?: string | boolean; sourceMetadata?: unknown; sourceMetadataJson?: unknown;
   } & Record<string, any>)[] = req.body;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
 
@@ -527,8 +976,8 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
       minGpa: r.minGpa ? Number(r.minGpa) : null,
       minLanguageScore: r.minLanguageScore ? Number(r.minLanguageScore) : null,
       quota: r.quota ? (isNaN(Number(r.quota)) || Math.round(Number(r.quota)) < 1 ? null : Math.round(Number(r.quota))) : null,
-      sourceMetadata: normalizeCatalogSourceMetadataFromRow("program", r as Record<string, unknown>),
       isActive: r.isActive === false || (typeof r.isActive === "string" && ["no", "false", "0"].includes(r.isActive.toLowerCase().trim())) ? false : true,
+      sourceMetadata: normalizeCatalogSourceMetadataFromRow("program", r),
     };
   }).filter(Boolean) as (typeof programsTable.$inferInsert)[];
 

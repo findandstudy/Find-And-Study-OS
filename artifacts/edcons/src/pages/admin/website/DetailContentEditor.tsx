@@ -63,7 +63,9 @@ import { DETAIL_LAYOUT_SECTIONS, DETAIL_TEMPLATE_VARIABLES } from "@/lib/website
 import { cityHeroCopy, detailCopy } from "@/pages/public/detailPresentation";
 import { detailTemplateLabel } from "./detailTemplateLabels";
 import { DetailSectionAppearanceFields } from "./DetailSectionAppearanceFields";
-import { detailPageFacts, type DetailPageFacts } from "./detailPageFacts";
+import { translateStructuredDraft } from "./adminAiTranslation";
+import { AiWritingAssistant } from "./AiWritingAssistant";
+import { applyAiWritingField, collectAiWritingFields, detailAiPageFacts, detailAiWritingContext, type DetailAiPageFacts } from "./adminAiWriting";
 
 export type DetailContentTarget = {
   kind: DetailContentKind;
@@ -87,6 +89,7 @@ type PendingAction =
   | { type: "close" }
   | { type: "locale"; locale: string }
   | { type: "reload" }
+  | { type: "translation" }
   | { type: "remove"; key: string };
 type HeroEditorContext = {
   effective: Partial<DetailHeroSettings>;
@@ -339,11 +342,18 @@ export function hydrateDetailContentForEditor(
   const sourcesFor = (key: string) => {
     const rows = (sourceKeys[key] ?? [key]).flatMap((field) => {
       const entry = asRecord(metadata?.[field]);
-      const url = nonEmpty(entry?.sourceUrl); if (!url || !/^https?:\/\//i.test(url)) return [];
+      const url = nonEmpty(entry?.sourceUrl);
+      if (!url || !/^https?:\/\//i.test(url)) return [];
       return [{ label: nonEmpty(entry?.sourceName) || (content.locale === "tr" ? "Resmî kaynak" : "Official source"), url }];
     });
     const unique = rows.filter((row, index) => rows.findIndex(candidate => candidate.url === row.url) === index).slice(0, 8);
-    return unique.length ? unique : [{ label: sourceUrl.includes("findandstudy.com") ? (content.locale === "tr" ? "Find & Study kaynak kaydı" : "Find & Study source record") : (content.locale === "tr" ? "Resmî web sitesi" : "Official website"), url: sourceUrl }];
+    if (unique.length) return unique;
+    return [{
+      label: sourceUrl.includes("findandstudy.com")
+        ? content.locale === "tr" ? "Find & Study kaynak kaydı" : "Find & Study source record"
+        : content.locale === "tr" ? "Resmî web sitesi" : "Official website",
+      url: sourceUrl,
+    }];
   };
   const reviewedOn = new Date().toISOString().slice(0, 10);
   const existing = new Map(content.sections.map((section) => [section.key, section]));
@@ -389,7 +399,7 @@ export function hydrateDetailContentForEditor(
     ...content,
     sectionOrder: [...DETAIL_CONTENT_LAYOUT_KEYS[content.kind]],
     sections,
-  }, detailPageFacts(content.kind, payload, targetTitle));
+  }, detailAiPageFacts(content.kind, payload, targetTitle));
 }
 
 /**
@@ -1169,12 +1179,18 @@ function SectionFields({
   onChange,
   copy,
   heroContext,
+  locale,
+  pageTitle,
+  editorContext,
 }: {
   section: DetailContentSection;
   kind: DetailContentKind;
   onChange: (section: DetailContentSection) => void;
   copy: Copy;
   heroContext: HeroEditorContext | null;
+  locale: string;
+  pageTitle: string;
+  editorContext: unknown;
 }) {
   const { lang } = useI18n();
   const patch = (value: Partial<DetailContentSection>) =>
@@ -1189,6 +1205,23 @@ function SectionFields({
       }
     />
   );
+  const writingAssistant = (
+    <AiWritingAssistant
+      locale={locale}
+      context={detailAiWritingContext({
+        kind,
+        pageTitle,
+        sectionTitle: section.title || section.key,
+        sectionKey: section.key,
+        payload: editorContext,
+        currentIntroduction: heroContext?.body,
+      })}
+      fields={collectAiWritingFields(section)}
+      allowedVariables={DETAIL_TEMPLATE_VARIABLES[kind].map(variable => variable.key)}
+      copy={copy}
+      onApply={(path, value) => onChange(applyAiWritingField(section, path, value))}
+    />
+  );
   if (section.key === "hero")
     return (
       <div className="space-y-4">
@@ -1199,6 +1232,7 @@ function SectionFields({
           copy={copy}
           context={heroContext}
         />
+        {writingAssistant}
         {appearance}
       </div>
     );
@@ -1232,6 +1266,7 @@ function SectionFields({
           maxLength={6000}
           multiline
         />
+        {writingAssistant}
         {appearance}
         <EvidenceFields section={section} patch={patch} copy={copy} />
       </div>
@@ -1264,6 +1299,7 @@ function SectionFields({
         maxLength={6000}
         multiline
       />
+      {writingAssistant}
       <RepeatFields
         title={copy("Cards", "Kartlar")}
         items={section.cards ?? []}
@@ -1497,7 +1533,7 @@ export function DetailContentPreview({
 
 export function prepareDetailContentDraft(
   content: DetailContent,
-  facts: DetailPageFacts = {},
+  facts: DetailAiPageFacts = {},
 ): DetailContent {
   return ensureDetailSeo({
     ...content,
@@ -1601,7 +1637,7 @@ export default function DetailContentEditor({
   const canSaveOrPublish =
     dirty ||
     (!!saved?.pageId && canSelfPublish && !savedIsPublished);
-  const pageFacts = detailPageFacts(target.kind, saved?.editorContext, target.title);
+  const aiPageFacts = detailAiPageFacts(target.kind, saved?.editorContext, target.title);
   const readUrl = `/api/website/detail-content?${new URLSearchParams({ kind: target.kind, entityId: String(target.entityId), locale })}`;
   const checkedEntry = (entry: SavedContent): SavedContent => {
     const parsed = parseDetailContent(entry.content);
@@ -1821,7 +1857,7 @@ export default function DetailContentEditor({
   };
   const save = async () => {
     if (!content || !saved || busy || reloadRequired) return;
-    const next = prepareDetailContentDraft(content, pageFacts);
+    const next = prepareDetailContentDraft(content, aiPageFacts);
     if (!parseDetailContent(next)) {
       const invalid = next.sections.filter(
         (section) => !parseDetailContent({ ...next, sections: [section] }),
@@ -1895,6 +1931,33 @@ export default function DetailContentEditor({
             ?.status;
         setReloadRequired(status === 409);
       }
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  };
+  const generateLocaleTranslation = async (replaceExisting = false) => {
+    if (locale === "en" || busy || !content) return;
+    if (!replaceExisting && (dirty || !!saved?.pageId)) {
+      confirmationOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setPendingAction({ type: "translation" });
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const sourceEntry = await customFetch<SavedContent>(`/api/website/detail-content?${new URLSearchParams({ kind: target.kind, entityId: String(target.entityId), locale: "en" })}`, { cache: "no-store" });
+      const source = parseDetailContent(sourceEntry.content);
+      if (!source || source.kind !== target.kind || source.entityId !== target.entityId || source.locale !== "en") throw new Error(copy("The English source content is unavailable.", "İngilizce kaynak içerik kullanılamıyor."));
+      const hydratedSource = hydrateDetailContentForEditor(source, sourceEntry.editorContext ?? null, target.title);
+      const translated = await translateStructuredDraft(hydratedSource, locale, "en");
+      change({ ...translated, locale, templateSections: undefined });
+      setMessage(copy(
+        "AI created a translation draft from English. Review every section and save changes when ready; nothing was published automatically.",
+        "AI, İngilizceden bir çeviri taslağı oluşturdu. Her bölümü kontrol edip hazır olduğunuzda değişiklikleri kaydedin; hiçbir şey otomatik yayınlanmadı.",
+      ));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : copy("Translation could not be created. Existing content was preserved.", "Çeviri oluşturulamadı. Mevcut içerik korundu."));
     } finally {
       if (mounted.current) setBusy(false);
     }
@@ -1994,6 +2057,10 @@ export default function DetailContentEditor({
                   </option>
                 ))}
               </select>
+              {locale !== "en" && <Button variant="outline" size="sm" disabled={busy || loading || !content} onClick={() => void generateLocaleTranslation()}>
+                <Sparkles className="me-1 h-4 w-4" />
+                {busy ? copy("Translating…", "Çevriliyor…") : copy("Translate from English", "İngilizceden çevir")}
+              </Button>}
               <Button asChild variant="outline" size="sm">
                 <a
                   href={target.sourceEditPath}
@@ -2327,7 +2394,7 @@ export default function DetailContentEditor({
                             ...content,
                             seoMode: "manual",
                             seo: {
-                              ...(content.seo ?? ensureDetailSeo(content, pageFacts).seo!),
+                              ...(content.seo ?? ensureDetailSeo(content, aiPageFacts).seo!),
                               [key]: value,
                             } as DetailSeo,
                           })}
@@ -2343,6 +2410,9 @@ export default function DetailContentEditor({
                       }
                       copy={copy}
                       heroContext={heroContext}
+                      locale={locale}
+                      pageTitle={target.title}
+                      editorContext={saved?.editorContext ?? null}
                     />
                   ) : selectedSectionKey &&
                     isEditableSection(selectedSectionKey) ? (
@@ -2473,7 +2543,7 @@ export default function DetailContentEditor({
                   >
                     <DetailFullPreview
                       target={target}
-                      content={prepareDetailContentDraft(previewContent, pageFacts)}
+                      content={prepareDetailContentDraft(previewContent, aiPageFacts)}
                       copy={copy}
                       onReady={onPreviewReady}
                       onPayload={onPreviewPayload}
@@ -2521,6 +2591,8 @@ export default function DetailContentEditor({
               <AlertDialogTitle>
                 {pendingAction?.type === "remove"
                   ? copy("Remove this section?", "Bu bölüm kaldırılsın mı?")
+                  : pendingAction?.type === "translation"
+                    ? copy("Replace this language draft?", "Bu dildeki taslak değiştirilsin mi?")
                   : copy(
                       "Discard unsaved changes?",
                       "Kaydedilmemiş değişiklikler silinsin mi?",
@@ -2532,6 +2604,8 @@ export default function DetailContentEditor({
                       "This removes the section from the local draft only. Public content changes only after saving and separate publication approval.",
                       "Bu işlem bölümü yalnız yerel taslaktan kaldırır. Yayındaki içerik ancak kaydetme ve ayrı yayın onayından sonra değişir.",
                     )
+                  : pendingAction?.type === "translation"
+                    ? copy("AI will create a new draft from the English content. The current unsaved text in this language will be replaced, but nothing will be published automatically.", "AI, İngilizce içerikten yeni bir taslak oluşturacak. Bu dildeki mevcut kaydedilmemiş metin değiştirilecek ancak hiçbir şey otomatik yayınlanmayacak.")
                   : copy(
                       "Your unsaved edits will be discarded. The saved draft and published content will not change.",
                       "Kaydedilmemiş düzenlemeleriniz silinir. Kaydedilmiş taslak ve yayın içeriği değişmez.",
@@ -2546,11 +2620,17 @@ export default function DetailContentEditor({
                 onClick={() => {
                   const action = pendingAction;
                   setPendingAction(null);
+                  if (action?.type === "translation" && !busy) {
+                    void generateLocaleTranslation(true);
+                    return;
+                  }
                   if (action && !busy) performAction(action);
                 }}
               >
                 {pendingAction?.type === "remove"
                   ? copy("Remove section", "Bölümü kaldır")
+                  : pendingAction?.type === "translation"
+                    ? copy("Create replacement draft", "Yeni taslak oluştur")
                   : copy(
                       "Discard and continue",
                       "Değişiklikleri sil ve devam et",

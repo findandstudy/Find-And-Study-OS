@@ -1,6 +1,7 @@
 import {
   db,
   citiesTable,
+  cityExternalFactsTable,
   countriesTable,
   destinationsTable,
   institutionCampusesTable,
@@ -41,9 +42,11 @@ import { DETAIL_LAYOUT_KINDS, type DetailLayoutKind } from "./websiteDetailLayou
 import { websiteCatalogTaxonomy, countryMatches, countryAliases, catalogName } from "./websiteCatalogFilters";
 import { catalogCountryRouteAccessible, readCatalogCountryFallback, matchCatalogCountry, readPublicCatalogCountryDirectory, resolvePublicCatalogLocationLinks } from "./publicCatalogLocationLinks";
 import { hasPublishedDetailContent, readPublishedDetailContent } from "./websiteDetailContent";
+import { buildWebsiteSeoDraft } from "./websiteSeoDraft";
 import { readPublicCatalogPrices } from "./publicCatalogPriceReadModel";
 import { projectPublicTuition } from "./publicCatalogTuition";
 import { projectPublicProgramBrief } from "./publicCatalogProgramBrief";
+import { readCityWeatherSnapshot, readCityWeatherSnapshotByLocation } from "./cityWeather";
 import { publicCatalogRequirements } from "./publicCatalogRequirements";
 import { courseFinderUniversityLogoUrl } from "./courseFinderVisibility";
 import {
@@ -239,9 +242,13 @@ function boundedString(value: unknown, maximum: number): string {
 }
 
 const PUBLIC_PAGE_BLOCK_TYPES = new Set([
-  "hero", "rich_text", "stats_strip", "feature_cards", "icon_cards",
+  "hero", "rich_text", "html_content", "stats_strip", "feature_cards", "icon_cards",
   "cta_banner", "faq", "team_grid", "office_list", "logo_grid",
   "testimonials", "section_title", "spacer_divider", "catalog_grid",
+  "home_fallback_hero", "home_fallback_stats", "home_fallback_features",
+  "media_text", "image_gallery", "process_steps", "quote_banner",
+  "grid_box", "scroll_box", "carousel_box", "column_layout",
+  "progress_bars", "counter_grid", "logo_marquee",
 ]);
 
 function publicPageBlocks(value: unknown): PublicPageBlock[] {
@@ -949,6 +956,7 @@ async function readUniversityDetail(
   const deliveredPrograms = programRows
     .filter((program) => indexableProgramIds === null || indexableProgramIds.has(program.id))
     .slice(0, PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT);
+  const weather = await readCityWeatherSnapshotByLocation(university.city, university.country);
   return {
     kind: "university_detail",
     locale: route.locale,
@@ -967,6 +975,7 @@ async function readUniversityDetail(
       country: university.country,
       isActive: university.isActive,
       city: university.city,
+      weather,
       universityType: localizedUniversity.universityType,
       programCount: Number(countRow?.count ?? 0),
       programs: deliveredPrograms.map((program) => ({
@@ -1210,6 +1219,8 @@ async function readCityDetail(
       name: citiesTable.name,
       country: countriesTable.name,
       countryCode: countriesTable.code,
+      transportModes: citiesTable.transportModes,
+      campusGeography: citiesTable.campusGeography,
     })
     .from(citiesTable)
     .innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id))
@@ -1229,6 +1240,9 @@ async function readCityDetail(
       indexable: false,
     };
   }
+  const [externalFacts] = await db.select().from(cityExternalFactsTable)
+    .where(eq(cityExternalFactsTable.cityId, city.id)).limit(1);
+  const weather = await readCityWeatherSnapshot(city.id);
 
   const policy = await getPublicCatalogPolicy();
   const universityConditions: any[] = [
@@ -1248,6 +1262,7 @@ async function readCityDetail(
   const [
     [universityCount],
     [programCount],
+    programLanguageRows,
     universityRows,
     programRows,
     seoState,
@@ -1260,9 +1275,17 @@ async function readCityDetail(
       .from(programsTable)
       .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
       .where(and(...programConditions)),
+    db.select({ language: sql<string>`min(btrim(${programsTable.language}))` })
+      .from(programsTable)
+      .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+      .where(and(...programConditions, sql`nullif(btrim(${programsTable.language}), '') is not null`))
+      .groupBy(sql`lower(btrim(${programsTable.language}))`)
+      .orderBy(sql`lower(btrim(${programsTable.language}))`),
     db.select({
       id: universitiesTable.id,
       name: universitiesTable.name,
+      country: universitiesTable.country,
+      city: universitiesTable.city,
       universityType: universitiesTable.universityType,
     })
       .from(universitiesTable)
@@ -1455,9 +1478,28 @@ async function readCityDetail(
       name: localizedCity.name,
       country: localizedCity.country,
       countryCode: city.countryCode,
+      filterCountry: universityRows[0]?.country ?? city.country,
+      filterCity: universityRows[0]?.city ?? city.name,
       description: localizedCity.description,
       universityCount: Number(universityCount?.count ?? 0),
       programCount: Number(programCount?.count ?? 0),
+      programLanguages: programLanguageRows.map(row => row.language),
+      transportModes: city.transportModes,
+      campusGeography: city.campusGeography,
+      weather,
+      externalFacts: externalFacts ? {
+        climateProvider: externalFacts.climateProvider,
+        climateSourceUrl: externalFacts.climateSourceUrl,
+        climateSummary: externalFacts.climateSummary,
+        climateAnnualAverageC: externalFacts.climateAnnualAverageC,
+        climateMonths: externalFacts.climateMonths,
+        climateVerifiedAt: externalFacts.climateVerifiedAt?.toISOString() ?? null,
+        housingProvider: externalFacts.housingProvider,
+        housingSourceUrl: externalFacts.housingSourceUrl,
+        housingSummary: externalFacts.housingSummary,
+        housingFormats: externalFacts.housingFormats,
+        housingVerifiedAt: externalFacts.housingVerifiedAt?.toISOString() ?? null,
+      } : null,
       universities,
       programs,
     },
@@ -1512,6 +1554,7 @@ async function readArticleDetail(
   }
 
   const baseContent = isRecord(post.content) ? post.content : {};
+  const baseSeo = isRecord(baseContent.seo) ? baseContent.seo : {};
   const translations = isRecord(post.translations) ? post.translations : {};
   const translated = isRecord(translations[route.locale])
     ? translations[route.locale] as Record<string, unknown>
@@ -1538,13 +1581,22 @@ async function readArticleDetail(
   const metaDescription = translationAvailable && translated
     ? boundedString(translated.metaDescription, 2_000).trim()
     : post.metaDescription;
+  const localizedSeo = translationAvailable && translated ? translated : baseSeo;
+  const ogTitle = boundedString(localizedSeo.ogTitle, 500).trim() || null;
+  const ogDescription = boundedString(localizedSeo.ogDescription, 2_000).trim() || null;
+  const ogImageUrl = boundedString(baseSeo.ogImageUrl, 2_048).trim() || null;
+  const twitterTitle = boundedString(localizedSeo.twitterTitle, 500).trim() || null;
+  const twitterDescription = boundedString(localizedSeo.twitterDescription, 2_000).trim() || null;
+  const twitterImageUrl = boundedString(baseSeo.twitterImageUrl, 2_048).trim() || null;
   const readTimeValue = Number(baseContent.readTime);
   const seoState = await resolvePublishedEntitySeoState({
     entityType: "article",
     entityId: post.id,
     locale: route.locale,
   });
-  const canonicalPath = seoState.canonicalPath || buildPublicWebCanonicalPath({
+  const configuredCanonical = boundedString(baseSeo.canonicalUrl, 2_048).trim();
+  const canonicalPattern = new RegExp(`^/${route.locale}/guides/[a-z0-9-]+-${post.id}$`);
+  const canonicalPath = (canonicalPattern.test(configuredCanonical) ? configuredCanonical : null) || seoState.canonicalPath || buildPublicWebCanonicalPath({
     entityType: "ARTICLE",
     entityId: post.id,
     locale: route.locale,
@@ -1620,8 +1672,17 @@ async function readArticleDetail(
     canonicalPath,
     title: metaTitle || title,
     description: boundedText(metaDescription || excerpt, title),
-    indexable: seoState.indexable && translationAvailable && body.trim().length > 0,
+    indexable: seoState.indexable && baseSeo.robotsIndex !== false && translationAvailable && body.trim().length > 0,
     alternatePaths: seoState.alternates,
+    social: {
+      robotsFollow: baseSeo.robotsFollow !== false,
+      ogTitle,
+      ogDescription,
+      ogImageUrl,
+      twitterTitle,
+      twitterDescription,
+      twitterImageUrl,
+    },
     relatedArticles,
     article: {
       id: post.id,
@@ -1744,6 +1805,7 @@ export async function readPageDetail(
     ? sourceMetaDescription
     : boundedString(translationFields?.metaDescription, 2_000).trim();
   const rawBlocks = source || !hasPublishedTranslation ? sourceBlocks : translatedBlocks;
+  const generatedSeo = buildWebsiteSeoDraft({ title, locale: route.locale, blocks: rawBlocks });
   const blocks = await hydratePublicCatalogBlocks(rawBlocks, route.locale);
   const translationAvailable = Boolean(title && blocks.length > 0);
   if (!translationAvailable) {
@@ -1771,8 +1833,8 @@ export async function readPageDetail(
     kind: "page_detail",
     locale: route.locale,
     canonicalPath,
-    title: metaTitle || title,
-    description: boundedText(metaDescription, title),
+    title: metaTitle || generatedSeo.metaTitle,
+    description: boundedText(metaDescription || generatedSeo.metaDescription, title),
     indexable: hasPublishedTranslation && metaSnapshot.robotsIndex === true && seoState.indexable,
     alternatePaths: hasPublishedTranslation ? seoState.alternates : {},
     page: {
@@ -1783,7 +1845,10 @@ export async function readPageDetail(
       publishedAt: version.publishedAt.toISOString(),
       blocks,
       seo: Object.fromEntries(["canonicalUrl", "ogTitle", "ogDescription", "ogImageUrl", "twitterTitle", "twitterDescription", "twitterImageUrl", "robotsFollow"].flatMap(key => {
-        const value = metaSnapshot[key];
+        const translatedValue = !source && hasPublishedTranslation ? translationFields?.[key] : undefined;
+        const generatedValue = key in generatedSeo ? generatedSeo[key as keyof typeof generatedSeo] : undefined;
+        const value = [translatedValue, metaSnapshot[key], generatedValue]
+          .find(candidate => typeof candidate === "boolean" || (typeof candidate === "string" && candidate.trim().length > 0));
         return typeof value === "string" || typeof value === "boolean" ? [[key, value]] : [];
       })),
     },

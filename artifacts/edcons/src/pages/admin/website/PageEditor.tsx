@@ -15,7 +15,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Save, Upload, Eye, EyeOff, Plus, Trash2, Copy, ChevronUp, ChevronDown,
-  Monitor, Tablet, Smartphone, History, ArrowLeft, RotateCcw, RefreshCw, GripVertical, Settings2, GitCompareArrows, Download, Search, ExternalLink, Layers3,
+  Monitor, Tablet, Smartphone, History, ArrowLeft, RotateCcw, RefreshCw, GripVertical, Sparkles, Settings2, GitCompareArrows, Download, Search, ExternalLink, Layers3,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -34,6 +34,10 @@ import { isSystemManagedPage, managedPagePublicPath } from "@/lib/website/manage
 import { enrichManagedPageBlocks, managedPageStarterBlocks, managedPageStarterTranslations, MANAGED_HOME_BLOCK_TYPES } from "@/lib/website/managedPageStarters";
 import { pageEditorPreviewGeometry, samePageEditorPreviewGeometry } from "./pageEditorPreviewGeometry";
 import { SITE_NAME } from "@/hooks/use-json-ld";
+import { translateStructuredDraft } from "./adminAiTranslation";
+import { AiWritingAssistant } from "./AiWritingAssistant";
+import { applyAiWritingField, collectAiWritingFields } from "./adminAiWriting";
+import { CMS_TEXT_VARIABLES } from "@/lib/website/cmsTextVariables";
 
 const ALLOWED_TAGS = ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "code", "pre", "span", "div", "img", "hr"];
 const ALLOWED_ATTRS = ["href", "target", "rel", "src", "alt", "class", "style"];
@@ -212,6 +216,7 @@ function PageEditorSession({ id }: { id: number }) {
   const [seoOpen, setSeoOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [translationsOpen, setTranslationsOpen] = useState(false);
+  const [translationBusy, setTranslationBusy] = useState(false);
   const [preflightOpen, setPreflightOpen] = useState(false);
   const [preflight, setPreflight] = useState<PublicationPreflight | null>(null);
   const [changesOpen, setChangesOpen] = useState(false);
@@ -599,6 +604,33 @@ function PageEditorSession({ id }: { id: number }) {
     setEditLocale(newLocale);
     setSelectedBlockIdx(null);
     markDirty();
+  }
+
+  async function generateLocaleTranslation() {
+    if (editLocale === sourceLocale || translationBusy) return;
+    if ((translationsRef.current[editLocale]?.length ?? 0) > 0 && !window.confirm(copy("Replace this language's current page translation with a new AI draft?", "Bu dildeki mevcut sayfa çevirisi yeni AI taslağıyla değiştirilsin mi?"))) return;
+    setTranslationBusy(true);
+    try {
+      const sourceBlocks = JSON.parse(JSON.stringify(defaultBlocksRef.current)) as PageBlock[];
+      const translated = await translateStructuredDraft(sourceBlocks, editLocale, sourceLocale);
+      translationsRef.current[editLocale] = translated;
+      setBlocks(translated);
+      setSelectedBlockIdx(translated.length ? 0 : null);
+      markDirty();
+      bumpTranslationCoverage(value => value + 1);
+      toast({
+        title: copy("AI translation draft created", "AI çeviri taslağı oluşturuldu"),
+        description: copy("Review the complete page in this language, then save the draft. Variables and links were preserved.", "Bu dilde tüm sayfayı kontrol edip taslağı kaydedin. Değişkenler ve bağlantılar korundu."),
+      });
+    } catch (reason) {
+      toast({
+        title: copy("Translation could not be created", "Çeviri oluşturulamadı"),
+        description: reason instanceof Error ? reason.message : copy("The source page was not changed.", "Kaynak sayfa değiştirilmedi."),
+        variant: "destructive",
+      });
+    } finally {
+      setTranslationBusy(false);
+    }
   }
 
   const restoreMutation = useMutation({
@@ -1240,7 +1272,10 @@ function PageEditorSession({ id }: { id: number }) {
                 </p>
                 <p className="text-blue-600 mt-0.5">{copy("Content entered here is for this locale's translation.", "Buraya girilen içerik, seçilen dilin çevirisine aittir.")}</p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px]" onClick={() => {
+                  <Button type="button" size="sm" className="h-7 gap-1 px-2 text-[10px]" disabled={translationBusy} onClick={() => void generateLocaleTranslation()}>
+                    <Sparkles className="h-3 w-3" />{translationBusy ? copy("Translating…", "Çevriliyor…") : copy("Translate from English with AI", "AI ile İngilizceden çevir")}
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px]" disabled={translationBusy} onClick={() => {
                     const defaultBlocks = defaultBlocksRef.current;
                     setBlocks(JSON.parse(JSON.stringify(defaultBlocks)));
                     markDirty();
@@ -1271,6 +1306,20 @@ function PageEditorSession({ id }: { id: number }) {
                       variableContext={{ siteName: SITE_NAME, pageTitle: page.title, pageSlug: seo.slug || page.slug, pageLocale: editLocale }}
                     />
                     {selectedBlock.blockType === "catalog_grid" && <CatalogBlockFields content={selectedBlock.content} locale={editLocale} onChange={(key, value) => updateBlockContent(selectedBlockIdx!, key, value)} />}
+                    <AiWritingAssistant
+                      locale={editLocale}
+                      context={`${page.title}\n${seo.metaDescription || ""}\nSection: ${selectedTypeDef?.label || selectedBlock.blockType}`.slice(0, 6000)}
+                      fields={collectAiWritingFields(selectedBlock.content)}
+                      allowedVariables={CMS_TEXT_VARIABLES.map(variable => variable.key)}
+                      copy={(en, tr) => copy(en, tr)}
+                      onApply={(path, value) => {
+                        if (selectedBlockIdx === null) return;
+                        setBlocks(previous => previous.map((block, index) => index === selectedBlockIdx
+                          ? { ...block, content: applyAiWritingField(block.content, path, value) }
+                          : block));
+                        markDirty();
+                      }}
+                    />
                   </>
                 )}
               </div>

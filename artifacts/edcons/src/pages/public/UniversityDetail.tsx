@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { detailContentPresentationOverrides, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { ArrowLeft, Building2, ExternalLink, ArrowUpRight, MapPin, GraduationCap, Award } from "lucide-react";
+import { CityWeatherCard, type CityWeatherSnapshot } from "./CityWeatherCard";
+import { weatherCopy } from "./weatherPresentation";
 
 
 type UniversityPayload = {
@@ -25,6 +27,7 @@ type UniversityPayload = {
     countryPath?: string | null;
     cityPath?: string | null;
     city: string | null;
+    weather?: CityWeatherSnapshot | null;
     website: string | null;
     description: string | null;
     ranking: number | null;
@@ -156,6 +159,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   ].filter((entry) => entry[1] !== null);
 
   const copy = detailCopy(lang);
+  const weatherText = weatherCopy(lang);
   const countryPath = localDetailPath(university.countryPath), cityPath = localDetailPath(university.cityPath);
   const degrees = [...new Set(payload.programs.map(program => program.degree).filter((value): value is string => !!value))];
   const location = <>{cityPath ? <Link href={cityPath}>{university.city}</Link> : university.city}{university.city && " · "}{countryPath ? <Link href={countryPath}>{university.country}</Link> : university.country}</>;
@@ -199,7 +203,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
         {detailContentAddon(editorial, "hero", lang, localePath("/contact"))}
       </section>
       <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", university.name)}><div className="detail-wrap">
-        <a href="#overview">{copy.overview}</a><a href="#facts">{t("countryDetail.quickFacts")}</a><a href="#programs">{t("catalogDetail.availablePrograms")}</a>
+        <a href="#overview">{copy.overview}</a><a href="#facts">{t("countryDetail.quickFacts")}</a>{university.weather && <a href="#weather">{weatherText.section}</a>}<a href="#programs">{t("catalogDetail.availablePrograms")}</a>
         {detailContentNavigation(editorial)}
       </div></nav>
       <section data-detail-section="overview" id="overview" className="detail-section">
@@ -221,9 +225,15 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
           </dl>
         </div>
       </section>
+      {university.weather && university.city && <section data-detail-section="weather" id="weather" className="detail-section">
+        <div className="detail-wrap">
+          <DetailHeading number="03" eyebrow={university.city} title={detailContentTitle(editorial, "weather", weatherText.campusTitle)} />
+          <CityWeatherCard cityName={university.city} locale={lang} weather={university.weather} />
+        </div>
+      </section>}
       <section data-detail-section="programs" id="programs" className="detail-section is-sand">
         <div className="detail-wrap">
-          <DetailHeading number="03" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} />
+          <DetailHeading number={university.weather ? "04" : "03"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} />
           {detailContentIntro(editorial, "programs")}
           <DeferredBelowFold minHeight={520}><Suspense fallback={<div className="h-[32rem] animate-pulse rounded-3xl bg-secondary" />}><UniversityProgramBrowser key={`${university.id}:${lang}`} universityId={university.id} admissionsOpen={university.isActive !== false} /></Suspense></DeferredBelowFold>
           <div className="detail-actions"><Link href={`${localePath("/programs")}?universityId=${university.id}`}>{t("countryDetail.viewAllPrograms")} · {payload.meta.programCount}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>

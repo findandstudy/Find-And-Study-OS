@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowDown, ArrowUp, Braces, Database, Eye, EyeOff, LayoutTemplate, Lightbulb, LockKeyhole, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, Braces, Database, Eye, EyeOff, LayoutTemplate, Lightbulb, LockKeyhole, Search, Sparkles } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { parseDetailContent, type DetailContent } from "@/lib/website/detailContentContract";
 import { DETAIL_TEMPLATE_VARIABLES, parseDetailLayout, type DetailLayout } from "@/lib/website/detailLayoutContract";
@@ -19,6 +19,8 @@ import { DetailSectionAppearanceFields } from "./DetailSectionAppearanceFields";
 import DetailFullPreview from "./DetailFullPreview";
 import { installPageEditorNavigationGuard, supportsPageEditorHistoryGuard } from "./pageEditorNavigationGuard";
 import { DETAIL_VARIABLE_GROUP_TR, detailVariableGroup, detailVariableHelp, detailVariableLabel } from "./detailVariableLabels";
+import { translateStructuredDraft } from "./adminAiTranslation";
+import { AiWritingAssistant } from "./AiWritingAssistant";
 type Entry = { pageId: number | null; digest: string | null; updatedAt: string | null; status: string; layout: DetailLayout };
 type Edit = { layout: DetailLayout; expectedUpdatedAt: string | null };
 type PreviewItem = { kind: "country" | "city" | "university" | "program"; sourceId: number; title: string; canonicalPath: string | null; sourceEditPath: string; locale: string; visible: boolean };
@@ -48,6 +50,7 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
   const [, setTemplatePreviewReady] = useState(false);
   const [selectedVariable, setSelectedVariable] = useState("");
   const [variableSearch, setVariableSearch] = useState("");
+  const [translationBusy, setTranslationBusy] = useState(false);
   const titleCopyRef = useRef<HTMLInputElement | null>(null);
   const bodyCopyRef = useRef<HTMLTextAreaElement | null>(null);
   const confirmationOpener = useRef<HTMLElement | null>(null);
@@ -93,7 +96,7 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
     setApproved(false); setSelected([]);
     await client.invalidateQueries({ queryKey: ["detail-layouts"] });
   } });
-  const busy = save.isPending || publish.isPending;
+  const busy = save.isPending || publish.isPending || translationBusy;
   const dirty = Object.keys(edits).length > 0;
   const navigationState = useRef({ dirty, busy, message: "" });
   navigationState.current = { dirty, busy, message: copy("Discard unsaved layout changes and leave this page?", "Kaydedilmemiş şablon değişikliklerini silip bu sayfadan ayrılmak istiyor musunuz?") };
@@ -169,6 +172,11 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
     if (Object.keys(localeCopy).length) nextCopy[previewLocale] = localeCopy; else delete nextCopy[previewLocale];
     change(editingEntry, { ...editingLayout, copy: nextCopy });
   };
+  const updateSelectedGeneration = (next: Partial<{ enabled: boolean; instruction: string }>) => {
+    if (!editingEntry || !editingLayout || !selectedSection) return;
+    const current = editingLayout.generation[selectedSection];
+    change(editingEntry, { ...editingLayout, generation: { ...editingLayout.generation, [selectedSection]: { ...current, ...next } } });
+  };
   const insertSelectedVariable = (field: "title" | "body") => {
     if (!editingLayout || !selectedSection || !selectedVariable) return;
     const element = field === "title" ? titleCopyRef.current : bodyCopyRef.current;
@@ -182,6 +190,26 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
       next?.focus();
       next?.setSelectionRange(start + token.length, start + token.length);
     });
+  };
+  const generateTemplateTranslation = async () => {
+    if (!editingEntry || !editingLayout || previewLocale === "en" || translationBusy) return;
+    const englishCopy = editingLayout.copy.en ?? {};
+    if (!Object.keys(englishCopy).length) {
+      setNotice(copy("Add the English shared section text before generating another language.", "Başka bir dil oluşturmadan önce İngilizce ortak bölüm metinlerini ekleyin."));
+      return;
+    }
+    if (Object.keys(editingLayout.copy[previewLocale] ?? {}).length && !window.confirm(copy("Replace this language's current template text with a new AI draft?", "Bu dildeki mevcut şablon metinleri yeni AI taslağıyla değiştirilsin mi?"))) return;
+    setTranslationBusy(true);
+    setNotice("");
+    try {
+      const translated = await translateStructuredDraft(englishCopy, previewLocale, "en");
+      change(editingEntry, { ...editingLayout, copy: { ...editingLayout.copy, [previewLocale]: translated } });
+      setNotice(copy("AI translation draft created. Review it in the real-page preview, then save the template draft.", "AI çeviri taslağı oluşturuldu. Gerçek sayfa önizlemesinde kontrol edip şablon taslağını kaydedin."));
+    } catch (reason) {
+      setNotice(reason instanceof Error ? reason.message : copy("Translation could not be created; existing template text was preserved.", "Çeviri oluşturulamadı; mevcut şablon metinleri korundu."));
+    } finally {
+      setTranslationBusy(false);
+    }
   };
   const moveSelected = (by: -1 | 1) => {
     if (!editingEntry || !editingLayout || selectedIndex < 0) return;
@@ -253,6 +281,7 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
                   <div className="space-y-1.5">
                     <Label>{copy("Text language", "Metin dili")}</Label>
                     <Select value={previewLocale} onValueChange={value => { setPreviewLocale(value as Language); setPreviewSourceId(""); }}><SelectTrigger aria-label={copy("Text language", "Metin dili")}><SelectValue /></SelectTrigger><SelectContent>{SUPPORTED_LANGUAGES.map(value => <SelectItem key={value} value={value}>{LANGUAGE_META[value].name}</SelectItem>)}</SelectContent></Select>
+                    {previewLocale !== "en" && <Button type="button" className="w-full gap-2" variant="outline" disabled={translationBusy} onClick={() => void generateTemplateTranslation()}><Sparkles className="h-4 w-4" />{translationBusy ? copy("Translating from English…", "İngilizceden çevriliyor…") : copy("Create this language from English", "Bu dili İngilizceden oluştur")}</Button>}
                   </div>
                   <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
                     <div className="flex items-start gap-3">
@@ -290,6 +319,21 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
                     <Label htmlFor="template-section-body">{selectedSection === "hero" ? copy("Default supporting text", "Varsayılan destek metni") : copy("Default introduction", "Varsayılan giriş metni")}</Label>
                     <Textarea ref={bodyCopyRef} id="template-section-body" rows={5} maxLength={6000} value={editingLayout.copy[previewLocale]?.[selectedSection]?.body ?? ""} onChange={event => updateSelectedCopy("body", event.target.value)} />
                   </div>
+                  <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/40 p-4 dark:border-violet-900 dark:bg-violet-950/20">
+                    <div className="flex items-start justify-between gap-3"><div><h5 className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-violet-600" />{copy("AI regeneration brief", "AI yeniden üretim yönlendirmesi")}</h5><p className="mt-1 text-xs text-muted-foreground">{copy("Used when an administrator chooses Regenerate with AI for one or more English detail pages. Live catalogue sections stay data-driven.", "Yönetici İngilizce detay sayfalarında AI ile yeniden üret seçtiğinde kullanılır. Canlı katalog bölümleri veriye bağlı kalır.")}</p></div><label className="flex shrink-0 items-center gap-2 text-xs font-medium"><input type="checkbox" checked={editingLayout.generation[selectedSection]?.enabled ?? false} onChange={event => updateSelectedGeneration({ enabled: event.target.checked })} />{copy("AI writes this section", "Bu bölümü AI yazsın")}</label></div>
+                    <div className="space-y-1.5"><Label htmlFor="template-section-ai-prompt">{copy("Section instruction", "Bölüm yönlendirmesi")}</Label><Textarea id="template-section-ai-prompt" rows={4} minLength={10} maxLength={2000} value={editingLayout.generation[selectedSection]?.instruction ?? ""} onChange={event => updateSelectedGeneration({ instruction: event.target.value })} /><p className="text-xs text-muted-foreground">{copy("This controls purpose, audience and emphasis. Verified catalogue facts remain the only factual source; safety rules cannot be overridden here.", "Burada amaç, hedef kitle ve vurgu belirlenir. Doğrulanmış katalog verileri tek gerçek kaynaktır; güvenlik kuralları bu alandan geçersiz kılınamaz.")}</p></div>
+                  </div>
+                  <AiWritingAssistant
+                    locale={previewLocale}
+                    context={`${label(editingLayout.kind)} template\nSection: ${label(selectedSection)}\nThis copy is shared by every matching detail page and may use approved template variables.`}
+                    fields={[
+                      ...(selectedSection === "hero" ? [] : [{ path: "root.title", label: copy("Default section title", "Varsayılan bölüm başlığı"), value: editingLayout.copy[previewLocale]?.[selectedSection]?.title ?? "", maxLength: 160, format: "plain" as const }]),
+                      { path: "root.body", label: selectedSection === "hero" ? copy("Default supporting text", "Varsayılan destek metni") : copy("Default introduction", "Varsayılan giriş metni"), value: editingLayout.copy[previewLocale]?.[selectedSection]?.body ?? "", maxLength: 6000, format: "plain" as const },
+                    ]}
+                    allowedVariables={availableVariables.map(variable => variable.key)}
+                    copy={copy}
+                    onApply={(path, value) => updateSelectedCopy(path.endsWith("title") ? "title" : "body", value)}
+                  />
                   {selectedSection === "hero" && <p className="text-xs text-muted-foreground">{copy("The page/entity name remains catalogue-authoritative, so the shared template changes only the hero supporting text.", "Sayfa/kayıt adı katalog kaynağı olarak kalır; bu nedenle ortak şablon yalnız hero destek metnini değiştirir.")}</p>}
                 </div>
                 <div className="grid grid-cols-2 gap-2"><Button variant="outline" disabled={selectedLocked || selectedIndex <= (editingLayout.sections.includes("navigation") ? 3 : 2)} onClick={() => moveSelected(-1)}><ArrowUp className="me-2 h-4 w-4" />{copy("Move up", "Yukarı taşı")}</Button><Button variant="outline" disabled={selectedLocked || selectedIndex >= editingLayout.sections.length - 1} onClick={() => moveSelected(1)}><ArrowDown className="me-2 h-4 w-4" />{copy("Move down", "Aşağı taşı")}</Button></div>

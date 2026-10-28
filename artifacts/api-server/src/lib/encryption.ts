@@ -7,11 +7,24 @@ const PREFIX = "enc::v1::";
 
 let cachedKey: Buffer | null = null;
 
+export class EncryptionKeyUnavailableError extends Error {
+  readonly code = "integration_secret_store_unavailable";
+
+  constructor() {
+    super("ENCRYPTION_KEY (or SESSION_SECRET fallback) is required for encrypting integration secrets");
+    this.name = "EncryptionKeyUnavailableError";
+  }
+}
+
+export function isEncryptionKeyConfigured(): boolean {
+  return Boolean((process.env.ENCRYPTION_KEY || process.env.SESSION_SECRET || "").trim());
+}
+
 function getKey(): Buffer {
   if (cachedKey) return cachedKey;
   const raw = process.env.ENCRYPTION_KEY || process.env.SESSION_SECRET || "";
   if (!raw) {
-    throw new Error("ENCRYPTION_KEY (or SESSION_SECRET fallback) is required for encrypting integration secrets");
+    throw new EncryptionKeyUnavailableError();
   }
   cachedKey = crypto.createHash("sha256").update(raw).digest();
   return cachedKey;

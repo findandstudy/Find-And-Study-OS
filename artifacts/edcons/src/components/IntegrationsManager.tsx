@@ -12,6 +12,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useAuth } from "@/hooks/use-auth";
 import { EmailAutomationManager } from "./notifications/EmailAutomationManager";
 import { accountListPath, accountTestState, accountWebhookPath, canManageIntegrationAccounts, integrationAccountScope, integrationAccountsCopy, type AccountChannel, type AccountScope } from "./integrationAccountModel";
+import { AI_MODEL_OPTIONS, DEFAULT_AI_MODELS } from "./aiModelCatalog";
 import {
   Mail, MessageCircle, Send, Bot, Plug, Key, Eye, EyeOff,
   Loader2, Check, X, ExternalLink, Search, Zap, Globe,
@@ -43,9 +44,10 @@ interface IntegrationDef {
 interface FieldDef {
   key: string;
   label: string;
-  type: "text" | "password" | "number" | "url" | "email";
+  type: "text" | "password" | "number" | "url" | "email" | "select";
   placeholder?: string;
   required?: boolean;
+  options?: Array<{ value: string; label: string; description?: string }>;
 }
 
 interface IntegrationData {
@@ -181,7 +183,7 @@ const INTEGRATION_DEFS: IntegrationDef[] = [
     description: "GPT models for AI-powered features",
     fields: [
       { key: "apiKey", label: "API Key", type: "password", placeholder: "sk-...", required: true },
-      { key: "model", label: "Default Model", type: "text", placeholder: "gpt-4o" },
+      { key: "model", label: "Default Model", type: "select", required: true, options: AI_MODEL_OPTIONS.openai },
       { key: "orgId", label: "Organization ID (optional)", type: "text" },
     ],
   },
@@ -191,7 +193,7 @@ const INTEGRATION_DEFS: IntegrationDef[] = [
     description: "Claude models for document processing and AI features",
     fields: [
       { key: "apiKey", label: "API Key", type: "password", placeholder: "sk-ant-...", required: true },
-      { key: "model", label: "Default Model", type: "text", placeholder: "claude-sonnet-4-20250514" },
+      { key: "model", label: "Default Model", type: "select", required: true, options: AI_MODEL_OPTIONS.claude },
     ],
   },
   {
@@ -305,7 +307,7 @@ const LIVE_GATED_KEYS = new Set(["whatsapp", "web_form", "facebook_messenger", "
 
 const ANTHROPIC_CONNECTION_FIELDS: FieldDef[] = [
   { key: "apiKey", label: "API Key", type: "password", placeholder: "sk-ant-...", required: true },
-  { key: "model", label: "Default Model", type: "text", placeholder: "claude-sonnet-4-6" },
+  { key: "model", label: "Default Model", type: "select", required: true, options: AI_MODEL_OPTIONS.claude },
 ];
 
 function isNamedAnthropicConnection(key: string): boolean {
@@ -386,7 +388,9 @@ export function IntegrationsManager() {
   function openEdit(def: IntegrationDef) {
     const existing = getIntegrationData(def.key);
     setEditDef(def);
-    setEditConfig(existing?.config || {});
+    const providerDefault = def.key === "openai" ? DEFAULT_AI_MODELS.openai : isNamedAnthropicConnection(def.key) || def.key === "claude" ? DEFAULT_AI_MODELS.claude : undefined;
+    const existingConfig = existing?.config || {};
+    setEditConfig({ ...existingConfig, ...(providerDefault && !String(existingConfig.model || "").trim() ? { model: providerDefault } : {}) });
     setEditEnabled(existing?.isEnabled || false);
     setShowPasswords(new Set());
     setConnectionName(def.name);
@@ -513,7 +517,7 @@ export function IntegrationsManager() {
           </div>
         </div>
       )}
-      <Card className="border-none shadow-lg shadow-black/5 p-6">
+      <Card id="ai-provider-integrations" className="border-none shadow-lg shadow-black/5 p-6 scroll-mt-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="font-display font-bold text-lg flex items-center gap-2">
@@ -697,13 +701,23 @@ export function IntegrationsManager() {
                       {field.required && <span className="text-red-500">*</span>}
                     </Label>
                     <div className="relative mt-1">
-                      <Input
+                      {field.type === "select" ? (
+                        <select
+                          value={editConfig[field.key] || ""}
+                          onChange={(e) => setEditConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                          className="h-9 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="" disabled>Select a model</option>
+                          {editConfig[field.key] && !(field.options || []).some(option => option.value === editConfig[field.key]) ? <option value={editConfig[field.key]}>Current legacy model — {editConfig[field.key]}</option> : null}
+                          {(field.options || []).map(option => <option key={option.value} value={option.value}>{option.label} — {option.description}</option>)}
+                        </select>
+                      ) : <Input
                         type={field.type === "password" && !showPasswords.has(field.key) ? "password" : field.type === "password" ? "text" : field.type}
                         placeholder={field.placeholder}
                         value={editConfig[field.key] || ""}
                         onChange={(e) => setEditConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
                         className="h-9 rounded-xl pr-10"
-                      />
+                      />}
                       {field.type === "password" && (
                         <button
                           type="button"

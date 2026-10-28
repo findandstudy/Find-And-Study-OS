@@ -32,6 +32,7 @@ export * from "./quickLinks";
 export * from "./programDocumentRequirements";
 export * from "./degreeDocumentRequirements";
 export * from "./website";
+export * from "./websiteTranslationJobs";
 export * from "./tasks";
 export * from "./campaigns";
 export * from "./inbox";

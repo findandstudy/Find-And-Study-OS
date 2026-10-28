@@ -47,6 +47,7 @@ import { readPublicCatalogPrices } from "../lib/publicCatalogPriceReadModel";
 import { projectPublicTuition, publicCurrency } from "../lib/publicCatalogTuition";
 import { resolvePublicCatalogLocationLinks } from "../lib/publicCatalogLocationLinks";
 import { projectPublicProgramBrief } from "../lib/publicCatalogProgramBrief";
+import { readCityWeatherSnapshotByLocation } from "../lib/cityWeather";
 
 const router: IRouter = Router();
 
@@ -482,6 +483,7 @@ router.get(
       .filter((program) => indexableProgramIds === null || indexableProgramIds.has(program.id))
       .slice(0, PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT);
     const programPrices = await readPublicCatalogPrices(deliveredPrograms.map(program => program.id));
+    const weather = await readCityWeatherSnapshotByLocation(university.city, university.country);
     setPublicCatalogHeaders(res);
     res.setHeader("Content-Location", canonicalPath);
     res.json({
@@ -492,6 +494,7 @@ router.get(
         name: localizedUniversity.name,
         description: localizedUniversity.description,
         universityType: localizedUniversity.universityType,
+        weather,
         hasLogo: undefined,
         website: safePublicUniversityWebsite(university.website),
         logoUrl: courseFinderUniversityLogoUrl(

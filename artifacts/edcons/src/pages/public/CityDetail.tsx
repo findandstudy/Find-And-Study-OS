@@ -16,6 +16,8 @@ import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { useSeo } from "@/hooks/use-seo";
 import { detailContentPresentationOverrides, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
+import { CityWeatherCard, type CityWeatherSnapshot } from "./CityWeatherCard";
+import { localizedWeatherDescription, weatherCopy } from "./weatherPresentation";
 
 type CityPayload = {
   editorial?: unknown;
@@ -32,6 +34,15 @@ type CityPayload = {
     universityCount: number;
     programCount: number;
     programLanguages: string[];
+    transportModes?: string[];
+    campusGeography?: string | null;
+    weather?: CityWeatherSnapshot | null;
+    externalFacts?: {
+      climateSummary: string | null;
+      climateAnnualAverageC: number | null;
+      housingSummary: string | null;
+      housingFormats: Array<{ name: string }>;
+    } | null;
     universities: Array<{
       id: number;
       name: string;
@@ -132,6 +143,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
 
   const copy = detailCopy(lang);
   const heroCopy = cityHeroCopy(lang);
+  const weatherText = weatherCopy(lang);
   const heroSection = detailHeroSection(editorial);
   const hero = heroSection?.hero;
   const heroStyle = {
@@ -144,6 +156,14 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
   const editorialTitle = (key: string, fallback: string) => detailContentTitle(editorial, key, fallback);
   const heroFacts = [
     city.programLanguages.length ? { title: hero?.programLanguagesLabel || editorialTitle("education", heroCopy.education), body: city.programLanguages.join(" · ") } : null,
+    city.weather || city.externalFacts?.climateSummary
+      ? { title: hero?.climateLabel || editorialTitle("weather", weatherText.section), body: city.weather ? `${Math.round(city.weather.temperatureC)}°C · ${localizedWeatherDescription(city.weather.conditionCode, city.weather.conditionGroup, lang)}` : city.externalFacts!.climateSummary! }
+      : null,
+    city.transportModes?.length ? { title: hero?.transportLabel || editorialTitle("transport", heroCopy.transport), body: city.transportModes.join(" · ") } : null,
+    city.campusGeography ? { title: hero?.campusGeographyLabel || editorialTitle("campus", heroCopy.campus), body: city.campusGeography } : null,
+    city.externalFacts?.housingSummary || city.externalFacts?.housingFormats.length
+      ? { title: hero?.housingLabel || editorialTitle("housing", heroCopy.housing), body: city.externalFacts.housingSummary || city.externalFacts.housingFormats.map(item => item.name).join(" · ") }
+      : null,
   ].filter((fact): fact is { title: string; body: string } => Boolean(fact));
   const overviewDescription = city.description?.trim();
   const hasEditorialOverview = detailContentTitle(editorial, "overview", "") !== "";
@@ -178,6 +198,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
       </section>
       <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", city.name)}><div className="detail-wrap">
         {(overviewDescription || hasEditorialOverview) && <a href="#overview">{copy.overview}</a>}<a href="#facts">{t("countryDetail.quickFacts")}</a>
+        {city.weather && <a href="#weather">{lang === "tr" ? "Hava" : "Weather"}</a>}
         {city.universities.length > 0 && <a href="#universities">{t("countryDetail.universities")}</a>}
         {city.programCount > 0 && <a href="#programs">{t("countryDetail.programs")}</a>}
         {detailContentNavigation(editorial)}
@@ -197,16 +218,22 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
           <DetailFacts items={[{ label: copy.country, icon: <Globe2 size={19} />, value: countryPath ? <Link href={countryPath}>{city.country}</Link> : city.country }, { label: copy.universityCount, icon: <Building2 size={19} />, value: city.universityCount }, { label: copy.programCount, icon: <GraduationCap size={19} />, value: city.programCount }]} />
         </div>
       </section>
+      {city.weather && <section data-detail-section="weather" id="weather" className="detail-section">
+        <div className="detail-wrap">
+          <DetailHeading number="03" eyebrow={city.name} title={editorialTitle("weather", weatherText.cityTitle)} />
+          <CityWeatherCard cityName={city.name} locale={lang} weather={city.weather} />
+        </div>
+      </section>}
       {city.universities.length > 0 && <section data-detail-section="universities" id="universities" className="detail-section is-sand">
         <div className="detail-wrap">
-          <DetailHeading number="03" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: city.name }))} />
+          <DetailHeading number={city.weather ? "04" : "03"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: city.name }))} />
           {detailContentIntro(editorial, "universities")}
           <div className="detail-grid">{city.universities.map((university) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={university.universityType} title={university.name} kind="university" />)}</div>
         </div>
       </section>}
       {city.programCount > 0 && <section data-detail-section="programs" id="programs" className="detail-section">
         <div className="detail-wrap">
-          <DetailHeading number="04" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} />
+          <DetailHeading number={city.weather ? "05" : "04"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} />
           {detailContentIntro(editorial, "programs")}
           <DeferredBelowFold minHeight={520}><Suspense fallback={<div className="h-[32rem] animate-pulse rounded-3xl bg-secondary" />}><DetailProgramBrowser key={`${city.id}:${lang}`} scope={{ kind: "city", country: city.filterCountry || city.country, city: city.filterCity || city.name }} admissionsOpen previewPrograms={city.programs.map(program => ({ ...program, universityId: program.universityId ?? 0, universityPath: program.universityPath ?? "" }))} previewTotal={city.programCount} /></Suspense></DeferredBelowFold>
           <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>

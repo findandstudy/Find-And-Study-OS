@@ -44,6 +44,17 @@ import {
   resolvePublicWebRouteAlias,
 } from "./lib/publicWebDiscoveryReadModel";
 
+// Local integration credentials must survive an API restart. Production keeps
+// using process-manager supplied secrets; development may load the ignored
+// repository-local file created by the local launcher/operator.
+if (process.env.NODE_ENV !== "production") {
+  const localEnvPath = process.env.FAS_LOCAL_ENV_FILE?.trim()
+    || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env.local");
+  if (fs.existsSync(localEnvPath)) {
+    process.loadEnvFile(localEnvPath);
+  }
+}
+
 const isProd = process.env.NODE_ENV === "production";
 
 const llmsText = renderLlmsText();
@@ -3428,6 +3439,18 @@ async function seedClaudeIntegration() {
       const { startProgramTranslationWorker } = await import("./lib/programTranslationWorker");
       return startProgramTranslationWorker();
     } },
+    { name: "cityWeatherSyncWorker", offsetMs: 49_500, start: async () => {
+      const { startCityWeatherSyncWorker } = await import("./lib/cityWeather");
+      return startCityWeatherSyncWorker();
+    } },
+    { name: "websiteAiTranslationWorker", offsetMs: 51_000, start: async () => {
+      const { startWebsiteAiTranslationWorker } = await import("./lib/websiteAiTranslationWorker");
+      return startWebsiteAiTranslationWorker();
+    } },
+    { name: "websiteTranslationQueueWorker", offsetMs: 52_000, start: async () => {
+      const { startWebsiteTranslationQueueWorker } = await import("./lib/websiteTranslationQueue");
+      return startWebsiteTranslationQueueWorker();
+    } },
     { name: "activityStaleSessionCleanup", offsetMs: 47_000, start: async () => {
       const { startActivityStaleSessionCleanup } = await import("./routes/activity");
       return startActivityStaleSessionCleanup();
@@ -3436,6 +3459,7 @@ async function seedClaudeIntegration() {
   const backgroundJobsRequested = backgroundJobsEnabled();
   await backgroundJobs.start(backgroundJobsRequested);
   let stopLocalSignedContractPdfWorker: (() => Promise<void>) | null = null;
+  let stopLocalWebsiteTranslationQueueWorker: (() => void) | null = null;
   if (!backgroundJobsRequested) {
     const {
       signedContractPdfWorkerEnabled,
@@ -3443,6 +3467,11 @@ async function seedClaudeIntegration() {
     } = await import("./lib/signedContractDelivery");
     if (signedContractPdfWorkerEnabled()) {
       stopLocalSignedContractPdfWorker = startSignedContractPdfWorker();
+    }
+    if (!isProd && process.env.WEBSITE_TRANSLATION_QUEUE_ENABLED === "true") {
+      const { startWebsiteTranslationQueueWorker } = await import("./lib/websiteTranslationQueue");
+      stopLocalWebsiteTranslationQueueWorker = startWebsiteTranslationQueueWorker();
+      console.log("[website-translation] Local queue worker enabled independently of unrelated schedulers");
     }
   }
 
@@ -3500,6 +3529,12 @@ async function seedClaudeIntegration() {
     if (stopLocalSignedContractPdfWorker) {
       try { await stopLocalSignedContractPdfWorker(); } catch (error) {
         console.error("[shutdown] Local signed-contract PDF worker shutdown failed:", error);
+        exitCode = 1;
+      }
+    }
+    if (stopLocalWebsiteTranslationQueueWorker) {
+      try { stopLocalWebsiteTranslationQueueWorker(); } catch (error) {
+        console.error("[shutdown] Local website translation queue shutdown failed:", error);
         exitCode = 1;
       }
     }

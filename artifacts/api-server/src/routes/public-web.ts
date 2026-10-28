@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, websiteBlogCategoriesTable, websiteBlogPostsTable } from "@workspace/db";
+import { db, websiteBlogCategoriesTable, websiteBlogPostsTable, websiteThemeTokensTable } from "@workspace/db";
 import { and, desc, eq, isNotNull, lt, lte, or, sql } from "drizzle-orm";
 
 import {
@@ -16,6 +16,26 @@ import {
 } from "../lib/programTranslationContract";
 
 const router: IRouter = Router();
+const PUBLIC_THEME_KEYS = new Set([
+  "colors.primary", "colors.secondary", "colors.accent", "colors.background", "colors.card", "colors.border", "colors.text", "colors.muted",
+  "colors.heroStart", "colors.heroEnd", "colors.heroText", "colors.heroOverlay", "buttons.primaryBg", "buttons.primaryText",
+  "typography.headingFont", "typography.bodyFont", "typography.fontScale", "buttons.borderRadius", "buttons.fontWeight",
+  "spacing.sectionPadding", "spacing.cardPadding", "spacing.containerMax", "spacing.gridGap",
+]);
+const PUBLIC_THEME_COLOR = /^(colors\.|buttons\.(primaryBg|primaryText)$)/;
+const PUBLIC_THEME_SAFE_VALUE = /^[A-Za-z0-9 ._-]{1,40}$/;
+router.get("/public/web/theme", async (_req, res): Promise<void> => {
+  try {
+    const rows = await db.select({ tokenGroup: websiteThemeTokensTable.tokenGroup, tokenKey: websiteThemeTokensTable.tokenKey, tokenValue: websiteThemeTokensTable.tokenValue }).from(websiteThemeTokensTable);
+    const tokens = Object.fromEntries(rows.flatMap(row => {
+      const key = `${row.tokenGroup}.${row.tokenKey}`;
+      const valid = PUBLIC_THEME_COLOR.test(key) ? /^#[0-9a-f]{6}$/i.test(row.tokenValue) : PUBLIC_THEME_SAFE_VALUE.test(row.tokenValue);
+      return PUBLIC_THEME_KEYS.has(key) && valid ? [[key, row.tokenValue]] : [];
+    }));
+    res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+    res.json({ tokens });
+  } catch { res.status(503).json({ error: "Theme unavailable" }); }
+});
 router.get("/public/web/detail-layouts/:kind", async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Robots-Tag", "noindex");
@@ -160,6 +180,7 @@ router.get("/public/web/guides/:routeKey", async (req: Request, res: Response): 
       indexable: rendered.value.indexable,
       canonicalPath: rendered.value.canonicalPath,
       alternatePaths: rendered.value.alternatePaths,
+      ...rendered.value.social,
       internalLinkPolicy: rendered.value.relatedArticles.length > 0
         ? "PUBLISHED_INDEXABLE_ONLY"
         : "DISABLED_OR_EMPTY",

@@ -1,4 +1,4 @@
-import { db, websitePagesTable as pages, websitePageBlocksTable as blocks, websitePageVersionsTable as versions, programsTable, universitiesTable, countriesTable, citiesTable, destinationsTable } from "@workspace/db";
+import { db, websitePagesTable as pages, websitePageBlocksTable as blocks, websitePageVersionsTable as versions, programsTable, universitiesTable, countriesTable, citiesTable, cityExternalFactsTable, destinationsTable } from "@workspace/db";
 import { and, asc, eq, desc, isNotNull, lte, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { ensureDetailSeo, inheritEnglishDetailStructure, parseDetailContent, type DetailContent, type DetailContentKind, type DetailSeoFacts } from "./websiteDetailContentContract";
@@ -83,10 +83,27 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
     const [city] = await db.select({
       id: citiesTable.id, name: citiesTable.name, country: countriesTable.name,
       countryCode: countriesTable.code,
+      transportModes: citiesTable.transportModes,
+      campusGeography: citiesTable.campusGeography,
       sourceMetadata: citiesTable.sourceMetadata,
     }).from(citiesTable).innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id))
       .where(eq(citiesTable.id, entityId)).limit(1);
     if (!city) return null;
+    const [externalFacts] = await db.select({
+      cityId: cityExternalFactsTable.cityId,
+      climateProvider: cityExternalFactsTable.climateProvider,
+      climateSourceUrl: cityExternalFactsTable.climateSourceUrl,
+      climateSummary: cityExternalFactsTable.climateSummary,
+      climateAnnualAverageC: cityExternalFactsTable.climateAnnualAverageC,
+      climateMonths: cityExternalFactsTable.climateMonths,
+      climateVerifiedAt: cityExternalFactsTable.climateVerifiedAt,
+      housingProvider: cityExternalFactsTable.housingProvider,
+      housingSourceUrl: cityExternalFactsTable.housingSourceUrl,
+      housingSummary: cityExternalFactsTable.housingSummary,
+      housingFormats: cityExternalFactsTable.housingFormats,
+      housingVerifiedAt: cityExternalFactsTable.housingVerifiedAt,
+      updatedAt: cityExternalFactsTable.updatedAt,
+    }).from(cityExternalFactsTable).where(eq(cityExternalFactsTable.cityId, city.id)).limit(1);
     const aliases = countryAliases({ name: city.country, code: city.countryCode }).map(value => value.toLowerCase().trim());
     const scope = and(
       sql`lower(trim(${universitiesTable.city})) = lower(trim(${city.name}))`,
@@ -108,7 +125,7 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
     return { data: {
       ...city, sourceMetadata: publicCatalogSources(city.sourceMetadata), filterCountry: city.country, filterCity: city.name,
       universityCount: Number(universityCount.count), programCount: Number(programCount.count),
-      programLanguages: languages.map(row => row.language),
+      programLanguages: languages.map(row => row.language), externalFacts: externalFacts ?? null,
       universities: universityList, programs: programList,
     }, meta };
   }

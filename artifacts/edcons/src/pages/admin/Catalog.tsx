@@ -178,7 +178,13 @@ function useDebounce<T>(value: T, delay = 300): T {
 type CatalogFieldSource = { sourceName?: string; sourceUrl?: string; verifiedAt?: string; validUntil?: string; notes?: string };
 type CatalogSourceMetadata = Record<string, CatalogFieldSource>;
 type Country = { id: number; name: string; code: string; flagEmoji?: string | null; dialCode?: string | null; sourceMetadata?: CatalogSourceMetadata; isActive: boolean };
-type City = { id: number; name: string; countryId: number; sourceMetadata?: CatalogSourceMetadata; isActive: boolean };
+type City = { id: number; name: string; countryId: number; transportModes: string[]; campusGeography: string | null; latitude: number | null; longitude: number | null; sourceMetadata?: CatalogSourceMetadata; isActive: boolean };
+type CityExternalFacts = { climateProvider?: string | null; climateSourceUrl?: string | null; climateSummary?: string | null; climateAnnualAverageC?: number | null; climateVerifiedAt?: string | null; housingProvider?: string | null; housingSourceUrl?: string | null; housingSummary?: string | null; housingVerifiedAt?: string | null };
+type CityWeatherAdminState = {
+  snapshot: null | { temperatureC: number; feelsLikeC: number; minimumC: number; maximumC: number; humidityPercent: number; description: string; fetchedAt: string; staleAfter: string; isStale: boolean };
+  sync: null | { lastAttemptAt: string; lastErrorCode: string | null; consecutiveFailures: number };
+  integration: { provider: string; keyConfigured: boolean; liveIntegrationsAllowed: boolean; automaticSyncEnabled: boolean; automaticSyncRequested: boolean; refreshIntervalHours: number };
+};
 type University = {
   id: number; name: string; country: string; city?: string | null; website?: string | null;
   description?: string | null; ranking?: number | null; logoUrl?: string | null; isActive: boolean;
@@ -200,33 +206,116 @@ type ProgramTranslationSummary = { total: number; published: number; pending: nu
 type Program = { id: number; universityId: number; universityName?: string | null; name: string; description?: string | null; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; quota?: number | null; isActive: boolean; requiredEducationLevel?: string | null; minGradeValue?: number | null; gradeScale?: string | null; languageRequirements?: Array<{ test: string; overall: number }> | null; conditionalAdmission?: boolean | null; admissionSourceUrl?: string | null; admissionVerifiedAt?: string | null; admissionValidUntil?: string | null; sourceMetadata?: CatalogSourceMetadata; translationSummary?: ProgramTranslationSummary };
 
 type SourceFieldOption = readonly [key: string, label: string, group: string];
+
 const SOURCE_FIELDS = {
-  country: [["name","Country name","Identity"],["code","ISO code","Identity"],["flagEmoji","Flag","Identity"],["dialCode","Dial code","Identity"],["description","Description","Overview"],["languages","Languages","Key facts"],["currency","Currency","Key facts"],["climate","Climate and weather","Planning"],["livingCost","Living costs","Planning"],["visaInfo","Visa information","Planning"],["workPermit","Work rights","Planning"],["heroMedia","Hero media","Media"],["gallery","Gallery","Media"],["education","Education system","Sections"],["keyFacts","Country facts","Sections"],["admission","Admissions","Sections"],["requirements","Entry requirements","Sections"],["scholarships","Scholarships","Sections"],["housing","Housing","Sections"],["services","Student services","Sections"],["cities","Featured cities","Sections"],["universities","Featured universities","Sections"],["faq","FAQ","Sections"]],
-  city: [["name","City name","Identity"],["country","Country","Identity"],["description","Description","Overview"],["coordinates","Coordinates","Location"],["transportModes","Transport","Planning"],["campusGeography","Campus geography","Planning"],["programLanguages","Teaching languages","Study data"],["climate","Climate and weather","Planning"],["housing","Housing","Planning"],["heroMedia","Hero media","Media"],["gallery","Gallery","Media"],["education","Studying in the city","Sections"],["keyFacts","City facts","Sections"],["living","Daily life and budgeting","Sections"],["requirements","Entry requirements","Sections"],["visa","Visa guidance","Sections"],["services","Student services","Sections"],["universities","Universities","Sections"],["programs","Programs","Sections"],["faq","FAQ","Sections"]],
-  university: [["name","University name","Identity"],["country","Country","Location"],["city","City","Location"],["address","Address","Location"],["website","Official website","Identity"],["logoUrl","Logo","Media"],["description","Description","Overview"],["universityType","University type","Overview"],["ranking","Ranking","Rankings"],["fees","Fees","Admissions"],["admissionProcess","Admission process","Admissions"],["admissionRules","Admission rules","Admissions"],["heroMedia","Hero media","Media"],["gallery","Gallery","Media"],["highlights","Highlights","Sections"],["programs","Programs","Sections"],["admission","Admissions","Sections"],["scholarships","Scholarships","Sections"],["keyFacts","University facts","Sections"],["support","Student support","Sections"],["services","Student services","Sections"],["campus","Campus","Sections"],["housing","Housing","Sections"],["recognition","Recognition","Sections"],["living","Living and budgeting","Sections"],["faq","FAQ","Sections"]],
-  program: [["name","Program name","Identity"],["description","Description","Overview"],["degree","Degree","Academics"],["field","Field","Academics"],["language","Teaching language","Academics"],["duration","Duration","Academics"],["tuitionFee","Tuition fee","Fees"],["discountedFee","Discounted fee","Fees"],["scholarship","Scholarship","Fees"],["currency","Currency","Fees"],["depositFee","Deposit fee","Fees"],["applicationFee","Application fee","Fees"],["intakes","Intakes","Admissions"],["requirements","Requirements","Admissions"],["quota","Quota","Admissions"],["admissionRules","Admission rules","Admissions"],["heroMedia","Hero media","Media"],["gallery","Gallery","Media"],["curriculum","Curriculum","Sections"],["admission","Admissions","Sections"],["fees","Fees overview","Sections"],["living","Living costs","Sections"],["campus","Campus","Sections"],["housing","Housing","Sections"],["services","Student services","Sections"],["faq","FAQ","Sections"]],
+  country: [
+    ["name", "Country name", "Identity"], ["code", "ISO code", "Identity"], ["flagEmoji", "Flag", "Identity"], ["dialCode", "Dial code", "Identity"],
+    ["shortDescription", "Short description", "Overview"], ["description", "Full description", "Overview"], ["languages", "Languages", "Key facts"], ["currency", "Currency", "Key facts"],
+    ["climate", "Climate and weather", "Living & planning"], ["livingCost", "Living costs", "Living & planning"], ["visaInfo", "Visa information", "Living & planning"], ["workPermit", "Work rights", "Living & planning"],
+    ["heroMedia", "Hero image / media", "Media"], ["gallery", "Image gallery", "Media"], ["highlights", "Highlights", "Page sections"], ["cautions", "Important cautions", "Page sections"],
+    ["education", "Education system", "Page sections"], ["keyFacts", "Country facts", "Page sections"], ["admission", "Admissions", "Page sections"], ["requirements", "Entry requirements", "Page sections"],
+    ["scholarships", "Scholarships", "Page sections"], ["housing", "Housing", "Page sections"], ["services", "Student services", "Page sections"], ["recognition", "Recognition", "Page sections"],
+    ["cities", "Featured cities", "Page sections"], ["universities", "Featured universities", "Page sections"], ["faq", "Frequently asked questions", "Page sections"], ["applyGuide", "Application guide", "Page sections"], ["cta", "Final call to action", "Page sections"],
+  ],
+  city: [
+    ["name", "City name", "Identity"], ["country", "Country", "Identity"], ["description", "Description", "Overview"], ["coordinates", "Coordinates", "Location"],
+    ["transportModes", "Transport", "Living & planning"], ["campusGeography", "Campus geography", "Living & planning"], ["programLanguages", "Teaching languages", "Study data"], ["climate", "Climate and weather", "Living & planning"], ["housing", "Housing formats and costs", "Living & planning"],
+    ["heroMedia", "Hero image / media", "Media"], ["gallery", "Image gallery", "Media"], ["highlights", "Highlights", "Page sections"], ["cautions", "Important cautions", "Page sections"],
+    ["education", "Studying in the city", "Page sections"], ["keyFacts", "City facts", "Page sections"], ["living", "Daily life and budgeting", "Page sections"], ["requirements", "Entry requirements", "Page sections"],
+    ["visa", "Visa guidance", "Page sections"], ["services", "Student services", "Page sections"], ["universities", "Universities", "Page sections"], ["programs", "Programs", "Page sections"],
+    ["faq", "Frequently asked questions", "Page sections"], ["applyGuide", "Application guide", "Page sections"],
+  ],
+  university: [
+    ["name", "University name", "Identity"], ["country", "Country", "Location"], ["city", "City", "Location"], ["address", "Address", "Location"], ["website", "Official website", "Identity"], ["logoUrl", "Logo", "Media"],
+    ["description", "Description", "Overview"], ["universityType", "University type", "Overview"], ["ranking", "Ranking summary", "Rankings"], ["qsRanking", "QS ranking", "Rankings"], ["timesRanking", "Times ranking", "Rankings"], ["shanghaiRanking", "Shanghai ranking", "Rankings"], ["leidenRanking", "Leiden ranking", "Rankings"],
+    ["fees", "Fees", "Admissions & fees"], ["admissionProcess", "Admission process", "Admissions & fees"], ["nationalityPolicy", "Nationality policy", "Admissions & fees"], ["admissionRules", "Admission rules", "Admissions & fees"],
+    ["heroMedia", "Hero image / media", "Media"], ["gallery", "Image gallery", "Media"], ["highlights", "Highlights", "Page sections"], ["cautions", "Important cautions", "Page sections"],
+    ["programs", "Programs", "Page sections"], ["admission", "Admissions", "Page sections"], ["scholarships", "Scholarships", "Page sections"], ["intakeGuide", "Intake guide", "Page sections"], ["keyFacts", "University facts", "Page sections"],
+    ["education", "Academic experience", "Page sections"], ["support", "Student support", "Page sections"], ["services", "Student services", "Page sections"], ["campus", "Campus", "Page sections"], ["housing", "Housing", "Page sections"],
+    ["recognition", "Accreditation and recognition", "Page sections"], ["living", "Living and budgeting", "Page sections"], ["reviews", "Student reviews", "Page sections"], ["faq", "Frequently asked questions", "Page sections"], ["applyGuide", "Application guide", "Page sections"],
+  ],
+  program: [
+    ["name", "Program name", "Identity"], ["description", "Description", "Overview"], ["degree", "Degree", "Academics"], ["field", "Field", "Academics"], ["language", "Teaching language", "Academics"], ["duration", "Duration", "Academics"],
+    ["tuitionFee", "Tuition fee", "Fees"], ["discountedFee", "Discounted fee", "Fees"], ["scholarship", "Scholarship", "Fees"], ["currency", "Currency", "Fees"], ["depositFee", "Deposit fee", "Fees"], ["applicationFee", "Application fee", "Fees"], ["serviceFeeAmount", "Service fee", "Fees"], ["languageFee", "Language fee", "Fees"], ["feeType", "Fee period / type", "Fees"], ["additionalFees", "Additional fees", "Fees"],
+    ["intakes", "Intakes", "Admissions"], ["requirements", "Requirements", "Admissions"], ["quota", "Quota", "Admissions"], ["admissionRules", "Admission rules", "Admissions"],
+    ["heroMedia", "Hero image / media", "Media"], ["gallery", "Image gallery", "Media"], ["highlights", "Highlights", "Page sections"], ["curriculum", "Curriculum", "Page sections"], ["admission", "Admissions", "Page sections"], ["fees", "Fees overview", "Page sections"],
+    ["living", "Living costs", "Page sections"], ["campus", "Campus", "Page sections"], ["climate", "Climate", "Page sections"], ["housing", "Housing", "Page sections"], ["services", "Student services", "Page sections"],
+    ["applyGuide", "Application guide", "Page sections"], ["studentStory", "Student story", "Page sections"], ["recognition", "Recognition", "Page sections"], ["related", "Related programs", "Page sections"], ["faq", "Frequently asked questions", "Page sections"],
+  ],
 } as const satisfies Record<string, readonly SourceFieldOption[]>;
 
-const SOURCE_PROPERTIES = [["sourceName","Source / institution"],["sourceUrl","Source URL"],["verifiedAt","Last verified"],["validUntil","Valid until"],["notes","Internal note"]] as const;
-function catalogSourceColumns(value: CatalogSourceMetadata | undefined, fields: readonly SourceFieldOption[]) {
-  const columns: Record<string,string> = { "Source Metadata JSON": JSON.stringify(value ?? {}) };
-  for (const [field,label] of fields) for (const [property,propertyLabel] of SOURCE_PROPERTIES) {
-    const raw = value?.[field]?.[property] ?? "";
-    columns[`Source · ${label} [${field}] · ${propertyLabel}`] = (property === "verifiedAt" || property === "validUntil") && raw ? raw.slice(0,10) : raw;
+const SOURCE_EXPORT_PROPERTIES = [
+  ["sourceName", "Source / institution"],
+  ["sourceUrl", "Source URL"],
+  ["verifiedAt", "Last verified"],
+  ["validUntil", "Valid until"],
+  ["notes", "Internal note"],
+] as const satisfies readonly (readonly [keyof CatalogFieldSource, string])[];
+
+function catalogSourceColumns(
+  value: CatalogSourceMetadata | undefined,
+  fields: readonly SourceFieldOption[],
+): Record<string, string> {
+  const columns: Record<string, string> = {};
+  for (const [field, label] of fields) {
+    const entry = value?.[field];
+    for (const [property, propertyLabel] of SOURCE_EXPORT_PROPERTIES) {
+      const raw = entry?.[property] ?? "";
+      columns[`Source · ${label} [${field}] · ${propertyLabel}`] =
+        (property === "verifiedAt" || property === "validUntil") && raw ? raw.slice(0, 10) : raw;
+    }
   }
   return columns;
 }
 
+function catalogSourceNotes(fields: readonly SourceFieldOption[]): Record<string, string>[] {
+  return [
+    { Column: "Source · … · Source / institution", Required: "No", Notes: "Official institution, publisher or data provider for this field." },
+    { Column: "Source · … · Source URL", Required: "No", Notes: "Public http(s) evidence URL. Links with embedded credentials are rejected." },
+    { Column: "Source · … · Last verified / Valid until", Required: "No", Notes: "Use YYYY-MM-DD. Valid until cannot be earlier than last verified." },
+    { Column: "Source · … · Internal note", Required: "No", Notes: "Internal verification note; never shown on the public website." },
+    { Column: "Available source fields", Required: "", Notes: fields.map(([key, label]) => `${label} [${key}]`).join(", ") },
+    { Column: "sourceMetadataJson", Required: "No", Notes: "Legacy lossless JSON column. Existing files remain supported; readable Source columns take priority when filled." },
+  ];
+}
+
 function SourceMetadataEditor({ value, fields, onChange }: { value?: CatalogSourceMetadata; fields: readonly SourceFieldOption[]; onChange: (value: CatalogSourceMetadata) => void }) {
-  const metadata = value ?? {}; const [selectedField,setSelectedField] = useState("");
+  const metadata = value ?? {};
+  const [selectedField, setSelectedField] = useState("");
+  const [isOpen, setIsOpen] = useState(true);
   const available = fields.filter(([key]) => !metadata[key]);
-  const setEntry = (key:string, patch:Partial<CatalogFieldSource>) => onChange({ ...metadata, [key]: { ...metadata[key], ...patch } });
-  return <details className="rounded-lg border bg-muted/20 p-3" open>
-    <summary className="cursor-pointer text-sm font-medium">External sources & verification <span className="font-normal text-muted-foreground">({Object.keys(metadata).length} added)</span></summary>
-    <p className="mt-2 text-xs text-muted-foreground">Add the official evidence used for catalogue facts and dynamic page sections. Internal notes remain admin-only.</p>
-    <div className="mt-3 flex gap-2"><Select value={selectedField} onValueChange={setSelectedField}><SelectTrigger className="flex-1"><SelectValue placeholder="Choose a field" /></SelectTrigger><SelectContent className="max-h-80">{available.map(([key,label,group]) => <SelectItem key={key} value={key}>{group} · {label}</SelectItem>)}</SelectContent></Select><Button type="button" variant="outline" disabled={!selectedField} onClick={() => { if(selectedField){ onChange({...metadata,[selectedField]:{}}); setSelectedField(""); } }}><Plus className="mr-1 h-4 w-4"/>Add source</Button></div>
-    <div className="mt-3 space-y-3">{Object.entries(metadata).map(([key,entry]) => { const option=fields.find(([field])=>field===key); return <div key={key} className="space-y-2 rounded-md border bg-background p-3"><div className="flex items-center justify-between"><span className="text-sm font-semibold">{option?.[1] ?? key}</span><Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => { const next={...metadata}; delete next[key]; onChange(next); }}><Trash2 className="h-3.5 w-3.5"/></Button></div><div className="grid gap-2 sm:grid-cols-2"><div><Label className="text-xs">Source / institution</Label><Input className="mt-1" value={entry.sourceName ?? ""} onChange={e=>setEntry(key,{sourceName:e.target.value})}/></div><div><Label className="text-xs">Source URL</Label><Input className="mt-1" type="url" value={entry.sourceUrl ?? ""} onChange={e=>setEntry(key,{sourceUrl:e.target.value})} placeholder="https://..."/></div><div><Label className="text-xs">Last verified</Label><Input className="mt-1" type="date" value={entry.verifiedAt?.slice(0,10) ?? ""} onChange={e=>setEntry(key,{verifiedAt:e.target.value})}/></div><div><Label className="text-xs">Valid until</Label><Input className="mt-1" type="date" value={entry.validUntil?.slice(0,10) ?? ""} onChange={e=>setEntry(key,{validUntil:e.target.value})}/></div></div><div><Label className="text-xs">Internal verification note</Label><Input className="mt-1" value={entry.notes ?? ""} onChange={e=>setEntry(key,{notes:e.target.value})}/></div></div>; })}</div>
-  </details>;
+  const setEntry = (key: string, patch: Partial<CatalogFieldSource>) => onChange({ ...metadata, [key]: { ...metadata[key], ...patch } });
+  return (
+    <details className="rounded-lg border bg-muted/20 p-3" open={isOpen} onToggle={event => setIsOpen(event.currentTarget.open)}>
+      <summary className="cursor-pointer font-medium text-sm">External sources & verification <span className="text-muted-foreground font-normal">({Object.keys(metadata).length} added · {fields.length} available)</span></summary>
+      <p className="mt-2 text-xs text-muted-foreground">Add the official source used for identity fields, factual data and editorial sections on the public detail page. This verification information stays in the admin catalogue and is not displayed publicly.</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">Live counts and catalogue lists are calculated by the system from linked records, so they do not require a manual source.</p>
+      <div className="mt-3 flex gap-2">
+        <Select value={selectedField} onValueChange={setSelectedField}>
+          <SelectTrigger className="flex-1"><SelectValue placeholder="Choose a field" /></SelectTrigger>
+          <SelectContent className="max-h-80">{available.map(([key, label, group]) => <SelectItem key={key} value={key}><span className="text-muted-foreground">{group} ·</span> {label}</SelectItem>)}</SelectContent>
+        </Select>
+        <Button type="button" variant="outline" disabled={!selectedField} onClick={() => { if (selectedField) { onChange({ ...metadata, [selectedField]: {} }); setSelectedField(""); } }}><Plus className="h-4 w-4 mr-1" />Add source</Button>
+      </div>
+      <div className="mt-3 space-y-3">
+        {Object.entries(metadata).map(([key, entry]) => {
+          const option = fields.find(([field]) => field === key);
+          const label = option?.[1] ?? key;
+          const group = option?.[2];
+          return <div key={key} className="rounded-md border bg-background p-3 space-y-2">
+            <div className="flex items-center justify-between"><div><span className="text-sm font-semibold">{label}</span>{group && <span className="ml-2 text-[11px] text-muted-foreground">{group}</span>}</div><Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => { const next = { ...metadata }; delete next[key]; onChange(next); }}><Trash2 className="h-3.5 w-3.5" /></Button></div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div><Label className="text-xs">Source / institution</Label><Input className="mt-1" value={entry.sourceName ?? ""} onChange={e => setEntry(key, { sourceName: e.target.value })} placeholder="Official institution" /></div>
+              <div><Label className="text-xs">Source URL</Label><Input className="mt-1" type="url" value={entry.sourceUrl ?? ""} onChange={e => setEntry(key, { sourceUrl: e.target.value })} placeholder="https://..." /></div>
+              <div><Label className="text-xs">Last verified</Label><Input className="mt-1" type="date" value={entry.verifiedAt?.slice(0, 10) ?? ""} onChange={e => setEntry(key, { verifiedAt: e.target.value })} /></div>
+              <div><Label className="text-xs">Valid until</Label><Input className="mt-1" type="date" value={entry.validUntil?.slice(0, 10) ?? ""} onChange={e => setEntry(key, { validUntil: e.target.value })} /></div>
+            </div>
+            <div><Label className="text-xs">Internal verification note</Label><Input className="mt-1" value={entry.notes ?? ""} onChange={e => setEntry(key, { notes: e.target.value })} placeholder="Optional note" /></div>
+          </div>;
+        })}
+      </div>
+    </details>
+  );
 }
 
 type ProgramTranslationRow = {
@@ -625,8 +714,9 @@ function CountriesTab() {
       const rows = list.map((c: Country) => ({
         Name: c.name, "ISO Code": c.code, "Flag Emoji": c.flagEmoji ?? "",
         "Dial Code": c.dialCode ?? "",
-        Status: c.isActive ? "Active" : "Inactive",
+        "Source Metadata JSON": JSON.stringify(c.sourceMetadata ?? {}),
         ...catalogSourceColumns(c.sourceMetadata, SOURCE_FIELDS.country),
+        Status: c.isActive ? "Active" : "Inactive",
       }));
       await exportToExcel(rows, "Countries", `countries-${new Date().toISOString().slice(0, 10)}.xlsx`);
     } catch {}
@@ -642,10 +732,10 @@ function CountriesTab() {
   };
 
   const templateRows = [
-    { name: "Türkiye", code: "TR", flagEmoji: "🇹🇷", dialCode: "+90", ...catalogSourceColumns(undefined, SOURCE_FIELDS.country) },
-    { name: "United Kingdom", code: "GB", flagEmoji: "🇬🇧", dialCode: "+44", ...catalogSourceColumns(undefined, SOURCE_FIELDS.country) },
-    { name: "Germany", code: "DE", flagEmoji: "🇩🇪", dialCode: "+49" },
-    { name: "France", code: "FR", flagEmoji: "🇫🇷", dialCode: "+33" },
+    { name: "Türkiye", code: "TR", flagEmoji: "🇹🇷", dialCode: "+90", sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.country) },
+    { name: "United Kingdom", code: "GB", flagEmoji: "🇬🇧", dialCode: "+44", sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.country) },
+    { name: "Germany", code: "DE", flagEmoji: "🇩🇪", dialCode: "+49", sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.country) },
+    { name: "France", code: "FR", flagEmoji: "🇫🇷", dialCode: "+33", sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.country) },
   ];
 
   return (
@@ -740,11 +830,11 @@ function CountriesTab() {
             <div><Label>{t("catalogPage.isoCode2Req")}</Label><Input className="mt-1 uppercase" maxLength={2} value={form?.code ?? ""} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} /></div>
             <div><Label>{t("catalogPage.flagEmoji")}</Label><Input className="mt-1" placeholder="🇹🇷" value={form?.flagEmoji ?? ""} onChange={e => setForm(f => ({ ...f, flagEmoji: e.target.value }))} /></div>
             <div><Label>{t("catalogPage.dialCodeOptional")}</Label><Input className="mt-1 font-mono" placeholder="+90" value={form?.dialCode ?? ""} onChange={e => setForm(f => ({ ...f, dialCode: e.target.value }))} /></div>
+            <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.country} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
             <div className="flex items-center justify-between">
               <Label>{t("common.active")}</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
-            <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.country} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
@@ -755,7 +845,7 @@ function CountriesTab() {
 
       {/* Single delete confirm */}
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>{t("catalogPage.deleteCountry")}</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">{t("catalogPage.confirmDeleteCountry")}</p>
           <DialogFooter>
@@ -779,7 +869,7 @@ function CountriesTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("adminCatalog.tabCountries")} templateRows={templateRows} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("adminCatalog.tabCountries")} templateRows={templateRows} notesRows={catalogSourceNotes(SOURCE_FIELDS.country)} onImport={handleBulkImport} />
     </div>
     </>
   );
@@ -800,7 +890,10 @@ function CitiesTab() {
   });
   const dSearch = useDebounce(search);
   const [form, setForm] = useState<Partial<City> | null>(null);
+  const [externalForm, setExternalForm] = useState<CityExternalFacts>({});
+  const [weatherState, setWeatherState] = useState<CityWeatherAdminState | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [coordinateBulkOpen, setCoordinateBulkOpen] = useState(false);
   const [delId, setDelId] = useState<number | null>(null);
   const [sort, setSort] = useState<SortState>({ col: "name", dir: "asc" });
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -831,7 +924,16 @@ function CitiesTab() {
     },
   });
   const cities: City[] = data?.data ?? [];
-  useOpenCatalogEntry("cities", cities, setForm);
+  const openCity = useCallback(async (city: City) => {
+    setForm(city);
+    const [external, weather] = await Promise.allSettled([
+      api(`/api/cities/${city.id}/external-facts`),
+      api(`/api/cities/${city.id}/weather`),
+    ]);
+    setExternalForm(external.status === "fulfilled" ? external.value : {});
+    setWeatherState(weather.status === "fulfilled" ? weather.value : null);
+  }, []);
+  useOpenCatalogEntry("cities", cities, openCity);
   const totalPages = Math.ceil((data?.meta?.total ?? 0) / 50);
 
   const sorted = useMemo(() => {
@@ -861,15 +963,28 @@ function CitiesTab() {
   }
 
   const save = useMutation({
-    mutationFn: async (f: Partial<City>) => f.id
-      ? api(`/api/cities/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) })
-      : api("/api/cities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) }),
+    mutationFn: async (f: Partial<City>) => {
+      const city = f.id
+        ? await api(`/api/cities/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) })
+        : await api("/api/cities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
+      await api(`/api/cities/${city.id}/external-facts`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(externalForm) });
+      return city;
+    },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["cities"] }); setForm(null); },
   });
 
   const del = useMutation({
     mutationFn: (id: number) => apiDelete(`/api/cities/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["cities"] }); setDelId(null); },
+  });
+
+  const refreshWeather = useMutation({
+    mutationFn: async (cityId: number) => api(`/api/cities/${cityId}/weather/refresh`, { method: "POST" }),
+    onSuccess: async (_result, cityId) => {
+      setWeatherState(await api(`/api/cities/${cityId}/weather`));
+      toast({ title: "Weather snapshot refreshed", description: "Public city and university pages now use the stored result." });
+    },
+    onError: (error: Error) => toast({ title: "Weather could not be refreshed", description: error.message, variant: "destructive" }),
   });
 
   async function handleBulkDelete() {
@@ -905,8 +1020,11 @@ function CitiesTab() {
       if (onlySelected) list = list.filter(c => selected.has(c.id));
       const rows = list.map((c: City) => ({
         Name: c.name, Country: cMap[c.countryId]?.name ?? "", "Country Code": cMap[c.countryId]?.code ?? "",
-        Status: c.isActive ? "Active" : "Inactive",
+        "Transport Modes": c.transportModes.join(", "),
+        "Campus Geography": c.campusGeography ?? "", Latitude: c.latitude ?? "", Longitude: c.longitude ?? "",
+        "Source Metadata JSON": JSON.stringify(c.sourceMetadata ?? {}),
         ...catalogSourceColumns(c.sourceMetadata, SOURCE_FIELDS.city),
+        Status: c.isActive ? "Active" : "Inactive",
       }));
       await exportToExcel(rows, "Cities", `cities-${new Date().toISOString().slice(0, 10)}.xlsx`);
     } catch {}
@@ -921,11 +1039,34 @@ function CitiesTab() {
     return res;
   };
 
+  const handleCoordinateBulkImport = async (
+    rows: Record<string, string>[],
+    onProgress: (progress: BulkImportProgress) => void,
+  ) => {
+    const res = await importRowsInChunks("/api/cities/bulk-coordinates", rows, onProgress);
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["cities"] }),
+      qc.invalidateQueries({ queryKey: ["catalog-weather-status"] }),
+    ]);
+    return res;
+  };
+
   const templateRows = [
-    { name: "İstanbul", countryCode: "TR", ...catalogSourceColumns(undefined, SOURCE_FIELDS.city) },
-    { name: "Ankara", countryCode: "TR", ...catalogSourceColumns(undefined, SOURCE_FIELDS.city) },
-    { name: "London", countryCode: "GB", ...catalogSourceColumns(undefined, SOURCE_FIELDS.city) },
-    { name: "Berlin", countryCode: "DE" },
+    { name: "İstanbul", countryCode: "TR", transportModes: "Metro, Tram, Bus, Ferry", campusGeography: "Europe · Asia", latitude: "41.0082", longitude: "28.9784", sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.city), climateProvider: "MGM", climateSourceUrl: "https://www.mgm.gov.tr/", climateSummary: "6.8°C Jan · 24.7°C Jul–Aug", climateAnnualAverageC: "", climateVerifiedAt: "2026-10-08", climateMonthsJson: "[]", housingProvider: "DormBooking", housingSourceUrl: "https://dormbooking.com/", housingSummary: "University · private · rental", housingVerifiedAt: "2026-10-08", housingFormatsJson: "[]" },
+    { name: "Ankara", countryCode: "TR", transportModes: "Metro, Bus", campusGeography: "Central Anatolia", latitude: "39.9334", longitude: "32.8597", sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.city) },
+  ];
+  const coordinateTemplateRows = [
+    {
+      id: "1",
+      name: "Istanbul",
+      countryCode: "TR",
+      latitude: "41.01384",
+      longitude: "28.94966",
+      sourceName: "GeoNames",
+      sourceUrl: "https://www.geonames.org/745044",
+      verifiedAt: new Date().toISOString().slice(0, 10),
+      notes: "WGS84 city-centre coordinate matched by city and ISO country code.",
+    },
   ];
 
   return (
@@ -961,8 +1102,9 @@ function CitiesTab() {
           </Button>
         )}
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />{t("catalogPage.importExcel")}</Button>
+        <Button variant="outline" onClick={() => setCoordinateBulkOpen(true)}><Globe className="h-4 w-4 mr-2" />{t("catalogPage.importCoordinates")}</Button>
         <Button variant="outline" onClick={() => runExport(false)}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
-        <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addCity")}</Button>
+        <Button onClick={() => { setForm({ isActive: true, transportModes: [] }); setExternalForm({}); setWeatherState(null); }}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addCity")}</Button>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -1002,7 +1144,7 @@ function CitiesTab() {
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1 justify-end">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setForm(c)}><Pencil className="h-3.5 w-3.5" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => void openCity(c)}><Pencil className="h-3.5 w-3.5" /></Button>
                     <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDelId(c.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div>
                 </td>
@@ -1024,7 +1166,7 @@ function CitiesTab() {
       <Pagination page={page} totalPages={totalPages} onPage={p => { setPage(p); setSelected(new Set()); }} />
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{form?.id ? t("catalogPage.editCity") : t("catalogPage.newCity")}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>{t("catalogPage.cityNameReq")}</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
@@ -1042,11 +1184,44 @@ function CitiesTab() {
                 }))}
               />
             </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div><Label>Transport modes</Label><Input className="mt-1" placeholder="Metro, Tram, Bus, Ferry" value={(form?.transportModes ?? []).join(", ")} onChange={e => setForm(f => ({ ...f, transportModes: e.target.value.split(",").map(v => v.trim()).filter(Boolean) }))} /></div>
+              <div className="sm:col-span-2"><Label>Campus geography</Label><Input className="mt-1" placeholder="Europe · Asia" value={form?.campusGeography ?? ""} onChange={e => setForm(f => ({ ...f, campusGeography: e.target.value }))} /></div>
+              <div><Label>Latitude</Label><Input className="mt-1" type="number" step="any" value={form?.latitude ?? ""} onChange={e => setForm(f => ({ ...f, latitude: e.target.value === "" ? null : Number(e.target.value) }))} /></div>
+              <div><Label>Longitude</Label><Input className="mt-1" type="number" step="any" value={form?.longitude ?? ""} onChange={e => setForm(f => ({ ...f, longitude: e.target.value === "" ? null : Number(e.target.value) }))} /></div>
+            </div>
+            <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.city} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
+            <div className="rounded-lg border p-3 space-y-3">
+              <p className="text-sm font-semibold">External city data</p>
+              <p className="text-xs text-muted-foreground">Climate and housing values are stored with provider, source and verification metadata; they are not CMS copy.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><Label>Climate provider</Label><Input className="mt-1" value={externalForm.climateProvider ?? ""} onChange={e => setExternalForm(f => ({ ...f, climateProvider: e.target.value }))} /></div>
+                <div><Label>Climate source URL</Label><Input className="mt-1" value={externalForm.climateSourceUrl ?? ""} onChange={e => setExternalForm(f => ({ ...f, climateSourceUrl: e.target.value }))} /></div>
+                <div><Label>Climate summary</Label><Input className="mt-1" placeholder="6.8°C Jan · 24.7°C Jul–Aug" value={externalForm.climateSummary ?? ""} onChange={e => setExternalForm(f => ({ ...f, climateSummary: e.target.value }))} /></div>
+                <div><Label>Annual average °C</Label><Input className="mt-1" type="number" step="0.1" value={externalForm.climateAnnualAverageC ?? ""} onChange={e => setExternalForm(f => ({ ...f, climateAnnualAverageC: e.target.value === "" ? null : Number(e.target.value) }))} /></div>
+                <div><Label>Housing provider</Label><Input className="mt-1" value={externalForm.housingProvider ?? ""} onChange={e => setExternalForm(f => ({ ...f, housingProvider: e.target.value }))} /></div>
+                <div><Label>Housing source URL</Label><Input className="mt-1" value={externalForm.housingSourceUrl ?? ""} onChange={e => setExternalForm(f => ({ ...f, housingSourceUrl: e.target.value }))} /></div>
+                <div className="sm:col-span-2"><Label>Housing summary</Label><Input className="mt-1" placeholder="University · private · rental" value={externalForm.housingSummary ?? ""} onChange={e => setExternalForm(f => ({ ...f, housingSummary: e.target.value }))} /></div>
+              </div>
+            </div>
+            <div className="rounded-lg border p-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div><p className="text-sm font-semibold">Stored city weather</p><p className="text-xs text-muted-foreground">OpenWeather is called by the server at most once every 24 hours. Public pages only read this stored snapshot.</p></div>
+                {form?.id && <Button type="button" variant="outline" size="sm" onClick={() => refreshWeather.mutate(form.id!)} disabled={refreshWeather.isPending || form.latitude == null || form.longitude == null}><RefreshCw className={cn("mr-2 h-4 w-4", refreshWeather.isPending && "animate-spin")} />Refresh now</Button>}
+              </div>
+              {!form?.id ? <p className="text-xs text-muted-foreground">Save the city before requesting weather.</p>
+                : form.latitude == null || form.longitude == null ? <p className="text-xs text-amber-700">Latitude and longitude are required before weather can be synchronized.</p>
+                  : <div className="grid gap-2 text-xs sm:grid-cols-2">
+                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">Integration</span><p className="font-medium">{weatherState?.integration.keyConfigured ? "API key configured" : "API key missing"} · {weatherState?.integration.automaticSyncEnabled ? "Automatic sync on" : "Automatic sync off"}</p></div>
+                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">Latest snapshot</span><p className="font-medium">{weatherState?.snapshot ? `${weatherState.snapshot.temperatureC.toFixed(1)}°C · ${weatherState.snapshot.description}` : "No successful snapshot yet"}</p></div>
+                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">Fetched</span><p className="font-medium">{weatherState?.snapshot?.fetchedAt ? new Date(weatherState.snapshot.fetchedAt).toLocaleString() : "—"}</p></div>
+                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">Last sync result</span><p className={cn("font-medium", weatherState?.sync?.lastErrorCode && "text-destructive")}>{weatherState?.sync?.lastErrorCode || (weatherState?.sync ? "Successful" : "Not attempted")}</p></div>
+                  </div>}
+            </div>
             <div className="flex items-center justify-between">
               <Label>{t("common.active")}</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
-            <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.city} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
@@ -1079,7 +1254,14 @@ function CitiesTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("adminCatalog.tabCities")} templateRows={templateRows} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("adminCatalog.tabCities")} templateRows={templateRows} notesRows={catalogSourceNotes(SOURCE_FIELDS.city)} onImport={handleBulkImport} />
+      <BulkImportModal
+        open={coordinateBulkOpen}
+        onClose={() => setCoordinateBulkOpen(false)}
+        title={t("catalogPage.cityCoordinates")}
+        templateRows={coordinateTemplateRows}
+        onImport={handleCoordinateBulkImport}
+      />
     </div>
     </>
   );
@@ -1231,6 +1413,7 @@ function UniversitiesTab() {
         "Initial Deposit Options": u.initialDepositOptions ?? "", "Admission Process": u.admissionProcess ?? "",
         "Contact Person": u.contactPersonName ?? "", "Contact Phone": u.contactPersonPhone ?? "",
         "Contact Email": u.contactPersonEmail ?? "", Description: u.description ?? "",
+        "Source Metadata JSON": JSON.stringify(u.sourceMetadata ?? {}),
         ...catalogSourceColumns(u.sourceMetadata, SOURCE_FIELDS.university),
       }));
       await exportToExcel(rows, "Universities", `universities-${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -1317,10 +1500,10 @@ function UniversitiesTab() {
   useOpenCatalogEntry("universities", universities, university => { void openEditUniversity(university.id); });
 
   const templateRows = [
-    { name: "Istanbul University", country: "Turkey", city: "Istanbul", website: "https://www.istanbul.edu.tr", description: "Leading state university", ranking: 351, universityType: "Public", taxType: "KDV", taxPercent: 18, qsRanking: 501, timesRanking: 601, shanghaiRanking: 401, cwtsLeidenRanking: 0, address: "Beyazıt, 34452 Fatih/İstanbul", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Bank Transfer", admissionProcess: "Online application via portal", contactPersonName: "Ahmet Yılmaz", contactPersonPhone: "+90 212 440 0000", contactPersonEmail: "intl@istanbul.edu.tr", status: "open", isActive: "Yes" },
+    { name: "Istanbul University", country: "Turkey", city: "Istanbul", website: "https://www.istanbul.edu.tr", description: "Leading state university", ranking: 351, universityType: "Public", taxType: "KDV", taxPercent: 18, qsRanking: 501, timesRanking: 601, shanghaiRanking: 401, cwtsLeidenRanking: 0, address: "Beyazıt, 34452 Fatih/İstanbul", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Bank Transfer", admissionProcess: "Online application via portal", contactPersonName: "Ahmet Yılmaz", contactPersonPhone: "+90 212 440 0000", contactPersonEmail: "intl@istanbul.edu.tr", status: "open", isActive: "Yes", sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.university) },
     { name: "Middle East Technical University", country: "Turkey", city: "Ankara", website: "https://www.metu.edu.tr", description: "Top technical university", ranking: 601, universityType: "Public", taxType: "KDV", taxPercent: 18, qsRanking: 336, timesRanking: 401, shanghaiRanking: 501, cwtsLeidenRanking: 0, address: "Üniversiteler Mah. Dumlupınar Blv. No:1, 06800 Çankaya/Ankara", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Credit Card, Bank Transfer", admissionProcess: "Apply through international office", contactPersonName: "Elif Demir", contactPersonPhone: "+90 312 210 2000", contactPersonEmail: "intl@metu.edu.tr", status: "open", isActive: "Yes" },
     { name: "King's College London", country: "United Kingdom", city: "London", website: "https://www.kcl.ac.uk", description: "Russell Group university", ranking: 35, universityType: "Private", taxType: "VAT", taxPercent: 20, qsRanking: 40, timesRanking: 35, shanghaiRanking: 47, cwtsLeidenRanking: 55, address: "Strand, London WC2R 2LS, UK", logoUrl: "", onlinePaymentUrl: "https://pay.kcl.ac.uk", cricosLink: "", documentsLink: "https://docs.kcl.ac.uk", currentFeeListLink: "https://www.kcl.ac.uk/study/fees", initialDepositOptions: "Credit Card, Bank Transfer", admissionProcess: "UCAS application required", contactPersonName: "James Smith", contactPersonPhone: "+44 20 7836 5454", contactPersonEmail: "admissions@kcl.ac.uk", status: "open", isActive: "Yes" },
-  ].map(row => ({ ...row, ...catalogSourceColumns(undefined, SOURCE_FIELDS.university) }));
+  ];
 
   return (
     <>
@@ -1663,7 +1846,7 @@ function UniversitiesTab() {
               </div>}
               <div className="grid grid-cols-2 gap-3">
                 <div><Label>Required previous education</Label><Select value={form?.defaultRequiredEducationLevel ?? "none"} onValueChange={v => setF({ defaultRequiredEducationLevel: v === "none" ? null : v })}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Not verified</SelectItem><SelectItem value="high_school">High school</SelectItem><SelectItem value="bachelor">Bachelor</SelectItem><SelectItem value="master">Master</SelectItem></SelectContent></Select></div>
-                <div><Label>Grade scale</Label><Select value={form?.defaultGradeScale ?? "none"} onValueChange={v => setF({ defaultGradeScale: v === "none" ? null : v })}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Not verified</SelectItem><SelectItem value="percent_100">100 point</SelectItem><SelectItem value="gpa_4">GPA 4.0</SelectItem><SelectItem value="gpa_5">GPA 5.0</SelectItem><SelectItem value="gpa_10">GPA 10.0</SelectItem></SelectContent></Select></div>
+                <div><Label>Grade scale</Label><Select value={form?.defaultGradeScale ?? "none"} onValueChange={v => setF({ defaultGradeScale: v === "none" ? null : v })}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Not verified</SelectItem><SelectItem value="percent_100">100 point</SelectItem><SelectItem value="gpa_4">GPA 4.0</SelectItem><SelectItem value="gpa_5">GPA 5.0</SelectItem><SelectItem value="gpa_10">GPA 10.0</SelectItem><SelectItem value="gpa_20">GPA 20.0</SelectItem></SelectContent></Select></div>
                 <div><Label>Minimum grade</Label><Input className="mt-1" type="number" step="0.01" value={form?.defaultMinGradeValue ?? ""} onChange={e => setF({ defaultMinGradeValue: e.target.value ? Number(e.target.value) : null })} /></div>
                 <div className="flex items-center justify-between rounded border px-3 mt-5"><Label>Conditional language admission</Label><Switch checked={form?.defaultConditionalAdmission ?? false} onCheckedChange={v => setF({ defaultConditionalAdmission: v })} /></div>
               </div>
@@ -1677,6 +1860,8 @@ function UniversitiesTab() {
                 <div><Label>Valid until</Label><Input className="mt-1" type="date" value={form?.admissionValidUntil?.slice(0, 10) ?? ""} onChange={e => setF({ admissionValidUntil: e.target.value ? new Date(`${e.target.value}T23:59:59.999Z`).toISOString() : null })} /></div>
               </div>
             </div>
+
+            <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.university} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
 
             {/* ── Contact Person (Super Admin only) ─── */}
             {isSuperAdmin && (
@@ -1701,7 +1886,6 @@ function UniversitiesTab() {
                 </div>
               </div>
             )}
-            <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.university} onChange={sourceMetadata => setF({ sourceMetadata })} />
           </div>
 
           <DialogFooter className="mt-4">
@@ -1737,7 +1921,7 @@ function UniversitiesTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("adminCatalog.tabUniversities")} templateRows={templateRows} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("adminCatalog.tabUniversities")} templateRows={templateRows.map(row => ({ ...row, ...catalogSourceColumns(undefined, SOURCE_FIELDS.university) }))} notesRows={catalogSourceNotes(SOURCE_FIELDS.university)} onImport={handleBulkImport} />
     </div>
     </>
   );
@@ -1943,6 +2127,7 @@ function ProgramsTab() {
         "Min Language Score": p.minLanguageScore ?? "", "Quota": p.quota ?? "",
         Active: p.isActive ? "Yes" : "No",
         Requirements: p.requirements ?? "",
+        "Source Metadata JSON": JSON.stringify(p.sourceMetadata ?? {}),
         ...catalogSourceColumns(p.sourceMetadata, SOURCE_FIELDS.program),
       }));
       await exportToExcel(rows, "Programs", `programs-${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -2056,8 +2241,7 @@ function ProgramsTab() {
       requirements: "High school diploma", commissionRate: 13, applicationFee: 0,
       advancedFee: 0, depositFee: 1000, serviceFeeAmount: 0, discountedFee: 2340,
       languageFee: 0, feeType: "Per Year", minGpa: 0, minLanguageScore: 0, quota: "",
-      isActive: "Yes",
-      ...catalogSourceColumns(undefined, SOURCE_FIELDS.program),
+      isActive: "Yes", sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.program),
       ...docColumnsAll(""),
       passport: "mandatory", high_school_diploma_translation: "mandatory",
       class_12th_hsc_marks_sheet: "mandatory", photo: "mandatory",
@@ -2071,7 +2255,7 @@ function ProgramsTab() {
       commissionRate: 9, applicationFee: 0, advancedFee: 0, depositFee: 2000,
       serviceFeeAmount: 0, discountedFee: 11900, languageFee: 0, feeType: "Per Year",
       minGpa: 0, minLanguageScore: 0, quota: "", isActive: "Yes",
-      ...catalogSourceColumns(undefined, SOURCE_FIELDS.program),
+      sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.program),
       ...docColumnsAll(""),
       passport: "mandatory", high_school_diploma_translation: "mandatory",
       class_12th_hsc_marks_sheet: "mandatory", photo: "mandatory",
@@ -2086,7 +2270,7 @@ function ProgramsTab() {
       commissionRate: 13, applicationFee: 0, advancedFee: 0, depositFee: 1000,
       serviceFeeAmount: 0, discountedFee: 4590, languageFee: 0, feeType: "Per Year",
       minGpa: 0, minLanguageScore: 0, quota: "", isActive: "Yes",
-      ...catalogSourceColumns(undefined, SOURCE_FIELDS.program),
+      sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.program),
       ...docColumnsAll(""),
       passport: "mandatory", bachelors_certificate: "mandatory",
       bachelors_transcript: "mandatory", photo: "mandatory",
@@ -2115,7 +2299,7 @@ function ProgramsTab() {
     { Column: "minLanguageScore", Required: "No", Notes: "Numeric — IELTS / TOEFL / Duolingo equivalent." },
     { Column: "quota", Required: "No", Notes: "Integer — number of seats per intake." },
     { Column: "isActive", Required: "No", Notes: "Yes / No (defaults to Yes)." },
-    { Column: "Source · …", Required: "No", Notes: "Field-level official source, URL, verification date, validity and internal note. Internal notes are never public." },
+    ...catalogSourceNotes(SOURCE_FIELDS.program),
     { Column: "— Document columns —", Required: "", Notes: "Every column from 'passport' onwards is a required-document marker." },
     { Column: "Allowed cell values", Required: "", Notes: "'mandatory' = student MUST upload before applying. 'optional' = shown but not required. (blank) = not requested." },
     { Column: "Removed columns", Required: "", Notes: "Any document column that you delete from the sheet is left UNCHANGED on existing programs (only filled cells overwrite)." },
@@ -2465,6 +2649,7 @@ function ProgramsTab() {
                       <SelectItem value="gpa_4">GPA 4.0</SelectItem>
                       <SelectItem value="gpa_5">GPA 5.0</SelectItem>
                       <SelectItem value="gpa_10">GPA 10.0</SelectItem>
+                      <SelectItem value="gpa_20">GPA 20.0</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -2603,11 +2788,12 @@ function ProgramsTab() {
               </div>
             </div>
 
+            <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.program} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
+
             <div className="flex items-center justify-between">
               <Label>{t("common.active")}</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
-            <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.program} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
@@ -2617,7 +2803,7 @@ function ProgramsTab() {
       </Dialog>
 
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{t("catalogPage.deleteProgram")}</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">{t("catalogPage.confirmDeleteProgram")}</p>
           <DialogFooter>
@@ -2750,6 +2936,11 @@ const OPTIONS_PANEL_CATEGORIES = [
     key: "public_catalog",
     labelKey: "adminCatalog.publicCatalogTitle",
     descKey: "adminCatalog.publicCatalogDesc",
+  },
+  {
+    key: "weather",
+    labelKey: "adminCatalog.weatherTitle",
+    descKey: "adminCatalog.weatherDesc",
   },
 ];
 
@@ -2938,7 +3129,12 @@ type DeleteBlockedPayload = DeleteBlockedDocPayload | DeleteBlockedDegreePayload
 function OptionsTab() {
   const { t } = useI18n();
   const { toast } = useToast();
-  const [activeCategory, setActiveCategory] = useState(OPTIONS_PANEL_CATEGORIES[0].key);
+  const [activeCategory, setActiveCategory] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("optionCategory");
+    return OPTIONS_PANEL_CATEGORIES.some((category) => category.key === requested)
+      ? requested!
+      : OPTIONS_PANEL_CATEGORIES[0].key;
+  });
   const [editItem, setEditItem] = useState<CatalogOption | null>(null);
   const [newValue, setNewValue] = useState("");
   const [addMode, setAddMode] = useState(false);
@@ -2960,6 +3156,7 @@ function OptionsTab() {
   const catMeta = OPTIONS_PANEL_CATEGORIES.find(c => c.key === activeCategory)!;
   const catLabel = t(catMeta.labelKey);
   const isPublicCatalog = activeCategory === "public_catalog";
+  const isWeather = activeCategory === "weather";
 
   async function handleAdd() {
     const trimmed = newValue.trim();
@@ -3045,28 +3242,28 @@ function OptionsTab() {
             className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${cat.key === "public_catalog" ? "mt-3 border-t pt-4" : ""} ${activeCategory === cat.key ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground hover:text-foreground"}`}
           >
             {t(cat.labelKey)}
-            {cat.key !== "public_catalog" && (
+            {!['public_catalog', 'weather'].includes(cat.key) && (
               <span className="ml-2 text-xs opacity-60">({(grouped[cat.key] || []).length})</span>
             )}
           </button>
         ))}
       </div>
 
-      {isPublicCatalog ? (
+      {isPublicCatalog || isWeather ? (
         <div className="rounded-lg border p-4">
           <div className="mb-4 border-b pb-3">
             <h3 className="flex items-center gap-2 text-sm font-semibold">
-              <Eye className="h-4 w-4 text-primary" />
+              {isWeather ? <RefreshCw className="h-4 w-4 text-primary" /> : <Eye className="h-4 w-4 text-primary" />}
               {catLabel}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">{t(catMeta.descKey)}</p>
           </div>
-          <PublicCatalogSettingsTab />
+          {isWeather ? <WeatherOptionsPanel /> : <PublicCatalogSettingsTab />}
         </div>
       ) : (
       <div className="border rounded-lg">
         <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
-          <div>
+            <div>
             <h3 className="text-sm font-semibold">{catLabel}</h3>
             <p className="text-xs text-muted-foreground">{t(catMeta.descKey)}</p>
           </div>
@@ -3812,6 +4009,441 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
           <Button onClick={handleSave} disabled={saving}>{saving ? t("common.saving") : t("common.save")}</Button>
         </div>
       )}
+    </div>
+  );
+}
+
+type WeatherIntegration = {
+  isEnabled: boolean;
+  keyConfigured: boolean;
+  automaticSyncEnabled: boolean;
+  batchSize: number;
+  updatedAt: string | null;
+};
+
+type WeatherStatus = {
+  integration: {
+    source: "database" | "environment" | "none";
+    keyConfigured: boolean;
+    integrationEnabled: boolean;
+    liveIntegrationsAllowed: boolean;
+    automaticSyncRequested: boolean;
+    automaticSyncEnabled: boolean;
+    batchSize: number;
+    refreshIntervalHours: number;
+    automaticSyncTimeZone: "Europe/Istanbul";
+    automaticSyncLocalTime: "00:05";
+    automaticSyncMaxBatches: number;
+  };
+  nextAutomaticRunAt: string | null;
+  continuationNextRunAt: string | null;
+  inventory: { eligible: number; coordinatesReady: number; missingCoordinates: number; fresh: number; due: number; failed: number };
+  quota: {
+    limit: number;
+    used: number;
+    remaining: number;
+    windowMinutes: number;
+    resetsAt: string | null;
+    fullyResetsAt: string | null;
+  };
+  latestRun: null | {
+    status: string;
+    requested: number;
+    refreshed: number;
+    failed: number;
+    startedAt: string;
+    finishedAt: string | null;
+  };
+};
+
+type WeatherCityRow = {
+  cityId: number;
+  cityName: string;
+  countryName: string;
+  countryCode: string;
+  latitude: number | null;
+  longitude: number | null;
+  conditionGroup: string | null;
+  description: string | null;
+  temperatureC: number | null;
+  fetchedAt: string | null;
+  staleAfter: string | null;
+  lastAttemptAt: string | null;
+  lastErrorCode: string | null;
+  consecutiveFailures: number | null;
+  status: "fresh" | "due" | "never_synced" | "missing_coordinates" | "failed" | "stale_error";
+};
+
+function WeatherOptionsPanel() {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [apiKey, setApiKey] = useState("");
+  const [enabled, setEnabled] = useState(false);
+  const [automaticSyncEnabled, setAutomaticSyncEnabled] = useState(false);
+  const [batchSize, setBatchSize] = useState(45);
+  const [citySearch, setCitySearch] = useState("");
+  const [cityStatus, setCityStatus] = useState("all");
+  const [cityPage, setCityPage] = useState(1);
+
+  const loadWeatherApi = useCallback(async (url: string) => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10_000);
+    try {
+      return await api(url, { signal: controller.signal });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new Error(t("adminCatalog.weatherLoadTimeout"));
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }, [t]);
+
+  const integrationQuery = useQuery<WeatherIntegration>({
+    queryKey: ["catalog-weather-settings"],
+    queryFn: () => loadWeatherApi("/api/catalog/weather/settings"),
+    retry: false,
+  });
+  const statusQuery = useQuery<WeatherStatus>({
+    queryKey: ["catalog-weather-status"],
+    queryFn: () => loadWeatherApi("/api/catalog/weather/status"),
+    retry: false,
+    refetchInterval: 60_000,
+  });
+  const citiesQuery = useQuery<{ data: WeatherCityRow[] }>({
+    queryKey: ["catalog-weather-cities"],
+    queryFn: () => loadWeatherApi("/api/catalog/weather/cities"),
+    retry: false,
+    refetchInterval: 60_000,
+  });
+
+  useEffect(() => {
+    if (integrationQuery.data === undefined) return;
+    const integration = integrationQuery.data;
+    setEnabled(Boolean(integration.isEnabled));
+    setAutomaticSyncEnabled(Boolean(integration.automaticSyncEnabled));
+    setBatchSize(Math.max(1, Math.min(Number(integration.batchSize || 45), 45)));
+  }, [integrationQuery.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const alreadyConfigured = Boolean(statusQuery.data?.integration.keyConfigured || integrationQuery.data?.keyConfigured);
+      if (enabled && !alreadyConfigured && !apiKey.trim()) throw new Error(t("adminCatalog.weatherKeyRequired"));
+      const config: Record<string, unknown> = {
+        automaticSyncEnabled,
+        batchSize: Math.max(1, Math.min(Number(batchSize) || 45, 45)),
+      };
+      if (apiKey.trim()) config.apiKey = apiKey.trim();
+      return api("/api/catalog/weather/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isEnabled: enabled,
+          ...config,
+        }),
+      });
+    },
+    onSuccess: (saved: WeatherIntegration) => {
+      setApiKey("");
+      setEnabled(saved.isEnabled);
+      setAutomaticSyncEnabled(saved.automaticSyncEnabled);
+      setBatchSize(saved.batchSize);
+      // The save response is authoritative. Reflect it immediately instead of
+      // delaying success feedback behind two follow-up refetches.
+      queryClient.setQueryData(["catalog-weather-settings"], saved);
+      toast({ title: t("adminCatalog.weatherSaved"), description: t("adminCatalog.weatherSavedDesc") });
+      void queryClient.invalidateQueries({ queryKey: ["catalog-weather-status"] });
+    },
+    onError: (error: Error) => toast({
+      title: t("adminCatalog.weatherSaveFailed"),
+      description: error.message,
+      variant: "destructive",
+    }),
+  });
+
+  const testMutation = useMutation({
+    mutationFn: () => api("/api/integrations/openweather/test", { method: "POST" }),
+    onSuccess: (result: { success?: boolean; simulated?: boolean; message?: string }) => toast({
+      title: result.success ? t("adminCatalog.weatherTestPassed") : result.simulated ? t("adminCatalog.weatherTestSkipped") : t("adminCatalog.weatherTestFailed"),
+      description: result.message,
+      variant: result.success || result.simulated ? "default" : "destructive",
+    }),
+    onError: (error: Error) => toast({ title: t("adminCatalog.weatherTestFailed"), description: error.message, variant: "destructive" }),
+  });
+
+  const refreshMutation = useMutation({
+    mutationFn: () => api("/api/catalog/weather/refresh-due", { method: "POST" }),
+    onSuccess: async (result: { requested: number; refreshed: number; failed: number; skipped: number }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["catalog-weather-status"] }),
+        queryClient.invalidateQueries({ queryKey: ["catalog-weather-cities"] }),
+      ]);
+      toast({
+        title: t("adminCatalog.weatherRefreshComplete"),
+        description: t("adminCatalog.weatherRefreshSummary", result),
+      });
+    },
+    onError: (error: Error) => toast({ title: t("adminCatalog.weatherRefreshFailed"), description: error.message, variant: "destructive" }),
+  });
+
+  if (integrationQuery.isLoading || statusQuery.isLoading) {
+    return <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{t("adminCatalog.weatherLoading")}</div>;
+  }
+
+  if (integrationQuery.isError || statusQuery.isError) {
+    const error = integrationQuery.error || statusQuery.error;
+    return (
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-5">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold">{t("adminCatalog.weatherLoadFailed")}</h3>
+            <p className="mt-1 break-words text-sm text-muted-foreground">
+              {error instanceof Error ? error.message : t("adminCatalog.weatherLoadFailedDesc")}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4 gap-2"
+              onClick={() => {
+                void integrationQuery.refetch();
+                void statusQuery.refetch();
+              }}
+              disabled={integrationQuery.isFetching || statusQuery.isFetching}
+            >
+              {(integrationQuery.isFetching || statusQuery.isFetching)
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <RefreshCw className="h-4 w-4" />}
+              {t("adminCatalog.weatherRetryLoad")}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const status = statusQuery.data;
+  const ready = Boolean(
+    status?.integration.liveIntegrationsAllowed
+    && status.integration.integrationEnabled
+    && status.integration.keyConfigured,
+  );
+  const configured = Boolean(status?.integration.keyConfigured || integrationQuery.data?.keyConfigured);
+  const normalizedCitySearch = citySearch.trim().toLocaleLowerCase();
+  const filteredWeatherCities = (citiesQuery.data?.data || []).filter(row => {
+    const matchesSearch = !normalizedCitySearch
+      || `${row.cityName} ${row.countryName} ${row.countryCode}`.toLocaleLowerCase().includes(normalizedCitySearch);
+    const matchesStatus = cityStatus === "all" || row.status === cityStatus;
+    return matchesSearch && matchesStatus;
+  });
+  const cityPageSize = 20;
+  const cityPageCount = Math.max(1, Math.ceil(filteredWeatherCities.length / cityPageSize));
+  const safeCityPage = Math.min(cityPage, cityPageCount);
+  const visibleWeatherCities = filteredWeatherCities.slice((safeCityPage - 1) * cityPageSize, safeCityPage * cityPageSize);
+  const weatherStatusLabel = (value: WeatherCityRow["status"]) => t(`adminCatalog.weatherCityStatus_${value}`);
+  const weatherStatusVariant = (value: WeatherCityRow["status"]): "default" | "secondary" | "destructive" | "outline" => {
+    if (value === "fresh") return "default";
+    if (value === "failed" || value === "stale_error") return "destructive";
+    if (value === "due") return "secondary";
+    return "outline";
+  };
+
+  return (
+    <div className="space-y-5">
+      {!status?.integration.liveIntegrationsAllowed && (
+        <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div><strong>{t("adminCatalog.weatherOutboundClosed")}</strong><p className="mt-1 text-xs opacity-80">{t("adminCatalog.weatherOutboundClosedDesc")}</p></div>
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {[
+          [t("adminCatalog.weatherEligibleCities"), status?.inventory.eligible ?? 0],
+          [t("adminCatalog.weatherMissingCoordinates"), status?.inventory.missingCoordinates ?? 0],
+          [t("adminCatalog.weatherFreshCities"), status?.inventory.fresh ?? 0],
+          [t("adminCatalog.weatherDueCities"), status?.inventory.due ?? 0],
+          [t("adminCatalog.weatherFailedCities"), status?.inventory.failed ?? 0],
+        ].map(([label, value]) => (
+          <div key={String(label)} className="rounded-lg border bg-muted/20 p-3">
+            <div className="text-2xl font-semibold tabular-nums">{value}</div>
+            <div className="mt-1 text-xs text-muted-foreground">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 p-4">
+        <div>
+          <div className="text-sm font-semibold">{t("adminCatalog.weatherHourlyQuota")}</div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t("adminCatalog.weatherHourlyQuotaHelp", {
+              used: status?.quota.used ?? 0,
+              limit: status?.quota.limit ?? 50,
+              remaining: status?.quota.remaining ?? 50,
+            })}
+          </p>
+        </div>
+        <Badge variant={(status?.quota.remaining ?? 50) === 0 ? "destructive" : "outline"} className="tabular-nums">
+          {status?.quota.used ?? 0} / {status?.quota.limit ?? 50}
+        </Badge>
+        {status?.quota.resetsAt && (
+          <div className="w-full text-xs text-muted-foreground">
+            {t("adminCatalog.weatherQuotaResetsAt", {
+              date: new Date(status.quota.resetsAt).toLocaleString(),
+              fullDate: new Date(status.quota.fullyResetsAt ?? status.quota.resetsAt).toLocaleString(),
+            })}
+          </div>
+        )}
+      </div>
+
+      <section className="space-y-4 rounded-lg border p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <Label className="text-sm font-semibold">{t("adminCatalog.weatherProviderEnabled")}</Label>
+            <p className="mt-1 text-xs text-muted-foreground">{t("adminCatalog.weatherProviderEnabledHelp")}</p>
+          </div>
+          <Switch checked={enabled} onCheckedChange={setEnabled} aria-label={t("adminCatalog.weatherProviderEnabled")} />
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem]">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label htmlFor="openweather-api-key">{t("adminCatalog.weatherApiKey")}</Label>
+              <Badge variant={configured ? "default" : "outline"} className="gap-1">
+                {configured && <Check className="h-3 w-3" />}
+                {configured ? t("adminCatalog.weatherConfiguredState") : t("adminCatalog.weatherNotConfiguredState")}
+              </Badge>
+            </div>
+            <Input
+              id="openweather-api-key"
+              type="password"
+              autoComplete="new-password"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              placeholder={configured ? t("adminCatalog.weatherKeyConfigured") : t("adminCatalog.weatherKeyPlaceholder")}
+            />
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Lock className="h-3.5 w-3.5" />{t("adminCatalog.weatherKeySecurity")}</p>
+            {integrationQuery.data?.updatedAt && (
+              <p className="text-xs text-muted-foreground">{t("adminCatalog.weatherSavedAt", { date: new Date(integrationQuery.data.updatedAt).toLocaleString() })}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="weather-batch-size">{t("adminCatalog.weatherBatchSize")}</Label>
+            <Input
+              id="weather-batch-size"
+              type="number"
+              min={1}
+              max={45}
+              value={batchSize}
+              onChange={(event) => setBatchSize(Math.max(1, Math.min(Number(event.target.value) || 1, 45)))}
+            />
+            <p className="text-xs text-muted-foreground">{t("adminCatalog.weatherBatchSizeHelp")}</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-md bg-muted/40 p-3">
+          <div>
+            <Label className="text-sm font-semibold">{t("adminCatalog.weatherAutomaticRefresh")}</Label>
+            <p className="mt-1 text-xs text-muted-foreground">{t("adminCatalog.weatherAutomaticRefreshHelp")}</p>
+            {status?.continuationNextRunAt && <p className="mt-1 text-xs font-semibold text-primary">{t("adminCatalog.weatherNextContinuationRun", { date: new Date(status.continuationNextRunAt).toLocaleString() })}</p>}
+            {status?.nextAutomaticRunAt && <p className="mt-1 text-xs font-medium text-foreground">{t("adminCatalog.weatherNextAutomaticRun", { date: new Date(status.nextAutomaticRunAt).toLocaleString() })}</p>}
+          </div>
+          <Switch checked={automaticSyncEnabled} onCheckedChange={setAutomaticSyncEnabled} disabled={!enabled} aria-label={t("adminCatalog.weatherAutomaticRefresh")} />
+        </div>
+      </section>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <div className="text-xs text-muted-foreground">
+          {status?.latestRun
+            ? t("adminCatalog.weatherLastRun", { date: new Date(status.latestRun.startedAt).toLocaleString(), refreshed: status.latestRun.refreshed, failed: status.latestRun.failed })
+            : t("adminCatalog.weatherNeverRun")}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => testMutation.mutate()} disabled={!configured || testMutation.isPending || (status?.quota.remaining ?? 1) <= 0}>
+            {testMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{t("adminCatalog.weatherTest")}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => refreshMutation.mutate()} disabled={!ready || refreshMutation.isPending || (status?.quota.remaining ?? 1) <= 0}>
+            <RefreshCw className={cn("mr-2 h-4 w-4", refreshMutation.isPending && "animate-spin")} />{t("adminCatalog.weatherRefreshDue")}
+          </Button>
+          <Button type="button" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+            {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{t("adminCatalog.weatherSave")}
+          </Button>
+        </div>
+      </div>
+
+      <section className="space-y-4 rounded-lg border p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">{t("adminCatalog.weatherCityListTitle")}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">{t("adminCatalog.weatherCityListDesc", { count: filteredWeatherCities.length })}</p>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => void citiesQuery.refetch()} disabled={citiesQuery.isFetching}>
+            <RefreshCw className={cn("mr-2 h-4 w-4", citiesQuery.isFetching && "animate-spin")} />
+            {t("adminCatalog.weatherCityListReload")}
+          </Button>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_13rem]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={citySearch} onChange={event => { setCitySearch(event.target.value); setCityPage(1); }} placeholder={t("adminCatalog.weatherCitySearch")} className="pl-9" />
+          </div>
+          <Select value={cityStatus} onValueChange={value => { setCityStatus(value); setCityPage(1); }}>
+            <SelectTrigger aria-label={t("adminCatalog.weatherCityStatusFilter")}><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("adminCatalog.weatherCityStatusAll")}</SelectItem>
+              {(["fresh", "due", "never_synced", "missing_coordinates", "failed", "stale_error"] as WeatherCityRow["status"][]).map(value => (
+                <SelectItem key={value} value={value}>{weatherStatusLabel(value)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {citiesQuery.isError ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{t("adminCatalog.weatherCityListError")}</div>
+        ) : citiesQuery.isLoading ? (
+          <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{t("adminCatalog.weatherCityListLoading")}</div>
+        ) : visibleWeatherCities.length === 0 ? (
+          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">{t("adminCatalog.weatherCityListEmpty")}</div>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2.5 font-medium">{t("adminCatalog.weatherCityColumnCity")}</th>
+                  <th className="px-3 py-2.5 font-medium">{t("adminCatalog.weatherCityColumnStatus")}</th>
+                  <th className="px-3 py-2.5 font-medium">{t("adminCatalog.weatherCityColumnWeather")}</th>
+                  <th className="px-3 py-2.5 font-medium">{t("adminCatalog.weatherCityColumnFetched")}</th>
+                  <th className="px-3 py-2.5 font-medium">{t("adminCatalog.weatherCityColumnNext")}</th>
+                  <th className="px-3 py-2.5 font-medium">{t("adminCatalog.weatherCityColumnError")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {visibleWeatherCities.map(row => (
+                  <tr key={row.cityId} className="align-top hover:bg-muted/30">
+                    <td className="px-3 py-3"><div className="font-medium">{row.cityName}</div><div className="text-xs text-muted-foreground">{row.countryName} · {row.countryCode}</div></td>
+                    <td className="px-3 py-3"><Badge variant={weatherStatusVariant(row.status)}>{weatherStatusLabel(row.status)}</Badge></td>
+                    <td className="px-3 py-3"><div className="font-medium tabular-nums">{row.temperatureC == null ? "—" : `${Math.round(row.temperatureC)}°C`}</div><div className="max-w-40 truncate text-xs capitalize text-muted-foreground">{row.description || row.conditionGroup || "—"}</div></td>
+                    <td className="px-3 py-3 text-xs tabular-nums">{row.fetchedAt ? new Date(row.fetchedAt).toLocaleString() : "—"}</td>
+                    <td className="px-3 py-3 text-xs tabular-nums">{row.staleAfter ? new Date(row.staleAfter).toLocaleString() : "—"}</td>
+                    <td className="px-3 py-3"><div className={cn("max-w-48 break-words text-xs", row.lastErrorCode ? "text-destructive" : "text-muted-foreground")}>{row.lastErrorCode || "—"}</div>{(row.consecutiveFailures || 0) > 0 && <div className="mt-1 text-[11px] text-muted-foreground">{t("adminCatalog.weatherCityFailureCount", { count: row.consecutiveFailures || 0 })}</div>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {filteredWeatherCities.length > cityPageSize && (
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+            <span>{t("adminCatalog.weatherCityPageSummary", { page: safeCityPage, pages: cityPageCount })}</span>
+            <div className="flex gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => setCityPage(page => Math.max(1, page - 1))} disabled={safeCityPage <= 1}><ChevronLeft className="h-4 w-4" /><span className="sr-only">{t("common.previous")}</span></Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setCityPage(page => Math.min(cityPageCount, page + 1))} disabled={safeCityPage >= cityPageCount}><ChevronRight className="h-4 w-4" /><span className="sr-only">{t("common.next")}</span></Button>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
