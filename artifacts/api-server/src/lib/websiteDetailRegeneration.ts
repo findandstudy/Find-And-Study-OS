@@ -6,6 +6,7 @@ import {
   DETAIL_CONTENT_LAYOUT_KEYS,
   inheritEnglishDetailStructure,
   parseDetailContent,
+  preserveDetailSectionDesign,
   type DetailContent,
   type DetailContentKind,
   type DetailSeo,
@@ -240,6 +241,7 @@ async function addGeneratedImages(params: {
 
 async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, payload: unknown, layout: Awaited<ReturnType<typeof readPublishedDetailLayout>>, existing: DetailContent, ai: AiContentService) {
   const base = buildEnglishSource(kind, entityId, payload, layout);
+  const existingByKey = new Map(existing.sections.map(section => [section.key, section] as const));
   const shared = new Map(detailTemplateSectionsForLocale(layout, "en").map(section => [section.key, section]));
   const requested = layout.sections.flatMap(layoutKey => {
     const setting = layout.generation[layoutKey];
@@ -259,8 +261,11 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
   const content = {
       ...base,
       sections: base.sections.map(section => generated[section.key]
-        ? { ...section, title: section.key === "hero" ? section.title : generated[section.key].title, body: generated[section.key].body }
-        : section),
+        ? preserveDetailSectionDesign(
+            { ...section, title: section.key === "hero" ? section.title : generated[section.key].title, body: generated[section.key].body },
+            existingByKey.get(section.key),
+          )
+        : preserveDetailSectionDesign(section, existingByKey.get(section.key))),
     };
   const visual = await addGeneratedImages({
     kind,

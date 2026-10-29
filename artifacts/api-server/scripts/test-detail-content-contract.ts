@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { DETAIL_CONTENT_LAYOUT_KEYS, detailContentPresentationOverrides, ensureDetailSeo, inheritEnglishDetailStructure, parseDetailContent, safeDetailContentUrl } from "../src/lib/websiteDetailContentContract";
+import { DETAIL_CONTENT_LAYOUT_KEYS, detailContentPresentationOverrides, ensureDetailSeo, inheritEnglishDetailStructure, parseDetailContent, preserveDetailSectionDesign, safeDetailContentUrl } from "../src/lib/websiteDetailContentContract";
 const fixture = () => ({ version: 1, kind: "program", entityId: 7, locale: "en", sections: [{ key: "faq", title: "Questions", questions: [{ question: "How?", answer: "Contact the institution." }], sources: [{ label: "Institution", url: "https://example.org/info" }], reviewedOn: "2026-09-01" }] });
 test("editorial mirrors and valid human-reviewed structured content", () => {
   assert.ok(parseDetailContent(fixture(), "2026-09-19"));
@@ -56,6 +56,29 @@ test("translated detail content inherits English structure without English copy"
   assert.equal(result.sections[0].hero?.backgroundColor, "#112233");
   assert.equal(result.sections[0].hero?.overlayOpacity, 45);
   assert.deepEqual(result.sections[0].presentation, english.sections[0].presentation);
+});
+test("AI copy regeneration preserves the existing section design", () => {
+  const generated = { ...fixture().sections[0], title: "Generated title", body: "Generated body" };
+  const existing = {
+    ...fixture().sections[0],
+    title: "Old title",
+    body: "Old body",
+    presentation: { tone: "sand", width: "full" },
+    cards: [{ title: "Card", body: "Card body" }],
+    table: { columns: ["Item"], rows: [["Value"]] },
+    steps: [{ title: "Step", body: "Step body" }],
+    images: [{ src: "https://example.org/image.jpg", alt: "Image" }],
+    questions: [{ question: "Question?", answer: "Answer." }],
+  };
+  const result = preserveDetailSectionDesign(generated as any, existing as any);
+  assert.equal(result.title, "Generated title");
+  assert.equal(result.body, "Generated body");
+  assert.deepEqual(result.presentation, existing.presentation);
+  assert.deepEqual(result.cards, existing.cards);
+  assert.deepEqual(result.table, existing.table);
+  assert.deepEqual(result.steps, existing.steps);
+  assert.deepEqual(result.images, existing.images);
+  assert.deepEqual(result.questions, existing.questions);
 });
 test("page-level section order is a complete bounded permutation with fixed structural sections", () => {
   const sectionOrder = [...DETAIL_CONTENT_LAYOUT_KEYS.program];

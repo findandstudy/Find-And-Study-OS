@@ -68,6 +68,20 @@ async function buildAll() {
     logLevel: "info",
   });
 
+  await esbuild({
+    entryPoints: [path.resolve(__dirname, "scripts/repair-detail-section-design.ts")],
+    platform: "node",
+    bundle: true,
+    format: "cjs",
+    outfile: path.resolve(distDir, "repair-detail-section-design.cjs"),
+    define: {
+      "process.env.NODE_ENV": '"production"',
+    },
+    minify: true,
+    external: externals,
+    logLevel: "info",
+  });
+
   const seedSrc = path.resolve(__dirname, "src/seed.sql");
   const seedDest = path.resolve(distDir, "seed.sql");
   try {

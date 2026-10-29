@@ -56,6 +56,29 @@ export type DetailSeo = {
 };
 export type DetailSeoFacts = { city?: string; country?: string; university?: string; program?: string };
 export type DetailContent = { version: 1; kind: DetailContentKind; entityId: number; locale: string; seo?: DetailSeo; seoMode?: "auto" | "manual"; sectionOrder?: string[]; sections: DetailContentSection[]; templateSections?: DetailTemplateSectionCopy[] };
+
+/**
+ * AI regeneration owns editorial copy, not the page's visual composition.
+ * Keep the human-authored section design when regenerated title/body copy is
+ * merged back into a page. This prevents cards, steps, tables and FAQ groups
+ * from silently collapsing into a plain paragraph after regeneration.
+ */
+export function preserveDetailSectionDesign(
+  generated: DetailContentSection,
+  existing: DetailContentSection | undefined,
+): DetailContentSection {
+  if (!existing) return generated;
+  return {
+    ...generated,
+    ...(existing.hero ? { hero: { ...(generated.hero ?? {}), ...existing.hero } } : {}),
+    ...(existing.presentation ? { presentation: existing.presentation } : {}),
+    ...(existing.cards?.length ? { cards: existing.cards } : {}),
+    ...(existing.table?.columns.length ? { table: existing.table } : {}),
+    ...(existing.steps?.length ? { steps: existing.steps } : {}),
+    ...(existing.images?.length ? { images: existing.images } : {}),
+    ...(existing.questions?.length ? { questions: existing.questions } : {}),
+  };
+}
 const SEO_FALLBACKS: Record<string, (name: string) => string> = {
   en: name => `Explore ${name}, compare study options and plan your next step with Find & Study.`,
   tr: name => `${name} hakkında bilgi alın, eğitim seçeneklerini karşılaştırın ve sonraki adımınızı Find & Study ile planlayın.`,
