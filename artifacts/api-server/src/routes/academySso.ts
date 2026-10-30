@@ -5,10 +5,11 @@ import { userHasPermission } from "../lib/permissions";
 import { db, agentsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { resolveAgentFeatures } from "../lib/agentFeatures";
+import { academyProfileClaims } from "../lib/academyProfileClaims";
 
 const router = Router();
 
-async function resolveCompanyName(userId: number, role: string): Promise<string | null> {
+async function resolveAgencyProfile(userId: number, role: string) {
   try {
     if (role === "agent_staff") {
       const [staffUser] = await db
@@ -17,16 +18,16 @@ async function resolveCompanyName(userId: number, role: string): Promise<string 
         .where(eq(usersTable.id, userId));
       if (!staffUser?.managingAgentId) return null;
       const [agent] = await db
-        .select({ companyName: agentsTable.companyName })
+        .select({ companyName: agentsTable.companyName, businessName: agentsTable.businessName, country: agentsTable.country })
         .from(agentsTable)
         .where(eq(agentsTable.id, staffUser.managingAgentId));
-      return agent?.companyName ?? null;
+      return agent;
     }
     const [agent] = await db
-      .select({ companyName: agentsTable.companyName })
+      .select({ companyName: agentsTable.companyName, businessName: agentsTable.businessName, country: agentsTable.country })
       .from(agentsTable)
       .where(eq(agentsTable.userId, userId));
-    return agent?.companyName ?? null;
+    return agent;
   } catch {
     return null;
   }
@@ -85,12 +86,12 @@ router.get("/academy-sso", requireAuth, requireRole("super_admin", "admin", "man
     return;
   }
 
-  const company = await resolveCompanyName(u.id, u.role);
+  const profile = await resolveAgencyProfile(u.id, u.role);
   const token = signHs256(
     {
       email: u.email,
       name: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email,
-      company: company,
+      ...academyProfileClaims(profile),
       phone: (u as any).phone ?? null,
       sub: String(u.id),
     },
