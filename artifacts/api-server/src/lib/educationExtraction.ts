@@ -75,6 +75,8 @@ export function buildEducationPromptSection(levelKey: string): string {
           case "languageScore":
             return '"languageScore": language test score as free text (e.g. "IELTS 7.0", "TOEFL 95")';
         }
+        // Preserve the deployed fallback for fields not yet described here.
+        return undefined;
       })
       .join("; ");
     return `  - { "level": "${lvl}", ${fieldDesc} }`;

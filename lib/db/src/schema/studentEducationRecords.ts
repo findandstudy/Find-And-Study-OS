@@ -8,6 +8,7 @@ export const studentEducationRecordsTable = pgTable("student_education_records",
   studentId: integer("student_id").notNull().references(() => studentsTable.id, { onDelete: "cascade" }),
   level: text("level").notNull(), // "high_school" | "bachelor" | "master"
   institution: text("institution"),
+  country: text("country"),
   program: text("program"),
   graduationYear: integer("graduation_year"),
   gpa: text("gpa"), // normalized percent string, e.g. "87"
