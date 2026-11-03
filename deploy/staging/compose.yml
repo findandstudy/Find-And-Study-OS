@@ -52,6 +52,7 @@ services:
     networks:
       - backend
       - edge
+      - egress
     healthcheck:
       test:
         [
@@ -107,6 +108,7 @@ services:
     networks:
       - backend
       - edge
+      - egress
 
   social-performance-worker:
     profiles: ["social-external"]
@@ -138,6 +140,7 @@ services:
     networks:
       - backend
       - edge
+      - egress
 
   social-creative-worker:
     profiles: ["social-ai"]
@@ -171,6 +174,7 @@ services:
     networks:
       - backend
       - edge
+      - egress
 
   social-advertising-worker:
     profiles: ["social-external"]
@@ -202,6 +206,7 @@ services:
     networks:
       - backend
       - edge
+      - egress
 
 secrets:
   postgres_password:
@@ -222,3 +227,10 @@ networks:
   edge:
     name: root_default
     external: true
+  # The shared Traefik network is intentionally internal on the KVM host.
+  # Keep ingress isolated there and give only services that call external
+  # providers a dedicated outbound path. This prevents DNS/fetch failures for
+  # OpenAI, weather and other provider integrations without exposing Postgres.
+  egress:
+    name: findandstudy_staging_egress
+    internal: false

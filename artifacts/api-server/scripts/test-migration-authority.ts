@@ -1404,6 +1404,25 @@ test("staging CI is isolated, exact-source and integration-disabled", () => {
     compose,
     /traefik\.http\.middlewares\.fasos-staging-noindex\.headers\.customresponseheaders\.X-Robots-Tag: "noindex, nofollow"/,
   );
+  assert.match(
+    compose,
+    /app:[\s\S]*?networks:\s*\n\s*- backend\s*\n\s*- edge\s*\n\s*- egress/,
+    "staging app must have a dedicated outbound network for provider APIs",
+  );
+  assert.match(
+    compose,
+    /egress:\s*\n\s*name: findandstudy_staging_egress\s*\n\s*internal: false/,
+    "staging egress network must be explicitly non-internal",
+  );
+  const stagingDbComposeSection = compose.match(
+    /^  db:[\s\S]*?(?=^  app:)/m,
+  )?.[0];
+  assert.ok(stagingDbComposeSection, "staging database service must exist");
+  assert.doesNotMatch(
+    stagingDbComposeSection,
+    /^\s*- egress$/m,
+    "PostgreSQL must remain isolated from the outbound network",
+  );
   assert.match(composeEnv, /^FASOS_STAGING_HOST=staging\.findandstudy\.com$/m);
   assert.match(
     composeEnv,
