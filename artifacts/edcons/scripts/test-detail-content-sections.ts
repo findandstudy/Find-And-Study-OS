@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { parseDetailContent, resolveDetailTemplateContent, DETAIL_CONTENT_KEYS, DETAIL_CONTENT_LAYOUT_KEYS, DETAIL_CONTENT_LOCALES, DETAIL_GENERATED_CONTENT_KEYS, type DetailContent } from "../src/lib/website/detailContentContract";
 import { defaultDetailLayout } from "../src/lib/website/detailLayoutContract";
 import { resolveCmsValue } from "../src/lib/website/cmsTextVariables";
-import { DetailHeroMedia, boundDetailContent, detailContentAddon, detailContentIntro, detailContentLabels, detailContentNavigation, detailContentSections, detailContentTitle } from "../src/pages/public/DetailContentSections";
+import { DetailHeroMedia, boundDetailContent, detailContentAddon, detailContentIntro, detailContentLabels, detailContentNavigation, detailContentSections, detailContentSummary, detailContentTitle, detailSectionKicker } from "../src/pages/public/DetailContentSections";
 
 const fixture: DetailContent = { version: 1, kind: "program", entityId: 42, locale: "en", sections: [{
   key: "faq", title: "Questions & answers", body: "Published narrative", reviewedOn: "2026-01-01",
@@ -28,6 +28,14 @@ test("editorial content is bound to the exact kind, entity and locale", () => {
   assert.equal(boundDetailContent(fixture, "program", 42, "tr"), null);
   assert.equal(boundDetailContent(fixture, "program", undefined, "en"), null);
   assert.deepEqual(detailContentSections(null, "en", "/en/contact"), []);
+});
+
+test("compact detail copy remains bound to the requested locale", () => {
+  const turkish: DetailContent = { ...fixture, kind: "city", entityId: 1, locale: "tr", sections: [{ key: "transport", title: "İstanbul'da ulaşım", body: "İstanbul'da metro, tramvay ve vapur ağı bulunur. İkinci cümle hero kutusuna taşınmamalıdır." }] };
+  assert.equal(detailContentSummary(turkish, "transport", "fallback"), "İstanbul'da metro, tramvay ve vapur ağı bulunur.");
+  assert.equal(detailSectionKicker("transport", "tr"), "Ulaşım");
+  assert.equal(detailSectionKicker("applyGuide", "ru"), "Следующие шаги");
+  assert.equal(detailContentSummary(turkish, "housing", "yedek"), "yedek");
 });
 
 test("all supported content keys are orderable and hideable in the existing layout", () => {

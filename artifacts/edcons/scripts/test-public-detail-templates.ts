@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sanitizePublicHtmlContent, sanitizePublicRichText } from "../src/lib/publicHtmlSanitizer";
-import { catalogueCount, DETAIL_COPY, detailCopy, detailMoney, displayTuition, durationIsAmbiguous, splitRequirements, localDetailPath, tuitionOffer } from "../src/pages/public/detailPresentation";
+import { catalogueCount, DETAIL_COPY, detailCopy, detailMoney, displayTuition, durationIsAmbiguous, localizedCountryName, localizedLanguageNames, localizedUniversityType, splitRequirements, localDetailPath, tuitionOffer } from "../src/pages/public/detailPresentation";
 import { SUPPORTED_LANGUAGES } from "../src/lib/i18n";
 import { defaultDetailLayout, parseDetailLayout } from "../src/lib/website/detailLayoutContract";
 import React, { createElement } from "react";
@@ -196,6 +196,10 @@ test("editorial layouts upgrade saved v1 layouts and keep frontend/backend parse
 });
 
 test("editorial presentation keeps honest counts, localized copy and safe navigation", () => {
+  assert.equal(localizedCountryName("Turkey", "TR", "tr"), "Türkiye");
+  assert.equal(localizedLanguageNames(["English", "Turkish"], "tr"), "İngilizce · Türkçe");
+  assert.equal(localizedLanguageNames(["Unknown teaching language"], "tr"), "Unknown teaching language");
+  assert.equal(localizedUniversityType("private", "tr"), "Vakıf / Özel");
   for (const missing of [undefined, null, NaN, Infinity, -1, "10"]) assert.equal(catalogueCount(missing, "Programs"), null);
   assert.equal(catalogueCount(0, "Programs"), "0 Programs");
   assert.equal(catalogueCount(10, "Programs"), "10 Programs");

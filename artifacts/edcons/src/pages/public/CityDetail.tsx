@@ -6,10 +6,10 @@ import { customFetch } from "@workspace/api-client-react";
 import { ArrowLeft, ArrowUpRight, MapPin, Building2, GraduationCap, Globe2 } from "lucide-react";
 
 import { DetailBreadcrumbs, DetailCard, DetailFacts, DetailHeading } from "./DetailEditorial";
-import { boundDetailContent, detailContentAddon, detailContentIntro, detailContentNavigation, detailContentSections, detailContentTitle, DetailHeroMedia, detailHeroSection } from "./DetailContentSections";
+import { boundDetailContent, detailContentAddon, detailContentIntro, detailContentNavigation, detailContentSections, detailContentSummary, detailContentTitle, DetailHeroMedia, detailHeroSection } from "./DetailContentSections";
 import type { CityProgramCardData } from "./CityProgramCards";
 import { DeferredBelowFold } from "./DeferredBelowFold";
-import { cityHeroCopy, detailCopy, detailCountLabel, localDetailPath } from "./detailPresentation";
+import { cityHeroCopy, detailCopy, detailCountLabel, localizedCountryName, localizedLanguageNames, localizedUniversityType, localDetailPath } from "./detailPresentation";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
@@ -154,15 +154,17 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
     ...(hero?.accentColor ? { "--detail-hero-accent": hero.accentColor } : {}),
   } as CSSProperties;
   const editorialTitle = (key: string, fallback: string) => detailContentTitle(editorial, key, fallback);
+  const countryName = localizedCountryName(city.country, city.countryCode, lang);
+  const localizedEditorialFact = (key: string, fallback: string) => lang === "en" ? fallback : detailContentSummary(editorial, key, fallback);
   const heroFacts = [
-    city.programLanguages.length ? { title: hero?.programLanguagesLabel || editorialTitle("education", heroCopy.education), body: city.programLanguages.join(" · ") } : null,
+    city.programLanguages.length ? { title: hero?.programLanguagesLabel || editorialTitle("education", heroCopy.education), body: localizedLanguageNames(city.programLanguages, lang) } : null,
     city.weather || city.externalFacts?.climateSummary
-      ? { title: hero?.climateLabel || editorialTitle("weather", weatherText.section), body: city.weather ? `${Math.round(city.weather.temperatureC)}°C · ${localizedWeatherDescription(city.weather.conditionCode, city.weather.conditionGroup, lang)}` : city.externalFacts!.climateSummary! }
+      ? { title: hero?.climateLabel || editorialTitle("weather", weatherText.section), body: city.weather ? `${Math.round(city.weather.temperatureC)}°C · ${localizedWeatherDescription(city.weather.conditionCode, city.weather.conditionGroup, lang)}` : localizedEditorialFact("climate", city.externalFacts!.climateSummary!) }
       : null,
-    city.transportModes?.length ? { title: hero?.transportLabel || editorialTitle("transport", heroCopy.transport), body: city.transportModes.join(" · ") } : null,
-    city.campusGeography ? { title: hero?.campusGeographyLabel || editorialTitle("campus", heroCopy.campus), body: city.campusGeography } : null,
+    city.transportModes?.length ? { title: hero?.transportLabel || editorialTitle("transport", heroCopy.transport), body: localizedEditorialFact("transport", city.transportModes.join(" · ")) } : null,
+    city.campusGeography ? { title: hero?.campusGeographyLabel || editorialTitle("campus", heroCopy.campus), body: localizedEditorialFact("campus", city.campusGeography) } : null,
     city.externalFacts?.housingSummary || city.externalFacts?.housingFormats.length
-      ? { title: hero?.housingLabel || editorialTitle("housing", heroCopy.housing), body: city.externalFacts.housingSummary || city.externalFacts.housingFormats.map(item => item.name).join(" · ") }
+      ? { title: hero?.housingLabel || editorialTitle("housing", heroCopy.housing), body: localizedEditorialFact("housing", city.externalFacts.housingSummary || city.externalFacts.housingFormats.map(item => item.name).join(" · ")) }
       : null,
   ].filter((fact): fact is { title: string; body: string } => Boolean(fact));
   const overviewDescription = city.description?.trim();
@@ -177,17 +179,17 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
         <div className="detail-hero is-city" style={heroStyle}>
           <DetailHeroMedia content={editorial} />
           <div className="detail-wrap detail-hero-top">
-            <DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: city.country, path: countryPath }, { label: city.name }]} />
+            <DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: countryName, path: countryPath }, { label: city.name }]} />
           </div>
           <div className="detail-wrap detail-hero-main detail-city-cover-inner">
             <div>
               <div className="detail-cover-label"><MapPin size={18} aria-hidden="true" /><span>{hero?.eyebrow || copy.city}</span></div>
               <h1>{heroSection?.title || city.name}</h1>
-              {countryPath ? <Link className="detail-hero-link" href={countryPath}><Globe2 size={17} aria-hidden="true" />{city.country}<ArrowUpRight size={17} aria-hidden="true" /></Link> : <p className="detail-hero-lead">{city.country}</p>}
+              {countryPath ? <Link className="detail-hero-link" href={countryPath}><Globe2 size={17} aria-hidden="true" />{countryName}<ArrowUpRight size={17} aria-hidden="true" /></Link> : <p className="detail-hero-lead">{countryName}</p>}
               {heroSection?.body && <p className="detail-hero-lead">{heroSection.body}</p>}
               <div className="detail-actions"><Link href={hero?.primaryCtaHref || programsPath}>{hero?.primaryCtaLabel || t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link><Link className="is-secondary" href={hero?.secondaryCtaHref || localePath("/contact")}>{hero?.secondaryCtaLabel || t("countryDetail.talkToAdvisor")}</Link></div>
               <dl className="detail-city-coverstrip">
-                <div><dt>{hero?.countryLabel || copy.country}</dt><dd>{city.country}</dd></div>
+                <div><dt>{hero?.countryLabel || copy.country}</dt><dd>{countryName}</dd></div>
                 <div><dt>{universityCountLabel}</dt><dd>{city.universityCount.toLocaleString(lang)}</dd></div>
                 <div><dt>{programCountLabel}</dt><dd>{city.programCount.toLocaleString(lang)}</dd></div>
                 {heroFacts.map((fact, index) => <div key={`${fact.title}-${index}`}><dt>{fact.title}</dt><dd>{fact.body}</dd></div>)}
@@ -215,7 +217,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
         <div className="detail-wrap">
           <DetailHeading number="02" eyebrow={city.name} title={detailContentTitle(editorial, "facts", t("countryDetail.quickFacts"))} />
           {detailContentIntro(editorial, "facts")}
-          <DetailFacts items={[{ label: copy.country, icon: <Globe2 size={19} />, value: countryPath ? <Link href={countryPath}>{city.country}</Link> : city.country }, { label: copy.universityCount, icon: <Building2 size={19} />, value: city.universityCount }, { label: copy.programCount, icon: <GraduationCap size={19} />, value: city.programCount }]} />
+          <DetailFacts items={[{ label: copy.country, icon: <Globe2 size={19} />, value: countryPath ? <Link href={countryPath}>{countryName}</Link> : countryName }, { label: copy.universityCount, icon: <Building2 size={19} />, value: city.universityCount }, { label: copy.programCount, icon: <GraduationCap size={19} />, value: city.programCount }]} />
         </div>
       </section>
       {city.weather && <section data-detail-section="weather" id="weather" className="detail-section">
@@ -228,7 +230,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
         <div className="detail-wrap">
           <DetailHeading number={city.weather ? "04" : "03"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: city.name }))} />
           {detailContentIntro(editorial, "universities")}
-          <div className="detail-grid">{city.universities.map((university) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={university.universityType} title={university.name} kind="university" />)}</div>
+          <div className="detail-grid">{city.universities.map((university) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={localizedUniversityType(university.universityType, lang)} title={university.name} kind="university" />)}</div>
         </div>
       </section>}
       {city.programCount > 0 && <section data-detail-section="programs" id="programs" className="detail-section">

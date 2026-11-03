@@ -68,6 +68,38 @@ export function localDetailPath(value: string | null | undefined): string | null
   return typeof value === "string" && /^\/[a-z]{2}\/[a-z0-9/_-]+(?:\?[a-zA-Z0-9%=&_-]+)?$/.test(value) ? value : null;
 }
 
+export function localizedCountryName(name: string, countryCode: string | null | undefined, locale: string): string {
+  const code = countryCode?.trim().toUpperCase();
+  if (!code || !/^[A-Z]{2}$/.test(code)) return name;
+  try { return new Intl.DisplayNames([locale], { type: "region" }).of(code) || name; }
+  catch { return name; }
+}
+
+const LANGUAGE_CODES: Record<string, string> = {
+  arabic: "ar", chinese: "zh", english: "en", french: "fr", german: "de", hindi: "hi", italian: "it",
+  persian: "fa", portuguese: "pt", russian: "ru", spanish: "es", turkish: "tr",
+};
+export function localizedLanguageNames(values: readonly string[], locale: string): string {
+  let display: Intl.DisplayNames;
+  try { display = new Intl.DisplayNames([locale], { type: "language" }); }
+  catch { return values.join(" · "); }
+  return values.map(value => {
+    const code = LANGUAGE_CODES[value.trim().toLowerCase()];
+    if (!code) return value;
+    try { return display.of(code) || value; }
+    catch { return value; }
+  }).join(" · ");
+}
+
+const UNIVERSITY_TYPE_LABELS: Record<string, Record<string, string>> = {
+  public: { en: "Public", tr: "Devlet", ar: "حكومية", fr: "Publique", ru: "Государственный", fa: "دولتی", zh: "公立", hi: "सार्वजनिक", es: "Pública", id: "Negeri" },
+  private: { en: "Private", tr: "Vakıf / Özel", ar: "خاصة", fr: "Privée", ru: "Частный", fa: "خصوصی", zh: "私立", hi: "निजी", es: "Privada", id: "Swasta" },
+};
+export function localizedUniversityType(value: string | null | undefined, locale: string): string | null {
+  if (!value?.trim()) return null;
+  return UNIVERSITY_TYPE_LABELS[value.trim().toLowerCase()]?.[locale] ?? UNIVERSITY_TYPE_LABELS[value.trim().toLowerCase()]?.en ?? value;
+}
+
 export const DETAIL_COPY = {
   ...DETAIL_PRESENTATION_LOCALES,
   en: { from: "From", institutionLocation: "Institution location", campus: "Campus", legacyPrice: "Listed tuition · confirmation required", confirmPrice: "Confirm tuition with an adviser", durationAsListed: "Duration · as listed", courseInformation: "Catalogue information", catalogueNote: "Details supplied in the catalogue. Confirm the campus, study mode and duration for your selected intake.", overview: "At a glance", studyOptions: "Explore your study options", catalogue: "Study catalogue", destination: "Study destination", city: "Student city", institution: "University profile", program: "Program guide", country: "Country", mode: "Study mode", intakes: "Intakes listed", decision: "Decision time listed", scrollTable: "Scroll to see all program details", unavailable: "Details are not available yet.", next: "Your next step", priceBasis: "The displayed amount follows the published fee basis; confirm any conditions before applying.", durationNote: "Multiple durations are listed. Confirm the duration for your chosen study mode and intake.", universityCount: "Universities", programCount: "Programs" },

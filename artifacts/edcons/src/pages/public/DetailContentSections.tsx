@@ -84,12 +84,43 @@ export function detailHeroStyle(content: DetailContent | null): CSSProperties {
   } as CSSProperties;
 }
 
-function sectionKicker(key: string) {
-  return key.replace(/([a-z\d])([A-Z])/g, "$1 $2").replace(/[-_]+/g, " ");
+const sectionKickers: Record<string, Record<string, string>> = {
+  en: { overview: "Overview", gallery: "Gallery", highlights: "Highlights", cautions: "Plan carefully", education: "Education", facts: "Key facts", weather: "Weather", living: "Student life", climate: "Climate", transport: "Transport", campus: "Campuses", housing: "Housing", requirements: "Requirements", visa: "Visa", services: "Support", universities: "Universities", programs: "Programs", faq: "FAQ", applyGuide: "Next steps", navigation: "On this page" },
+  tr: { overview: "Genel bakış", gallery: "Galeri", highlights: "Öne çıkanlar", cautions: "Dikkatli planlayın", education: "Eğitim", facts: "Temel bilgiler", weather: "Hava durumu", living: "Öğrenci yaşamı", climate: "İklim", transport: "Ulaşım", campus: "Kampüsler", housing: "Konaklama", requirements: "Gereklilikler", visa: "Vize", services: "Destek", universities: "Üniversiteler", programs: "Programlar", faq: "Sık sorulanlar", applyGuide: "Sonraki adımlar", navigation: "Bu sayfada" },
+  ar: { overview: "نظرة عامة", gallery: "معرض الصور", highlights: "أبرز المزايا", cautions: "خطط بعناية", education: "الدراسة", facts: "حقائق أساسية", weather: "الطقس", living: "حياة الطلاب", climate: "المناخ", transport: "النقل", campus: "الحُرُم الجامعية", housing: "السكن", requirements: "المتطلبات", visa: "التأشيرة", services: "الدعم", universities: "الجامعات", programs: "البرامج", faq: "أسئلة شائعة", applyGuide: "الخطوات التالية", navigation: "في هذه الصفحة" },
+  fr: { overview: "Aperçu", gallery: "Galerie", highlights: "Points forts", cautions: "À bien planifier", education: "Études", facts: "Informations clés", weather: "Météo", living: "Vie étudiante", climate: "Climat", transport: "Transports", campus: "Campus", housing: "Logement", requirements: "Conditions", visa: "Visa", services: "Accompagnement", universities: "Universités", programs: "Programmes", faq: "Questions fréquentes", applyGuide: "Prochaines étapes", navigation: "Sur cette page" },
+  ru: { overview: "Обзор", gallery: "Галерея", highlights: "Преимущества", cautions: "Что учесть", education: "Обучение", facts: "Основные факты", weather: "Погода", living: "Студенческая жизнь", climate: "Климат", transport: "Транспорт", campus: "Кампусы", housing: "Жильё", requirements: "Требования", visa: "Виза", services: "Поддержка", universities: "Университеты", programs: "Программы", faq: "Частые вопросы", applyGuide: "Следующие шаги", navigation: "На этой странице" },
+  fa: { overview: "نمای کلی", gallery: "گالری", highlights: "نکات برجسته", cautions: "برنامه‌ریزی دقیق", education: "تحصیل", facts: "اطلاعات کلیدی", weather: "آب‌وهوا", living: "زندگی دانشجویی", climate: "اقلیم", transport: "حمل‌ونقل", campus: "پردیس‌ها", housing: "اقامت", requirements: "شرایط", visa: "ویزا", services: "پشتیبانی", universities: "دانشگاه‌ها", programs: "برنامه‌ها", faq: "پرسش‌های متداول", applyGuide: "گام‌های بعدی", navigation: "در این صفحه" },
+  zh: { overview: "概览", gallery: "图片", highlights: "亮点", cautions: "规划要点", education: "学习", facts: "关键信息", weather: "天气", living: "学生生活", climate: "气候", transport: "交通", campus: "校区", housing: "住宿", requirements: "要求", visa: "签证", services: "支持", universities: "大学", programs: "课程", faq: "常见问题", applyGuide: "后续步骤", navigation: "本页内容" },
+  hi: { overview: "अवलोकन", gallery: "चित्र", highlights: "मुख्य बातें", cautions: "सावधानी से योजना बनाएँ", education: "पढ़ाई", facts: "मुख्य तथ्य", weather: "मौसम", living: "छात्र जीवन", climate: "जलवायु", transport: "परिवहन", campus: "परिसर", housing: "आवास", requirements: "आवश्यकताएँ", visa: "वीज़ा", services: "सहायता", universities: "विश्वविद्यालय", programs: "कार्यक्रम", faq: "सामान्य प्रश्न", applyGuide: "अगले कदम", navigation: "इस पृष्ठ पर" },
+  es: { overview: "Resumen", gallery: "Galería", highlights: "Puntos destacados", cautions: "Planifica con cuidado", education: "Estudios", facts: "Datos clave", weather: "Tiempo", living: "Vida estudiantil", climate: "Clima", transport: "Transporte", campus: "Campus", housing: "Alojamiento", requirements: "Requisitos", visa: "Visado", services: "Apoyo", universities: "Universidades", programs: "Programas", faq: "Preguntas frecuentes", applyGuide: "Próximos pasos", navigation: "En esta página" },
+  id: { overview: "Ikhtisar", gallery: "Galeri", highlights: "Sorotan", cautions: "Rencanakan dengan cermat", education: "Studi", facts: "Fakta utama", weather: "Cuaca", living: "Kehidupan mahasiswa", climate: "Iklim", transport: "Transportasi", campus: "Kampus", housing: "Akomodasi", requirements: "Persyaratan", visa: "Visa", services: "Dukungan", universities: "Universitas", programs: "Program", faq: "Pertanyaan umum", applyGuide: "Langkah berikutnya", navigation: "Di halaman ini" },
+};
+
+export function detailSectionKicker(key: string, locale: string) {
+  return sectionKickers[locale]?.[key] ?? sectionKickers.en[key] ?? key.replace(/([a-z\d])([A-Z])/g, "$1 $2").replace(/[-_]+/g, " ");
+}
+
+function compactEditorialSummary(value: string, maxLength = 180): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  const sentence = normalized.match(/^.*?(?:[.!?](?=\s|$)|$)/u)?.[0] || normalized;
+  if (sentence.length <= maxLength) return sentence;
+  const clipped = sentence.slice(0, maxLength + 1);
+  return `${clipped.slice(0, Math.max(1, clipped.lastIndexOf(" "))).replace(/[,:;\s]+$/u, "")}…`;
+}
+
+/** Short, locale-bound copy for compact hero facts; never mixes another locale. */
+export function detailContentSummary(content: DetailContent | null, key: string, fallback = ""): string {
+  const section = effectiveDetailContentSections(content).find(entry => entry.key === key);
+  if (!section) return fallback;
+  if (section.body?.trim()) return compactEditorialSummary(section.body);
+  const cardTitles = section.cards?.map(card => card.title.trim()).filter(Boolean) ?? [];
+  return cardTitles.length ? compactEditorialSummary(cardTitles.slice(0, 3).join(" · ")) : fallback;
 }
 
 function detailContentSectionBody(section: DetailContentSection, locale: string, _correctionPath: string): ReactNode {
-  const heading = section.key === "hero" ? null : <><div className="detail-editorial-heading"><span>{sectionKicker(section.key)}</span><h2>{section.title}</h2></div>
+  const heading = section.key === "hero" ? null : <><div className="detail-editorial-heading"><span lang={locale}>{detailSectionKicker(section.key, locale)}</span><h2>{section.title}</h2></div>
     {section.body && <p className="detail-prose detail-editorial-intro">{section.body}</p>}</>;
 
   if (section.key === "climate") return <div className="detail-wrap detail-editorial-content detail-climate-shell">
