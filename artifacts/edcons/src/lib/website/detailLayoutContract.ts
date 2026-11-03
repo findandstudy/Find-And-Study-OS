@@ -92,13 +92,17 @@ export const DETAIL_LAYOUT_SECTIONS: Record<DetailLayoutKind, readonly string[]>
   destination: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "cautions", "education"), "facts", ...editorial("admission", "requirements", "scholarships", "living", "climate", "housing", "visa", "services", "recognition"), "cities", "universities", "programs", ...editorial("faq", "applyGuide"), "cta"],
   city: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "cautions", "education"), "facts", "weather", ...editorial("living", "climate", "transport", "campus", "housing", "requirements", "visa", "services"), "universities", "programs", ...editorial("faq", "applyGuide")],
 };
-const LIVE_GENERATION_SECTIONS = new Set(["navigation", "facts", "weather", "fees", "intakes", "related", "programs", "universities", "cities", "mobileActions"]);
+const LIVE_GENERATION_SECTIONS = new Set(["navigation", "weather", "fees", "intakes", "related", "programs", "universities", "cities", "mobileActions"]);
+const CITY_KEY_FACTS_INSTRUCTION = `Write a substantial but concise Key facts introduction of 90–160 words for prospective international students. Explain the city's role as a study destination and connect only the available verified climate, teaching-language, transport, campus-geography and housing evidence to practical student decisions. Do not repeat the country, university or programme counters already displayed in the live fact grid. Do not mention connected source records, catalogues, AI, prompts or missing data. Never invent population, living costs, rankings, counts or other facts. If evidence is limited, use the verified facts that exist and give practical comparison guidance without generic filler or absence disclaimers.`;
 export function defaultDetailSectionGeneration(kind: DetailLayoutKind, section: string): DetailSectionGeneration {
   const name = section.replace(/^editorial-/, "").replace(/([A-Z])/g, " $1").toLowerCase();
-  const enabled = !LIVE_GENERATION_SECTIONS.has(section);
+  const cityKeyFacts = kind === "city" && section === "facts";
+  const enabled = cityKeyFacts || !LIVE_GENERATION_SECTIONS.has(section);
   return {
     enabled,
-    instruction: enabled
+    instruction: cityKeyFacts
+      ? CITY_KEY_FACTS_INSTRUCTION
+      : enabled
       ? `Write a concise, practical ${name} section for prospective international students. Use only verified page facts and the shared template direction. Do not invent rankings, prices, deadlines, requirements, visa outcomes or guarantees.`
       : `Keep ${name} connected to authoritative live catalogue or external-source data; do not replace it with generated facts.`,
   };

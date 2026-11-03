@@ -53,3 +53,24 @@ test("field-aware AI writing rejects unsupported variables and unverified URLs",
     await assert.rejects(service.writeText({ ...base, action: "generate", currentText: "", format: "plain" }), /unverified URL/);
   } finally { restore(); }
 });
+
+test("city key facts generation asks for decision-useful copy without repeating live counters", async () => {
+  let capturedPrompt = "";
+  const body = "Ankara combines a continental climate with a multi-mode public transport network. Students should compare the exact teaching site, the daily route and suitable housing together before deciding where to live.";
+  const restore = mockOpenAi(prompt => {
+    capturedPrompt = prompt;
+    return JSON.stringify({ facts: { title: "Key facts", body } });
+  });
+  try {
+    const service = new AiContentService({ provider: "openai", apiKey: "test" });
+    const result = await service.generateDetailSections({
+      kind: "city",
+      entityName: "Ankara",
+      facts: { city: "Ankara", country: "Türkiye", transportModes: ["Metro", "Bus"] },
+      sections: [{ key: "facts", title: "Key facts", templateBody: "", instruction: "Use verified city facts." }],
+    });
+    assert.equal(result.facts.body, body);
+    assert.match(capturedPrompt, /90–160 word introduction/);
+    assert.match(capturedPrompt, /do not repeat or narrate those counters/);
+  } finally { restore(); }
+});

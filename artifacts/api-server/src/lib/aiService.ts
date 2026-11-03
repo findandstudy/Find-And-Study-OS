@@ -386,6 +386,7 @@ ACCURACY AND SAFETY:
 - A catalogue total may appear in at most one section across the entire response. Never build several sections around phrases such as "there are X programmes", "X programmes are available" or "X universities are listed".
 - Avoid shallow stock copy, repeated sentence openings and repeated verification disclaimers. Never lead with missing-data or absence statements such as "not specified", "not provided", "not confirmed", "none are shown", "no universities" or "no programmes". When evidence is limited, give useful decision criteria, questions to ask and next steps without inventing local facts.
 - Write search-useful, entity-specific copy: name the page entity naturally, answer the section's likely search intent and vary the vocabulary. Do not keyword-stuff or repeat the entity name mechanically.
+- For a city section whose key is facts, write a useful 90–160 word introduction that interprets the available verified climate, teaching-language, transport, campus and housing evidence for student decision-making. The live fact grid owns country, university and programme values, so do not repeat or narrate those counters in the body.
 - Do not mention internal catalogues, prompts, sources, AI, missing data or editorial review.
 - Do not output HTML, Markdown, citations, URLs or template variables.
 - Keep every title under 100 characters and every body between 80 and 900 characters.

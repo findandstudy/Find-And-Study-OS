@@ -187,6 +187,10 @@ test("editorial layouts upgrade saved v1 layouts and keep frontend/backend parse
   assert.deepEqual(upgraded?.hidden, ["universities"]);
   const current = defaultDetailLayout("program");
   assert.deepEqual(parseDetailLayout(current), current);
+  const cityLayout = defaultDetailLayout("city");
+  assert.equal(cityLayout.generation.facts.enabled, true);
+  assert.match(cityLayout.generation.facts.instruction, /90–160 words/);
+  assert.match(cityLayout.generation.facts.instruction, /Do not repeat the country, university or programme counters/);
   const previous = parseDetailLayout({ version: 2, kind: "program", sections: ["hero", "navigation", "overview", "fees", "requirements", "intakes", "related"], hidden: ["fees"] });
   assert.ok(previous);
   assert.deepEqual(previous.sections.filter(key => !key.startsWith("editorial-") && key !== "mobileActions"), ["hero", "navigation", "overview", "fees", "requirements", "intakes", "related"]);
