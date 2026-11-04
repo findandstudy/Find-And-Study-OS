@@ -173,6 +173,17 @@ test("program detail labels legacy display fees but reserves offers for verified
   assert.match(from, /Verified price/);
 });
 
+test("program detail uses the shared decision-focused responsive template", () => {
+  assert.match(program, /detail-program-hero-grid/);
+  assert.match(program, /<aside className="detail-hero-card"/);
+  assert.match(program, /detail-program-overview-grid/);
+  assert.match(program, /detail-program-requirements-grid/);
+  assert.match(program, /detail-program-fees/);
+  assert.match(css, /\.detail-program \.detail-hero-main \{ min-height: clamp\(540px, 70vh, 660px\)/);
+  assert.match(css, /\.detail-program \.detail-factbar \.detail-facts \{[^}]*border-radius: 18px/);
+  assert.match(css, /@media \(max-width: 480px\)[\s\S]*\.detail-program \.detail-hero-card \.detail-actions \{ display: none; \}/);
+});
+
 test("imported catalogue metadata is not presented as admission requirements", () => {
   assert.deepEqual(splitRequirements("Country: United Kingdom | Campus: Manchester | Mode: Full-time | Intake years: 2026/2027 | Offer turnaround: 14 days | Edvoy ref: 123 | IELTS: 6.5"), {
     requirements: ["IELTS: 6.5"],

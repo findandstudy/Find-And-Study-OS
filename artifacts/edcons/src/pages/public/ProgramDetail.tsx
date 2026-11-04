@@ -235,7 +235,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
             { label: program.universityName, path: program.universityPath },
             { label: program.name },
           ]} /></div>
-          <div className="detail-wrap detail-hero-main">
+          <div className="detail-wrap detail-hero-main detail-program-hero-grid">
             <div className="detail-hero-content">
               <div className="detail-identity">
                 <DetailIdentity src={program.universityLogoUrl} name={program.universityName} />
@@ -282,11 +282,11 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           {payload.related.length > 0 && <a href="#related">{t("catalogDetail.relatedPrograms")}</a>}
         </div>
       </nav>
-      <section data-detail-section="overview" id="overview" className="detail-section">
+      <section data-detail-section="overview" id="overview" className="detail-section detail-program-overview">
         <div className="detail-wrap">
           <DetailHeading number="01" eyebrow={copy.program} title={copy.overview} />
-          <div className="detail-split">
-            <div>
+          <div className="detail-split detail-program-overview-grid">
+            <div className="detail-program-story">
               {program.description ? <p className="detail-prose detail-snapshot">{program.description}</p> : <DetailFacts items={[
                 { label: t("courseFinderPage.degree"), value: program.degree },
                 { label: t("courseFinderPage.field"), value: program.field },
@@ -294,7 +294,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
               ]} />}
               {durationIsAmbiguous(program.duration) && <p className="detail-provenance">{copy.durationNote}</p>}
             </div>
-            <div>
+            <aside className="detail-program-profile">
               <p className="detail-eyebrow">{copy.courseInformation}</p>
               <dl className="detail-keylines">
                 <div><dt><Building2 size={17} aria-hidden="true" />{copy.institution}</dt><dd><Link href={program.universityPath}>{program.universityName}</Link></dd></div>
@@ -302,13 +302,13 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
                 {metadata.map((item, index) => <div key={index}><dt><BookOpen size={17} aria-hidden="true" />{copy[item.key]}</dt><dd>{item.value}</dd></div>)}
               </dl>
               {metadata.length > 0 && <p className="detail-provenance">{copy.catalogueNote}</p>}
-            </div>
+            </aside>
           </div>
           {detailContentAddon(editorial, "overview", lang, localePath("/contact"))}
         </div>
       </section>
-      {(requirements.length > 0 || hasEditorialRequirements) && <section data-detail-section="requirements" id="requirements" className="detail-section is-sky">
-        <div className="detail-wrap detail-split">
+      {(requirements.length > 0 || hasEditorialRequirements) && <section data-detail-section="requirements" id="requirements" className="detail-section is-sky detail-program-requirements">
+        <div className="detail-wrap detail-split detail-program-requirements-grid">
           <DetailHeading number="02" eyebrow={copy.program} title={t("programs.requirements")} />
           {requirements.length > 0 && <ul className="detail-program-points">{requirements.map((item, index) => <li key={index}><FileText size={20} aria-hidden="true" /><span>{item}</span></li>)}</ul>}
           {detailContentAddon(editorial, "requirements", lang, localePath("/contact"))}
@@ -330,8 +330,8 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           </article>)}</div>
         </div>
       </section>}
-      {hasFees && <section data-detail-section="fees" id="fees" className="detail-section is-sky">
-        <div className="detail-wrap detail-split">
+      {hasFees && <section data-detail-section="fees" id="fees" className="detail-section is-sky detail-program-fees">
+        <div className="detail-wrap detail-split detail-program-fees-grid">
           <div><DetailHeading number="04" eyebrow={copy.program} title={detailContentTitle(editorial, "fees", t("courseFinderPage.tuitionFee"))} />{detailContentIntro(editorial, "fees")}{tuition?.source !== "legacy" && <p className="detail-provenance">{copy.priceBasis}</p>}</div>
           <div className="detail-fee-panel">{tuition && <DetailPrice tuition={tuition} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} />}
             {visiblePrices.length > 0 && <dl className="detail-keylines">{visiblePrices.map(price => <div key={price.id}>
