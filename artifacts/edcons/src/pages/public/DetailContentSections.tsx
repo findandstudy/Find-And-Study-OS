@@ -20,6 +20,38 @@ const labels: Record<string, string> = {
 };
 export const detailContentLabels = (locale: string) => labels[locale] ?? labels.en;
 
+/**
+ * Editor hydration needs valid, source-bound copy before an author or AI has
+ * written a section. Those instructions are useful in the admin form but are
+ * never public editorial content. Keep the match deliberately exact so normal
+ * prose containing words such as "edit" or "source" is not removed.
+ */
+export function isDetailEditorInstruction(value: string | undefined): boolean {
+  const normalized = value?.replace(/\s+/g, " ").trim();
+  if (!normalized) return false;
+  return /^(?:Edit the .+ section for .+ from this page\.|.+ for .+ is shown together with the current source records\.|.+ için .+ bölümünü bu alandan düzenleyebilirsiniz\.|.+ için .+ bilgileri güncel kaynak kayıtlarıyla birlikte gösterilir\.)$/u.test(normalized);
+}
+
+function publicDetailSection(section: DetailContentSection): DetailContentSection {
+  if (!isDetailEditorInstruction(section.body)) return section;
+  const { body: _instruction, ...publicSection } = section;
+  return publicSection;
+}
+
+function hasPublicSectionContent(section: DetailContentSection): boolean {
+  return !!section.body?.trim()
+    || !!section.hero
+    || !!section.cards?.length
+    || !!section.table
+    || !!section.steps?.length
+    || !!section.images?.length
+    || !!section.questions?.length;
+}
+
+function publicDetailSections(content: DetailContent | null): DetailContentSection[] {
+  return effectiveDetailContentSections(content).map(publicDetailSection);
+}
+
 function Gallery({ images, title, locale }: { images: NonNullable<DetailContentSection["images"]>; title: string; locale: string }) {
   const [failed, setFailed] = useState<string[]>([]);
   const [selected, setSelected] = useState<(typeof images)[number] | null>(null);
@@ -62,7 +94,7 @@ export function DetailHeroMedia({ content }: { content: DetailContent | null }) 
 }
 
 export function detailHeroSection(content: DetailContent | null) {
-  return effectiveDetailContentSections(content).find((section) => section.key === "hero") ?? null;
+  return publicDetailSections(content).find((section) => section.key === "hero") ?? null;
 }
 
 export function detailHeroStyle(content: DetailContent | null): CSSProperties {
@@ -112,7 +144,7 @@ function compactEditorialSummary(value: string, maxLength = 180): string {
 
 /** Short, locale-bound copy for compact hero facts; never mixes another locale. */
 export function detailContentSummary(content: DetailContent | null, key: string, fallback = "", maxLength = 180): string {
-  const section = effectiveDetailContentSections(content).find(entry => entry.key === key);
+  const section = publicDetailSections(content).find(entry => entry.key === key);
   if (!section) return compactEditorialSummary(fallback, maxLength);
   if (section.body?.trim()) return compactEditorialSummary(section.body, maxLength);
   const cardTitles = section.cards?.map(card => card.title.trim()).filter(Boolean) ?? [];
@@ -170,8 +202,8 @@ function detailContentSectionBody(section: DetailContentSection, locale: string,
 
 /** Adds the static CMS layer inside a factual section without duplicating its catalogue fields. */
 export function detailContentAddon(content: DetailContent | null, key: string, locale: string, correctionPath: string): ReactNode {
-  const section = effectiveDetailContentSections(content).find(entry => entry.key === key);
-  if (!section) return null;
+  const section = publicDetailSections(content).find(entry => entry.key === key);
+  if (!section || !hasPublicSectionContent(section)) return null;
   if (key === "hero") {
     // Hero title, supporting copy and reviewed image are rendered by the
     // actual hero. Only genuinely supplemental structures belong below it.
@@ -195,27 +227,27 @@ export function detailContentTitle(
   key: string,
   fallback: string,
 ): string {
-  return effectiveDetailContentSections(content).find((section) => section.key === key)?.title || fallback;
+  return publicDetailSections(content).find((section) => section.key === key)?.title || fallback;
 }
 
 export function detailContentIntro(
   content: DetailContent | null,
   key: string,
 ): ReactNode {
-  const body = effectiveDetailContentSections(content).find((section) => section.key === key)?.body;
+  const body = publicDetailSections(content).find((section) => section.key === key)?.body;
   return body ? <p className="detail-prose detail-editorial-intro">{body}</p> : null;
 }
 
 /** Returned as direct children so the existing CMS layout can order/hide each standalone section. */
 export function detailContentSections(content: DetailContent | null, locale: string, correctionPath: string, exclude: readonly string[] = []): ReactNode[] {
   if (!content) return [];
-  return effectiveDetailContentSections(content).filter(section => !exclude.includes(section.key) && !DETAIL_GENERATED_CONTENT_KEYS.includes(section.key as (typeof DETAIL_GENERATED_CONTENT_KEYS)[number])).map(section => <section key={section.key} data-detail-section={`editorial-${section.key}`} id={`editorial-${section.key}`} className={`detail-section detail-editorial-section is-${section.key} ${section.key === "services" || section.key === "support" ? "detail-band" : ""}`}>
+  return publicDetailSections(content).filter(section => hasPublicSectionContent(section) && !exclude.includes(section.key) && !DETAIL_GENERATED_CONTENT_KEYS.includes(section.key as (typeof DETAIL_GENERATED_CONTENT_KEYS)[number])).map(section => <section key={section.key} data-detail-section={`editorial-${section.key}`} id={`editorial-${section.key}`} className={`detail-section detail-editorial-section is-${section.key} ${section.key === "services" || section.key === "support" ? "detail-band" : ""}`}>
     {detailContentSectionBody(section, locale, correctionPath)}
   </section>);
 }
 
 export function detailContentNavigation(content: DetailContent | null): ReactNode[] {
-  return effectiveDetailContentSections(content).filter(section => !["hero", "overview", "requirements"].includes(section.key) && !DETAIL_GENERATED_CONTENT_KEYS.includes(section.key as (typeof DETAIL_GENERATED_CONTENT_KEYS)[number]))
+  return publicDetailSections(content).filter(section => hasPublicSectionContent(section) && !["hero", "overview", "requirements"].includes(section.key) && !DETAIL_GENERATED_CONTENT_KEYS.includes(section.key as (typeof DETAIL_GENERATED_CONTENT_KEYS)[number]))
     .map(section => <a key={section.key} href={`#editorial-${section.key}`}>{section.title}</a>) ?? [];
 }
 

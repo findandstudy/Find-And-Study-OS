@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { parseDetailContent, resolveDetailTemplateContent, DETAIL_CONTENT_KEYS, DETAIL_CONTENT_LAYOUT_KEYS, DETAIL_CONTENT_LOCALES, DETAIL_GENERATED_CONTENT_KEYS, type DetailContent } from "../src/lib/website/detailContentContract";
 import { defaultDetailLayout } from "../src/lib/website/detailLayoutContract";
 import { resolveCmsValue } from "../src/lib/website/cmsTextVariables";
-import { DetailHeroMedia, boundDetailContent, detailContentAddon, detailContentIntro, detailContentLabels, detailContentNavigation, detailContentSections, detailContentSummary, detailContentTitle, detailSectionKicker } from "../src/pages/public/DetailContentSections";
+import { DetailHeroMedia, boundDetailContent, detailContentAddon, detailContentIntro, detailContentLabels, detailContentNavigation, detailContentSections, detailContentSummary, detailContentTitle, detailSectionKicker, isDetailEditorInstruction } from "../src/pages/public/DetailContentSections";
 
 const fixture: DetailContent = { version: 1, kind: "program", entityId: 42, locale: "en", sections: [{
   key: "faq", title: "Questions & answers", body: "Published narrative", reviewedOn: "2026-01-01",
@@ -36,6 +36,26 @@ test("compact detail copy remains bound to the requested locale", () => {
   assert.equal(detailSectionKicker("transport", "tr"), "Ulaşım");
   assert.equal(detailSectionKicker("applyGuide", "ru"), "Следующие шаги");
   assert.equal(detailContentSummary(turkish, "housing", "yedek"), "yedek");
+});
+
+test("admin hydration instructions never leak into public detail pages", () => {
+  const hydrated: DetailContent = {
+    ...fixture,
+    kind: "university",
+    entityId: 3120,
+    sections: [
+      { key: "hero", title: "Acibadem University", body: "Edit the hero section for Acibadem University from this page.", hero: { backgroundColor: "#081727" }, sources: [{ label: "Official website", url: "https://www.acibadem.edu.tr/en" }], reviewedOn: "2026-01-01" },
+      { key: "programs", title: "Available programs", body: "Available programs for Acibadem University is shown together with the current source records.", sources: [{ label: "Catalogue", url: "https://example.org/catalogue" }], reviewedOn: "2026-01-01" },
+      { key: "gallery", title: "Gallery", body: "Edit the gallery section for Acibadem University from this page.", sources: [{ label: "Official website", url: "https://www.acibadem.edu.tr/en" }], reviewedOn: "2026-01-01" },
+      { key: "housing", title: "Housing", body: "Verified housing guidance.", sources: [{ label: "Official website", url: "https://www.acibadem.edu.tr/en" }], reviewedOn: "2026-01-01" },
+    ],
+  };
+  assert.equal(isDetailEditorInstruction(hydrated.sections[0].body), true);
+  assert.equal(isDetailEditorInstruction("Edit carefully before travelling."), false);
+  assert.equal(renderToStaticMarkup(React.createElement(React.Fragment, null, detailContentIntro(hydrated, "programs"))), "");
+  assert.equal(renderToStaticMarkup(React.createElement(React.Fragment, null, detailContentSections(hydrated, "en", "/en/contact"))).includes("editorial-gallery"), false);
+  assert.doesNotMatch(renderToStaticMarkup(React.createElement(React.Fragment, null, detailContentNavigation(hydrated))), /gallery/i);
+  assert.match(renderToStaticMarkup(React.createElement(React.Fragment, null, detailContentSections(hydrated, "en", "/en/contact"))), /Verified housing guidance/);
 });
 
 test("city hero fact copy can be capped without losing the full editorial section", () => {
