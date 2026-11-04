@@ -156,17 +156,25 @@ if (rootElement.hasAttribute("data-public-render-shell-root")) {
 
   const brand = document.createElement("div");
   brand.className = "public-app-preloader-brand";
-  const mark = document.createElement("span");
-  mark.className = "public-app-preloader-mark";
-  mark.setAttribute("aria-hidden", "true");
-  mark.textContent = "F&S";
-  const name = document.createElement("strong");
-  name.textContent = "Find & Study";
+  const logo = document.createElement("img");
+  logo.className = "public-app-preloader-logo";
+  logo.src = `${import.meta.env.BASE_URL || "/"}api/settings/branding/logo?variant=header`;
+  logo.alt = "Find & Study";
+  logo.decoding = "async";
+  logo.fetchPriority = "high";
+  const fallback = document.createElement("strong");
+  fallback.className = "public-app-preloader-fallback";
+  fallback.textContent = "Find & Study";
+  fallback.hidden = true;
+  logo.addEventListener("error", () => {
+    logo.hidden = true;
+    fallback.hidden = false;
+  }, { once: true });
   const activity = document.createElement("span");
   activity.className = "public-app-preloader-activity";
   activity.setAttribute("aria-hidden", "true");
   activity.append(document.createElement("i"), document.createElement("i"), document.createElement("i"));
-  brand.append(mark, name, activity);
+  brand.append(logo, fallback, activity);
   preloader.append(brand);
   document.documentElement.classList.add("public-preloader-active");
   document.body.append(preloader);

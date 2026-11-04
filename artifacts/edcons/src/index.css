@@ -319,12 +319,12 @@ textarea:focus-visible {
   display: grid;
   place-items: center;
   padding: 1.5rem;
-  color: #fff;
+  color: #0b2945;
   opacity: 1;
   background:
-    radial-gradient(circle at 18% 18%, rgba(50, 128, 255, .3), transparent 32rem),
-    radial-gradient(circle at 82% 82%, rgba(53, 208, 191, .2), transparent 28rem),
-    linear-gradient(145deg, #061321, #0b2945 55%, #0d3653);
+    radial-gradient(circle at 18% 18%, rgba(23, 74, 126, .07), transparent 30rem),
+    radial-gradient(circle at 82% 82%, rgba(223, 37, 56, .045), transparent 26rem),
+    #fff;
   transition: opacity .2s ease, visibility .2s ease;
 }
 
@@ -342,23 +342,18 @@ textarea:focus-visible {
   letter-spacing: -.02em;
 }
 
-.public-app-preloader-brand strong {
+.public-app-preloader-fallback {
   font-family: var(--font-display, inherit);
   font-size: clamp(1.35rem, 3vw, 2rem);
   font-weight: 750;
 }
 
-.public-app-preloader-mark {
-  display: grid;
-  place-items: center;
-  width: 4.5rem;
-  height: 4.5rem;
-  border: 1px solid rgba(255, 255, 255, .3);
-  border-radius: 1.35rem;
-  background: linear-gradient(145deg, rgba(255,255,255,.2), rgba(255,255,255,.06));
-  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, .28), inset 0 1px rgba(255,255,255,.2);
-  font-size: 1.15rem;
-  font-weight: 800;
+.public-app-preloader-logo {
+  display: block;
+  width: min(17rem, 68vw);
+  height: clamp(4.25rem, 10vw, 6.25rem);
+  object-fit: contain;
+  object-position: center;
 }
 
 .public-app-preloader-activity {
@@ -371,11 +366,11 @@ textarea:focus-visible {
   width: .42rem;
   height: .42rem;
   border-radius: 50%;
-  background: rgba(255, 255, 255, .86);
+  background: #174a7e;
   animation: public-preloader-pulse 1s ease-in-out infinite;
 }
 
-.public-app-preloader-activity i:nth-child(2) { animation-delay: .14s; }
+.public-app-preloader-activity i:nth-child(2) { animation-delay: .14s; background: #df2538; }
 .public-app-preloader-activity i:nth-child(3) { animation-delay: .28s; }
 
 @keyframes public-preloader-pulse {

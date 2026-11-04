@@ -609,8 +609,11 @@ test("SSR semantic content hands off atomically without painting two layouts", (
   assert.match(bootstrap, /document\.documentElement\.classList\.add\("js-public-app"\)/);
   assert.match(indexCss, /\.js-public-app #root\[data-public-render-shell-root\]/);
   assert.match(main, /preloader\.id = "public-app-preloader"/);
+  assert.match(main, /logo\.src = `\$\{import\.meta\.env\.BASE_URL \|\| "\/"\}api\/settings\/branding\/logo\?variant=header`/);
+  assert.match(main, /logo\.fetchPriority = "high"/);
   assert.match(main, /preloader\.classList\.add\("is-leaving"\)/);
   assert.match(indexCss, /\.public-app-preloader-brand/);
+  assert.match(indexCss, /\.public-app-preloader-logo/);
   assert.doesNotMatch(indexCss, /#root\[data-public-render-shell-root\]::before/);
   assert.match(main, /rootElement\.replaceChildren\(\)/);
   assert.match(main, /new MutationObserver/);
