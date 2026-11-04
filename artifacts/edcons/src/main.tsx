@@ -139,23 +139,16 @@ if (import.meta.env.DEV) {
 }
 
 const rootElement = document.getElementById("root")!;
-// The SSR/ISR pilot emits a safe semantic shell for crawlers and first paint.
-// It is intentionally not a React hydration payload. Keep that factual shell
-// visible until the client route has rendered its own heading; clearing it
-// before the lazy route/data boundary resolves creates a blank first paint and
-// turns the client heading into a needlessly late LCP candidate.
+// The SSR/ISR pilot emits safe semantic HTML for crawlers and no-JS visitors,
+// but it is not a React hydration payload. Showing that legacy markup and then
+// replacing it with the richer React template caused a visible second layout
+// pass even when the page was otherwise fast. bootstrap.js marks JS-capable
+// documents before first paint, so CSS presents one stable loading geometry.
+// React replaces the semantic shell immediately and reveals only the fully
+// styled route. No-JS visitors retain the original semantic HTML unchanged.
 if (rootElement.hasAttribute("data-public-render-shell-root")) {
-  const shell = document.createElement("div");
-  shell.id = "public-render-shell-handoff";
-  shell.setAttribute("aria-hidden", "false");
-  while (rootElement.firstChild) shell.appendChild(rootElement.firstChild);
-  rootElement.before(shell);
-  rootElement.removeAttribute("data-public-render-shell-root");
-  rootElement.setAttribute("aria-hidden", "true");
-  rootElement.style.position = "absolute";
-  rootElement.style.inset = "0";
-  rootElement.style.visibility = "hidden";
-  rootElement.style.pointerEvents = "none";
+  rootElement.replaceChildren();
+  rootElement.setAttribute("aria-busy", "true");
 
   let handedOff = false;
   const handoff = () => {
@@ -163,12 +156,8 @@ if (rootElement.hasAttribute("data-public-render-shell-root")) {
     handedOff = true;
     observer.disconnect();
     clearTimeout(failSafe);
-    shell.remove();
-    rootElement.removeAttribute("aria-hidden");
-    rootElement.style.removeProperty("position");
-    rootElement.style.removeProperty("inset");
-    rootElement.style.removeProperty("visibility");
-    rootElement.style.removeProperty("pointer-events");
+    rootElement.removeAttribute("data-public-render-shell-root");
+    rootElement.removeAttribute("aria-busy");
   };
   const observer = new MutationObserver(() => {
     if (rootElement.querySelector("h1")) requestAnimationFrame(handoff);

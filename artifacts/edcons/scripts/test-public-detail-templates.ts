@@ -590,9 +590,8 @@ test("public detail transitions preload style, dictionary and locale payload wit
   assert.match(publicDetailQuery, /\["public-detail", kind, identity, locale\]/);
   assert.match(publicDetailQuery, /queryFn: \(\{ signal \}/);
   assert.match(publicDetailQuery, /placeholderData: \(previous\) => previous/);
-  assert.match(publicLayout, /<DelayedPageProgress active=\{Boolean\(switchingTo\)\}/);
-  assert.match(publicAsyncFeedback, /delayMs = 350/);
-  assert.match(publicAsyncFeedback, /role="progressbar"/);
+  assert.doesNotMatch(publicLayout, /DelayedPageProgress/);
+  assert.doesNotMatch(publicAsyncFeedback, /delayMs|role="progressbar"/);
   assert.match(publicAsyncFeedback, /detail-loading-grid/);
   assert.match(indexCss, /@media \(max-width: 767px\)[\s\S]*\.detail-loading-grid \{ grid-template-columns: 1fr; \}/);
   assert.match(indexCss, /@media \(prefers-reduced-motion: reduce\)/);
@@ -604,12 +603,16 @@ test("public detail transitions preload style, dictionary and locale payload wit
   assert.match(editorial, /detail-progressive-image/);
 });
 
-test("SSR shell remains visible until the client route has rendered its heading", () => {
-  assert.match(main, /public-render-shell-handoff/);
+test("SSR semantic content hands off atomically without painting two layouts", () => {
+  assert.match(bootstrap, /document\.documentElement\.classList\.add\("js-public-app"\)/);
+  assert.match(indexCss, /\.js-public-app #root\[data-public-render-shell-root\]/);
+  assert.match(main, /rootElement\.replaceChildren\(\)/);
   assert.match(main, /new MutationObserver/);
   assert.match(main, /rootElement\.querySelector\("h1"\)/);
+  assert.match(main, /rootElement\.removeAttribute\("data-public-render-shell-root"\)/);
   assert.match(main, /window\.setTimeout\(handoff, 15_000\)/);
-  assert.doesNotMatch(main, /rootElement\.replaceChildren\(\)/);
+  assert.doesNotMatch(main, /public-render-shell-handoff/);
+  assert.match(bootstrap, /document\.documentElement\.classList\.remove\("js-public-app"\)/);
 });
 
 test("missing optional facts and tuition do not become invented values", () => {

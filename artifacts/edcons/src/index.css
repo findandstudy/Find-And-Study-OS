@@ -291,30 +291,57 @@ textarea:focus-visible {
 .cookie-consent-known .public-consent-shell {
   display: none;
 }
+/*
+ * The API's semantic public shell and the React detail template intentionally
+ * use different renderers. Never paint one and then visually restyle it into
+ * the other. bootstrap.js adds .js-public-app before body parsing; JS clients
+ * see this stable geometry until React has produced its real heading, while
+ * no-JS visitors and crawlers continue to receive the semantic shell.
+ */
+.js-public-app #root[data-public-render-shell-root] {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    linear-gradient(hsl(var(--background)), hsl(var(--background))) 0 0 / 100% 5rem no-repeat,
+    linear-gradient(120deg, #081727, #102d4d) 0 5rem / 100% min(72vh, 40rem) no-repeat,
+    hsl(var(--background));
+}
+
+.js-public-app #root[data-public-render-shell-root] > * {
+  position: absolute !important;
+  inset: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.js-public-app #root[data-public-render-shell-root]::before,
+.js-public-app #root[data-public-render-shell-root]::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .22);
+}
+
+.js-public-app #root[data-public-render-shell-root]::before {
+  top: clamp(13rem, 30vh, 18rem);
+  inset-inline-start: max(1.25rem, calc((100% - 78rem) / 2));
+  width: min(34rem, calc(100% - 2.5rem));
+  height: clamp(2.75rem, 7vw, 5rem);
+}
+
+.js-public-app #root[data-public-render-shell-root]::after {
+  top: clamp(17.5rem, 42vh, 24rem);
+  inset-inline-start: max(1.25rem, calc((100% - 78rem) / 2));
+  width: min(27rem, calc(100% - 2.5rem));
+  height: 1.15rem;
+}
+
 @keyframes public-page-progress-slide {
   0% { transform: translateX(-100%); }
   55% { transform: translateX(35%); }
   100% { transform: translateX(220%); }
-}
-
-.public-page-progress {
-  position: fixed;
-  inset: 0 0 auto;
-  z-index: 140;
-  height: 3px;
-  overflow: hidden;
-  background: color-mix(in srgb, hsl(var(--primary)) 14%, transparent);
-  pointer-events: none;
-}
-
-.public-page-progress > span {
-  display: block;
-  width: 45%;
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)));
-  box-shadow: 0 0 12px color-mix(in srgb, hsl(var(--primary)) 55%, transparent);
-  animation: public-page-progress-slide 1.15s ease-in-out infinite;
 }
 
 .detail-loading-shell {
@@ -362,7 +389,6 @@ textarea:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .public-page-progress > span,
   .detail-loading-hero::after,
   .detail-loading-block::after { animation: none; transform: none; }
   .detail-progressive-image { transition: none; filter: none; transform: none; }

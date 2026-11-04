@@ -1,6 +1,11 @@
 (function () {
   "use strict";
 
+  // Added synchronously in <head>. Public SSR detail pages can therefore keep
+  // their semantic HTML for no-JS visitors and crawlers while JS visitors see
+  // one stable loading geometry until the real React layout is ready.
+  document.documentElement.classList.add("js-public-app");
+
   try {
     var mode = localStorage.getItem("edcons_theme") || "light";
     var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -50,7 +55,16 @@
 
   function showBootstrapError() {
     var root = document.getElementById("root");
-    if (!root || root.children.length) return;
+    if (!root) return;
+
+    // If the React bundle fails before the atomic handoff, fall back to the
+    // semantic server-rendered content instead of leaving the loading frame up.
+    if (root.hasAttribute("data-public-render-shell-root")) {
+      document.documentElement.classList.remove("js-public-app");
+      root.removeAttribute("aria-busy");
+      return;
+    }
+    if (root.children.length) return;
 
     var panel = document.createElement("div");
     var heading = document.createElement("h2");
