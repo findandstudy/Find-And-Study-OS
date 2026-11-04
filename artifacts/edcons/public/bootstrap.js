@@ -61,6 +61,9 @@
     // semantic server-rendered content instead of leaving the loading frame up.
     if (root.hasAttribute("data-public-render-shell-root")) {
       document.documentElement.classList.remove("js-public-app");
+      document.documentElement.classList.remove("public-preloader-active");
+      var preloader = document.getElementById("public-app-preloader");
+      if (preloader) preloader.remove();
       root.removeAttribute("aria-busy");
       return;
     }

@@ -295,17 +295,12 @@ textarea:focus-visible {
  * The API's semantic public shell and the React detail template intentionally
  * use different renderers. Never paint one and then visually restyle it into
  * the other. bootstrap.js adds .js-public-app before body parsing; JS clients
- * see this stable geometry until React has produced its real heading, while
- * no-JS visitors and crawlers continue to receive the semantic shell.
+ * see a clearly branded cover until React has produced its real heading,
+ * while no-JS visitors and crawlers retain the semantic shell.
  */
 .js-public-app #root[data-public-render-shell-root] {
-  position: relative;
   min-height: 100vh;
-  overflow: hidden;
-  background:
-    linear-gradient(hsl(var(--background)), hsl(var(--background))) 0 0 / 100% 5rem no-repeat,
-    linear-gradient(120deg, #081727, #102d4d) 0 5rem / 100% min(72vh, 40rem) no-repeat,
-    hsl(var(--background));
+  background: hsl(var(--background));
 }
 
 .js-public-app #root[data-public-render-shell-root] > * {
@@ -315,27 +310,102 @@ textarea:focus-visible {
   pointer-events: none !important;
 }
 
-.js-public-app #root[data-public-render-shell-root]::before,
-.js-public-app #root[data-public-render-shell-root]::after {
-  content: "";
-  position: absolute;
-  z-index: 1;
+.public-preloader-active { overflow: hidden; }
+
+.public-app-preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  color: #fff;
+  opacity: 1;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(50, 128, 255, .3), transparent 32rem),
+    radial-gradient(circle at 82% 82%, rgba(53, 208, 191, .2), transparent 28rem),
+    linear-gradient(145deg, #061321, #0b2945 55%, #0d3653);
+  transition: opacity .2s ease, visibility .2s ease;
+}
+
+.public-app-preloader.is-leaving {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.public-app-preloader-brand {
+  display: grid;
+  justify-items: center;
+  gap: .9rem;
+  text-align: center;
+  letter-spacing: -.02em;
+}
+
+.public-app-preloader-brand strong {
+  font-family: var(--font-display, inherit);
+  font-size: clamp(1.35rem, 3vw, 2rem);
+  font-weight: 750;
+}
+
+.public-app-preloader-mark {
+  display: grid;
+  place-items: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: 1.35rem;
+  background: linear-gradient(145deg, rgba(255,255,255,.2), rgba(255,255,255,.06));
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, .28), inset 0 1px rgba(255,255,255,.2);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.public-app-preloader-activity {
+  display: flex;
+  gap: .42rem;
+  padding-top: .15rem;
+}
+
+.public-app-preloader-activity i {
+  width: .42rem;
+  height: .42rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .86);
+  animation: public-preloader-pulse 1s ease-in-out infinite;
+}
+
+.public-app-preloader-activity i:nth-child(2) { animation-delay: .14s; }
+.public-app-preloader-activity i:nth-child(3) { animation-delay: .28s; }
+
+@keyframes public-preloader-pulse {
+  0%, 70%, 100% { opacity: .3; transform: translateY(0); }
+  35% { opacity: 1; transform: translateY(-.3rem); }
+}
+
+.public-language-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: grid;
+  place-items: center;
+  background: hsl(var(--background) / .16);
+  backdrop-filter: blur(1.5px);
+  cursor: wait;
+}
+
+.public-language-transition-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .75rem 1rem;
+  border: 1px solid hsl(var(--border) / .7);
   border-radius: 999px;
-  background: rgba(255, 255, 255, .22);
-}
-
-.js-public-app #root[data-public-render-shell-root]::before {
-  top: clamp(13rem, 30vh, 18rem);
-  inset-inline-start: max(1.25rem, calc((100% - 78rem) / 2));
-  width: min(34rem, calc(100% - 2.5rem));
-  height: clamp(2.75rem, 7vw, 5rem);
-}
-
-.js-public-app #root[data-public-render-shell-root]::after {
-  top: clamp(17.5rem, 42vh, 24rem);
-  inset-inline-start: max(1.25rem, calc((100% - 78rem) / 2));
-  width: min(27rem, calc(100% - 2.5rem));
-  height: 1.15rem;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background) / .94);
+  box-shadow: 0 .8rem 2.5rem rgba(3, 15, 28, .16);
+  font-size: .875rem;
+  font-weight: 650;
 }
 
 @keyframes public-page-progress-slide {
@@ -389,6 +459,8 @@ textarea:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .public-app-preloader { transition: none; }
+  .public-app-preloader-activity i { animation: none; opacity: .75; transform: none; }
   .detail-loading-hero::after,
   .detail-loading-block::after { animation: none; transform: none; }
   .detail-progressive-image { transition: none; filter: none; transform: none; }

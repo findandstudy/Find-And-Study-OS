@@ -93,6 +93,14 @@ export function PublicLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col font-sans" dir={isRTL ? "rtl" : "ltr"}>
+      {switchingTo ? (
+        <div className="public-language-transition" role="status" aria-live="polite" aria-label={t("common.loading")}>
+          <div className="public-language-transition-pill">
+            <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+            <span>{t("common.loading")}</span>
+          </div>
+        </div>
+      ) : null}
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-[100] focus:rounded focus:bg-background focus:p-3 focus:text-foreground focus:ring-2">
         {t("a11y.skipToContent")}
       </a>

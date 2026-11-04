@@ -592,6 +592,8 @@ test("public detail transitions preload style, dictionary and locale payload wit
   assert.match(publicDetailQuery, /placeholderData: \(previous\) => previous/);
   assert.doesNotMatch(publicLayout, /DelayedPageProgress/);
   assert.doesNotMatch(publicAsyncFeedback, /delayMs|role="progressbar"/);
+  assert.match(publicLayout, /className="public-language-transition" role="status"/);
+  assert.match(indexCss, /\.public-language-transition-pill/);
   assert.match(publicAsyncFeedback, /detail-loading-grid/);
   assert.match(indexCss, /@media \(max-width: 767px\)[\s\S]*\.detail-loading-grid \{ grid-template-columns: 1fr; \}/);
   assert.match(indexCss, /@media \(prefers-reduced-motion: reduce\)/);
@@ -606,6 +608,10 @@ test("public detail transitions preload style, dictionary and locale payload wit
 test("SSR semantic content hands off atomically without painting two layouts", () => {
   assert.match(bootstrap, /document\.documentElement\.classList\.add\("js-public-app"\)/);
   assert.match(indexCss, /\.js-public-app #root\[data-public-render-shell-root\]/);
+  assert.match(main, /preloader\.id = "public-app-preloader"/);
+  assert.match(main, /preloader\.classList\.add\("is-leaving"\)/);
+  assert.match(indexCss, /\.public-app-preloader-brand/);
+  assert.doesNotMatch(indexCss, /#root\[data-public-render-shell-root\]::before/);
   assert.match(main, /rootElement\.replaceChildren\(\)/);
   assert.match(main, /new MutationObserver/);
   assert.match(main, /rootElement\.querySelector\("h1"\)/);

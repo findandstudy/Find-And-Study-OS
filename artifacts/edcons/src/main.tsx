@@ -143,10 +143,34 @@ const rootElement = document.getElementById("root")!;
 // but it is not a React hydration payload. Showing that legacy markup and then
 // replacing it with the richer React template caused a visible second layout
 // pass even when the page was otherwise fast. bootstrap.js marks JS-capable
-// documents before first paint, so CSS presents one stable loading geometry.
-// React replaces the semantic shell immediately and reveals only the fully
-// styled route. No-JS visitors retain the original semantic HTML unchanged.
+// documents before first paint. A deliberately non-page-like branded cover
+// now masks the handoff, so users never mistake loading geometry for the final
+// template. No-JS visitors retain the original semantic HTML unchanged.
 if (rootElement.hasAttribute("data-public-render-shell-root")) {
+  const preloader = document.createElement("div");
+  preloader.id = "public-app-preloader";
+  preloader.className = "public-app-preloader";
+  preloader.setAttribute("role", "status");
+  preloader.setAttribute("aria-live", "polite");
+  preloader.setAttribute("aria-label", "Loading");
+
+  const brand = document.createElement("div");
+  brand.className = "public-app-preloader-brand";
+  const mark = document.createElement("span");
+  mark.className = "public-app-preloader-mark";
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = "F&S";
+  const name = document.createElement("strong");
+  name.textContent = "Find & Study";
+  const activity = document.createElement("span");
+  activity.className = "public-app-preloader-activity";
+  activity.setAttribute("aria-hidden", "true");
+  activity.append(document.createElement("i"), document.createElement("i"), document.createElement("i"));
+  brand.append(mark, name, activity);
+  preloader.append(brand);
+  document.documentElement.classList.add("public-preloader-active");
+  document.body.append(preloader);
+
   rootElement.replaceChildren();
   rootElement.setAttribute("aria-busy", "true");
 
@@ -158,6 +182,11 @@ if (rootElement.hasAttribute("data-public-render-shell-root")) {
     clearTimeout(failSafe);
     rootElement.removeAttribute("data-public-render-shell-root");
     rootElement.removeAttribute("aria-busy");
+    document.documentElement.classList.remove("public-preloader-active");
+    preloader.classList.add("is-leaving");
+    const removePreloader = () => preloader.remove();
+    preloader.addEventListener("transitionend", removePreloader, { once: true });
+    window.setTimeout(removePreloader, 240);
   };
   const observer = new MutationObserver(() => {
     if (rootElement.querySelector("h1")) requestAnimationFrame(handoff);
