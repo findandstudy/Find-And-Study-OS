@@ -397,7 +397,7 @@ router.get(
       eq(programsTable.isActive, true),
     ];
     addPublicCatalogConditions(programConditions, policy);
-    const [[countRow], programRows, seoState, localizedDelivery, locationLinks] = await Promise.all([
+    const [[countRow], degreeRows, programRows, seoState, localizedDelivery, locationLinks] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
         .from(programsTable)
@@ -406,6 +406,18 @@ router.get(
           eq(programsTable.universityId, universitiesTable.id),
         )
         .where(and(...programConditions)),
+      db
+        .selectDistinct({ degree: programsTable.degree })
+        .from(programsTable)
+        .innerJoin(
+          universitiesTable,
+          eq(programsTable.universityId, universitiesTable.id),
+        )
+        .where(and(
+          ...programConditions,
+          sql`${programsTable.degree} IS NOT NULL AND length(trim(${programsTable.degree})) > 0`,
+        ))
+        .orderBy(asc(programsTable.degree)),
       db
         .select({
           id: programsTable.id,
@@ -518,6 +530,9 @@ router.get(
         indexable,
         alternatePaths: seoState.alternates,
         programCount: Number(countRow?.count ?? 0),
+        degreeLevels: degreeRows
+          .map(({ degree }) => degree?.trim())
+          .filter((degree): degree is string => Boolean(degree)),
         returnedPrograms: deliveredPrograms.length,
         programLinkPolicy: internalLinkMode === "published"
           ? "PUBLISHED_INDEXABLE_ONLY"

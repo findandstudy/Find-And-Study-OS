@@ -57,6 +57,7 @@ type UniversityPayload = {
   }>;
   meta: {
     programCount: number;
+    degreeLevels?: string[];
     canonicalPath: string;
     requestedPathIsCanonical: boolean;
     indexable: boolean;
@@ -161,7 +162,12 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   const copy = detailCopy(lang);
   const weatherText = weatherCopy(lang);
   const countryPath = localDetailPath(university.countryPath), cityPath = localDetailPath(university.cityPath);
-  const degrees = [...new Set(payload.programs.map(program => program.degree).filter((value): value is string => !!value))];
+  const degrees = [...new Set(
+    (payload.meta.degreeLevels?.length
+      ? payload.meta.degreeLevels
+      : payload.programs.map(program => program.degree)
+    ).filter((value): value is string => Boolean(value?.trim())),
+  )];
   const location = <>{cityPath ? <Link href={cityPath}>{university.city}</Link> : university.city}{university.city && " · "}{countryPath ? <Link href={countryPath}>{university.country}</Link> : university.country}</>;
   const heroSection = detailHeroSection(editorial);
   const hero = heroSection?.hero;

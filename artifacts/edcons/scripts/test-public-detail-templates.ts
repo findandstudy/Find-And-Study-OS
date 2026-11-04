@@ -111,6 +111,7 @@ test("university template keeps overview, facts and governed programs connected"
     assert.match(university, new RegExp(`(?:href=\\"#${anchor}\\"|id=\\"${anchor}\\")`));
   }
   assert.match(university, /payload\.meta\.programCount/);
+  assert.match(university, /payload\.meta\.degreeLevels/);
   assert.match(university, /programLinkPolicy/);
   assert.match(university, /rel="noopener noreferrer"/);
   assert.doesNotMatch(university, /Fenerbahçe|YÖK|ICEF|example\.com/i);

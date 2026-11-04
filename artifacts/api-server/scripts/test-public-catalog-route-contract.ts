@@ -117,6 +117,8 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(route, /"PUBLISHED_INDEXABLE_ONLY"/);
   assert.match(route, /"LEGACY_UNGATED"/);
   assert.match(route, /programLinkPolicy/);
+  assert.match(route, /selectDistinct\(\{ degree: programsTable\.degree \}\)/);
+  assert.match(route, /degreeLevels: degreeRows/);
   assert.match(route, /safePublicUniversityWebsite/);
   assert.match(route, /parsed\.protocol === "https:"/);
   assert.match(route, /readPublishedLocalizedEntity/);
