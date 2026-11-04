@@ -38,6 +38,18 @@ test("compact detail copy remains bound to the requested locale", () => {
   assert.equal(detailContentSummary(turkish, "housing", "yedek"), "yedek");
 });
 
+test("city hero fact copy can be capped without losing the full editorial section", () => {
+  const city: DetailContent = { ...fixture, kind: "city", entityId: 1, locale: "en", sections: [{
+    key: "campus",
+    title: "Find your exact campus",
+    body: "Universities and campuses are distributed across several central districts and neighbourhoods. The full section keeps the supporting detail for students.",
+  }] };
+  const compact = detailContentSummary(city, "campus", "fallback", 54);
+  assert.ok(compact.length <= 55);
+  assert.match(compact, /…$/u);
+  assert.equal(city.sections[0].body, "Universities and campuses are distributed across several central districts and neighbourhoods. The full section keeps the supporting detail for students.");
+});
+
 test("all supported content keys are orderable and hideable in the existing layout", () => {
   for (const [kind, keys] of Object.entries(DETAIL_CONTENT_KEYS)) {
     const layout = defaultDetailLayout(kind as DetailContent["kind"]);

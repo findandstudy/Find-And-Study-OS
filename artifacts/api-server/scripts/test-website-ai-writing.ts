@@ -72,5 +72,8 @@ test("city key facts generation asks for decision-useful copy without repeating 
     assert.equal(result.facts.body, body);
     assert.match(capturedPrompt, /90–160 word introduction/);
     assert.match(capturedPrompt, /do not repeat or narrate those counters/);
+    assert.match(capturedPrompt, /city sections whose key is campus or housing/);
+    assert.match(capturedPrompt, /8–14 words/);
+    assert.match(capturedPrompt, /under 96 characters/);
   } finally { restore(); }
 });

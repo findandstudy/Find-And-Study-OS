@@ -111,12 +111,12 @@ function compactEditorialSummary(value: string, maxLength = 180): string {
 }
 
 /** Short, locale-bound copy for compact hero facts; never mixes another locale. */
-export function detailContentSummary(content: DetailContent | null, key: string, fallback = ""): string {
+export function detailContentSummary(content: DetailContent | null, key: string, fallback = "", maxLength = 180): string {
   const section = effectiveDetailContentSections(content).find(entry => entry.key === key);
-  if (!section) return fallback;
-  if (section.body?.trim()) return compactEditorialSummary(section.body);
+  if (!section) return compactEditorialSummary(fallback, maxLength);
+  if (section.body?.trim()) return compactEditorialSummary(section.body, maxLength);
   const cardTitles = section.cards?.map(card => card.title.trim()).filter(Boolean) ?? [];
-  return cardTitles.length ? compactEditorialSummary(cardTitles.slice(0, 3).join(" · ")) : fallback;
+  return cardTitles.length ? compactEditorialSummary(cardTitles.slice(0, 3).join(" · "), maxLength) : compactEditorialSummary(fallback, maxLength);
 }
 
 function detailContentSectionBody(section: DetailContentSection, locale: string, _correctionPath: string): ReactNode {
