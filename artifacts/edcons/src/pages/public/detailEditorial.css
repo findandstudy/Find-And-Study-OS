@@ -203,6 +203,13 @@
 .detail-hero > .detail-hero-media { position: absolute; z-index: 0; inset: 0; }
 .detail-hero-media img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .detail-hero .detail-eyebrow { color: #a9c1d8; }
+/* The shared section accent is editable, but it must not reduce contrast over
+   photographic university covers. Keep the identity label tied to the hero
+   foreground while leaving the white summary card's eyebrow untouched. */
+.public-detail > [data-detail-section="hero"] .detail-hero .detail-identity .detail-eyebrow {
+  color: var(--detail-hero-text, #fff);
+  text-shadow: 0 1px 14px rgba(2, 10, 24, .72);
+}
 .detail-hero .detail-breadcrumbs, .detail-hero .detail-breadcrumbs a { color: #dce4ef; }
 .detail-hero .detail-breadcrumbs li + li::before { color: #91a6bd; }
 .detail-hero .detail-editorial-content { color: #fff; padding-bottom: 34px; }
@@ -534,9 +541,11 @@
 .detail-section-heading h2 { font-size: clamp(27px, 3vw, 40px); letter-spacing: -.04em; font-weight: 800; line-height: 1.08; margin: 0; max-width: 34ch; text-wrap: balance; }
 .detail-program .detail-section-heading h2 { font-size: clamp(30px, 3.6vw, 50px); line-height: 1.06; letter-spacing: -.045em; }
 .detail-prose { font-size: 15px; line-height: 1.85; color: var(--detail-muted); max-width: 78ch; white-space: pre-line; overflow-wrap: anywhere; margin: 0; }
+.detail-editorial-section .detail-editorial-intro { max-width: min(96ch, 100%); }
 .detail-snapshot { padding: 22px 26px; border: 1px solid var(--detail-line); border-inline-start: 4px solid var(--detail-accent); background: var(--detail-white); }
 .detail-overview-single .detail-snapshot { max-width: none; }
 .detail-split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 38px; align-items: start; }
+.detail-university .detail-split { grid-template-columns: minmax(260px, .65fr) minmax(0, 1.35fr); }
 .detail-split > * { min-width: 0; }
 .detail-destination-image { display: block; width: 100%; max-height: 300px; object-fit: cover; border-radius: 18px; }
 .detail-keylines { margin: 0; border: 1px solid var(--detail-line); padding: 6px 22px; background: var(--detail-white); }
