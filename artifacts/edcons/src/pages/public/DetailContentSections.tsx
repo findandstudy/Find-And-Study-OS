@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowUpRight, ChevronDown } from "lucide-react";
 import { DETAIL_GENERATED_CONTENT_KEYS, effectiveDetailContentSections, parseDetailContent, type DetailContent, type DetailContentKind, type DetailContentSection } from "@/lib/website/detailContentContract";
 
@@ -54,6 +54,7 @@ function publicDetailSections(content: DetailContent | null): DetailContentSecti
 
 function Gallery({ images, title, locale }: { images: NonNullable<DetailContentSection["images"]>; title: string; locale: string }) {
   const [failed, setFailed] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState<string[]>([]);
   const [selected, setSelected] = useState<(typeof images)[number] | null>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
   const visible = images.filter(image => !failed.includes(image.src));
@@ -61,7 +62,7 @@ function Gallery({ images, title, locale }: { images: NonNullable<DetailContentS
   return <>
     <div className="detail-editorial-gallery">{visible.map((image, index) => <figure key={`${image.src}-${index}`}>
       <button type="button" aria-label={`${detailContentLabels(locale)}: ${image.alt}`} onClick={event => { opener.current = event.currentTarget; setSelected(image); }}>
-        <img src={image.src} alt={image.alt} loading="lazy" decoding="async" width="800" height="560" onError={() => setFailed(old => [...old, image.src])} />
+        <img src={image.src} alt={image.alt} className={`detail-progressive-image ${loaded.includes(image.src) ? "is-loaded" : ""}`} loading="lazy" decoding="async" width="800" height="560" onLoad={() => setLoaded(old => old.includes(image.src) ? old : [...old, image.src])} onError={() => setFailed(old => [...old, image.src])} />
         <span aria-hidden="true"><ArrowUpRight size={19} /></span>
       </button>{image.caption && <figcaption>{image.caption}</figcaption>}
     </figure>)}</div>
@@ -87,9 +88,11 @@ export function DetailHeroMedia({ content }: { content: DetailContent | null }) 
     : undefined;
   const image = heroImage ?? cityGalleryFallback;
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => setLoaded(false), [image?.src]);
   if (!image || failed) return null;
   return <div className="detail-hero-media" aria-hidden="true">
-    <img src={image.src} alt="" loading="eager" decoding="async" fetchPriority="high" onError={() => setFailed(true)} />
+    <img src={image.src} alt="" className={`detail-progressive-image ${loaded ? "is-loaded" : ""}`} loading="eager" decoding="async" fetchPriority="high" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
   </div>;
 }
 

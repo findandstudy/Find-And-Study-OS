@@ -291,3 +291,79 @@ textarea:focus-visible {
 .cookie-consent-known .public-consent-shell {
   display: none;
 }
+@keyframes public-page-progress-slide {
+  0% { transform: translateX(-100%); }
+  55% { transform: translateX(35%); }
+  100% { transform: translateX(220%); }
+}
+
+.public-page-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 140;
+  height: 3px;
+  overflow: hidden;
+  background: color-mix(in srgb, hsl(var(--primary)) 14%, transparent);
+  pointer-events: none;
+}
+
+.public-page-progress > span {
+  display: block;
+  width: 45%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)));
+  box-shadow: 0 0 12px color-mix(in srgb, hsl(var(--primary)) 55%, transparent);
+  animation: public-page-progress-slide 1.15s ease-in-out infinite;
+}
+
+.detail-loading-shell {
+  width: min(100% - 2rem, 80rem);
+  margin-inline: auto;
+  padding-block: clamp(2.5rem, 7vw, 6rem);
+}
+
+.detail-loading-hero,
+.detail-loading-block {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border) / .55);
+  background: hsl(var(--secondary) / .78);
+}
+
+.detail-loading-hero { min-height: clamp(18rem, 42vw, 33rem); border-radius: 1.75rem; }
+.detail-loading-hero.is-compact { min-height: clamp(15rem, 34vw, 27rem); }
+.detail-loading-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(15rem, 1fr); gap: 1.25rem; margin-top: 1.25rem; }
+.detail-loading-block { min-height: 15rem; border-radius: 1.25rem; }
+.detail-loading-block.is-wide { min-height: 21rem; grid-row: span 2; }
+
+.detail-loading-hero::after,
+.detail-loading-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(100deg, transparent 15%, hsl(var(--background) / .72) 48%, transparent 82%);
+  animation: public-page-progress-slide 1.55s ease-in-out infinite;
+}
+
+.detail-progressive-image {
+  opacity: .18;
+  filter: blur(12px);
+  transform: scale(1.025);
+  transition: opacity .32s ease, filter .42s ease, transform .42s ease;
+}
+.detail-progressive-image.is-loaded { opacity: 1; filter: none; transform: none; }
+
+@media (max-width: 767px) {
+  .detail-loading-grid { grid-template-columns: 1fr; }
+  .detail-loading-block.is-wide { min-height: 17rem; grid-row: auto; }
+  .detail-loading-block { min-height: 11rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-page-progress > span,
+  .detail-loading-hero::after,
+  .detail-loading-block::after { animation: none; transform: none; }
+  .detail-progressive-image { transition: none; filter: none; transform: none; }
+}

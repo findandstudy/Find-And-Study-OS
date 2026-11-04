@@ -15,6 +15,7 @@ import { detailCopy, detailMoney, displayTuition, durationIsAmbiguous, localDeta
 import { detailContentPresentationOverrides, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { usePublicDetailPayload } from "./publicDetailQuery";
+import { DetailPageSkeleton } from "@/components/public/PublicAsyncFeedback";
 
 import { ArrowLeft, BookOpen, ArrowUpRight, Building2, GraduationCap, Clock3, Languages, MapPin, CalendarDays, FileText, Wallet } from "lucide-react";
 
@@ -188,15 +189,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   }, [payload, preview, setLocation]);
 
   if (loading) {
-    return (
-      <div className="mx-auto max-w-7xl px-4 py-24">
-        <div className="h-56 animate-pulse rounded-3xl bg-secondary" />
-        <div className="mt-8 grid gap-6 lg:grid-cols-3">
-          <div className="h-80 animate-pulse rounded-2xl bg-secondary lg:col-span-2" />
-          <div className="h-80 animate-pulse rounded-2xl bg-secondary" />
-        </div>
-      </div>
-    );
+    return <DetailPageSkeleton label={t("common.loading")} compact />;
   }
 
   if (error || !program || !payload) {
@@ -205,9 +198,10 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
         <BookOpen className="mx-auto mb-5 h-14 w-14 text-muted-foreground/40" />
         <h1 className="text-2xl font-bold">{t("programs.noResults")}</h1>
         <p className="mt-2 text-muted-foreground">{t("programs.noResultsDesc")}</p>
-        <Button asChild variant="outline" className="mt-7 rounded-full">
-          <Link href={localePath("/programs")}><ArrowLeft className="mr-2 h-4 w-4" />{t("countryDetail.viewAllPrograms")}</Link>
-        </Button>
+        <div className="mt-7 flex flex-wrap justify-center gap-3">
+          {error ? <Button type="button" onClick={() => void detail.retry()}>{t("common.retry")}</Button> : null}
+          <Button asChild variant="outline" className="rounded-full"><Link href={localePath("/programs")}><ArrowLeft className="mr-2 h-4 w-4" />{t("countryDetail.viewAllPrograms")}</Link></Button>
+        </div>
       </div>
     );
   }

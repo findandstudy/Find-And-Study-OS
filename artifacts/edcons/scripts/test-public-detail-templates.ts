@@ -36,6 +36,7 @@ const cityProgramCards = readFileSync(new URL("../src/pages/public/CityProgramCa
 const main = readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8");
 const publicLayout = readFileSync(new URL("../src/components/layout/PublicLayout.tsx", import.meta.url), "utf8");
 const publicDetailQuery = readFileSync(new URL("../src/pages/public/publicDetailQuery.ts", import.meta.url), "utf8");
+const publicAsyncFeedback = readFileSync(new URL("../src/components/public/PublicAsyncFeedback.tsx", import.meta.url), "utf8");
 const cookieBanner = readFileSync(new URL("../src/components/CookieBanner.tsx", import.meta.url), "utf8");
 const bootstrap = readFileSync(new URL("../public/bootstrap.js", import.meta.url), "utf8");
 const indexCss = readFileSync(new URL("../src/index.css", import.meta.url), "utf8");
@@ -589,9 +590,18 @@ test("public detail transitions preload style, dictionary and locale payload wit
   assert.match(publicDetailQuery, /\["public-detail", kind, identity, locale\]/);
   assert.match(publicDetailQuery, /queryFn: \(\{ signal \}/);
   assert.match(publicDetailQuery, /placeholderData: \(previous\) => previous/);
+  assert.match(publicLayout, /<DelayedPageProgress active=\{Boolean\(switchingTo\)\}/);
+  assert.match(publicAsyncFeedback, /delayMs = 350/);
+  assert.match(publicAsyncFeedback, /role="progressbar"/);
+  assert.match(publicAsyncFeedback, /detail-loading-grid/);
+  assert.match(indexCss, /@media \(max-width: 767px\)[\s\S]*\.detail-loading-grid \{ grid-template-columns: 1fr; \}/);
+  assert.match(indexCss, /@media \(prefers-reduced-motion: reduce\)/);
   for (const source of [country, city, university, program]) {
     assert.match(source, /usePublicDetailPayload</);
+    assert.match(source, /<DetailPageSkeleton label=\{t\("common\.loading"\)\}/);
+    assert.match(source, /detail\.retry\(\)/);
   }
+  assert.match(editorial, /detail-progressive-image/);
 });
 
 test("SSR shell remains visible until the client route has rendered its heading", () => {

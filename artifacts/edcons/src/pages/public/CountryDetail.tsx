@@ -16,6 +16,7 @@ import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { Globe2, ArrowLeft, ArrowUpRight, Building2, GraduationCap, MapPin } from "lucide-react";
 import { DeferredBelowFold } from "./DeferredBelowFold";
 import { usePublicDetailPayload } from "./publicDetailQuery";
+import { DetailPageSkeleton } from "@/components/public/PublicAsyncFeedback";
 
 const DetailProgramBrowser = lazy(() => import("./UniversityProgramBrowser").then(module => ({ default: module.DetailProgramBrowser })));
 
@@ -155,13 +156,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
   );
 
   if (isLoading) {
-    return (
-      <div className="pt-24 pb-16 max-w-7xl mx-auto px-4">
-        <div className="h-64 rounded-3xl bg-secondary animate-pulse mb-8" />
-        <div className="h-8 w-64 bg-secondary animate-pulse rounded mb-4" />
-        <div className="h-4 w-full max-w-xl bg-secondary animate-pulse rounded" />
-      </div>
-    );
+    return <DetailPageSkeleton label={t("common.loading")} />;
   }
 
   if (error || !data) {
@@ -170,9 +165,10 @@ export default function CountryDetail({ slug }: { slug: string }) {
         <Globe2 className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
         <h2 className="text-2xl font-bold text-foreground mb-2">{t("countryDetail.notFound")}</h2>
         <p className="text-muted-foreground mb-6">{t("countryDetail.notFoundDesc")}</p>
-        <Button asChild variant="outline" className="rounded-full">
-          <Link href={localePath("/countries")}><ArrowLeft className="w-4 h-4 mr-2" /> {t("countryDetail.backToDestinations")}</Link>
-        </Button>
+        <div className="flex flex-wrap justify-center gap-3">
+          {error ? <Button type="button" onClick={() => void detail.retry()}>{t("common.retry")}</Button> : null}
+          <Button asChild variant="outline" className="rounded-full"><Link href={localePath("/countries")}><ArrowLeft className="w-4 h-4 mr-2" /> {t("countryDetail.backToDestinations")}</Link></Button>
+        </div>
       </div>
     );
   }

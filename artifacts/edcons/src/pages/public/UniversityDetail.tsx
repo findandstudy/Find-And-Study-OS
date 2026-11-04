@@ -16,6 +16,7 @@ import { ArrowLeft, Building2, ExternalLink, ArrowUpRight, MapPin, GraduationCap
 import { CityWeatherCard, type CityWeatherSnapshot } from "./CityWeatherCard";
 import { weatherCopy } from "./weatherPresentation";
 import { usePublicDetailPayload } from "./publicDetailQuery";
+import { DetailPageSkeleton } from "@/components/public/PublicAsyncFeedback";
 
 
 type UniversityPayload = {
@@ -131,14 +132,17 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   }, [payload, preview, setLocation]);
 
   if (loading) {
-    return <div className="mx-auto max-w-7xl px-4 py-24"><div className="h-64 animate-pulse rounded-3xl bg-secondary" /><div className="mt-8 h-96 animate-pulse rounded-3xl bg-secondary" /></div>;
+    return <DetailPageSkeleton label={t("common.loading")} />;
   }
   if (error || !university || !payload) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-32 text-center">
         <Building2 className="mx-auto mb-5 h-14 w-14 text-muted-foreground/40" />
         <h1 className="text-2xl font-bold">{t("countryDetail.notFound")}</h1>
-        <Button asChild variant="outline" className="mt-7 rounded-full"><Link href={localePath("/countries")}><ArrowLeft className="mr-2 h-4 w-4" />{t("countryDetail.backToDestinations")}</Link></Button>
+        <div className="mt-7 flex flex-wrap justify-center gap-3">
+          {error ? <Button type="button" onClick={() => void detail.retry()}>{t("common.retry")}</Button> : null}
+          <Button asChild variant="outline" className="rounded-full"><Link href={localePath("/countries")}><ArrowLeft className="mr-2 h-4 w-4" />{t("countryDetail.backToDestinations")}</Link></Button>
+        </div>
       </div>
     );
   }

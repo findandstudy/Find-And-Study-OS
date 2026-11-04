@@ -10,6 +10,7 @@ import { loadCriticalPublicLanguage } from "@/lib/i18n/context";
 import { prefetchPublicDetailForLanguage } from "@/pages/public/publicDetailQuery";
 import { CountryFlag } from "@/components/CountryFlag";
 import { CookieBanner } from "@/components/CookieBanner";
+import { DelayedPageProgress } from "@/components/public/PublicAsyncFeedback";
 
 export function PublicLayout({ children }: { children: ReactNode }) {
   const { t, lang, setLang, localePath, isRTL } = useI18n();
@@ -93,6 +94,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col font-sans" dir={isRTL ? "rtl" : "ltr"}>
+      <DelayedPageProgress active={Boolean(switchingTo)} label={t("common.loading")} />
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-[100] focus:rounded focus:bg-background focus:p-3 focus:text-foreground focus:ring-2">
         {t("a11y.skipToContent")}
       </a>

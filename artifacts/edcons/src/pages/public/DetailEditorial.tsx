@@ -1,4 +1,4 @@
-import React, { useState, type ReactNode } from "react";
+import React, { useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ArrowUpRight, BookOpen, Building2, MapPin } from "lucide-react";
 import { localDetailPath, type DetailTuition, detailMoney, detailCopy } from "./detailPresentation";
@@ -6,8 +6,10 @@ import { localDetailPath, type DetailTuition, detailMoney, detailCopy } from "./
 /** A missing catalogue photograph leaves no fake campus or empty media frame. */
 export function DetailImage({ src, alt, className = "", priority = false }: { src: string | null | undefined; alt: string; className?: string; priority?: boolean }) {
   const [failed, setFailed] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => setLoaded(false), [src]);
   if (!src || failed === src || !/^(?:https?:\/\/|\/(?!\/))/.test(src)) return null;
-  return <img src={src} alt={alt} className={className} onError={() => setFailed(src)} loading={priority ? "eager" : "lazy"} fetchPriority={priority ? "high" : undefined} decoding="async" />;
+  return <img src={src} alt={alt} className={`${className} detail-progressive-image ${loaded ? "is-loaded" : ""}`} onLoad={() => setLoaded(true)} onError={() => setFailed(src)} loading={priority ? "eager" : "lazy"} fetchPriority={priority ? "high" : undefined} decoding="async" />;
 }
 
 export function DetailIdentity({ src, name, kind = "university" }: { src?: string | null; name: string; kind?: "university" | "city" | "program" }) {
