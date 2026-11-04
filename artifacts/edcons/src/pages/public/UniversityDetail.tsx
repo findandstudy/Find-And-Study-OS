@@ -1,8 +1,7 @@
 import { DetailLayout } from "./DetailLayout";
-import { lazy, Suspense, useEffect, useState, useContext } from "react";
+import { lazy, Suspense, useEffect, useContext } from "react";
 import { DetailPreviewContext } from "./DetailPreviewContext";
 import { Link, useLocation } from "wouter";
-import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
@@ -16,6 +15,7 @@ import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { ArrowLeft, Building2, ExternalLink, ArrowUpRight, MapPin, GraduationCap, Award } from "lucide-react";
 import { CityWeatherCard, type CityWeatherSnapshot } from "./CityWeatherCard";
 import { weatherCopy } from "./weatherPresentation";
+import { usePublicDetailPayload } from "./publicDetailQuery";
 
 
 type UniversityPayload = {
@@ -72,10 +72,16 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
   const [, setLocation] = useLocation();
-  const [fetchedPayload, setPayload] = useState<UniversityPayload | null>(null);
-  const payload = preview ? preview.payload as UniversityPayload : fetchedPayload;
-  const [loading, setLoading] = useState(!preview);
-  const [error, setError] = useState(false);
+  const detail = usePublicDetailPayload<UniversityPayload>({
+    kind: "university",
+    identity: routeKey,
+    locale: lang,
+    preview: Boolean(preview),
+    previewPayload: preview?.payload as UniversityPayload | undefined,
+  });
+  const payload = detail.payload;
+  const loading = detail.loading;
+  const error = detail.error;
   const university = payload?.data;
   const editorial = resolveDetailTemplateContent(boundDetailContent(payload?.editorial, "university", university?.id, lang), detailTemplateVariableValues("university", payload, lang));
 
@@ -119,25 +125,10 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   ] : []);
 
   useEffect(() => {
-    if (preview) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(false);
-    customFetch<UniversityPayload>(
-      `/api/public/catalog/universities/${encodeURIComponent(routeKey)}?locale=${encodeURIComponent(lang)}`,
-      { method: "GET" },
-    )
-      .then((result) => {
-        if (cancelled) return;
-        setPayload(result);
-        if (!result.meta.requestedPathIsCanonical) {
-          setLocation(result.meta.canonicalPath, { replace: true });
-        }
-      })
-      .catch(() => { if (!cancelled) setError(true); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [lang, routeKey, setLocation]);
+    if (!preview && payload && !payload.meta.requestedPathIsCanonical) {
+      setLocation(payload.meta.canonicalPath, { replace: true });
+    }
+  }, [payload, preview, setLocation]);
 
   if (loading) {
     return <div className="mx-auto max-w-7xl px-4 py-24"><div className="h-64 animate-pulse rounded-3xl bg-secondary" /><div className="mt-8 h-96 animate-pulse rounded-3xl bg-secondary" /></div>;

@@ -1,19 +1,25 @@
-import { ReactNode, useState, useRef, useEffect } from "react";
+import { ReactNode, useState, useRef, useEffect, startTransition } from "react";
 import { Link, useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { useI18n } from "@/hooks/use-i18n";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
-import { GraduationCap, Menu, X, ChevronDown, Mail, Phone, MapPin } from "lucide-react";
+import { GraduationCap, Menu, X, ChevronDown, Mail, Phone, MapPin, LoaderCircle } from "lucide-react";
 import { SUPPORTED_LANGUAGES, LANGUAGE_META, LANGUAGE_COUNTRY_CODES, type Language } from "@/lib/i18n/index";
+import { loadCriticalPublicLanguage } from "@/lib/i18n/context";
+import { prefetchPublicDetailForLanguage } from "@/pages/public/publicDetailQuery";
 import { CountryFlag } from "@/components/CountryFlag";
 import { CookieBanner } from "@/components/CookieBanner";
 
 export function PublicLayout({ children }: { children: ReactNode }) {
   const { t, lang, setLang, localePath, isRTL } = useI18n();
   const { settings, resolvedTheme } = useTheme();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
+  const [switchingTo, setSwitchingTo] = useState<Language | null>(null);
+  const [langSwitchFailed, setLangSwitchFailed] = useState(false);
   const [headerLogoFailed, setHeaderLogoFailed] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
 
@@ -54,13 +60,35 @@ export function PublicLayout({ children }: { children: ReactNode }) {
     { href: localePath("/contact"), label: t("nav.contact") },
   ];
 
-  function handleLangSwitch(newLang: Language) {
-    setLang(newLang);
-    setLangOpen(false);
-    const currentPath = window.location.pathname;
+  async function handleLangSwitch(newLang: Language) {
+    if (newLang === lang || switchingTo) {
+      setLangOpen(false);
+      return;
+    }
+    setSwitchingTo(newLang);
+    setLangSwitchFailed(false);
+    const currentPath = location || window.location.pathname;
     const stripped = currentPath.replace(/^\/[a-z]{2}(\/|$)/, "/") || "/";
     const newPath = `/${newLang}${stripped === "/" ? "" : stripped}`;
-    setLocation(newPath, { replace: true });
+    try {
+      const [dictionaryReady] = await Promise.all([
+        loadCriticalPublicLanguage(newLang),
+        prefetchPublicDetailForLanguage(queryClient, currentPath, newLang),
+      ]);
+      if (!dictionaryReady) throw new Error("language_dictionary_unavailable");
+      startTransition(() => {
+        void setLang(newLang);
+        setLocation(newPath, { replace: true });
+        setLangOpen(false);
+      });
+    } catch {
+      // Keep the current URL, dictionary and complete page visible. A failed
+      // prefetch must never turn a language change into a blank/error page.
+      setLangSwitchFailed(true);
+      setLangOpen(true);
+    } finally {
+      setSwitchingTo(null);
+    }
   }
 
   return (
@@ -111,7 +139,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
               >
                 <CountryFlag code={LANGUAGE_COUNTRY_CODES[lang]} size="sm" alt="" />
                 <span className="text-foreground">{currentMeta.code.toUpperCase()}</span>
-                <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${langOpen ? "rotate-180" : ""}`} />
+                {switchingTo ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-primary" /> : <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${langOpen ? "rotate-180" : ""}`} />}
               </button>
               {langOpen && (
                 <div className={`absolute top-full mt-2 ${isRTL ? "left-0" : "right-0"} bg-card border border-border rounded-xl shadow-xl py-2 min-w-[200px] z-[110] max-h-[400px] overflow-y-auto`}>
@@ -121,6 +149,8 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                       <button
                         key={code}
                         onClick={() => handleLangSwitch(code)}
+                        disabled={Boolean(switchingTo)}
+                        aria-busy={switchingTo === code}
                         className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-secondary/80 transition-colors ${
                           code === lang ? "bg-primary/10 text-primary font-semibold" : "text-foreground"
                         }`}
@@ -131,6 +161,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                       </button>
                     );
                   })}
+                  {langSwitchFailed ? <p role="alert" className="px-4 py-2 text-xs text-destructive">{t("common.error")}</p> : null}
                 </div>
               )}
             </div>

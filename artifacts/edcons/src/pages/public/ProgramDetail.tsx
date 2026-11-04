@@ -1,9 +1,8 @@
 import { DetailLayout } from "./DetailLayout";
 import { programAdmissionsOpen } from "@/lib/programAdmissions";
-import { lazy, Suspense, useEffect, useState, useContext } from "react";
+import { lazy, Suspense, useEffect, useContext } from "react";
 import { DetailPreviewContext } from "./DetailPreviewContext";
 import { Link, useLocation } from "wouter";
-import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
@@ -15,6 +14,7 @@ import { DeferredBelowFold } from "./DeferredBelowFold";
 import { detailCopy, detailMoney, displayTuition, durationIsAmbiguous, localDetailPath, splitRequirements, tuitionOffer, type DetailTuition } from "./detailPresentation";
 import { detailContentPresentationOverrides, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
+import { usePublicDetailPayload } from "./publicDetailQuery";
 
 import { ArrowLeft, BookOpen, ArrowUpRight, Building2, GraduationCap, Clock3, Languages, MapPin, CalendarDays, FileText, Wallet } from "lucide-react";
 
@@ -121,10 +121,16 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
   const [, setLocation] = useLocation();
-  const [fetchedPayload, setPayload] = useState<ProgramDetailPayload | null>(null);
-  const payload = preview ? preview.payload as ProgramDetailPayload : fetchedPayload;
-  const [loading, setLoading] = useState(!preview);
-  const [error, setError] = useState(false);
+  const detail = usePublicDetailPayload<ProgramDetailPayload>({
+    kind: "program",
+    identity: routeKey,
+    locale: lang,
+    preview: Boolean(preview),
+    previewPayload: preview?.payload as ProgramDetailPayload | undefined,
+  });
+  const payload = detail.payload;
+  const loading = detail.loading;
+  const error = detail.error;
   const program = payload?.data;
   const editorial = resolveDetailTemplateContent(boundDetailContent(payload?.editorial, "program", program?.id, lang), detailTemplateVariableValues("program", payload, lang));
   const tuition = program ? displayTuition(program, lang) : null;
@@ -176,29 +182,10 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   ] : []);
 
   useEffect(() => {
-    if (preview) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(false);
-    customFetch<ProgramDetailPayload>(
-      `/api/public/catalog/programs/${encodeURIComponent(routeKey)}?locale=${encodeURIComponent(lang)}`,
-      { method: "GET" },
-    )
-      .then((result) => {
-        if (cancelled) return;
-        setPayload(result);
-        if (!result.meta.requestedPathIsCanonical) {
-          setLocation(result.meta.canonicalPath, { replace: true });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [lang, routeKey, setLocation]);
+    if (!preview && payload && !payload.meta.requestedPathIsCanonical) {
+      setLocation(payload.meta.canonicalPath, { replace: true });
+    }
+  }, [payload, preview, setLocation]);
 
   if (loading) {
     return (

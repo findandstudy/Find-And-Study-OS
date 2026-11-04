@@ -7,6 +7,10 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./assets/fonts/inter.css";
 import "./index.css";
+// Public detail pages are route-split, but their visual foundation must be in
+// the render-blocking stylesheet. Otherwise the SSR shell paints before the
+// lazy route discovers this CSS and visitors see a short unstyled flash.
+import "./pages/public/detailEditorial.css";
 
 // ─── Determine the starting in-memory path ───────────────────────────────────
 //

@@ -2,7 +2,6 @@ import { Children, cloneElement, isValidElement, useEffect, useMemo, useRef, use
 import { DetailPreviewContext } from "./DetailPreviewContext";
 import { customFetch } from "@workspace/api-client-react";
 import { defaultDetailLayout, parseDetailLayout, type DetailLayoutKind, type DetailSectionPresentation } from "@/lib/website/detailLayoutContract";
-import "./detailEditorial.css";
 
 const previewSectionLabels: Record<string, string> = {
   gallery: "Image gallery", highlights: "Highlights", cautions: "Things to consider", curriculum: "Curriculum",

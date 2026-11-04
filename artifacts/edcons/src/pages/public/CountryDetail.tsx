@@ -1,10 +1,9 @@
 import { DetailLayout } from "./DetailLayout";
-import { lazy, Suspense, useState, useEffect, useContext } from "react";
+import { lazy, Suspense, useContext } from "react";
 import { DetailPreviewContext } from "./DetailPreviewContext";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
-import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { DetailBreadcrumbs, DetailCard, DetailHeading, DetailImage } from "./DetailEditorial";
 import { boundDetailContent, detailContentAddon, detailContentIntro, detailContentNavigation, detailContentSections, detailContentTitle, DetailHeroMedia, detailHeroSection, detailHeroStyle } from "./DetailContentSections";
@@ -16,6 +15,7 @@ import { detailContentPresentationOverrides, resolveDetailTemplateContent } from
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { Globe2, ArrowLeft, ArrowUpRight, Building2, GraduationCap, MapPin } from "lucide-react";
 import { DeferredBelowFold } from "./DeferredBelowFold";
+import { usePublicDetailPayload } from "./publicDetailQuery";
 
 const DetailProgramBrowser = lazy(() => import("./UniversityProgramBrowser").then(module => ({ default: module.DetailProgramBrowser })));
 
@@ -69,6 +69,22 @@ interface ProgramBrief {
   canonicalPath: string;
 }
 
+type DestinationPayload = {
+  editorial?: unknown;
+  destination: Destination;
+  universities: UniversityBrief[];
+  programs: ProgramBrief[];
+  cities: Array<{ id: number; name: string; sourceName: string; canonicalPath: string }>;
+  stats: { universityCount: number; programCount: number };
+  meta: {
+    locale: Language;
+    indexable: boolean;
+    canonicalPath: string;
+    alternatePaths: Partial<Record<Language, string>>;
+    internalLinkPolicy: "PUBLISHED_INDEXABLE_ONLY" | "LEGACY_UNGATED";
+  };
+};
+
 function fixStorageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   let fixed = url.replace(/\/api\/storage\/objects\/objects\//, "/api/storage/objects/");
@@ -81,24 +97,16 @@ function fixStorageUrl(url: string | null | undefined): string | null {
 export default function CountryDetail({ slug }: { slug: string }) {
   const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
-  const [fetchedData, setData] = useState<{
-    editorial?: unknown;
-    destination: Destination;
-    universities: UniversityBrief[];
-    programs: ProgramBrief[];
-    cities: Array<{ id: number; name: string; sourceName: string; canonicalPath: string }>;
-    stats: { universityCount: number; programCount: number };
-    meta: {
-      locale: Language;
-      indexable: boolean;
-      canonicalPath: string;
-      alternatePaths: Partial<Record<Language, string>>;
-      internalLinkPolicy: "PUBLISHED_INDEXABLE_ONLY" | "LEGACY_UNGATED";
-    };
-  } | null>(null);
-  const data = preview ? preview.payload as NonNullable<typeof fetchedData> : fetchedData;
-  const [isLoading, setIsLoading] = useState(!preview);
-  const [error, setError] = useState(false);
+  const detail = usePublicDetailPayload<DestinationPayload>({
+    kind: "destination",
+    identity: slug,
+    locale: lang,
+    preview: Boolean(preview),
+    previewPayload: preview?.payload as DestinationPayload | undefined,
+  });
+  const data = detail.payload;
+  const isLoading = detail.loading;
+  const error = detail.error;
   const editorial = resolveDetailTemplateContent(boundDetailContent(data?.editorial, "destination", data?.destination.catalogCountryId, lang), detailTemplateVariableValues("destination", data, lang));
 
   useSeo({
@@ -145,18 +153,6 @@ export default function CountryDetail({ slug }: { slug: string }) {
         ]
       : []
   );
-
-  useEffect(() => {
-    if (preview) return;
-    const controller = new AbortController();
-    setIsLoading(true);
-    setError(false);
-    customFetch<any>(`/api/public/destinations/${encodeURIComponent(slug)}?locale=${encodeURIComponent(lang)}`, { method: "GET", signal: controller.signal })
-      .then(d => setData(d))
-      .catch(() => { if (!controller.signal.aborted) setError(true); })
-      .finally(() => { if (!controller.signal.aborted) setIsLoading(false); });
-    return () => controller.abort();
-  }, [slug, lang]);
 
   if (isLoading) {
     return (

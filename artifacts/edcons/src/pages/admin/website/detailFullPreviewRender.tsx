@@ -93,7 +93,7 @@ export async function renderDetailFullPreview({ content, payload, layout, route,
   let renderError = false;
   const dir = LANGUAGE_META[lang].dir;
   const stream = await renderToReadableStream(
-    <I18nContext.Provider value={{ lang, dir, isRTL: dir === "rtl", setLang: () => undefined,
+    <I18nContext.Provider value={{ lang, dir, isRTL: dir === "rtl", setLang: () => Promise.resolve(true),
       t: (key, params) => getTranslation(lang, key, params), localePath: path => buildLocalizedPath(path, lang) }}>
       <Router ssrPath={route.canonicalPath}>
         <DetailPreviewContext.Provider value={{ payload, layout, universityPrograms }}><Page slug={route.routeKey} routeKey={route.routeKey} /></DetailPreviewContext.Provider>

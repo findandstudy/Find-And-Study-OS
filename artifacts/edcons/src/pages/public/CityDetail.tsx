@@ -1,8 +1,7 @@
 import { DetailLayout } from "./DetailLayout";
-import { lazy, Suspense, useEffect, useState, useContext, type CSSProperties } from "react";
+import { lazy, Suspense, useEffect, useContext, type CSSProperties } from "react";
 import { DetailPreviewContext } from "./DetailPreviewContext";
 import { Link, useLocation } from "wouter";
-import { customFetch } from "@workspace/api-client-react";
 import { ArrowLeft, ArrowUpRight, MapPin, Building2, GraduationCap, Globe2 } from "lucide-react";
 
 import { DetailBreadcrumbs, DetailCard, DetailFacts, DetailHeading } from "./DetailEditorial";
@@ -18,6 +17,7 @@ import { detailContentPresentationOverrides, resolveDetailTemplateContent } from
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { CityWeatherCard, type CityWeatherSnapshot } from "./CityWeatherCard";
 import { localizedWeatherDescription, weatherCopy } from "./weatherPresentation";
+import { usePublicDetailPayload } from "./publicDetailQuery";
 
 type CityPayload = {
   editorial?: unknown;
@@ -67,10 +67,16 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
   const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
   const [, setLocation] = useLocation();
-  const [fetchedPayload, setPayload] = useState<CityPayload | null>(null);
-  const payload = preview ? preview.payload as CityPayload : fetchedPayload;
-  const [loading, setLoading] = useState(!preview);
-  const [error, setError] = useState(false);
+  const detail = usePublicDetailPayload<CityPayload>({
+    kind: "city",
+    identity: routeKey,
+    locale: lang,
+    preview: Boolean(preview),
+    previewPayload: preview?.payload as CityPayload | undefined,
+  });
+  const payload = detail.payload;
+  const loading = detail.loading;
+  const error = detail.error;
   const city = payload?.data;
   const editorial = resolveDetailTemplateContent(boundDetailContent(payload?.editorial, "city", city?.id, lang), detailTemplateVariableValues("city", payload, lang));
 
@@ -108,25 +114,10 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
   ] : []);
 
   useEffect(() => {
-    if (preview) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(false);
-    customFetch<CityPayload>(
-      `/api/public/web/cities/${encodeURIComponent(routeKey)}?locale=${encodeURIComponent(lang)}`,
-      { method: "GET" },
-    )
-      .then((result) => {
-        if (cancelled) return;
-        setPayload(result);
-        if (!result.meta.requestedPathIsCanonical) {
-          setLocation(result.meta.canonicalPath, { replace: true });
-        }
-      })
-      .catch(() => { if (!cancelled) setError(true); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [lang, routeKey, setLocation]);
+    if (!preview && payload && !payload.meta.requestedPathIsCanonical) {
+      setLocation(payload.meta.canonicalPath, { replace: true });
+    }
+  }, [payload, preview, setLocation]);
 
   if (loading) {
     return <div className="mx-auto max-w-7xl px-4 py-24"><div className="h-64 animate-pulse rounded-3xl bg-secondary" /><div className="mt-8 h-96 animate-pulse rounded-3xl bg-secondary" /></div>;

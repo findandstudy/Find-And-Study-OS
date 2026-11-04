@@ -35,6 +35,7 @@ const programDialog = readFileSync(new URL("../src/pages/public/PublicProgramDet
 const cityProgramCards = readFileSync(new URL("../src/pages/public/CityProgramCards.tsx", import.meta.url), "utf8");
 const main = readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8");
 const publicLayout = readFileSync(new URL("../src/components/layout/PublicLayout.tsx", import.meta.url), "utf8");
+const publicDetailQuery = readFileSync(new URL("../src/pages/public/publicDetailQuery.ts", import.meta.url), "utf8");
 const cookieBanner = readFileSync(new URL("../src/components/CookieBanner.tsx", import.meta.url), "utf8");
 const bootstrap = readFileSync(new URL("../public/bootstrap.js", import.meta.url), "utf8");
 const indexCss = readFileSync(new URL("../src/index.css", import.meta.url), "utf8");
@@ -560,7 +561,7 @@ test("new presentation preserves canonical SEO, governed sections and guarded ap
     assert.match(source, /alternates: payload\?\.meta\.alternatePaths/);
     assert.match(source, /useJsonLd\(/);
     assert.match(source, /"@type": "BreadcrumbList"/);
-    assert.match(source, /setLocation\(result\.meta\.canonicalPath, \{ replace: true \}\)/);
+    assert.match(source, /setLocation\(payload\.meta\.canonicalPath, \{ replace: true \}\)/);
     for (const section of ["hero", "navigation", "overview"]) assert.ok(source.includes(`data-detail-section="${section}"`));
   }
   assert.match(program, /"@type": "Course"/);
@@ -576,6 +577,21 @@ test("SSR-provided detail layout avoids a duplicate client request while SPA nav
   assert.match(layout, /const serverLayout = embedded\(\)/);
   assert.match(layout, /if \(serverLayout\) \{\s*setLayout\(serverLayout\);\s*return;/);
   assert.match(layout, /customFetch\(`\/api\/public\/web\/detail-layouts\/\$\{kind\}`/);
+});
+
+test("public detail transitions preload style, dictionary and locale payload without blanking the page", () => {
+  assert.match(main, /import "\.\/pages\/public\/detailEditorial\.css"/);
+  assert.doesNotMatch(layout, /import "\.\/detailEditorial\.css"/);
+  assert.match(publicLayout, /loadCriticalPublicLanguage\(newLang\)/);
+  assert.match(publicLayout, /prefetchPublicDetailForLanguage\(queryClient, currentPath, newLang\)/);
+  assert.match(publicLayout, /startTransition\(\(\) =>/);
+  assert.match(publicLayout, /setLocation\(newPath, \{ replace: true \}\)/);
+  assert.match(publicDetailQuery, /\["public-detail", kind, identity, locale\]/);
+  assert.match(publicDetailQuery, /queryFn: \(\{ signal \}/);
+  assert.match(publicDetailQuery, /placeholderData: \(previous\) => previous/);
+  for (const source of [country, city, university, program]) {
+    assert.match(source, /usePublicDetailPayload</);
+  }
 });
 
 test("SSR shell remains visible until the client route has rendered its heading", () => {
@@ -730,7 +746,8 @@ test("Pages editor previews catalogue blocks without persisting catalogue facts"
 
 test("city template and destination links stay on governed canonical projections", () => {
   assert.match(app, /\/\$\{lang\}\/cities\/:routeKey/);
-  assert.match(city, /public\/web\/cities\/\$\{encodeURIComponent\(routeKey\)\}\?locale=/);
+  assert.match(city, /usePublicDetailPayload<CityPayload>/);
+  assert.match(publicDetailQuery, /public\/web\/cities\/\$\{encodedIdentity\}\?locale=\$\{encodedLocale\}/);
   assert.match(city, /requestedPathIsCanonical/);
   assert.match(city, /payload\?\.meta\.indexable/);
   assert.match(city, /"@type": "City"/);

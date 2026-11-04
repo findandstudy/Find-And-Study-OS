@@ -3,7 +3,7 @@ import { type Language } from "./index";
 
 export interface I18nContextValue {
   lang: Language;
-  setLang: (lang: Language) => void;
+  setLang: (lang: Language) => Promise<boolean>;
   t: (key: string, params?: Record<string, string | number>) => string;
   dir: "ltr" | "rtl";
   isRTL: boolean;

@@ -30,7 +30,7 @@ export function isCriticalPublicPath(pathname: string): boolean {
   return parts.length >= 1 && isValidLanguage(parts[0]) && PUBLIC_CRITICAL_SECTIONS.has(parts[1] ?? "");
 }
 
-async function loadCriticalPublicLanguage(lang: Language): Promise<boolean> {
+export async function loadCriticalPublicLanguage(lang: Language): Promise<boolean> {
   if (isPartialLanguageLoaded(lang) || isLanguageLoaded(lang)) return true;
   try {
     const response = await fetch(`/i18n-critical/${lang}.json`, { credentials: "same-origin", cache: "force-cache" });
@@ -167,20 +167,36 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   // order (each awaits its own chunk); only the LATEST request may commit.
   const langSwitchToken = useRef(0);
 
-  const setLang = useCallback((newLang: Language) => {
-    if (!isValidLanguage(newLang)) return;
+  const setLang = useCallback((newLang: Language): Promise<boolean> => {
+    if (!isValidLanguage(newLang)) return Promise.resolve(false);
     // Route synchronization calls setLang for the locale already selected by
     // resolveInitialLang(). Do not turn that no-op into an eager download of
     // the full portal dictionary while a public critical dictionary is active.
-    if (newLang === lang) return;
+    if (newLang === lang) return Promise.resolve(true);
     const token = ++langSwitchToken.current;
-    // Keep showing the CURRENT language until the new dictionary is loaded —
-    // switching state first would flash raw keys / English fallbacks.
-    void loadLanguage(newLang).then((loaded) => {
-      if (token !== langSwitchToken.current) return; // superseded by a newer switch
-      if (!loaded) return; // fetch failed → stay on the current language
+    const commit = () => {
+      if (token !== langSwitchToken.current) return false;
       setLangState(newLang);
       localStorage.setItem(STORAGE_KEY, newLang);
+      if (!isLanguageLoaded(newLang)) {
+        globalThis.setTimeout(() => {
+          void loadLanguage(newLang).then((loaded) => {
+            if (loaded) setDictionaryRevision((value) => value + 1);
+          });
+        }, 0);
+      }
+      return true;
+    };
+    // Language navigation preloads the dictionary first. Commit synchronously
+    // when it is already cached so URL and visible language can change in one
+    // React transition instead of producing an old/new-language flash.
+    if (isLanguageLoaded(newLang) || isPartialLanguageLoaded(newLang)) return Promise.resolve(commit());
+    // Keep showing the CURRENT language until the new dictionary is loaded —
+    // switching state first would flash raw keys / English fallbacks.
+    return loadLanguage(newLang).then((loaded) => {
+      if (token !== langSwitchToken.current) return false; // superseded by a newer switch
+      if (!loaded) return false; // fetch failed → stay on the current language
+      return commit();
     });
   }, [lang]);
 
