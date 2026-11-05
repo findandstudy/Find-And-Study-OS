@@ -3468,10 +3468,10 @@ async function seedClaudeIntegration() {
     if (signedContractPdfWorkerEnabled()) {
       stopLocalSignedContractPdfWorker = startSignedContractPdfWorker();
     }
-    if (!isProd && process.env.WEBSITE_TRANSLATION_QUEUE_ENABLED === "true") {
+    if (process.env.WEBSITE_TRANSLATION_QUEUE_ENABLED === "true") {
       const { startWebsiteTranslationQueueWorker } = await import("./lib/websiteTranslationQueue");
       stopLocalWebsiteTranslationQueueWorker = startWebsiteTranslationQueueWorker();
-      console.log("[website-translation] Local queue worker enabled independently of unrelated schedulers");
+      console.log("[website-translation] Dedicated queue worker enabled independently of unrelated schedulers");
     }
   }
 

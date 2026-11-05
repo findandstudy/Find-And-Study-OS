@@ -35,6 +35,8 @@ services:
     user: "${FASOS_STAGING_UID:?set FASOS_STAGING_UID}:${FASOS_STAGING_GID:?set FASOS_STAGING_GID}"
     env_file:
       - "${FASOS_STAGING_APP_ENV_FILE:?set FASOS_STAGING_APP_ENV_FILE}"
+    environment:
+      WEBSITE_TRANSLATION_QUEUE_ENABLED: "true"
     depends_on:
       db:
         condition: service_healthy
