@@ -447,6 +447,18 @@ textarea:focus-visible {
 }
 .detail-progressive-image.is-loaded { opacity: 1; filter: none; transform: none; }
 
+.destination-card-image {
+  transform: translateY(0) scale(1);
+  transform-origin: center;
+  transition: transform .7s cubic-bezier(.2, .75, .25, 1);
+  will-change: transform;
+}
+
+.group:hover .destination-card-image,
+.group:focus-visible .destination-card-image {
+  transform: translateY(-.25rem) scale(1.06);
+}
+
 @media (max-width: 767px) {
   .detail-loading-grid { grid-template-columns: 1fr; }
   .detail-loading-block.is-wide { min-height: 17rem; grid-row: auto; }
@@ -459,4 +471,5 @@ textarea:focus-visible {
   .detail-loading-hero::after,
   .detail-loading-block::after { animation: none; transform: none; }
   .detail-progressive-image { transition: none; filter: none; transform: none; }
+  .destination-card-image { transition: none; transform: none; }
 }
