@@ -1,5 +1,5 @@
 import { db, websitePagesTable as pages, websitePageBlocksTable as blocks, websitePageVersionsTable as versions, programsTable, universitiesTable, countriesTable, citiesTable, cityExternalFactsTable, destinationsTable } from "@workspace/db";
-import { and, asc, eq, desc, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, desc, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { ensureDetailSeo, inheritEnglishDetailStructure, parseDetailContent, type DetailContent, type DetailContentKind, type DetailSeoFacts } from "./websiteDetailContentContract";
 import { countryAliases, countryMatches } from "./websiteCatalogFilters";
@@ -280,6 +280,59 @@ export async function readPublishedDetailContent(kind: DetailContentKind, entity
     ...(pageOwned ?? { version: 1, kind, entityId, locale, sections: [] }),
     ...(templateSections.length ? { templateSections } : {}),
   } as DetailContent;
+}
+
+/**
+ * Resolve the same reviewed hero image used by public detail pages without an
+ * N+1 read for directory cards. A localized page may inherit the English
+ * structure exactly as the detail renderer does; an English-only page is not
+ * exposed as a fallback when the requested locale has no publication.
+ */
+export async function readPublishedDetailHeroImageUrls(
+  kind: DetailContentKind,
+  entityIds: number[],
+  locale: string,
+): Promise<Map<number, string>> {
+  const ids = [...new Set(entityIds.filter((entityId) => Number.isInteger(entityId) && entityId > 0))];
+  if (!ids.length) return new Map();
+
+  const locales = locale === "en" ? ["en"] : [locale, "en"];
+  const slugs = ids.flatMap((entityId) => locales.map((contentLocale) => detailContentSlug(kind, entityId, contentLocale)));
+  const rows = await db.select({
+    slug: pages.slug,
+    snapshot: versions.blocksSnapshot,
+    versionNumber: versions.versionNumber,
+  }).from(pages)
+    .innerJoin(versions, eq(versions.pageId, pages.id))
+    .where(and(
+      inArray(pages.slug, slugs),
+      eq(pages.template, `detail-content:${kind}`),
+      isNotNull(versions.publishedAt),
+      lte(versions.publishedAt, new Date()),
+    ))
+    .orderBy(desc(versions.versionNumber));
+
+  const latestBySlug = new Map<string, unknown>();
+  for (const row of rows) {
+    if (!latestBySlug.has(row.slug)) latestBySlug.set(row.slug, row.snapshot);
+  }
+  const read = (entityId: number, contentLocale: string): DetailContent | null => {
+    const snapshot = latestBySlug.get(detailContentSlug(kind, entityId, contentLocale));
+    const content = Array.isArray(snapshot) && snapshot.length === 1 && snapshot[0]?.blockType === "detail_content"
+      ? parseDetailContent(snapshot[0].content)
+      : null;
+    return content?.kind === kind && content.entityId === entityId && content.locale === contentLocale ? content : null;
+  };
+
+  const result = new Map<number, string>();
+  for (const entityId of ids) {
+    const localized = read(entityId, locale);
+    const english = locale === "en" ? null : read(entityId, "en");
+    const content = localized ? inheritEnglishDetailStructure(localized, english) : null;
+    const src = content?.sections.find((section) => section.key === "hero")?.images?.[0]?.src?.trim();
+    if (src) result.set(entityId, src);
+  }
+  return result;
 }
 export async function readDetailContentDraft(kind: DetailContentKind, entityId: number, locale: string) {
   const [page] = await db.select().from(pages).where(eq(pages.slug, detailContentSlug(kind, entityId, locale))).limit(1);

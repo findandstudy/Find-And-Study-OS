@@ -8,7 +8,7 @@ import {
 import { courseFinderUniversityLogoUrl } from "../lib/courseFinderVisibility";
 import { normalizeProgramLocale } from "../lib/programTranslationContract";
 import { catalogCountryRouteAccessible, readPublicCatalogCountryDirectory, readCatalogCountryFallback, matchCatalogCountry } from "../lib/publicCatalogLocationLinks";
-import { hasPublishedDetailContent, readPublishedDetailContent } from "../lib/websiteDetailContent";
+import { hasPublishedDetailContent, readPublishedDetailContent, readPublishedDetailHeroImageUrls } from "../lib/websiteDetailContent";
 import { countryAliases } from "../lib/websiteCatalogFilters";
 import {
   parsePublicWebInternalLinkMode,
@@ -60,11 +60,18 @@ router.get("/public/destinations", async (req: Request, res: Response): Promise<
 
   const countMap = new Map(countryCounts.map(c => [c.countryKey, { uniCount: Number(c.uniCount), progCount: Number(c.progCount) }]));
 
-  const localizedDelivery = await readPublishedLocalizedEntities({
-    entityType: "destination",
-    entityIds: destinations.map((destination) => destination.id),
-    locale,
-  });
+  const directory = await readPublicCatalogCountryDirectory(locale);
+  const [localizedDelivery, heroImageByCountryId] = await Promise.all([
+    readPublishedLocalizedEntities({
+      entityType: "destination",
+      entityIds: destinations.map((destination) => destination.id),
+      locale,
+    }),
+    readPublishedDetailHeroImageUrls("destination", directory.entries.map((entry) => entry.country.id), locale),
+  ]);
+  const countryIdByDestinationId = new Map(directory.entries.flatMap((entry) => (
+    entry.destination ? [[entry.destination.id, entry.country.id] as const] : []
+  )));
   const enriched = destinations.flatMap(d => {
     const key = (d.country ?? "").trim().toLowerCase();
     const live = countMap.get(key);
@@ -114,15 +121,16 @@ router.get("/public/destinations", async (req: Request, res: Response): Promise<
       contentPolicy: localized.contentPolicy,
       universityCount: live?.uniCount ?? 0,
       programCount: live?.progCount ?? 0,
+      cardHeroImageUrl: heroImageByCountryId.get(countryIdByDestinationId.get(d.id) ?? -1) ?? null,
     }];
   });
 
   res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=3600");
-  const directory = await readPublicCatalogCountryDirectory(locale);
   const fallbackCountries = directory.entries.filter(entry => !entry.destination).map(entry => ({
     id: null, catalogCountryId: entry.country.id, source: "catalog", name: entry.country.name,
     country: entry.country.name, slug: entry.canonicalPath.split("/").at(-1), canonicalPath: entry.canonicalPath,
     shortDescription: null, description: null, imageUrl: null, isFeatured: false,
+    cardHeroImageUrl: heroImageByCountryId.get(entry.country.id) ?? null,
     universityCount: entry.universityCount, programCount: entry.programCount,
     contentPolicy: "CATALOG_SOURCE_FALLBACK", indexable: false,
   }));

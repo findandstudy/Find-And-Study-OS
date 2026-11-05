@@ -17,6 +17,7 @@ type Destination = {
   country: string;
   flagEmoji: string | null;
   thumbnailUrl: string | null;
+  cardHeroImageUrl: string | null;
   shortDescription: string | null;
   universityCount: number;
   programCount: number;
@@ -95,10 +96,12 @@ function DestinationCard({ destination, index, featured, t, localePath }: {
 }) {
   const gradients = ["from-blue-500/20 to-indigo-600/20", "from-emerald-500/20 to-teal-600/20", "from-rose-500/20 to-pink-600/20", "from-amber-500/20 to-orange-600/20"];
   const iso = destination.country?.length === 2 ? destination.country : destination.flagEmoji ? countryCodeFromEmoji(destination.flagEmoji) : null;
+  const cardImageUrl = destination.cardHeroImageUrl || destination.thumbnailUrl;
   return <Link href={destination.canonicalPath || localePath(`/destinations/${destination.slug}`)} className="group block">
     <article className={`flex ${featured ? "min-h-80" : "min-h-72"} flex-col overflow-hidden rounded-[1.75rem] border border-border/50 bg-card shadow-lg shadow-slate-950/5 transition duration-300 hover:-translate-y-1 hover:shadow-xl`}>
       <div className={`relative flex h-36 items-center justify-center bg-gradient-to-br ${gradients[index % gradients.length]}`}>
-        {destination.thumbnailUrl ? <img src={destination.thumbnailUrl} alt={destination.name} className="absolute inset-0 h-full w-full object-cover" loading="lazy" /> : iso ? <CountryFlag code={iso} size="3xl" rounded className="shadow-md" alt={destination.name} /> : null}
+        {iso ? <CountryFlag code={iso} size="3xl" rounded className="shadow-md" alt={destination.name} /> : null}
+        {cardImageUrl ? <img src={cardImageUrl} alt={destination.name} className="absolute inset-0 h-full w-full object-cover" loading="lazy" decoding="async" onError={(event) => { event.currentTarget.hidden = true; }} /> : null}
         {destination.isFeatured ? <Badge className="absolute end-4 top-4 border-0 bg-amber-500 text-white">{t("countries.featuredBadge")}</Badge> : null}
       </div>
       <div className="flex flex-1 flex-col p-6"><h3 className="font-display text-xl font-bold transition-colors group-hover:text-primary">{destination.name}</h3>{destination.shortDescription ? <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{destination.shortDescription}</p> : null}<div className="mt-auto flex flex-wrap gap-4 pt-5 text-sm text-muted-foreground"><span className="flex items-center gap-1.5"><Building2 className="h-4 w-4 text-primary" />{destination.universityCount} {t(destination.universityCount === 1 ? "countries.university" : "countries.universities")}</span><span className="flex items-center gap-1.5"><GraduationCap className="h-4 w-4 text-accent" />{destination.programCount} {t(destination.programCount === 1 ? "countries.program" : "countries.programs")}</span></div><span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">{t("countries.explore")} <ArrowRight className="h-4 w-4" /></span></div>
