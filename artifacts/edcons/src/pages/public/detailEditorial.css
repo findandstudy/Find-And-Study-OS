@@ -575,9 +575,14 @@
 .detail-program-fees .detail-fee-panel .detail-keylines > div { padding-block: 16px; }
 .detail-program [data-detail-section="related"] { background: var(--detail-paper); }
 .detail-prose { font-size: 15px; line-height: 1.85; color: var(--detail-muted); max-width: 78ch; white-space: pre-line; overflow-wrap: anywhere; margin: 0; }
-.detail-editorial-content > .detail-editorial-intro { max-width: min(96ch, 100%); }
+.detail-editorial-content > .detail-editorial-intro { max-width: min(74ch, 100%); }
+.detail-destination .detail-editorial-content > .detail-editorial-intro,
+.detail-city .detail-editorial-content > .detail-editorial-intro { max-width: min(68ch, calc(100% - 76px)); }
+.detail-university .detail-editorial-content > .detail-editorial-intro { max-width: min(76ch, 100%); }
+.detail-program .detail-editorial-content > .detail-editorial-intro { max-width: min(72ch, 100%); }
 .detail-snapshot { padding: 22px 26px; border: 1px solid var(--detail-line); border-inline-start: 4px solid var(--detail-accent); background: var(--detail-white); }
-.detail-overview-single .detail-snapshot { max-width: none; }
+.detail-overview-single .detail-snapshot { max-width: min(78ch, 100%); }
+.detail-program-story .detail-snapshot { max-width: none; }
 .detail-split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 38px; align-items: start; }
 .detail-university .detail-split { grid-template-columns: minmax(260px, .65fr) minmax(0, 1.35fr); }
 .detail-split > .detail-editorial-content { grid-column: 1 / -1; width: 100%; margin-inline: 0; }
@@ -680,12 +685,36 @@
   .detail-program-requirements-grid,
   .detail-program-fees-grid { gap: 30px; }
 }
+
+/* Cross-template reading comfort and visual rhythm. Keep catalogue facts full
+   width where needed, but prevent editorial copy from becoming a wall of text. */
+@media (min-width: 761px) {
+  .detail-destination > .detail-section,
+  .detail-city > .detail-section { padding-block: clamp(72px, 6vw, 84px); }
+  .detail-university .detail-section,
+  .detail-program .detail-section { padding-block: clamp(64px, 5.5vw, 76px); }
+  .detail-university .detail-hero-main {
+    min-height: clamp(520px, 66vh, 600px);
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+  }
+  .detail-university .detail-hero h1 { font-size: clamp(42px, 4.5vw, 60px); max-width: 18ch; }
+  .detail-program .detail-hero h1 { font-size: clamp(38px, 4vw, 54px); max-width: 18ch; }
+  .detail-country-cover h1,
+  .detail-hero.is-destination.detail-country-cover h1 { font-size: clamp(52px, 6.4vw, 88px); }
+  .detail-city .detail-hero h1 { font-size: clamp(44px, 5.1vw, 72px); }
+  .detail-editorial-cards article,
+  .detail-catalog-card,
+  .detail-intake,
+  .detail-fee-panel { border-radius: 14px; }
+  .detail-destination .detail-editorial-cards article,
+  .detail-city .detail-editorial-cards article { border-radius: 0; }
+}
 @media (max-width: 760px) {
   .detail-wrap { width: calc(100% - 36px); }
   .detail-hero-main { grid-template-columns: 1fr; gap: 28px; min-height: 0; padding-block: 34px 30px; }
   .detail-university .detail-hero-main { grid-template-columns: minmax(0, 1fr); gap: 28px; min-height: 0; padding-block: 34px 30px; }
   .detail-city .detail-hero-main { min-height: min(74vh, 640px); padding-top: 84px; padding-bottom: 0; }
-  .detail-city-coverstrip { grid-template-columns: minmax(0, 1fr); border-radius: 12px; }
+  .detail-city-coverstrip { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); border-radius: 12px; }
   .detail-city-coverstrip > div:last-child:nth-child(odd) { grid-column: auto; }
   .detail-country-cover-inner { padding: 40px 0 44px; }
   .detail-hero-top .detail-breadcrumbs { padding-top: 15px; }
@@ -740,6 +769,17 @@
   .detail-editorial-table { max-width: 100%; overscroll-behavior-inline: contain; scrollbar-gutter: stable; }
   .detail-snapshot { padding: 20px; }
   .detail-prose { font-size: 14px; }
+  .detail-editorial-content > .detail-editorial-intro,
+  .detail-destination .detail-editorial-content > .detail-editorial-intro,
+  .detail-city .detail-editorial-content > .detail-editorial-intro,
+  .detail-university .detail-editorial-content > .detail-editorial-intro,
+  .detail-program .detail-editorial-content > .detail-editorial-intro {
+    max-width: 100%;
+    margin-inline-start: 0;
+  }
+  .detail-editorial-intro { line-height: 1.72; }
+  .detail-university .detail-hero h1,
+  .detail-program .detail-hero h1 { overflow-wrap: break-word; hyphens: auto; }
   .detail-grid { gap: 13px; }
   .detail-catalog-card { padding: 20px; gap: 14px; }
   .detail-program-card { grid-template-columns: 1fr; grid-template-areas: "heading" "meta" "price" "link"; gap: 17px; padding: 20px; }

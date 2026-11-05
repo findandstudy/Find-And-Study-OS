@@ -43,7 +43,7 @@ const indexCss = readFileSync(new URL("../src/index.css", import.meta.url), "utf
 
 test("detail sections collapse safely across tablet and mobile layouts", () => {
   assert.match(css, /@media \(max-width: 1050px\)[\s\S]*\.detail-editorial-gallery \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
-  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-city-coverstrip \{ grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-city-coverstrip \{ grid-template-columns: repeat\(auto-fit, minmax\(140px, 1fr\)\)/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-country-stats \{ grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-facts \{ grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(css, /\.detail-editorial-gallery,[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
@@ -122,7 +122,7 @@ test("university template keeps overview, facts and governed programs connected"
 
 test("university template preserves hero contrast and a usable editorial measure", () => {
   assert.match(css, /\[data-detail-section="hero"\][\s\S]*\.detail-identity \.detail-eyebrow[\s\S]*color: var\(--detail-hero-text, #fff\)/);
-  assert.match(css, /\.detail-editorial-content > \.detail-editorial-intro \{ max-width: min\(96ch, 100%\); \}/);
+  assert.match(css, /\.detail-editorial-content > \.detail-editorial-intro \{ max-width: min\(74ch, 100%\); \}/);
   assert.match(css, /\.detail-university \.detail-split \{ grid-template-columns: minmax\(260px, \.65fr\) minmax\(0, 1\.35fr\); \}/);
   assert.match(css, /\.detail-split > \.detail-editorial-content \{ grid-column: 1 \/ -1; width: 100%; margin-inline: 0; \}/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-split \{ grid-template-columns: 1fr;/);
