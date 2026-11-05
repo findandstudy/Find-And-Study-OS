@@ -179,7 +179,8 @@ test("program detail uses the shared decision-focused responsive template", () =
   assert.match(program, /detail-program-overview-grid/);
   assert.match(program, /detail-program-requirements-grid/);
   assert.match(program, /detail-program-fees/);
-  assert.match(css, /\.detail-program \.detail-hero-main \{ min-height: clamp\(540px, 70vh, 660px\)/);
+  assert.match(css, /\.detail-program \.detail-hero-main \{ min-height: clamp\(500px, 62vh, 600px\)/);
+  assert.doesNotMatch(css, /\.detail-program \.detail-hero-card::before/);
   assert.match(css, /\.detail-program \.detail-factbar \.detail-facts \{[^}]*border-radius: 18px/);
   assert.match(css, /@media \(max-width: 480px\)[\s\S]*\.detail-program \.detail-hero-card \.detail-actions \{ display: none; \}/);
 });

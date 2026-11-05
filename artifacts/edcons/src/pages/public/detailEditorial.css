@@ -218,15 +218,14 @@
 .detail-hero-main { display: grid; grid-template-columns: minmax(0, 1.2fr) 380px; gap: 48px; align-items: end; padding-block: 64px 44px; min-height: 510px; }
 .detail-hero-main > * { min-width: 0; }
 .detail-hero h1 { font-size: clamp(38px, 5.2vw, 68px); letter-spacing: -.05em; line-height: .98; font-weight: 800; margin: 16px 0 20px; max-width: 16ch; text-wrap: balance; }
-.detail-program .detail-hero h1 { font-size: clamp(42px, 5vw, 70px); line-height: .98; max-width: 14ch; }
-.detail-program .detail-hero-main { min-height: clamp(540px, 70vh, 660px); padding-top: 68px; padding-bottom: 52px; align-items: center; }
+.detail-program .detail-hero h1 { font-size: clamp(38px, 4.2vw, 60px); line-height: 1; max-width: 16ch; }
+.detail-program .detail-hero-main { min-height: clamp(500px, 62vh, 600px); padding-top: 52px; padding-bottom: 44px; align-items: center; }
 .detail-program .detail-hero-content { max-width: 800px; }
 .detail-program .detail-identity { display: inline-flex; max-width: 100%; padding: 7px 12px 7px 7px; border: 1px solid rgba(255,255,255,.22); border-radius: 14px; background: rgba(8,23,39,.36); backdrop-filter: blur(12px); }
 .detail-program .detail-identity .detail-card-identity { width: 42px; height: 42px; border-radius: 10px; }
 .detail-program .detail-hero-link { min-width: 0; overflow-wrap: anywhere; }
 .detail-program .detail-meta-pill { min-height: 38px; border-radius: 999px; padding-inline: 13px; backdrop-filter: blur(10px); }
-.detail-program .detail-hero-card { position: relative; border-radius: 20px; border: 1px solid rgba(255,255,255,.55); padding: 28px; box-shadow: 0 24px 70px rgba(3,12,25,.24); }
-.detail-program .detail-hero-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; border-radius: 20px 20px 0 0; background: linear-gradient(90deg, var(--detail-accent), #df2538); }
+.detail-program .detail-hero-card { position: relative; border-radius: 18px; border: 1px solid rgba(8,23,39,.10); padding: 28px; box-shadow: 0 22px 64px rgba(3,12,25,.22); }
 .detail-program .detail-hero-card .detail-price { font-size: clamp(30px, 3vw, 38px); }
 .detail-program .detail-hero-card .detail-actions { margin-top: 12px; }
 .detail-program .detail-hero-card .detail-actions:first-of-type { margin-top: 22px; }
@@ -673,7 +672,7 @@
   .detail-housing-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 0; }
   .detail-housing-strip > article:first-child { grid-column: 1 / -1; }
   .detail-editorial-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .detail-program .detail-hero-main { grid-template-columns: minmax(0, 1fr) 330px; gap: 32px; min-height: 570px; padding-top: 56px; }
+  .detail-program .detail-hero-main { grid-template-columns: minmax(0, 1fr) 330px; gap: 32px; min-height: 540px; padding-top: 46px; }
   .detail-program-overview-grid,
   .detail-program-requirements-grid,
   .detail-program-fees-grid { gap: 30px; }
@@ -689,7 +688,7 @@
   .detail-hero-top .detail-breadcrumbs { padding-top: 15px; }
   .detail-hero h1 { font-size: clamp(30px, 7vw, 44px); max-width: none; margin-block: 14px 16px; }
   .detail-program .detail-hero-main { grid-template-columns: 1fr; min-height: 0; padding-top: 36px; padding-bottom: 50px; }
-  .detail-program .detail-hero h1 { font-size: clamp(36px, 10vw, 50px); line-height: 1; }
+  .detail-program .detail-hero h1 { font-size: clamp(32px, 8.8vw, 42px); line-height: 1.02; }
   .detail-program .detail-identity { width: 100%; }
   .detail-program .detail-hero-card { width: 100%; max-width: none; padding: 24px; }
   .detail-program .detail-factbar { margin-top: -18px; padding-bottom: 18px; }

@@ -259,7 +259,7 @@ test("public detail presentation retains the approved HTML-reference visual lang
   assert.match(styles, /\.detail-hero-main \{[^}]*grid-template-columns: minmax\(0, 1\.2fr\) 380px/);
   assert.match(styles, /\.detail-section \{ padding-block: 64px/);
   assert.match(styles, /\.detail-program \.detail-section \{ padding-block: 76px/);
-  assert.match(styles, /\.detail-program \.detail-hero-main \{ min-height: clamp\(540px, 70vh, 660px\)/);
+  assert.match(styles, /\.detail-program \.detail-hero-main \{ min-height: clamp\(500px, 62vh, 600px\)/);
   assert.match(styles, /\.detail-university \.detail-hero-main \{ min-height: min\(72vh, 640px\)/);
   assert.match(styles, /\.detail-editorial-section\.is-climate \.detail-editorial-cards/);
   assert.match(styles, /counter-reset: detail-chapter 0/);
