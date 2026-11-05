@@ -99,15 +99,27 @@ export async function readCatalogCountryFallback(localeInput: unknown, slug: str
   if (!entry) return null;
   const conditions: any[] = [inArray(universitiesTable.country, entry.sourceCountryNames)];
   addPublicCatalogConditions(conditions, await getPublicCatalogPolicy());
-  const [universities, cities] = await Promise.all([
+  const [universities, cities, cityUniversityCountRows] = await Promise.all([
     db.select({ id: universitiesTable.id, name: universitiesTable.name, city: universitiesTable.city,
       universityType: universitiesTable.universityType }).from(universitiesTable).where(and(...conditions)).orderBy(asc(universitiesTable.name)).limit(24),
     db.select({ id: citiesTable.id, name: citiesTable.name }).from(citiesTable)
       .where(and(eq(citiesTable.countryId, entry.country.id), eq(citiesTable.isActive, true))).orderBy(asc(citiesTable.name)).limit(24),
+    db.select({
+      cityKey: sql<string>`lower(trim(${universitiesTable.city}))`.as("city_key"),
+      universityCount: sql<number>`count(*)`.as("university_count"),
+    }).from(universitiesTable)
+      .where(and(...conditions, sql`nullif(trim(${universitiesTable.city}), '') is not null`))
+      .groupBy(sql`lower(trim(${universitiesTable.city}))`),
   ]);
+  const universityCountByCity = new Map(cityUniversityCountRows.map(row => [row.cityKey, Number(row.universityCount)]));
   const cityLinks = await Promise.all(cities.map(async city => {
     const delivery = await readPublishedLocalizedEntity({ entityType: "city", entityId: city.id, locale: directory.locale });
-    return { ...city, sourceName: city.name, canonicalPath: delivery.snapshot?.canonicalPath ?? `/${directory.locale}/cities/${publicCatalogRouteKey(city.id, city.name)}` };
+    return {
+      ...city,
+      sourceName: city.name,
+      universityCount: universityCountByCity.get(city.name.trim().toLocaleLowerCase("en-US")) ?? 0,
+      canonicalPath: delivery.snapshot?.canonicalPath ?? `/${directory.locale}/cities/${publicCatalogRouteKey(city.id, city.name)}`,
+    };
   }));
   const programCounts = universities.length ? await db.select({ universityId: programsTable.universityId,
     count: sql<number>`count(*)` }).from(programsTable)

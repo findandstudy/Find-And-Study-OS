@@ -787,7 +787,10 @@ test("city template and destination links stay on governed canonical projections
   assert.match(city, /"@type": "City"/);
   assert.match(country, /cityLinks/);
   assert.match(country, /city\.sourceName/);
+  assert.match(country, /city\.universityCount/);
+  assert.match(country, /countries\.university/);
   assert.match(country, /href=\{cityPath\}/);
+  assert.match(css, /\.detail-city-university-count/);
   assert.doesNotMatch(city, /dangerouslySetInnerHTML|serviceFee|commission|contactPerson/);
 });
 

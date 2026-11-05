@@ -39,7 +39,7 @@ test("catalog-only country and city are reachable, noindex, and inactive entitie
     assert.equal(detail.meta.indexable, false); assert.deepEqual(detail.meta.alternatePaths, {});
     assert.equal(detail.destination.source, "catalog");
     assert.equal(detail.universities.find((row: any) => row.id === universityId)?.programCount, 0);
-    assert.ok(detail.cities.some((city: any) => city.id === cityId));
+    assert.equal(detail.cities.find((city: any) => city.id === cityId)?.universityCount, 1);
     const cityRoute = publicCatalogRouteKey(cityId!, run);
     const cityResponse = await fetch(`${base}/public/web/cities/${cityRoute}?locale=en`);
     assert.equal(cityResponse.status, 200);

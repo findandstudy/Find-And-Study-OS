@@ -278,20 +278,33 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     return;
   }
 
-  const cityRows = await db.select({
-    id: citiesTable.id,
-    name: citiesTable.name,
-    country: countriesTable.name,
-  })
-    .from(citiesTable)
-    .innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id))
-    .where(and(
-      eq(citiesTable.isActive, true),
-      eq(countriesTable.isActive, true),
-      mappedCountry ? eq(countriesTable.id, mappedCountry.id) : sql`false`,
-    ))
-    .orderBy(asc(citiesTable.name), asc(citiesTable.id))
-    .limit(256);
+  const [cityRows, cityUniversityCountRows] = await Promise.all([
+    db.select({
+      id: citiesTable.id,
+      name: citiesTable.name,
+      country: countriesTable.name,
+    })
+      .from(citiesTable)
+      .innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id))
+      .where(and(
+        eq(citiesTable.isActive, true),
+        eq(countriesTable.isActive, true),
+        mappedCountry ? eq(countriesTable.id, mappedCountry.id) : sql`false`,
+      ))
+      .orderBy(asc(citiesTable.name), asc(citiesTable.id))
+      .limit(256),
+    db.select({
+      cityKey: sql<string>`lower(trim(${universitiesTable.city}))`.as("city_key"),
+      universityCount: sql<number>`count(*)`.as("university_count"),
+    })
+      .from(universitiesTable)
+      .where(and(
+        ...universityConditions,
+        sql`nullif(trim(${universitiesTable.city}), '') is not null`,
+      ))
+      .groupBy(sql`lower(trim(${universitiesTable.city}))`),
+  ]);
+  const universityCountByCity = new Map(cityUniversityCountRows.map((row) => [row.cityKey, Number(row.universityCount)]));
   const popularCityKeys = new Set(localizedDestination.popularCities.map((city) => city.toLocaleLowerCase("en-US")));
   const cityCandidates = cityRows;
   const cityIdBatches = Array.from(
@@ -378,6 +391,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       id: city.id,
       name: localized.name,
       sourceName: city.name,
+      universityCount: universityCountByCity.get(sourceKey) ?? 0,
       canonicalPath: delivery.snapshot?.canonicalPath || buildPublicWebCanonicalPath({ entityType: "CITY", entityId: city.id, locale, slug: city.name }),
     }];
   }).slice(0, 24);

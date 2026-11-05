@@ -75,7 +75,7 @@ type DestinationPayload = {
   destination: Destination;
   universities: UniversityBrief[];
   programs: ProgramBrief[];
-  cities: Array<{ id: number; name: string; sourceName: string; canonicalPath: string }>;
+  cities: Array<{ id: number; name: string; sourceName: string; universityCount: number; canonicalPath: string }>;
   stats: { universityCount: number; programCount: number };
   meta: {
     locale: Language;
@@ -182,12 +182,12 @@ export default function CountryDetail({ slug }: { slug: string }) {
   const hasOverview = !!overviewDescription || whyPoints.length > 0 || hasOverviewImage;
   const cityNames = dest.popularCities?.split(",").map(c => c.trim()).filter(Boolean) || [];
   const cityLinks = new Map(data.cities.flatMap((city) => [
-    [city.name.toLocaleLowerCase("en-US"), city.canonicalPath] as const,
-    [city.sourceName.toLocaleLowerCase("en-US"), city.canonicalPath] as const,
+    [city.name.toLocaleLowerCase("en-US"), city] as const,
+    [city.sourceName.toLocaleLowerCase("en-US"), city] as const,
   ]));
-  const cities = [...data.cities.map(city => ({ name: city.name, canonicalPath: city.canonicalPath })), ...cityNames
+  const cities = [...data.cities.map(city => ({ name: city.name, canonicalPath: city.canonicalPath, universityCount: city.universityCount })), ...cityNames
     .filter(name => !cityLinks.has(name.toLocaleLowerCase("en-US")))
-    .map(name => ({ name, canonicalPath: null }))];
+    .map(name => ({ name, canonicalPath: null, universityCount: null }))];
   const facts = [
     { label: t("countryDetail.language"), value: dest.language },
     { label: t("countryDetail.currency"), value: dest.currency },
@@ -265,7 +265,10 @@ export default function CountryDetail({ slug }: { slug: string }) {
           {detailContentIntro(editorial, "cities")}
           <div className="detail-grid">{cities.map((city) => {
             const cityPath = city.canonicalPath;
-            return cityPath ? <DetailCard key={city.name} href={cityPath} eyebrow={dest.name} title={city.name} kind="city" /> : <article key={city.name} className="detail-catalog-card"><MapPin aria-hidden="true" /><p className="detail-eyebrow">{dest.name}</p><h3>{city.name}</h3></article>;
+            const count = Number.isFinite(city.universityCount) ? city.universityCount : null;
+            const countLabel = count === null ? null : t(count === 1 ? "countries.university" : "countries.universities");
+            const countContent = count === null ? null : <p className="detail-city-university-count"><Building2 size={15} aria-hidden="true" /><strong>{count.toLocaleString(lang)}</strong> {countLabel}</p>;
+            return cityPath ? <DetailCard key={city.name} href={cityPath} eyebrow={dest.name} title={city.name} kind="city">{countContent}</DetailCard> : <article key={city.name} className="detail-catalog-card is-city"><MapPin aria-hidden="true" /><div><p className="detail-eyebrow">{dest.name}</p><h3>{city.name}</h3>{countContent}</div></article>;
           })}</div>
         </div>
       </section>}

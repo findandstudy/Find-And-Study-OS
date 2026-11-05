@@ -616,6 +616,9 @@
 .detail-catalog-card.is-city .detail-card-arrow { position: absolute; inset-inline-end: 18px; top: calc(50% - 9px); }
 .detail-catalog-card.is-city h3 { margin: 0; }
 .detail-catalog-card.is-city .detail-eyebrow { margin-bottom: 3px; }
+.detail-catalog-card.is-city .detail-city-university-count { display: flex; align-items: center; gap: 5px; margin-top: 5px; color: var(--detail-muted); }
+.detail-catalog-card.is-city .detail-city-university-count svg { color: var(--detail-accent); flex: 0 0 auto; }
+.detail-catalog-card.is-city .detail-city-university-count strong { color: var(--detail-ink); font-weight: 800; }
 .detail-destination-image + .detail-eyebrow { margin-top: 20px; }
 .detail-intake { padding: 23px; border: 1px solid var(--detail-line); background: var(--detail-white); }
 .detail-intake h3 { font-size: 25px; line-height: 1.35; margin: 0 0 13px; font-weight: 700; }
