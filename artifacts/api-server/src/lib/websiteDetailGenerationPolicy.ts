@@ -64,15 +64,15 @@ const PAGE_INTENT: Record<DetailContentKind, string> = {
 };
 
 const COMMON_POLICIES: Record<string, SectionPolicy> = {
-  hero: { objective: "Introduce the exact page entity and its most useful verified study decision point.", intent: "What is this study option and why should I continue reading?", evidence: [["name", "destination", "city", "university", "program"]], minCharacters: 80, maxCharacters: 520 },
-  overview: { objective: "Give a durable, entity-specific orientation without repeating the hero.", intent: "What should I know first?", evidence: [["description", "shortDescription"], ["officialSources"]], minCharacters: 180 },
-  gallery: { objective: "Explain what a prospective student should assess in the available imagery.", intent: "What can I learn from the location or campus visuals?", evidence: [["description", "shortDescription", "campusGeography", "address"], ["officialSources"]], minCharacters: 140 },
-  highlights: { objective: "Present distinct, decision-useful strengths supported by named facts.", intent: "What meaningfully differentiates this option?", evidence: [["programs", "universities", "teachingLanguages", "degree", "field"], ["description", "officialSources"]], minCharacters: 180 },
-  cautions: { objective: "Explain practical trade-offs without fear, filler or repeated disclaimers.", intent: "What should I plan carefully?", evidence: [["requirements", "transportModes", "housingSummary", "programs"], ["officialSources"]], minCharacters: 160 },
-  education: { objective: "Explain the verified academic options and how a student should compare them.", intent: "What can I study and in which language or level?", evidence: [["programs", "teachingLanguages", "degree", "field"], ["officialSources"]], minCharacters: 180 },
-  curriculum: { objective: "Describe verified curriculum or study-format evidence without inventing modules.", intent: "What will the learning experience cover?", evidence: [["curriculum", "programs", "field", "description"], ["officialSources"]], minCharacters: 180 },
-  facts: { objective: "Interpret verified facts for a student decision; never narrate live counters.", intent: "Which facts affect my shortlist?", evidence: [["teachingLanguages", "transportModes", "campusGeography", "climateSummary", "housingSummary", "type", "address", "degree", "duration"], ["officialSources"]], minCharacters: 260, maxCharacters: 900 },
-  admission: { objective: "Explain the verified admissions path and what must be confirmed for the exact intake.", intent: "How does admission work?", evidence: [["requirements", "intakes"], ["officialSources"]], minCharacters: 180 },
+  hero: { objective: "Introduce the exact page entity with a source-bound value proposition and the most useful verified study decision point.", intent: "What is this study option, what makes it relevant and why should I continue reading?", evidence: [["name", "destination", "city", "university", "program"]], minCharacters: 150, maxCharacters: 520 },
+  overview: { objective: "Give a durable, entity-specific orientation with context, fit and trade-offs without repeating the hero.", intent: "What should I know first?", evidence: [["description", "shortDescription"], ["officialSources"]], minCharacters: 280, maxCharacters: 950 },
+  gallery: { objective: "Explain what a prospective student should assess in the available imagery and why those visual cues matter.", intent: "What can I learn from the location or campus visuals?", evidence: [["description", "shortDescription", "campusGeography", "address"], ["officialSources"]], minCharacters: 200, maxCharacters: 760 },
+  highlights: { objective: "Present distinct, decision-useful strengths supported by named facts and explain their practical value.", intent: "What meaningfully differentiates this option?", evidence: [["programs", "universities", "teachingLanguages", "degree", "field"], ["description", "officialSources"]], minCharacters: 260, maxCharacters: 900 },
+  cautions: { objective: "Explain practical trade-offs and planning decisions without fear, filler or repeated disclaimers.", intent: "What should I plan carefully?", evidence: [["requirements", "transportModes", "housingSummary", "programs"], ["officialSources"]], minCharacters: 230, maxCharacters: 820 },
+  education: { objective: "Explain the verified academic options, meaningful variety and how a student should compare them.", intent: "What can I study and in which language or level?", evidence: [["programs", "teachingLanguages", "degree", "field"], ["officialSources"]], minCharacters: 260, maxCharacters: 920 },
+  curriculum: { objective: "Describe verified curriculum or study-format evidence and its learning significance without inventing modules.", intent: "What will the learning experience cover?", evidence: [["curriculum", "programs", "field", "description"], ["officialSources"]], minCharacters: 240, maxCharacters: 900 },
+  facts: { objective: "Interpret verified facts for a student decision; connect them to practical choices and never narrate live counters.", intent: "Which facts affect my shortlist and why?", evidence: [["teachingLanguages", "transportModes", "campusGeography", "climateSummary", "housingSummary", "type", "address", "degree", "duration"], ["officialSources"]], minCharacters: 480, maxCharacters: 1100 },
+  admission: { objective: "Explain the verified admissions path, its sequence and what must be confirmed for the exact intake.", intent: "How does admission work and what should I prepare?", evidence: [["requirements", "intakes"], ["officialSources"]], minCharacters: 250, maxCharacters: 900 },
   requirements: { objective: "Summarise only verified entry requirements and distinguish them from planning guidance.", intent: "What do I need to qualify?", evidence: [["requirements"], ["officialSources"]], minCharacters: 160 },
   fees: { objective: "Explain authoritative fee components without inventing or estimating prices.", intent: "What verified fees should I budget for?", evidence: [["tuitionFee", "discountedFee", "currency"], ["officialSources"]], minCharacters: 140 },
   intakes: { objective: "Explain verified intake timing and deadline evidence without guessing dates.", intent: "When can I start and apply?", evidence: [["intakes"], ["officialSources"]], minCharacters: 140 },
@@ -220,6 +220,10 @@ export function buildDetailGenerationPlan(input: {
     pageRules: [
       "Give each section one distinct job and do not repeat advice or evidence already assigned elsewhere.",
       "Use deterministic catalogue facts as facts; use AI only to explain their significance.",
+      "Write an entity-specific, source-bound value proposition in the hero; do not reduce it to a neutral inventory summary.",
+      "Use intent-led editorial headings that reveal the section's value; avoid one-word labels such as Overview or Highlights for generated editorial sections.",
+      "Preserve useful editorial depth. Do not replace specific context, comparisons or trade-offs with shallow totals or generic summaries.",
+      "End action sections with one clear, realistic next step that follows from the evidence on the page.",
       "Do not expose internal catalogue, source-record, prompt, AI or editorial-review language.",
       "Do not use one institution or programme as the recurring example on destination or city pages.",
       "Use verification advice only where time-sensitive evidence genuinely requires it, and never as a stock ending.",
@@ -241,10 +245,14 @@ const similarity = (left: string, right: string) => {
 const ENGLISH_LEAKAGE = /\b(?:weather|transport|campus|housing|broken clouds|few clouds|scattered clouds|overcast clouds|clear sky|feels like|daily range|student services)\b/giu;
 const INTERNAL_WORDING = /\b(?:catalog(?:ue)?|source record|connected source|prompt|generated by ai|editorial review|katalog|kaynak kaydı)\b/giu;
 const STOCK_DISCLAIMER = /\b(?:check directly|confirm directly|ask the (?:institution|university)|verify current|compare the exact|contact the (?:institution|university))\b/giu;
+const GENERIC_SECTION_TITLE = /^(?:overview|introduction|highlights|education|gallery|image gallery|key facts|facts|student life|next step|things to consider)$/iu;
+const TECHNICAL_OR_DRAFT_COPY = /\b(?:review and customi[sz]e|before publishing|supplied from|connected source|source records?)\b/iu;
+const LITERAL_ELLIPSIS = /(?:…|\.\.\.)/u;
 
 export function evaluateDetailContentQuality(input: {
   content: DetailContent;
   plan: DetailGenerationPlan;
+  previous?: DetailContent;
 }): DetailContentQualityReport {
   const issues: DetailContentQualityIssue[] = [];
   const generatedKeys = new Set(input.plan.sections.map(section => section.key));
@@ -263,11 +271,36 @@ export function evaluateDetailContentQuality(input: {
   const internalMatches = combined.match(INTERNAL_WORDING) ?? [];
   if (internalMatches.length) issues.push({ code: "INTERNAL_WORDING", severity: "blocker", sections: sections.filter(section => new RegExp(INTERNAL_WORDING.source, "iu").test(`${section.title}\n${section.body}`)).map(section => section.key), message: "Public copy exposes internal catalogue, source or generation language." });
   INTERNAL_WORDING.lastIndex = 0;
+  const technicalCopy = sections.filter(section => TECHNICAL_OR_DRAFT_COPY.test(`${section.title}\n${section.body}`)).map(section => section.key);
+  if (technicalCopy.length) issues.push({ code: "TECHNICAL_FALLBACK_COPY", severity: "blocker", sections: technicalCopy, message: "Public copy contains drafting, publishing or source-system instructions." });
+  const genericTitles = sections.filter(section => section.key !== "hero" && GENERIC_SECTION_TITLE.test(section.title.trim())).map(section => section.key);
+  if (genericTitles.length >= 2) issues.push({ code: "GENERIC_SECTION_TITLES", severity: "warning", sections: genericTitles, message: "Too many editorial sections use generic labels instead of entity-specific, intent-led headings." });
   const disclaimerCount = (combined.match(STOCK_DISCLAIMER) ?? []).length;
   if (disclaimerCount > 3) issues.push({ code: "REPEATED_VERIFICATION_DISCLAIMER", severity: "warning", sections: [], message: "Verification advice is repeated as stock copy instead of adding information." });
   const planByKey = new Map(input.plan.sections.map(section => [section.key, section] as const));
   const thin = sections.filter(section => (section.body?.length ?? 0) < (planByKey.get(section.key)?.minCharacters ?? 80)).map(section => section.key);
   if (thin.length) issues.push({ code: "THIN_SECTION_COPY", severity: "warning", sections: thin, message: "One or more generated sections are below their information-value target." });
+  const hero = sections.find(section => section.key === "hero");
+  if (hero && ((hero.body?.length ?? 0) < 150 || /^explore\b/iu.test(hero.body ?? ""))) issues.push({ code: "WEAK_HERO_VALUE_PROPOSITION", severity: "warning", sections: ["hero"], message: "The hero does not yet communicate a strong, entity-specific reason to continue." });
+  if ((input.plan.kind === "destination" || input.plan.kind === "city") && input.plan.sections.some(section => section.allocatedEntities.length)) {
+    const allocated = [...new Set(input.plan.sections.flatMap(section => section.allocatedEntities))];
+    const mentioned = allocated.filter(entity => combined.toLocaleLowerCase("en-US").includes(entity.toLocaleLowerCase("en-US")));
+    if (allocated.length >= 4 && mentioned.length < 2) issues.push({ code: "LOW_ENTITY_DIVERSITY", severity: "warning", sections: sections.map(section => section.key), message: "The page underuses the verified cities, institutions or programmes available for concrete examples." });
+  }
+  if (input.previous) {
+    const previousByKey = new Map(input.previous.sections.map(section => [section.key, section] as const));
+    const regressions = sections.flatMap(section => {
+      const previousLength = previousByKey.get(section.key)?.body?.trim().length ?? 0;
+      const currentLength = section.body?.trim().length ?? 0;
+      return previousLength >= 220 && currentLength < previousLength * 0.8 ? [{ key: section.key, ratio: currentLength / previousLength }] : [];
+    });
+    if (regressions.length) issues.push({
+      code: "EXCESSIVE_CONTENT_LOSS",
+      severity: regressions.some(item => item.ratio < 0.55) ? "blocker" : "warning",
+      sections: regressions.map(item => item.key),
+      message: "Regeneration removed too much useful editorial depth compared with the existing page.",
+    });
+  }
   let languageStatus: DetailContentQualityReport["languageStatus"] = "pass";
   if (input.content.locale !== "en") {
     const leakage = combined.match(ENGLISH_LEAKAGE) ?? [];
@@ -279,6 +312,7 @@ export function evaluateDetailContentQuality(input: {
   }
   const seo = input.content.seo;
   if (!seo || seo.title.length > 60 || seo.description.length > 160) issues.push({ code: "SEO_LENGTH_OR_MISSING", severity: "warning", sections: [], message: "Localized SEO title or description is missing or outside the preferred search-result length." });
+  if (seo && (LITERAL_ELLIPSIS.test(seo.title) || LITERAL_ELLIPSIS.test(seo.description))) issues.push({ code: "SEO_LITERAL_ELLIPSIS", severity: "blocker", sections: [], message: "SEO copy contains a literal ellipsis caused by mechanical truncation." });
   const sourceReady = input.plan.sections.filter(section => section.readiness !== "insufficient").length;
   const sourceTotal = input.plan.sections.length + input.plan.skippedSections.length;
   const sourceCoverage = sourceTotal ? Math.round(sourceReady / sourceTotal * 100) : 0;

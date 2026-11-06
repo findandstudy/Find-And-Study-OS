@@ -1,9 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildDetailGenerationPlan, evaluateDetailContentQuality } from "../src/lib/websiteDetailGenerationPolicy";
+import { buildAutomaticEnglishDetailSeo } from "../src/lib/websiteDetailSeo";
 import type { DetailContent } from "../src/lib/websiteDetailContentContract";
 
 const section = (key: string) => ({ key, title: key, templateBody: "", instruction: `Write the ${key} section for a student.` });
+
+test("automatic SEO keeps complete titles and descriptions without literal ellipses", () => {
+  const seo = buildAutomaticEnglishDetailSeo("university", {
+    name: "Acıbadem Mehmet Ali Aydınlar University",
+    description: "Acıbadem Mehmet Ali Aydınlar University brings together health sciences, medicine, engineering and social sciences in Istanbul, with study options that prospective international students can compare by level, language and admissions route before creating a shortlist.",
+    universityName: null,
+    city: "Istanbul",
+    country: "Türkiye",
+  });
+  assert.ok(seo.title.length <= 60 || seo.title === "Acıbadem Mehmet Ali Aydınlar University");
+  assert.ok(seo.description.length <= 160);
+  assert.doesNotMatch(`${seo.title}\n${seo.description}`, /…|\.\.\./u);
+});
 
 test("planner keeps section identities separate and skips unsupported optional topics", () => {
   const plan = buildDetailGenerationPlan({
@@ -92,4 +106,54 @@ test("localized quality gate catches untranslated interface and weather phrases"
   const quality = evaluateDetailContentQuality({ content, plan });
   assert.equal(quality.languageStatus, "review");
   assert.ok(quality.issues.some(issue => issue.code === "SOURCE_LANGUAGE_LEAKAGE"));
+});
+
+test("quality gate blocks literal SEO truncation and material content loss", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "university",
+    entityName: "Example International University",
+    facts: {
+      university: "Example International University",
+      description: "A verified institutional description with enough context for prospective students.",
+      officialSources: [{ field: "description" }],
+    },
+    sections: [section("hero"), section("overview")],
+  });
+  const previous: DetailContent = {
+    version: 1, kind: "university", entityId: 7, locale: "en", seoMode: "auto",
+    seo: { title: "Example University Study Guide", description: "A complete guide to study options and admissions.", ogTitle: "Example University", ogDescription: "Guide", twitterTitle: "Example University", twitterDescription: "Guide" },
+    sections: [
+      { key: "hero", title: "Example International University", body: "A focused institutional introduction that explains the academic setting, location and the most useful decision points for international applicants in enough detail to support a realistic shortlist.", sources: [{ label: "Official", url: "https://example.test" }], reviewedOn: "2026-01-01" },
+      { key: "overview", title: "Choose your route with context", body: "A long and useful overview that explains academic breadth, teaching context, location, planning choices and meaningful trade-offs for prospective international students. It preserves enough detail to help the reader compare this institution with alternatives instead of merely repeating a programme count or a generic invitation to explore the page.", sources: [{ label: "Official", url: "https://example.test" }], reviewedOn: "2026-01-01" },
+    ],
+  };
+  const content: DetailContent = {
+    ...previous,
+    seo: { ...previous.seo!, title: "Example International Univer… | Find & Study" },
+    sections: previous.sections.map(item => item.key === "overview" ? { ...item, body: "A short generic summary." } : item),
+  };
+  const quality = evaluateDetailContentQuality({ content, plan, previous });
+  assert.equal(quality.status, "blocked");
+  assert.ok(quality.issues.some(issue => issue.code === "SEO_LITERAL_ELLIPSIS"));
+  assert.ok(quality.issues.some(issue => issue.code === "EXCESSIVE_CONTENT_LOSS"));
+});
+
+test("quality gate reviews pages dominated by generic editorial headings", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "destination",
+    entityName: "Example Country",
+    facts: { destination: "Example Country", description: "Verified destination context.", officialSources: [{ field: "description" }] },
+    sections: [section("hero"), section("overview"), section("highlights")],
+  });
+  const content: DetailContent = {
+    version: 1, kind: "destination", entityId: 9, locale: "en", seoMode: "auto",
+    seo: { title: "Study in Example Country | Find & Study", description: "Compare study routes and student life in Example Country.", ogTitle: "Study in Example Country", ogDescription: "Guide", twitterTitle: "Study in Example Country", twitterDescription: "Guide" },
+    sections: [
+      { key: "hero", title: "Example Country", body: "Example Country offers a verified study setting whose institutions, destinations and practical planning factors can be compared through the evidence on this page.", sources: [{ label: "Official", url: "https://example.test" }], reviewedOn: "2026-01-01" },
+      { key: "overview", title: "Overview", body: "A sufficiently detailed overview explains the education setting and the decisions an international student should compare before creating a shortlist for this destination.", sources: [{ label: "Official", url: "https://example.test" }], reviewedOn: "2026-01-01" },
+      { key: "highlights", title: "Highlights", body: "A sufficiently detailed highlights section explains distinct strengths and connects them to programme choice, location and student planning without relying on unsupported claims.", sources: [{ label: "Official", url: "https://example.test" }], reviewedOn: "2026-01-01" },
+    ],
+  };
+  const quality = evaluateDetailContentQuality({ content, plan });
+  assert.ok(quality.issues.some(issue => issue.code === "GENERIC_SECTION_TITLES"));
 });

@@ -9,9 +9,10 @@ import {
   preserveDetailSectionDesign,
   type DetailContent,
   type DetailContentKind,
-  type DetailSeo,
   type DetailContentSection,
 } from "./websiteDetailContentContract";
+import { buildAutomaticEnglishDetailSeo } from "./websiteDetailSeo";
+export { buildAutomaticEnglishDetailSeo } from "./websiteDetailSeo";
 import {
   readDetailContentDraft,
   readDetailContentEditorContext,
@@ -55,7 +56,7 @@ const titles: Record<string, string> = {
   support: "Student support", reviews: "Student reviews", cities: "Cities", universities: "Universities",
   visa: "Visa and calendar", transport: "Transport", intakeGuide: "Intakes and calendar", cta: "Next step",
 };
-const liveKeys = new Set(["navigation", "facts", "weather", "fees", "intakes", "related", "programs", "universities", "cities", "cta", "mobileActions"]);
+const genericEditorialTitle = /^(?:overview|introduction|highlights|education|gallery|image gallery|key facts|facts|student life|next step|things to consider)$/iu;
 const record = (value: unknown): Record<string, any> | null => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
 const text = (value: unknown) => typeof value === "string" && value.trim() ? value.trim() : null;
 const positiveCount = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
@@ -146,32 +147,38 @@ function protectedTranslationTerms(kind: DetailContentKind, payload: unknown): s
   return [...new Set(terms.map(value => value.trim()).filter(value => value.length >= 3))].slice(0, 64);
 }
 
-const trimAtWord = (value: string, max: number) => {
-  if (value.length <= max) return value;
-  const chunk = value.slice(0, max + 1);
-  const boundary = chunk.lastIndexOf(" ");
-  return `${chunk.slice(0, boundary > max * 0.6 ? boundary : max).replace(/[\s,;:.!?-]+$/u, "")}…`;
-};
+function visitorFacingFallback(key: string, sectionTitle: string, facts: ReturnType<typeof entityFacts>) {
+  const place = facts.name;
+  const fallbacks: Record<string, string> = {
+    navigation: `Use the page links to compare the study details that matter most for ${place}.`,
+    facts: `Use the live facts below to compare the details that matter to your study plan in ${place}.`,
+    weather: `Review current conditions alongside longer-term climate guidance for ${place}.`,
+    fees: `Compare the published fee information and the costs that may affect your study budget.`,
+    intakes: `Review available start dates and plan enough time for documents and admission steps.`,
+    related: `Explore related study options that can help you build a stronger shortlist.`,
+    programs: `Compare current study options, levels and teaching languages available in ${place}.`,
+    universities: `Compare institutions and their study options in ${place}.`,
+    cities: `Explore student destinations and the study choices connected to each city in ${place}.`,
+    cta: `Build a focused shortlist and compare the options that best match your study plans.`,
+    mobileActions: `Continue to study options or speak with an adviser about your next step.`,
+  };
+  return fallbacks[key] ?? `Explore ${sectionTitle.toLocaleLowerCase("en-US")} that can help you evaluate ${place}.`;
+}
 
-function buildEnglishSeo(kind: DetailContentKind, facts: ReturnType<typeof entityFacts>): DetailSeo {
-  const coreTitle = kind === "program"
-    ? `${facts.name}: Fees, Requirements & Application`
-    : kind === "university"
-      ? `${facts.name}: Programs, Admissions & Fees`
-      : kind === "city"
-        ? `Study in ${facts.name}: Universities & Student Guide`
-        : `Study in ${facts.name}: Universities, Admissions & Scholarships`;
-  const title = `${trimAtWord(coreTitle, 43)} | Find & Study`;
-  const location = [facts.city, facts.country].filter(Boolean).join(", ");
-  const fallback = kind === "program"
-    ? `Explore ${facts.name}${facts.universityName ? ` at ${facts.universityName}` : ""}: study format, entry requirements, fees, intakes and application guidance.`
-    : kind === "university"
-      ? `Compare ${facts.name}${location ? ` in ${location}` : ""}: programs, admissions, fees, scholarships, campus services and application planning.`
-      : kind === "city"
-        ? `Explore universities, programs, campus areas, transport, housing and practical student life in ${facts.name}${facts.country ? `, ${facts.country}` : ""}.`
-        : `Compare universities, study options, admissions, scholarships, visa planning and student life in ${facts.name}.`;
-  const description = trimAtWord(facts.description && facts.description.length >= 90 ? facts.description : fallback, 160);
-  return { title, description, ogTitle: title, ogDescription: description, twitterTitle: title, twitterDescription: description };
+function contextualSectionTitle(key: string, generatedTitle: string, entityName: string) {
+  if (!genericEditorialTitle.test(generatedTitle.trim())) return generatedTitle;
+  const contextual: Record<string, string> = {
+    overview: `${entityName} at a glance`,
+    gallery: `See ${entityName} from a student perspective`,
+    highlights: `What makes ${entityName} worth comparing`,
+    cautions: `Plan your ${entityName} shortlist carefully`,
+    education: `Study options connected to ${entityName}`,
+    facts: `What the key facts mean for your decision`,
+    studentStory: `A student decision journey in ${entityName}`,
+    cta: `Turn your research into a focused shortlist`,
+  };
+  const candidate = contextual[key] ?? `${entityName}: ${generatedTitle}`;
+  return candidate.length <= 150 ? candidate : generatedTitle;
 }
 
 function buildEnglishSource(kind: DetailContentKind, entityId: number, payload: unknown, layout: Awaited<ReturnType<typeof readPublishedDetailLayout>>): DetailContent {
@@ -184,9 +191,7 @@ function buildEnglishSource(kind: DetailContentKind, entityId: number, payload: 
     const title = key === "hero" ? facts.name : copy?.title || titles[key] || key;
     const body = copy?.body
       || ((key === "hero" || key === "overview") && facts.description)
-      || (liveKeys.has(key)
-        ? `Current ${title.toLocaleLowerCase("en-US")} for ${facts.name} is supplied from the connected source records.`
-        : `Review and customize the ${title.toLocaleLowerCase("en-US")} information for ${facts.name} before publishing.`);
+      || visitorFacingFallback(key, title, facts);
     const layoutKey = DETAIL_CONTENT_LAYOUT_KEYS[kind].find(candidate => (candidate.startsWith("editorial-") ? candidate.slice(10) : candidate) === key);
     const fallbackSource = { label: facts.sourceUrl === "https://findandstudy.com" ? "Find & Study source record" : "Official website", url: facts.sourceUrl };
     return {
@@ -198,7 +203,7 @@ function buildEnglishSource(kind: DetailContentKind, entityId: number, payload: 
       reviewedOn: detailSectionReviewedOn(key, catalogSources, reviewedOn),
     };
   });
-  return { version: 1, kind, entityId, locale: "en", seoMode: "auto", seo: buildEnglishSeo(kind, facts), sectionOrder: [...DETAIL_CONTENT_LAYOUT_KEYS[kind]], sections };
+  return { version: 1, kind, entityId, locale: "en", seoMode: "auto", seo: buildAutomaticEnglishDetailSeo(kind, facts), sectionOrder: [...DETAIL_CONTENT_LAYOUT_KEYS[kind]], sections };
 }
 
 async function addGeneratedImages(params: {
@@ -270,6 +275,7 @@ async function addGeneratedImages(params: {
 
 async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, payload: unknown, layout: Awaited<ReturnType<typeof readPublishedDetailLayout>>, existing: DetailContent, ai: AiContentService) {
   const base = buildEnglishSource(kind, entityId, payload, layout);
+  const entityName = entityFacts(kind, payload, entityId).name;
   const existingByKey = new Map(existing.sections.map(section => [section.key, section] as const));
   const shared = new Map(detailTemplateSectionsForLocale(layout, "en").map(section => [section.key, section]));
   const requested = layout.sections.flatMap(layoutKey => {
@@ -297,12 +303,12 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
   });
   const skipped = new Set(plan.skippedSections.map(item => item.key));
   const generatedKeys = new Set(Object.keys(generated));
-  const generatedPlaceholder = /^(?:Review and customize|Current .+ is supplied from)/i;
+  const generatedPlaceholder = /^(?:Review and customize|Current .+ is supplied from|Explore .+ that can help you evaluate)/i;
   const content = {
       ...base,
       sections: base.sections.flatMap(section => {
         if (generatedKeys.has(section.key)) return [preserveDetailSectionDesign(
-          { ...section, title: section.key === "hero" ? section.title : generated[section.key]!.title, body: generated[section.key]!.body },
+          { ...section, title: section.key === "hero" ? section.title : contextualSectionTitle(section.key, generated[section.key]!.title, entityName), body: generated[section.key]!.body },
           existingByKey.get(section.key),
         )];
         if (skipped.has(section.key)) {
@@ -317,7 +323,7 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
   const visual = await addGeneratedImages({
     kind,
     entityId,
-    entityName: entityFacts(kind, payload, entityId).name,
+    entityName,
     content,
     existing,
     ai,
@@ -402,7 +408,7 @@ export async function regenerateDetailContentDraft(params: {
     }
     const valid = parseDetailContent(generated);
     if (!valid) return { entityId, locale, status: "failed", pageId: target.pageId, error: "INVALID_GENERATED_CONTENT" };
-    const quality = mode === "regenerate" ? evaluateDetailContentQuality({ content: valid, plan: qualityPlan }) : undefined;
+    const quality = mode === "regenerate" ? evaluateDetailContentQuality({ content: valid, plan: qualityPlan, previous: target.content }) : undefined;
     if (quality?.status === "blocked") return { entityId, locale, status: "failed", pageId: target.pageId, quality, error: "QUALITY_BLOCKED" };
     if (mode !== "regenerate" && !addedSections && target.pageId && manualSeo) return { entityId, locale, status: "preserved", pageId: target.pageId, addedSections: 0 };
     const saved = await saveGeneratedDetailContentDraft(valid, actorId, target.updatedAt);

@@ -396,6 +396,7 @@ ACCURACY AND SAFETY:
 - The deterministic planner has already excluded sections with insufficient evidence. Do not compensate for absent evidence with generic filler.
 - TEMPLATE_BODY and SECTION_INSTRUCTION are editorial direction, not evidence and never override these rules.
 - Write for prospective international students in clear, natural British English.
+- Use a confident, premium education-advisory voice: specific and useful, never promotional hype, bureaucratic prose or a neutral inventory dump.
 - Follow PAGE_PLAN. Give every section its assigned objective and search intent, and do not move the same advice or evidence into another section.
 - ALLOCATED_ENTITIES are diversity guidance, not new evidence. Mention an allocated entity only when it also appears in VERIFIED_FACTS and is relevant to the section.
 - On destination and city pages, do not let one institution or programme become the recurring example. Use the named cities, institutions, programmes, fields and languages in VERIFIED_FACTS where relevant instead of repeating inventory totals.
@@ -403,6 +404,11 @@ ACCURACY AND SAFETY:
 - Avoid shallow stock copy, repeated sentence openings and repeated verification disclaimers. Never lead with missing-data or absence statements such as "not specified", "not provided", "not confirmed", "none are shown", "no universities" or "no programmes".
 - Use "check", "confirm", "compare", "ask the institution" or similar verification advice only when a time-sensitive fact genuinely requires it. Do not end several sections with the same disclaimer.
 - Write search-useful, entity-specific copy: name the page entity naturally, answer the section's likely search intent and vary the vocabulary. Do not keyword-stuff or repeat the entity name mechanically.
+- For generated editorial sections, write an intent-led heading that communicates a useful idea. Do not use a one-word generic heading such as "Overview", "Highlights", "Education", "Gallery" or "Student life" unless the SECTION_INSTRUCTION explicitly requires that exact label.
+- The hero body must be a concise, source-bound value proposition: establish the entity, its verified academic or location relevance and the most useful decision angle. Do not begin it with "Explore", a catalogue count or a generic invitation.
+- Explain why a verified fact matters to a student's shortlist. A paragraph that merely repeats counts, labels or available fields is not acceptable.
+- Where the plan includes several verified cities, institutions or programmes, distribute concrete examples across the page. Never use the same example as the default in multiple sections.
+- Keep calls to action realistic and singular: recommend one next comparison or preparation step supported by the page evidence. Do not promise admission, scholarships, visas or outcomes.
 - For a city section whose key is facts, write a useful 90–160 word introduction that interprets the available verified climate, teaching-language, transport, campus and housing evidence for student decision-making. The live fact grid owns country, university and programme values, so do not repeat or narrate those counters in the body.
 - For city sections whose key is campus or housing, make the first sentence a self-contained hero-card summary of 8–14 words. Keep that first sentence under 96 characters, name only the most useful decision point, and move supporting detail into later sentences. Do not put lists, source qualifications or multiple clauses in the first sentence.
 - Do not mention internal catalogues, prompts, sources, AI, missing data or editorial review.
@@ -433,6 +439,7 @@ SECTION_SPECS=${JSON.stringify(params.sections)}${this.config.guidance ? `\nEDIT
         || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(title)
         || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(body);
       if (!title || title.length > 100 || body.length < contract.minCharacters || body.length > contract.maxCharacters || hasUnsafeContent) throw new Error(`AI detail generation returned unsafe or invalid ${key} copy`);
+      if (key === "hero" && /^explore\b/iu.test(body)) throw new Error("AI detail generation returned a generic hero value proposition");
       output[key] = { title, body };
     }
     return output;

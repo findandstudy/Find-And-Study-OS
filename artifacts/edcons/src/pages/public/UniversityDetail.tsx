@@ -69,6 +69,18 @@ type UniversityPayload = {
 
 const UniversityProgramBrowser = lazy(() => import("./UniversityProgramBrowser").then(module => ({ default: module.UniversityProgramBrowser })));
 
+const normalizeDegreeLevel = (value: string) => {
+  const normalized = value.trim();
+  if (/\b(?:associate|ön\s*lisans)\b/iu.test(normalized)) return "Associate";
+  if (/\b(?:bachelor|undergraduate|lisans)\b/iu.test(normalized)) return "Bachelor";
+  if (/\b(?:master|postgraduate|yüksek\s*lisans)\b/iu.test(normalized)) return "Master";
+  if (/\b(?:ph\.?d|doctorate|doctoral|doktora)\b/iu.test(normalized)) return "Doctorate";
+  if (/\b(?:foundation|pathway|preparatory|hazırlık)\b/iu.test(normalized)) return "Foundation / Pathway";
+  return normalized;
+};
+
+const degreeOrder = new Map(["Foundation / Pathway", "Associate", "Bachelor", "Master", "Doctorate"].map((value, index) => [value, index]));
+
 export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
@@ -157,12 +169,13 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   const copy = detailCopy(lang);
   const weatherText = weatherCopy(lang);
   const countryPath = localDetailPath(university.countryPath), cityPath = localDetailPath(university.cityPath);
+  // Use both the unpaginated server aggregate and the delivered programme
+  // sample. A partial aggregate must never hide a level visible on the page.
   const degrees = [...new Set(
-    (payload.meta.degreeLevels?.length
-      ? payload.meta.degreeLevels
-      : payload.programs.map(program => program.degree)
-    ).filter((value): value is string => Boolean(value?.trim())),
-  )];
+    [...(payload.meta.degreeLevels ?? []), ...payload.programs.map(program => program.degree)]
+      .filter((value): value is string => Boolean(value?.trim()))
+      .map(normalizeDegreeLevel),
+  )].sort((left, right) => (degreeOrder.get(left) ?? 99) - (degreeOrder.get(right) ?? 99) || left.localeCompare(right));
   const location = <>{cityPath ? <Link href={cityPath}>{university.city}</Link> : university.city}{university.city && " · "}{countryPath ? <Link href={countryPath}>{university.country}</Link> : university.country}</>;
   const heroSection = detailHeroSection(editorial);
   const hero = heroSection?.hero;
