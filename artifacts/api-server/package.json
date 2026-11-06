@@ -10,6 +10,7 @@
     "test:city-weather": "tsx --test ./scripts/test-city-weather.ts ./scripts/test-city-weather-quota.ts",
     "test:website-ai-writing": "tsx --test ./scripts/test-website-ai-writing.ts",
     "test:website-detail-sources": "tsx --test ./scripts/test-website-detail-sources.ts",
+    "test:website-detail-generation-policy": "tsx --test ./scripts/test-website-detail-generation-policy.ts",
     "dev": "NODE_ENV=development tsx ./src/index.ts",
     "worker:portal-status": "NODE_OPTIONS=--max-old-space-size=512 tsx ./src/workers/portalStatusWorker.ts",
     "worker:portal-lifecycle": "NODE_OPTIONS=--max-old-space-size=384 tsx ./src/workers/portalLifecycleWorker.ts",

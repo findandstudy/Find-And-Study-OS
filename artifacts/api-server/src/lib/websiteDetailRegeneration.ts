@@ -21,6 +21,12 @@ import { readPublishedDetailLayout } from "./websiteDetailLayouts";
 import { detailTemplateSectionsForLocale } from "./websiteDetailLayoutContract";
 import { translateStructuredDetailContent } from "./websiteDetailTranslation";
 import { detailGenerationSources, detailSectionReviewedOn, detailSectionSources } from "./websiteDetailSources";
+import {
+  buildDetailGenerationPlan,
+  evaluateDetailContentQuality,
+  type DetailContentQualityReport,
+  type DetailGenerationPlan,
+} from "./websiteDetailGenerationPolicy";
 
 export type DetailRegenerationResult = {
   entityId: number;
@@ -31,7 +37,8 @@ export type DetailRegenerationResult = {
   generatedSections?: number;
   generatedImages?: number;
   imageFailures?: number;
-  error?: "AI_NOT_CONFIGURED" | "SOURCE_NOT_FOUND" | "INVALID_GENERATED_CONTENT" | "CONFLICT" | "UNAVAILABLE";
+  quality?: DetailContentQualityReport;
+  error?: "AI_NOT_CONFIGURED" | "SOURCE_NOT_FOUND" | "INVALID_GENERATED_CONTENT" | "QUALITY_BLOCKED" | "CONFLICT" | "UNAVAILABLE";
 };
 
 const generatedImageStorage = new ObjectStorageService();
@@ -123,6 +130,22 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
   };
 }
 
+function protectedTranslationTerms(kind: DetailContentKind, payload: unknown): string[] {
+  const facts = verifiedGenerationFacts(kind, payload) as Record<string, unknown>;
+  const terms: string[] = [];
+  if (kind === "university" && typeof facts.university === "string") terms.push(facts.university);
+  if (kind === "program" && typeof facts.program === "string") terms.push(facts.program);
+  if (kind === "program" && typeof facts.university === "string") terms.push(facts.university);
+  for (const collection of [facts.universities, facts.programs]) if (Array.isArray(collection)) {
+    for (const item of collection) {
+      const value = record(item);
+      if (typeof value?.name === "string") terms.push(value.name);
+      if (typeof value?.university === "string") terms.push(value.university);
+    }
+  }
+  return [...new Set(terms.map(value => value.trim()).filter(value => value.length >= 3))].slice(0, 64);
+}
+
 const trimAtWord = (value: string, max: number) => {
   if (value.length <= max) return value;
   const chunk = value.slice(0, max + 1);
@@ -131,17 +154,23 @@ const trimAtWord = (value: string, max: number) => {
 };
 
 function buildEnglishSeo(kind: DetailContentKind, facts: ReturnType<typeof entityFacts>): DetailSeo {
-  const title = trimAtWord(kind === "program" && facts.universityName
-    ? `${facts.name} at ${facts.universityName} | Find & Study`
+  const coreTitle = kind === "program"
+    ? `${facts.name}: Fees, Requirements & Application`
     : kind === "university"
-      ? `${facts.name} Programs & Admissions | Find & Study`
-      : `Study in ${facts.name} | Find & Study`, 60);
+      ? `${facts.name}: Programs, Admissions & Fees`
+      : kind === "city"
+        ? `Study in ${facts.name}: Universities & Student Guide`
+        : `Study in ${facts.name}: Universities, Admissions & Scholarships`;
+  const title = `${trimAtWord(coreTitle, 43)} | Find & Study`;
+  const location = [facts.city, facts.country].filter(Boolean).join(", ");
   const fallback = kind === "program"
-    ? `Explore ${facts.name}${facts.universityName ? ` at ${facts.universityName}` : ""}, including study details, requirements, fees and application guidance.`
+    ? `Explore ${facts.name}${facts.universityName ? ` at ${facts.universityName}` : ""}: study format, entry requirements, fees, intakes and application guidance.`
     : kind === "university"
-      ? `Explore ${facts.name}${facts.city || facts.country ? ` in ${[facts.city, facts.country].filter(Boolean).join(", ")}` : ""}, compare programs and plan your application.`
-      : `Explore study opportunities, universities, programs and practical student guidance for ${facts.name}.`;
-  const description = trimAtWord(facts.description || fallback, 160);
+      ? `Compare ${facts.name}${location ? ` in ${location}` : ""}: programs, admissions, fees, scholarships, campus services and application planning.`
+      : kind === "city"
+        ? `Explore universities, programs, campus areas, transport, housing and practical student life in ${facts.name}${facts.country ? `, ${facts.country}` : ""}.`
+        : `Compare universities, study options, admissions, scholarships, visa planning and student life in ${facts.name}.`;
+  const description = trimAtWord(facts.description && facts.description.length >= 90 ? facts.description : fallback, 160);
   return { title, description, ogTitle: title, ogDescription: description, twitterTitle: title, twitterDescription: description };
 }
 
@@ -251,21 +280,39 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
     if (!section) return [];
     return [{ key, title: section.title, templateBody: shared.get(key)?.body ?? "", instruction: setting.instruction }];
   });
-  if (!requested.length) return { content: base, generatedSections: 0, generatedImages: 0, imageFailures: 0 };
+  const facts = verifiedGenerationFacts(kind, payload);
+  const plan = buildDetailGenerationPlan({
+    kind,
+    entityName: entityFacts(kind, payload, entityId).name,
+    facts,
+    sections: requested,
+  });
+  if (!plan.sections.length) return { content: base, plan, generatedSections: 0, generatedImages: 0, imageFailures: 0 };
   const generated = await ai.generateDetailSections({
     kind,
     entityName: entityFacts(kind, payload, entityId).name,
-    facts: verifiedGenerationFacts(kind, payload),
-    sections: requested,
+    facts,
+    sections: plan.sections,
+    plan,
   });
+  const skipped = new Set(plan.skippedSections.map(item => item.key));
+  const generatedKeys = new Set(Object.keys(generated));
+  const generatedPlaceholder = /^(?:Review and customize|Current .+ is supplied from)/i;
   const content = {
       ...base,
-      sections: base.sections.map(section => generated[section.key]
-        ? preserveDetailSectionDesign(
-            { ...section, title: section.key === "hero" ? section.title : generated[section.key].title, body: generated[section.key].body },
-            existingByKey.get(section.key),
-          )
-        : preserveDetailSectionDesign(section, existingByKey.get(section.key))),
+      sections: base.sections.flatMap(section => {
+        if (generatedKeys.has(section.key)) return [preserveDetailSectionDesign(
+          { ...section, title: section.key === "hero" ? section.title : generated[section.key]!.title, body: generated[section.key]!.body },
+          existingByKey.get(section.key),
+        )];
+        if (skipped.has(section.key)) {
+          const current = existingByKey.get(section.key);
+          if (current?.body && !generatedPlaceholder.test(current.body)) return [current];
+          if (shared.get(section.key)?.body) return [preserveDetailSectionDesign(section, current)];
+          return [];
+        }
+        return [preserveDetailSectionDesign(section, existingByKey.get(section.key))];
+      }),
     };
   const visual = await addGeneratedImages({
     kind,
@@ -277,7 +324,8 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
   });
   return {
     content: visual.content,
-    generatedSections: requested.length,
+    plan,
+    generatedSections: plan.sections.length,
     generatedImages: visual.generatedImages,
     imageFailures: visual.imageFailures,
   };
@@ -303,7 +351,7 @@ export async function regenerateDetailContentDraft(params: {
     if (locale === "en" && mode === "regenerate" && !ai) return { entityId, locale, status: "failed", pageId: target.pageId, error: "AI_NOT_CONFIGURED" };
     const aiEnglish = locale === "en" && mode === "regenerate" && ai
       ? await buildAiEnglishSource(kind, entityId, payload, layout, target.content, ai)
-      : { content: buildEnglishSource(kind, entityId, payload, layout), generatedSections: 0, generatedImages: 0, imageFailures: 0 };
+      : { content: buildEnglishSource(kind, entityId, payload, layout), plan: null as DetailGenerationPlan | null, generatedSections: 0, generatedImages: 0, imageFailures: 0 };
     const generatedEnglish = aiEnglish.content;
     const savedEnglish = english?.content.sections.length ? new Map(english.content.sections.map(section => [section.key, section])) : null;
     const englishBase = savedEnglish ? {
@@ -313,6 +361,18 @@ export async function regenerateDetailContentDraft(params: {
     let generated: DetailContent;
     let addedSections = 0;
     const manualSeo = Boolean(target.content.seo && target.content.seoMode !== "auto");
+    const qualityPlan = aiEnglish.plan ?? buildDetailGenerationPlan({
+      kind,
+      entityName: entityFacts(kind, payload, entityId).name,
+      facts: verifiedGenerationFacts(kind, payload),
+      sections: layout.sections.flatMap(layoutKey => {
+        const setting = layout.generation[layoutKey];
+        if (!setting?.enabled || layout.hidden.includes(layoutKey)) return [];
+        const key = layoutKey.startsWith("editorial-") ? layoutKey.slice(10) : layoutKey;
+        const section = generatedEnglish.sections.find(value => value.key === key);
+        return [{ key, title: section?.title ?? titles[key] ?? key, templateBody: "", instruction: setting.instruction }];
+      }),
+    });
     // A full page regeneration is one atomic content operation: sections and
     // language-specific SEO are rebuilt together. Manual SEO is preserved only
     // for the non-destructive fill-missing path.
@@ -326,7 +386,7 @@ export async function regenerateDetailContentDraft(params: {
       const missing = DETAIL_CONTENT_KEYS[kind].filter(key => !target.content.sections.some(section => section.key === key));
       if (!missing.length && mode === "fill_missing") return { entityId, locale, status: "preserved", pageId: target.pageId, addedSections: 0 };
       if (!ai) return { entityId, locale, status: "failed", pageId: target.pageId, error: "AI_NOT_CONFIGURED" };
-      const translated = await translateStructuredDetailContent(englishBase, locale, ai);
+      const translated = await translateStructuredDetailContent(englishBase, locale, ai, { protectedTerms: protectedTranslationTerms(kind, payload) });
       const translatedByKey = new Map(translated.sections.map(section => [section.key, section]));
       generated = inheritEnglishDetailStructure({
         ...target.content,
@@ -342,9 +402,11 @@ export async function regenerateDetailContentDraft(params: {
     }
     const valid = parseDetailContent(generated);
     if (!valid) return { entityId, locale, status: "failed", pageId: target.pageId, error: "INVALID_GENERATED_CONTENT" };
+    const quality = mode === "regenerate" ? evaluateDetailContentQuality({ content: valid, plan: qualityPlan }) : undefined;
+    if (quality?.status === "blocked") return { entityId, locale, status: "failed", pageId: target.pageId, quality, error: "QUALITY_BLOCKED" };
     if (mode !== "regenerate" && !addedSections && target.pageId && manualSeo) return { entityId, locale, status: "preserved", pageId: target.pageId, addedSections: 0 };
     const saved = await saveGeneratedDetailContentDraft(valid, actorId, target.updatedAt);
-    return { entityId, locale, status: target.pageId ? "completed" : "created", pageId: saved.pageId, addedSections, generatedSections: aiEnglish.generatedSections, generatedImages: aiEnglish.generatedImages, imageFailures: aiEnglish.imageFailures };
+    return { entityId, locale, status: target.pageId ? "completed" : "created", pageId: saved.pageId, addedSections, generatedSections: aiEnglish.generatedSections, generatedImages: aiEnglish.generatedImages, imageFailures: aiEnglish.imageFailures, ...(quality ? { quality } : {}) };
   } catch (error) {
     const reason = error instanceof Error ? error.message : "";
     const diagnostic = reason

@@ -270,7 +270,15 @@ router.post("/website/catalog-pages/reapply", ...adminOnly, async (req, res) => 
     const estimatedTokens = reservedTokens;
     const generatedImages = results.reduce((sum, item) => sum + (item.generatedImages ?? 0), 0);
     const imageFailures = results.reduce((sum, item) => sum + (item.imageFailures ?? 0), 0);
-    await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "website_ai_content_execute", resource: "website_page", changes: JSON.stringify({ operation: "reapply", mode, kind, locales, requests: results.length + generatedImages + imageFailures, reservedProviderRequests: reservedRequests, estimatedTokens, generatedImages, imageFailures, succeeded: summary.created + summary.completed + summary.preserved, failed: summary.failed, provider: aiConfig?.provider || "none", publication: "draft_only" }) });
+    const qualityReports = results.flatMap(item => item.quality ? [item.quality] : []);
+    const qualitySummary = {
+      pass: qualityReports.filter(item => item.status === "pass").length,
+      review: qualityReports.filter(item => item.status === "review").length,
+      blocked: qualityReports.filter(item => item.status === "blocked").length,
+      averageScore: qualityReports.length ? Math.round(qualityReports.reduce((sum, item) => sum + item.score, 0) / qualityReports.length) : null,
+      averageSourceCoverage: qualityReports.length ? Math.round(qualityReports.reduce((sum, item) => sum + item.sourceCoverage, 0) / qualityReports.length) : null,
+    };
+    await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "website_ai_content_execute", resource: "website_page", changes: JSON.stringify({ operation: "reapply", mode, kind, locales, requests: results.length + generatedImages + imageFailures, reservedProviderRequests: reservedRequests, estimatedTokens, generatedImages, imageFailures, succeeded: summary.created + summary.completed + summary.preserved, failed: summary.failed, quality: qualitySummary, provider: aiConfig?.provider || "none", publication: "draft_only" }) });
     res.json({ kind, locales, sourceIds, requested: results.length, summary, results, evicted, publication: "draft_review_required", completedAt: new Date().toISOString() });
   } catch (error) {
     console.error("[website-reapply] Page regeneration failed", error);

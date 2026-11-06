@@ -10,6 +10,16 @@ export type ReapplyDetailPageResult = {
   generatedSections?: number;
   generatedImages?: number;
   imageFailures?: number;
+  quality?: {
+    version: 1;
+    status: "pass" | "review" | "blocked";
+    score: number;
+    sourceCoverage: number;
+    languageStatus: "pass" | "review";
+    duplicatePairs: number;
+    skippedSections: string[];
+    issues: Array<{ code: string; severity: "warning" | "blocker"; sections: string[]; message: string }>;
+  };
   error?: string;
 };
 export type ReapplyDetailPagesResponse = {

@@ -169,6 +169,10 @@ const generationErrorText = (code: string | undefined, tr: boolean) => {
     return tr
       ? "AI yanıtı içerik doğrulamasından geçemedi."
       : "The AI response did not pass content validation.";
+  if (code === "QUALITY_BLOCKED")
+    return tr
+      ? "Taslak; tekrar, dil, kaynak veya sistem içi ifade kalite kontrolünden geçemedi. Mevcut içerik değiştirilmedi."
+      : "The draft failed repetition, language, evidence or internal-wording quality checks. Existing content was not changed.";
   if (code === "CONFLICT")
     return tr
       ? "Sayfa bu sırada değiştirildi. Yenileyip tekrar deneyin."
@@ -803,6 +807,19 @@ export default function CatalogPagesInventory() {
                     ? "İçerik, SEO ve eksik görseller tek taslakta hazırlanır; mevcut görseller korunur ve otomatik yayın yapılmaz."
                     : "Content, SEO and missing images are prepared in one review draft; existing images are preserved. Nothing was auto-published."}
                 </p>
+                {generationReport.results.some((item) => item.quality) && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {generationReport.results
+                      .filter((item) => item.quality)
+                      .slice(0, 20)
+                      .map((item) => (
+                        <Badge key={`quality-${item.entityId}-${item.locale}`} variant="outline">
+                          #{item.entityId} · {item.locale.toUpperCase()} · {tr ? "kalite" : "quality"} {item.quality!.score}/100 · {tr ? "kaynak" : "sources"} %{item.quality!.sourceCoverage}
+                          {item.quality!.skippedSections.length ? ` · ${tr ? "kanıtsız atlandı" : "evidence skipped"}: ${item.quality!.skippedSections.join(", ")}` : ""}
+                        </Badge>
+                      ))}
+                  </div>
+                )}
               </div>
               <Button
                 type="button"

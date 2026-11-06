@@ -32,7 +32,12 @@ function applyText<T>(value: T, translations: Record<string, string>): T {
 }
 
 /** Translates page copy and its SEO atomically while preserving URLs and structural fields. */
-export async function translateStructuredDetailContent(content: DetailContent, locale: string, ai: AiContentService) {
+export async function translateStructuredDetailContent(
+  content: DetailContent,
+  locale: string,
+  ai: AiContentService,
+  options: { protectedTerms?: string[] } = {},
+) {
   const source = { ...content, locale };
   const all = collectText(source);
   const translations: Record<string, string> = {};
@@ -40,7 +45,7 @@ export async function translateStructuredDetailContent(content: DetailContent, l
   let chars = 0;
   const flush = async () => {
     if (!Object.keys(chunk).length) return;
-    Object.assign(translations, await ai.translateTextMap({ sourceLocale: "en", targetLocale: locale, texts: chunk }));
+    Object.assign(translations, await ai.translateTextMap({ sourceLocale: "en", targetLocale: locale, texts: chunk, protectedTerms: options.protectedTerms }));
     chunk = {};
     chars = 0;
   };
