@@ -122,7 +122,10 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
     officialSources,
   };
   return {
-    program: text(entity.programName), description: text(entity.description), degree: text(entity.degree), field: text(entity.field),
+    // The editor projection exposes the catalogue programme title as `name`.
+    // Keep the legacy alias for older payloads so the quality gate always
+    // recognises the page's own programme as an allowed catalogue entity.
+    program: text(entity.name) ?? text(entity.programName), description: text(entity.description), degree: text(entity.degree), field: text(entity.field),
     teachingLanguage: text(entity.language), duration: text(entity.duration), tuitionFee: entity.tuitionFee,
     discountedFee: entity.discountedFee, currency: text(entity.currency), scholarship: entity.scholarship,
     intakes: entity.intakesText, requirements: entity.requirements, quota: entity.quota,
