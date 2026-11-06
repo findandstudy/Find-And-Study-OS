@@ -129,7 +129,10 @@ export async function processWebsiteTranslation(job: Claimed, workerId: string) 
     await db.insert(auditLogsTable).values({ userId: job.createdBy, action: "website_ai_content_execute", resource: "website_translation_job", resourceId: job.id, changes: JSON.stringify({ operation: "queued_translation", kind: job.kind, locales: [job.locale], requests: providerCalls, estimatedTokens: providerCalls * 4_000, succeeded: 1, failed: 0, provider: resolved.provider, model: resolved.model, publication: "draft_only" }) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNEXPECTED";
-    const retryable = !["SOURCE_NOT_FOUND", "INVALID_CONTENT", "INVALID_GENERATED_CONTENT", "POLICY_DENIED"].includes(message);
+    // A quality gate decision is deterministic for the generated draft and is
+    // not a transient provider failure. Retrying it automatically burns model
+    // budget and can repeat the same rejected output without human action.
+    const retryable = !["SOURCE_NOT_FOUND", "INVALID_CONTENT", "INVALID_GENERATED_CONTENT", "POLICY_DENIED", "QUALITY_BLOCKED"].includes(message);
     await markFailure(job, workerId, message.slice(0, 120), retryable, resolved.settings.maxAttempts, providerCalls);
   }
 }
