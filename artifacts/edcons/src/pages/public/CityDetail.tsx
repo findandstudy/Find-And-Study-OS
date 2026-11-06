@@ -156,14 +156,17 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
   // being regenerated; the cover strip must remain scannable in either case.
   const compactHeroFact = (value: string) => detailContentSummary(null, "hero", value, 96);
   const heroFacts = [
-    city.programLanguages.length ? { title: hero?.programLanguagesLabel || editorialTitle("education", heroCopy.education), body: localizedLanguageNames(city.programLanguages, lang) } : null,
+    // Hero fact labels are compact UI chrome, not editorial headings. Reusing
+    // AI-generated section titles here can turn the cover strip into several
+    // lines of prose and break its grid after a regeneration.
+    city.programLanguages.length ? { title: hero?.programLanguagesLabel || heroCopy.education, body: localizedLanguageNames(city.programLanguages, lang) } : null,
     city.weather || city.externalFacts?.climateSummary
-      ? { title: hero?.climateLabel || editorialTitle("weather", weatherText.section), body: city.weather ? `${Math.round(city.weather.temperatureC)}°C · ${localizedWeatherDescription(city.weather.conditionCode, city.weather.conditionGroup, lang)}` : localizedEditorialFact("climate", city.externalFacts!.climateSummary!) }
+      ? { title: hero?.climateLabel || weatherText.section, body: city.weather ? `${Math.round(city.weather.temperatureC)}°C · ${localizedWeatherDescription(city.weather.conditionCode, city.weather.conditionGroup, lang)}` : localizedEditorialFact("climate", city.externalFacts!.climateSummary!) }
       : null,
-    city.transportModes?.length ? { title: hero?.transportLabel || editorialTitle("transport", heroCopy.transport), body: localizedEditorialFact("transport", city.transportModes.join(" · ")) } : null,
-    city.campusGeography ? { title: hero?.campusGeographyLabel || editorialTitle("campus", heroCopy.campus), body: compactHeroFact(localizedEditorialFact("campus", city.campusGeography, 96)) } : null,
+    city.transportModes?.length ? { title: hero?.transportLabel || heroCopy.transport, body: localizedEditorialFact("transport", city.transportModes.join(" · ")) } : null,
+    city.campusGeography ? { title: hero?.campusGeographyLabel || heroCopy.campus, body: compactHeroFact(localizedEditorialFact("campus", city.campusGeography, 96)) } : null,
     city.externalFacts?.housingSummary || city.externalFacts?.housingFormats.length
-      ? { title: hero?.housingLabel || editorialTitle("housing", heroCopy.housing), body: compactHeroFact(localizedEditorialFact("housing", city.externalFacts.housingSummary || city.externalFacts.housingFormats.map(item => item.name).join(" · "), 96)) }
+      ? { title: hero?.housingLabel || heroCopy.housing, body: compactHeroFact(localizedEditorialFact("housing", city.externalFacts.housingSummary || city.externalFacts.housingFormats.map(item => item.name).join(" · "), 96)) }
       : null,
   ].filter((fact): fact is { title: string; body: string } => Boolean(fact));
   const overviewDescription = city.description?.trim();

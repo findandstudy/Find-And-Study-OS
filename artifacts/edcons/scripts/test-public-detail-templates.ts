@@ -798,6 +798,12 @@ test("city template and destination links stay on governed canonical projections
 
 test("city hero combines catalogue counters and catalogue-owned language facts", () => {
   assert.match(city, /city\.programLanguages\.length/);
+  assert.match(city, /hero\?\.programLanguagesLabel \|\| heroCopy\.education/);
+  assert.match(city, /hero\?\.climateLabel \|\| weatherText\.section/);
+  assert.match(city, /hero\?\.transportLabel \|\| heroCopy\.transport/);
+  assert.match(city, /hero\?\.campusGeographyLabel \|\| heroCopy\.campus/);
+  assert.match(city, /hero\?\.housingLabel \|\| heroCopy\.housing/);
+  assert.doesNotMatch(city, /hero\?\.(?:programLanguagesLabel|climateLabel|transportLabel|campusGeographyLabel|housingLabel) \|\| editorialTitle\(/);
   assert.match(city, /heroFacts\.map\(\(fact, index\) =>/);
   assert.match(city, /<dt>\{fact\.title\}<\/dt><dd>\{fact\.body\}<\/dd>/);
   assert.match(css, /\.detail-city-coverstrip \{[^}]*repeat\(auto-fit, minmax\(118px, 1fr\)\)/);
