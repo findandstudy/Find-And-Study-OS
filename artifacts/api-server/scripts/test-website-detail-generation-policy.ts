@@ -56,6 +56,36 @@ test("planner rotates named entities instead of making one institution the defau
   assert.equal(plan.sections.length, 3);
   assert.notDeepEqual(plan.sections[0]?.allocatedEntities, plan.sections[1]?.allocatedEntities);
   assert.match(plan.pageRules.join(" "), /do not repeat/i);
+  assert.deepEqual(plan.catalogEntities.universities.sort(), ["Alpha University", "Beta University", "Gamma University"].sort());
+  assert.ok(plan.catalogEntities.programs.includes("Architecture"));
+  assert.match(plan.pageRules.join(" "), /only from the system catalogue/i);
+});
+
+test("quality gate blocks named universities and programmes outside the system catalogue", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "city",
+    entityName: "Example City",
+    facts: {
+      city: "Example City",
+      universities: [{ name: "Known University" }],
+      programs: [{ name: "Associate of Nursing", degree: "Associate", university: "Known University" }],
+      officialSources: [{ field: "description", sourceName: "Official city guide", sourceUrl: "https://example.test" }],
+    },
+    sections: [section("overview")],
+  });
+  const base: DetailContent = {
+    version: 1, kind: "city", entityId: 1, locale: "en", seoMode: "auto",
+    seo: { title: "Example City | Find & Study", description: "A useful city guide.", ogTitle: "Example City", ogDescription: "Guide", twitterTitle: "Example City", twitterDescription: "Guide" },
+    sections: [{ key: "overview", title: "Choose with verified facts", body: "Known University offers the Associate of Nursing. Imaginary University also offers the Bachelor of Invented Studies.", sources: [], reviewedOn: "2026-01-01" }],
+  };
+  const quality = evaluateDetailContentQuality({ content: base, plan });
+  assert.equal(quality.status, "blocked");
+  assert.ok(quality.issues.some(issue => issue.code === "OUT_OF_CATALOG_NAMED_ENTITY"));
+  const allowed = evaluateDetailContentQuality({
+    content: { ...base, sections: [{ ...base.sections[0]!, body: "Known University offers the Associate of Nursing as a verified system-catalogue option for students comparing this city." }] },
+    plan,
+  });
+  assert.equal(allowed.issues.some(issue => issue.code === "OUT_OF_CATALOG_NAMED_ENTITY"), false);
 });
 
 test("quality gate blocks internal wording and highly repeated section copy", () => {

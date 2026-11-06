@@ -25,6 +25,10 @@ export type DetailGenerationPlan = {
   entityName: string;
   audience: "prospective international students";
   primaryIntent: string;
+  catalogEntities: {
+    universities: string[];
+    programs: string[];
+  };
   pageRules: string[];
   sections: DetailGenerationSectionPlan[];
   skippedSections: Array<{ key: string; reason: "INSUFFICIENT_EVIDENCE" }>;
@@ -165,6 +169,35 @@ function entityPool(facts: Record<string, unknown>): string[] {
   return [...new Set(names)].slice(0, 24);
 }
 
+function catalogNamedEntities(facts: Record<string, unknown>) {
+  const universities: string[] = [];
+  const programs: string[] = [];
+  const add = (target: string[], value: unknown) => {
+    if (typeof value === "string" && value.trim()) target.push(value.trim());
+  };
+  add(universities, facts.university);
+  add(programs, facts.program);
+  for (const row of Array.isArray(facts.universities) ? facts.universities : []) {
+    add(universities, record(row)?.name);
+  }
+  for (const row of Array.isArray(facts.programs) ? facts.programs : []) {
+    const value = record(row);
+    add(programs, value?.name);
+    add(universities, value?.university);
+    if (typeof value?.name === "string" && typeof value?.degree === "string") {
+      const name = value.name.trim();
+      const degree = value.degree.trim();
+      if (name && degree && !name.toLocaleLowerCase("en-US").startsWith(degree.toLocaleLowerCase("en-US"))) {
+        programs.push(`${degree} of ${name}`);
+      }
+    }
+  }
+  return {
+    universities: [...new Set(universities)].slice(0, 64),
+    programs: [...new Set(programs)].slice(0, 96),
+  };
+}
+
 function policyFor(key: string): SectionPolicy {
   return COMMON_POLICIES[key] ?? {
     objective: `Write a distinct, practical ${key} section using only verified evidence.`,
@@ -217,9 +250,13 @@ export function buildDetailGenerationPlan(input: {
     entityName: input.entityName,
     audience: "prospective international students",
     primaryIntent: PAGE_INTENT[input.kind],
+    catalogEntities: catalogNamedEntities(input.facts),
     pageRules: [
       "Give each section one distinct job and do not repeat advice or evidence already assigned elsewhere.",
       "Use deterministic catalogue facts as facts; use AI only to explain their significance.",
+      "University and programme names, levels, languages, durations, fees and availability may come only from the system catalogue fields in VERIFIED_FACTS.",
+      "External-source metadata may support general context, official guidance, climate, transport, housing or institutional background, but it must never introduce a university, programme or academic offering absent from the system catalogue inventory.",
+      "Do not use model memory or general world knowledge to add named universities or programmes. Use only CATALOG_ENTITIES supplied by the planner.",
       "Write an entity-specific, source-bound value proposition in the hero; do not reduce it to a neutral inventory summary.",
       "Use intent-led editorial headings that reveal the section's value; avoid one-word labels such as Overview or Highlights for generated editorial sections.",
       "Preserve useful editorial depth. Do not replace specific context, comparisons or trade-offs with shallow totals or generic summaries.",
@@ -232,6 +269,26 @@ export function buildDetailGenerationPlan(input: {
     sections: planned,
     skippedSections,
   };
+}
+
+const normalizedEntity = (value: string) => value.toLocaleLowerCase("en-US").normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+const INSTITUTION_MENTION = /\b(?:[\p{Lu}][\p{L}\p{M}'’.-]*[ \t]+){1,8}(?:University|College|Institute|Academy)\b/gu;
+const PROGRAM_MENTION = /\b(?:Associate|Bachelor|Master|Doctorate)\s+of\s+[\p{Lu}][\p{L}\p{M}'’.-]*(?:\s+(?:(?:and|of|in|for|the)\s+)?[\p{Lu}][\p{L}\p{M}'’.-]*){0,7}/gu;
+
+function unsupportedCatalogEntityMentions(text: string, plan: DetailGenerationPlan) {
+  const allowedUniversities = plan.catalogEntities.universities.map(normalizedEntity);
+  const allowedPrograms = plan.catalogEntities.programs.map(normalizedEntity);
+  const supported = (candidate: string, allowed: string[]) => {
+    const normalized = normalizedEntity(candidate);
+    return allowed.some(value => value === normalized || value.includes(normalized) || normalized.includes(value));
+  };
+  const universities = [...text.matchAll(new RegExp(INSTITUTION_MENTION.source, INSTITUTION_MENTION.flags))]
+    .map(match => match[0].trim())
+    .filter(value => !supported(value, allowedUniversities));
+  const programs = [...text.matchAll(new RegExp(PROGRAM_MENTION.source, PROGRAM_MENTION.flags))]
+    .map(match => match[0].trim())
+    .filter(value => !supported(value, allowedPrograms));
+  return [...new Set([...universities, ...programs])];
 }
 
 const words = (value: string) => new Set(value.toLocaleLowerCase("en-US").replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(token => token.length > 3));
@@ -268,6 +325,13 @@ export function evaluateDetailContentQuality(input: {
     message: "Sections repeat too much of the same vocabulary and decision guidance.",
   });
   const combined = sections.map(section => `${section.title}\n${section.body}`).join("\n");
+  const unsupportedEntities = unsupportedCatalogEntityMentions(combined, input.plan);
+  if (unsupportedEntities.length) issues.push({
+    code: "OUT_OF_CATALOG_NAMED_ENTITY",
+    severity: "blocker",
+    sections: sections.filter(section => unsupportedCatalogEntityMentions(`${section.title}\n${section.body}`, input.plan).length).map(section => section.key),
+    message: `Generated copy introduced named universities or programmes outside the system catalogue: ${unsupportedEntities.slice(0, 5).join(", ")}.`,
+  });
   const internalMatches = combined.match(INTERNAL_WORDING) ?? [];
   if (internalMatches.length) issues.push({ code: "INTERNAL_WORDING", severity: "blocker", sections: sections.filter(section => new RegExp(INTERNAL_WORDING.source, "iu").test(`${section.title}\n${section.body}`)).map(section => section.key), message: "Public copy exposes internal catalogue, source or generation language." });
   INTERNAL_WORDING.lastIndex = 0;

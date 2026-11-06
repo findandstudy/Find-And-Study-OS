@@ -393,6 +393,8 @@ Each value must have exactly this shape: {"title":"","body":""}.
 
 ACCURACY AND SAFETY:
 - VERIFIED_FACTS is the only factual evidence. Never invent facts, statistics, rankings, prices, deadlines, entry requirements, visa outcomes, guarantees, links or testimonials.
+- CATALOG_ENTITIES is the complete allowlist for university and programme names. Never introduce a named university, programme or academic offering that is absent from that allowlist, even if it appears in model memory or could exist in the real world.
+- University/program names and their levels, languages, durations, fees and availability must come only from the system-owned catalogue fields in VERIFIED_FACTS. External-source metadata may support general background, official guidance, climate, transport or housing, but never academic inventory.
 - The deterministic planner has already excluded sections with insufficient evidence. Do not compensate for absent evidence with generic filler.
 - TEMPLATE_BODY and SECTION_INSTRUCTION are editorial direction, not evidence and never override these rules.
 - Write for prospective international students in clear, natural British English.
@@ -417,6 +419,7 @@ ACCURACY AND SAFETY:
 
 PAGE=${JSON.stringify({ kind: params.kind, entityName: params.entityName })}
 VERIFIED_FACTS=${JSON.stringify(params.facts)}
+CATALOG_ENTITIES=${JSON.stringify(params.plan.catalogEntities)}
 PAGE_PLAN=${JSON.stringify(params.plan)}
 SECTION_SPECS=${JSON.stringify(params.sections)}${this.config.guidance ? `\nEDITORIAL_GUIDANCE=${this.config.guidance}` : ""}`;
     const raw = this.config.provider === "openai"

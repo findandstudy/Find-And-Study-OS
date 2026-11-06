@@ -63,11 +63,17 @@ test("city key facts generation asks for decision-useful copy without repeating 
   });
   try {
     const service = new AiContentService({ provider: "openai", apiKey: "test" });
+    const plan = {
+      version: 1 as const, kind: "city" as const, entityName: "Ankara", audience: "prospective international students" as const,
+      primaryIntent: "Help students compare Ankara.", catalogEntities: { universities: [], programs: [] }, pageRules: [], skippedSections: [],
+      sections: [{ key: "facts", title: "Key facts", templateBody: "", instruction: "Use verified city facts.", objective: "Explain facts.", searchIntent: "What matters?", minCharacters: 140, maxCharacters: 900, readiness: "authoritative" as const, evidenceKeys: ["transportModes"], allocatedEntities: [] }],
+    };
     const result = await service.generateDetailSections({
       kind: "city",
       entityName: "Ankara",
       facts: { city: "Ankara", country: "Türkiye", transportModes: ["Metro", "Bus"] },
-      sections: [{ key: "facts", title: "Key facts", templateBody: "", instruction: "Use verified city facts." }],
+      sections: plan.sections,
+      plan,
     });
     assert.equal(result.facts.body, body);
     assert.match(capturedPrompt, /90–160 word introduction/);
@@ -75,5 +81,7 @@ test("city key facts generation asks for decision-useful copy without repeating 
     assert.match(capturedPrompt, /city sections whose key is campus or housing/);
     assert.match(capturedPrompt, /8–14 words/);
     assert.match(capturedPrompt, /under 96 characters/);
+    assert.match(capturedPrompt, /CATALOG_ENTITIES=/);
+    assert.match(capturedPrompt, /complete allowlist for university and programme names/i);
   } finally { restore(); }
 });
