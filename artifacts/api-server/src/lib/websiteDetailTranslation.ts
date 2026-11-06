@@ -31,6 +31,35 @@ function applyText<T>(value: T, translations: Record<string, string>): T {
   return visit(value, "root", "root") as T;
 }
 
+function compactSeoText(value: string, max: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= max) return normalized;
+  const candidate = normalized.slice(0, max + 1);
+  const sentenceBoundaries = [...candidate.matchAll(/[.!?。！？](?=\s|$)/gu)];
+  const sentenceEnd = sentenceBoundaries.at(-1)?.index;
+  if (sentenceEnd !== undefined && sentenceEnd + 1 >= max * 0.6) return candidate.slice(0, sentenceEnd + 1).trim();
+  const wordBoundary = candidate.lastIndexOf(" ");
+  return candidate.slice(0, wordBoundary >= max * 0.6 ? wordBoundary : max).replace(/[\s,;:–—-]+$/u, "").trim();
+}
+
+function normalizeTranslatedSeo(content: DetailContent): DetailContent {
+  if (!content.seo) return content;
+  const title = compactSeoText(content.seo.title, 60);
+  const description = compactSeoText(content.seo.description, 160);
+  return {
+    ...content,
+    seo: {
+      ...content.seo,
+      title,
+      description,
+      ogTitle: title,
+      ogDescription: description,
+      twitterTitle: title,
+      twitterDescription: description,
+    },
+  };
+}
+
 /** Translates page copy and its SEO atomically while preserving URLs and structural fields. */
 export async function translateStructuredDetailContent(
   content: DetailContent,
@@ -55,6 +84,6 @@ export async function translateStructuredDetailContent(
     chars += value.length;
   }
   await flush();
-  return applyText(source, translations);
+  return normalizeTranslatedSeo(applyText(source, translations));
 }
 
