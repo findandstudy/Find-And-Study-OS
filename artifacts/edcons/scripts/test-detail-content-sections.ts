@@ -51,6 +51,7 @@ test("admin hydration instructions never leak into public detail pages", () => {
     ],
   };
   assert.equal(isDetailEditorInstruction(hydrated.sections[0].body), true);
+  assert.equal(isDetailEditorInstruction("Current programs for Istanbul is supplied from the connected source records."), true);
   assert.equal(isDetailEditorInstruction("Edit carefully before travelling."), false);
   assert.equal(renderToStaticMarkup(React.createElement(React.Fragment, null, detailContentIntro(hydrated, "programs"))), "");
   assert.equal(renderToStaticMarkup(React.createElement(React.Fragment, null, detailContentSections(hydrated, "en", "/en/contact"))).includes("editorial-gallery"), false);

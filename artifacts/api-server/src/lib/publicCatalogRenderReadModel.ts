@@ -43,6 +43,7 @@ import { websiteCatalogTaxonomy, countryMatches, countryAliases, catalogName } f
 import { catalogCountryRouteAccessible, readCatalogCountryFallback, matchCatalogCountry, readPublicCatalogCountryDirectory, resolvePublicCatalogLocationLinks } from "./publicCatalogLocationLinks";
 import { hasPublishedDetailContent, readPublishedDetailContent } from "./websiteDetailContent";
 import { buildWebsiteSeoDraft } from "./websiteSeoDraft";
+import { buildAutomaticEnglishDetailSeo } from "./websiteDetailSeo";
 import { readPublicCatalogPrices } from "./publicCatalogPriceReadModel";
 import { projectPublicTuition } from "./publicCatalogTuition";
 import { projectPublicProgramBrief } from "./publicCatalogProgramBrief";
@@ -788,18 +789,21 @@ async function readProgramDetail(
     frequency: price.frequency,
   })), { truncated: !!priceRows.truncated });
   const verifiedTuition = prices.find((price) => price.componentType === "TUITION") || null;
-  const fallbackDescription = [
-    program.degree,
-    program.field,
-    program.duration,
-    program.universityName,
-    program.country,
-  ].filter(Boolean).join(" · ");
+  const automaticSeo = buildAutomaticEnglishDetailSeo("program", {
+    name: program.name,
+    description: program.description,
+    universityName: program.universityName,
+    city: program.city,
+    country: program.country,
+  });
+  const fallbackDescription = route.locale === "en"
+    ? automaticSeo.description
+    : [program.degree, program.field, program.duration, program.universityName, program.country].filter(Boolean).join(" · ");
   return {
     kind: "program_detail",
     locale: route.locale,
     canonicalPath: seoState.canonicalPath || canonical.canonicalPath,
-    title: `${program.name} | ${program.universityName}`,
+    title: route.locale === "en" ? automaticSeo.title : program.name,
     description: boundedText(program.description, fallbackDescription),
     indexable: seoState.indexable && (route.locale === "en" || program.translatedLocale === route.locale),
     alternatePaths: seoState.alternates,
@@ -808,6 +812,7 @@ async function readProgramDetail(
       ...await resolvePublicCatalogLocationLinks({ locale: route.locale, country: program.country, city: program.city }),
       id: program.id,
       name: program.name,
+      description: program.description || (route.locale === "en" ? automaticSeo.description : null),
       universityName: program.universityName,
       universityPath: publicCatalogPath({
         locale: route.locale,

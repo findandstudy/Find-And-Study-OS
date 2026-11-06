@@ -83,5 +83,6 @@ test("city key facts generation asks for decision-useful copy without repeating 
     assert.match(capturedPrompt, /under 96 characters/);
     assert.match(capturedPrompt, /CATALOG_ENTITIES=/);
     assert.match(capturedPrompt, /complete allowlist for university and programme names/i);
+    assert.match(capturedPrompt, /no more than two titles may begin with the same action verb/i);
   } finally { restore(); }
 });

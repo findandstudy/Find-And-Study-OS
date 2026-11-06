@@ -29,7 +29,7 @@ export const detailContentLabels = (locale: string) => labels[locale] ?? labels.
 export function isDetailEditorInstruction(value: string | undefined): boolean {
   const normalized = value?.replace(/\s+/g, " ").trim();
   if (!normalized) return false;
-  return /^(?:Edit the .+ section for .+ from this page\.|.+ for .+ is shown together with the current source records\.|.+ için .+ bölümünü bu alandan düzenleyebilirsiniz\.|.+ için .+ bilgileri güncel kaynak kayıtlarıyla birlikte gösterilir\.)$/u.test(normalized);
+  return /^(?:Edit the .+ section for .+ from this page\.|(?:Current )?.+ for .+ (?:is|are) (?:shown together with|supplied from) the (?:current )?(?:connected )?source records\.|.+ için .+ bölümünü bu alandan düzenleyebilirsiniz\.|.+ için .+ bilgileri güncel kaynak kayıtlarıyla birlikte gösterilir\.)$/iu.test(normalized);
 }
 
 function publicDetailSection(section: DetailContentSection): DetailContentSection {

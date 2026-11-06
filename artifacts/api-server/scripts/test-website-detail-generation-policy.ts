@@ -19,6 +19,19 @@ test("automatic SEO keeps complete titles and descriptions without literal ellip
   assert.doesNotMatch(`${seo.title}\n${seo.description}`, /…|\.\.\./u);
 });
 
+test("automatic programme SEO remains concise and decision-oriented", () => {
+  const seo = buildAutomaticEnglishDetailSeo("program", {
+    name: "Associate of Anesthesia (Turkish)",
+    description: null,
+    universityName: "Acıbadem Mehmet Ali Aydınlar University",
+    city: "Istanbul",
+    country: "Türkiye",
+  });
+  assert.ok(seo.title.length <= 60);
+  assert.ok(seo.description.length >= 90 && seo.description.length <= 160);
+  assert.doesNotMatch(`${seo.title}\n${seo.description}`, /…|\.\.\./u);
+});
+
 test("planner keeps section identities separate and skips unsupported optional topics", () => {
   const plan = buildDetailGenerationPlan({
     kind: "city",
@@ -186,4 +199,29 @@ test("quality gate reviews pages dominated by generic editorial headings", () =>
   };
   const quality = evaluateDetailContentQuality({ content, plan });
   assert.ok(quality.issues.some(issue => issue.code === "GENERIC_SECTION_TITLES"));
+});
+
+test("programme quality gate reviews thin decision support and repetitive heading openings", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "program",
+    entityName: "Example Programme",
+    facts: {
+      program: "Example Programme", university: "Example University", degree: "Bachelor", field: "Engineering", language: "English",
+      description: "A verified programme overview.", requirements: "A verified entry route.",
+      officialSources: [{ field: "description" }, { field: "field" }, { field: "requirements" }],
+    },
+    sections: [section("overview"), section("academics"), section("requirements")],
+  });
+  const content: DetailContent = {
+    version: 1, kind: "program", entityId: 10, locale: "en", seoMode: "auto",
+    seo: { title: "Example Programme | Find & Study", description: "Compare the Example Programme, its academic fit, entry route and practical study planning details.", ogTitle: "Example Programme", ogDescription: "Programme guide", twitterTitle: "Example Programme", twitterDescription: "Programme guide" },
+    sections: [
+      { key: "overview", title: "Compare the course", body: "A short overview.", sources: [], reviewedOn: null },
+      { key: "academics", title: "Compare the curriculum", body: "A short curriculum note.", sources: [], reviewedOn: null },
+      { key: "requirements", title: "Compare entry routes", body: "A short entry note.", sources: [], reviewedOn: null },
+    ],
+  };
+  const quality = evaluateDetailContentQuality({ content, plan });
+  assert.ok(quality.issues.some(issue => issue.code === "REPETITIVE_HEADING_OPENINGS"));
+  assert.ok(quality.issues.some(issue => issue.code === "THIN_PROGRAM_DECISION_SUPPORT"));
 });

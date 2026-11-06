@@ -48,6 +48,7 @@ import { projectPublicTuition, publicCurrency } from "../lib/publicCatalogTuitio
 import { resolvePublicCatalogLocationLinks } from "../lib/publicCatalogLocationLinks";
 import { projectPublicProgramBrief } from "../lib/publicCatalogProgramBrief";
 import { readCityWeatherSnapshotByLocation } from "../lib/cityWeather";
+import { buildAutomaticEnglishDetailSeo } from "../lib/websiteDetailSeo";
 
 const router: IRouter = Router();
 
@@ -290,10 +291,18 @@ router.get(
     setPublicCatalogHeaders(res);
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Content-Location", canonicalPath);
+    const automaticSeo = buildAutomaticEnglishDetailSeo("program", {
+      name: program.name,
+      description: program.description,
+      universityName: program.universityName,
+      city: program.universityCity,
+      country: program.universityCountry,
+    });
     res.json({
       editorial: await readPublishedDetailContent("program", program.id, locale),
       data: {
         ...program,
+        description: program.description || (locale === "en" ? automaticSeo.description : null),
         ...locationLinks,
         requirements: publicCatalogRequirements(program.requirements, { canonicalPath, id: program.id }),
         tuition: projectPublicTuition(program, priceRows),

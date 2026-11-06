@@ -179,6 +179,7 @@ type PublicCatalogRenderModelData =
       program: {
         id: number;
         name: string;
+        description: string | null;
         universityName: string;
         universityPath: string;
         universityIsActive?: boolean;
@@ -648,6 +649,13 @@ function detailContentForModel(model: PublicCatalogRenderModel): DetailContent |
     : model.kind === "city_detail" ? model.city.id : model.kind === "destination_detail" ? model.destination.catalogCountryId : null;
   return !content || content.locale !== model.locale || content.entityId !== entityId || `${content.kind}_detail` !== model.kind ? null : resolveDetailTemplateContent(content, detailTemplateVariablesForModel(model));
 }
+
+function isPublicEditorInstruction(value: string | null | undefined): boolean {
+  const text = String(value ?? "").trim();
+  if (!text) return false;
+  return /^(?:Edit the .+ section for .+ from this page\.|(?:Current )?.+ for .+ (?:is|are) (?:shown together with|supplied from) the (?:current )?(?:connected )?source records\.|Bu sayfadan .+ için .+ bölümünü düzenleyin\.|.+ için mevcut içerik ve katalog kayıtları birlikte gösterilir\.)$/iu.test(text);
+}
+
 function renderDetailContentSection(section: DetailContentSection, wrapped: boolean): string {
   const cardsClass = section.key === "climate" ? "detail-climate-ribbon" : section.key === "housing" ? "detail-housing-strip" : ["services", "support"].includes(section.key) ? "detail-service-grid" : "detail-editorial-cards";
   const cards = section.cards?.map((card, index) => `<article><span class="detail-editorial-index">${String(index + 1).padStart(2, "0")}</span><h3>${card.href ? `<a href="${escapeHtml(card.href)}" rel="noopener noreferrer">${escapeHtml(card.title)}</a>` : escapeHtml(card.title)}</h3><p>${escapeHtml(card.body)}</p></article>`).join("") || "";
@@ -658,7 +666,8 @@ function renderDetailContentSection(section: DetailContentSection, wrapped: bool
   const evidence = section.sources.length > 0 && section.reviewedOn
     ? `<footer class="detail-editorial-evidence">${section.sources.map(source => `<cite><a href="${escapeHtml(source.url)}" rel="noopener noreferrer">${escapeHtml(source.label)}</a></cite>`).join(" · ")} <time datetime="${section.reviewedOn}">${section.reviewedOn}</time></footer>`
     : "";
-  const inner = `<div class="detail-wrap detail-editorial-content"><div class="detail-editorial-heading"><h2>${escapeHtml(section.title)}</h2></div>${section.body ? `<p class="detail-prose detail-editorial-intro">${escapeHtml(section.body)}</p>` : ""}${images ? `<div class="detail-editorial-gallery">${images}</div>` : ""}${cards ? `<div class="${cardsClass}">${cards}</div>` : ""}${table}${steps}${faq}${evidence}</div>`;
+  const publicBody = isPublicEditorInstruction(section.body) ? "" : section.body;
+  const inner = `<div class="detail-wrap detail-editorial-content"><div class="detail-editorial-heading"><h2>${escapeHtml(section.title)}</h2></div>${publicBody ? `<p class="detail-prose detail-editorial-intro">${escapeHtml(publicBody)}</p>` : ""}${images ? `<div class="detail-editorial-gallery">${images}</div>` : ""}${cards ? `<div class="${cardsClass}">${cards}</div>` : ""}${table}${steps}${faq}${evidence}</div>`;
   const layoutKey = `editorial-${section.key}`;
   const band = ["services", "support"].includes(section.key) ? " detail-band" : "";
   return wrapped ? `<section data-detail-section="${escapeHtml(layoutKey)}" id="${escapeHtml(layoutKey)}" class="detail-section detail-editorial-section is-${escapeHtml(section.key)}${band}">${inner}</section>` : inner;

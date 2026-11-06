@@ -22,7 +22,7 @@ const indexHtml = `<!doctype html><html lang="en"><head>
 test("reviewed editorial SSR is bound, escaped, layout-controlled and cannot change SEO", async () => {
   const { defaultDetailLayout } = await import("../src/lib/websiteDetailLayoutContract");
   const model: PublicCatalogRenderModel = { kind: "program_detail", locale: "en", canonicalPath: "/en/programs/example-42", title: "Example", description: "Catalogue", indexable: false, alternatePaths: {}, relatedPrograms: [],
-    program: { id: 42, name: "Example", universityName: "University", universityPath: "/en/universities/example-1", country: "Turkey", city: null, degree: "Bachelor", field: null, duration: null, language: "English", tuitionFee: null, discountedFee: null, currency: "USD" },
+    program: { id: 42, name: "Example", description: "A useful programme overview.", universityName: "University", universityPath: "/en/universities/example-1", country: "Turkey", city: null, degree: "Bachelor", field: null, duration: null, language: "English", tuitionFee: null, discountedFee: null, currency: "USD" },
     editorial: { version: 1, kind: "program", entityId: 42, locale: "en", sections: [{ key: "faq", title: "Questions & answers", questions: [{ question: "When can I ask?", answer: "Contact admissions & discuss." }], sources: [{ label: "Source", url: "https://example.org/info?a=1&b=2" }], reviewedOn: "2026-09-01" }] },
     detailLayout: defaultDetailLayout("program") };
   const render = () => renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
@@ -37,7 +37,9 @@ test("reviewed editorial SSR is bound, escaped, layout-controlled and cannot cha
   model.detailLayout = undefined;
   model.editorial!.locale = "tr"; assert.doesNotMatch(render(), /When can I ask/);
   model.editorial!.locale = "en"; model.editorial!.entityId = 43; assert.doesNotMatch(render(), /When can I ask/);
-  model.editorial!.entityId = 42; model.editorial!.sections[0].body = "<script>alert(1)</script>";
+  model.editorial!.entityId = 42; model.editorial!.sections[0].body = "Current programmes for Example is supplied from the connected source records.";
+  assert.doesNotMatch(render(), /supplied from the connected source records/);
+  model.editorial!.sections[0].body = "<script>alert(1)</script>";
   assert.doesNotMatch(render(), /When can I ask|alert\(1\)/);
 });
 

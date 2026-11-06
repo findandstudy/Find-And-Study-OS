@@ -259,7 +259,11 @@ export function buildDetailGenerationPlan(input: {
       "Do not use model memory or general world knowledge to add named universities or programmes. Use only CATALOG_ENTITIES supplied by the planner.",
       "Write an entity-specific, source-bound value proposition in the hero; do not reduce it to a neutral inventory summary.",
       "Use intent-led editorial headings that reveal the section's value; avoid one-word labels such as Overview or Highlights for generated editorial sections.",
+      "Vary heading and paragraph openings across the page. No more than two editorial headings may begin with the same action verb, and adjacent sections must not use the same sentence pattern.",
       "Preserve useful editorial depth. Do not replace specific context, comparisons or trade-offs with shallow totals or generic summaries.",
+      ...(input.kind === "program" ? [
+        "Make the programme page answer academic fit, verified delivery/language, entry preparation, fees or intakes when available, and one evidence-bound next step; do not reduce it to a fee card and requirement list.",
+      ] : []),
       "End action sections with one clear, realistic next step that follows from the evidence on the page.",
       "Do not expose internal catalogue, source-record, prompt, AI or editorial-review language.",
       "Do not use one institution or programme as the recurring example on destination or city pages.",
@@ -305,6 +309,7 @@ const STOCK_DISCLAIMER = /\b(?:check directly|confirm directly|ask the (?:instit
 const GENERIC_SECTION_TITLE = /^(?:overview|introduction|highlights|education|gallery|image gallery|key facts|facts|student life|next step|things to consider)$/iu;
 const TECHNICAL_OR_DRAFT_COPY = /\b(?:review and customi[sz]e|before publishing|supplied from|connected source|source records?)\b/iu;
 const LITERAL_ELLIPSIS = /(?:…|\.\.\.)/u;
+const HEADING_OPENING = /^(?:the\s+|a\s+|an\s+)?([\p{L}\p{M}]+)/iu;
 
 export function evaluateDetailContentQuality(input: {
   content: DetailContent;
@@ -339,11 +344,34 @@ export function evaluateDetailContentQuality(input: {
   if (technicalCopy.length) issues.push({ code: "TECHNICAL_FALLBACK_COPY", severity: "blocker", sections: technicalCopy, message: "Public copy contains drafting, publishing or source-system instructions." });
   const genericTitles = sections.filter(section => section.key !== "hero" && GENERIC_SECTION_TITLE.test(section.title.trim())).map(section => section.key);
   if (genericTitles.length >= 2) issues.push({ code: "GENERIC_SECTION_TITLES", severity: "warning", sections: genericTitles, message: "Too many editorial sections use generic labels instead of entity-specific, intent-led headings." });
+  const openingGroups = new Map<string, string[]>();
+  for (const section of sections.filter(section => section.key !== "hero")) {
+    const opening = section.title.trim().match(HEADING_OPENING)?.[1]?.toLocaleLowerCase("en-US");
+    if (!opening || opening.length < 3) continue;
+    openingGroups.set(opening, [...(openingGroups.get(opening) ?? []), section.key]);
+  }
+  const repetitiveOpenings = [...openingGroups.entries()].filter(([, keys]) => keys.length >= 3);
+  if (repetitiveOpenings.length) issues.push({
+    code: "REPETITIVE_HEADING_OPENINGS",
+    severity: repetitiveOpenings.some(([, keys]) => keys.length >= 5) ? "blocker" : "warning",
+    sections: [...new Set(repetitiveOpenings.flatMap(([, keys]) => keys))],
+    message: "Too many editorial headings begin with the same word, making the page feel mechanically generated.",
+  });
   const disclaimerCount = (combined.match(STOCK_DISCLAIMER) ?? []).length;
   if (disclaimerCount > 3) issues.push({ code: "REPEATED_VERIFICATION_DISCLAIMER", severity: "warning", sections: [], message: "Verification advice is repeated as stock copy instead of adding information." });
   const planByKey = new Map(input.plan.sections.map(section => [section.key, section] as const));
   const thin = sections.filter(section => (section.body?.length ?? 0) < (planByKey.get(section.key)?.minCharacters ?? 80)).map(section => section.key);
   if (thin.length) issues.push({ code: "THIN_SECTION_COPY", severity: "warning", sections: thin, message: "One or more generated sections are below their information-value target." });
+  if (input.plan.kind === "program") {
+    const substantive = sections.filter(section => (section.body?.trim().length ?? 0) >= 160);
+    const totalCharacters = substantive.reduce((sum, section) => sum + (section.body?.trim().length ?? 0), 0);
+    if (substantive.length < 4 || totalCharacters < 900) issues.push({
+      code: "THIN_PROGRAM_DECISION_SUPPORT",
+      severity: "warning",
+      sections: sections.map(section => section.key),
+      message: "The programme page does not yet provide enough distinct decision support beyond its live facts, fees and requirements.",
+    });
+  }
   const hero = sections.find(section => section.key === "hero");
   if (hero && ((hero.body?.length ?? 0) < 150 || /^explore\b/iu.test(hero.body ?? ""))) issues.push({ code: "WEAK_HERO_VALUE_PROPOSITION", severity: "warning", sections: ["hero"], message: "The hero does not yet communicate a strong, entity-specific reason to continue." });
   if ((input.plan.kind === "destination" || input.plan.kind === "city") && input.plan.sections.some(section => section.allocatedEntities.length)) {
