@@ -300,7 +300,12 @@ const similarity = (left: string, right: string) => {
   const a = words(left), b = words(right);
   if (!a.size || !b.size) return 0;
   const intersection = [...a].filter(token => b.has(token)).length;
-  return intersection / Math.min(a.size, b.size);
+  // Measure actual set overlap instead of containment. The former minimum-set
+  // denominator treated a concise section as a duplicate whenever its common
+  // decision vocabulary appeared inside a longer section. That produced many
+  // false blockers in Indic translations while still allowing true/near-exact
+  // repeated copy to score at or near 1 with the Jaccard denominator.
+  return intersection / (a.size + b.size - intersection);
 };
 
 // Multi-language copy can legitimately contain loanwords such as `campus` and
