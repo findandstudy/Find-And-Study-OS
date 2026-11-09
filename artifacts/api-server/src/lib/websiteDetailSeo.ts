@@ -44,7 +44,7 @@ export function buildAutomaticEnglishDetailSeo(kind: DetailContentKind, facts: A
       ? [`${facts.name}: Programs & Admissions`, `${facts.name}: Study Guide`, `${facts.name} University Guide`, facts.name]
       : kind === "city"
         ? [`Study in ${facts.name}: Universities & Student Life`, `Study in ${facts.name}: Student Guide`, `${facts.name} Study Guide`, facts.name]
-        : [`Study in ${facts.name}: Universities & Admissions`, `Study in ${facts.name}: Student Guide`, `${facts.name} Study Guide`, facts.name];
+        : [`Study in ${facts.name}: Cities, Costs & Student Life`, `${facts.name} Student Destination Guide`, `${facts.name} Study & Living Guide`, facts.name];
   const title = chooseSeoTitle(titleVariants);
   const location = [facts.city, facts.country].filter(Boolean).join(", ");
   const fallback = kind === "program"
@@ -53,7 +53,7 @@ export function buildAutomaticEnglishDetailSeo(kind: DetailContentKind, facts: A
       ? `Compare ${facts.name}${location ? ` in ${location}` : ""}: programs, admissions, fees, scholarships, campus services and application planning.`
       : kind === "city"
         ? `Explore universities, programs, campus areas, transport, housing and practical student life in ${facts.name}${facts.country ? `, ${facts.country}` : ""}.`
-        : `Compare universities, study options, admissions, scholarships, visa planning and student life in ${facts.name}.`;
+        : `Explore cities, daily life, climate, housing, transport and study planning in ${facts.name}, with practical guidance on admissions, funding and visas.`;
   const description = fitMetaDescription(facts.description && facts.description.length >= 90 ? facts.description : fallback, 160);
   return { title, description, ogTitle: title, ogDescription: description, twitterTitle: title, twitterDescription: description };
 }

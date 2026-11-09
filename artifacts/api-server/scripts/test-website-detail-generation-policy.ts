@@ -32,6 +32,28 @@ test("automatic programme SEO remains concise and decision-oriented", () => {
   assert.doesNotMatch(`${seo.title}\n${seo.description}`, /…|\.\.\./u);
 });
 
+test("country SEO leads with destination decisions instead of catalogue promotion", () => {
+  const seo = buildAutomaticEnglishDetailSeo("destination", {
+    name: "Turkey",
+    description: null,
+    universityName: null,
+    city: null,
+    country: "Turkey",
+  });
+  assert.equal(
+    seo.title,
+    "Study in Turkey: Cities, Costs & Student Life | Find & Study",
+  );
+  assert.match(
+    seo.description,
+    /^Explore cities, daily life, climate, housing, transport and study planning in Turkey/,
+  );
+  assert.doesNotMatch(
+    `${seo.title} ${seo.description}`,
+    /compare universities|universities & admissions/i,
+  );
+});
+
 test("planner keeps section identities separate and skips unsupported optional topics", () => {
   const plan = buildDetailGenerationPlan({
     kind: "city",
