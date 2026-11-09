@@ -72,6 +72,68 @@ test("planner rotates named entities instead of making one institution the defau
   assert.deepEqual(plan.catalogEntities.universities.sort(), ["Alpha University", "Beta University", "Gamma University"].sort());
   assert.ok(plan.catalogEntities.programs.includes("Architecture"));
   assert.match(plan.pageRules.join(" "), /only from the system catalogue/i);
+  assert.match(plan.pageRules.join(" "), /must not narrate university or programme totals/i);
+});
+
+test("country quality gate rejects changing catalogue totals in hero copy", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "destination",
+    entityName: "Example Country",
+    facts: {
+      destination: "Example Country",
+      description: "A verified destination description for international students.",
+      officialSources: [{ field: "description", sourceName: "Official portal", sourceUrl: "https://example.test/study" }],
+    },
+    sections: [section("hero")],
+  });
+  const content: DetailContent = {
+    version: 1,
+    kind: "destination",
+    entityId: 9,
+    locale: "en",
+    seoMode: "auto",
+    seo: { title: "Study in Example Country", description: "Compare study routes and student life in Example Country." },
+    sections: [{
+      key: "hero",
+      title: "Study in Example Country",
+      body: "12 universities and 80 programmes provide a changing inventory summary instead of a durable, evidence-bound reason for students to compare this destination carefully.",
+      sources: [],
+      reviewedOn: "2026-01-01",
+    }],
+  };
+  const quality = evaluateDetailContentQuality({ content, plan });
+  assert.equal(quality.status, "blocked");
+  assert.ok(quality.issues.some(issue => issue.code === "DESTINATION_HERO_LIVE_COUNTER"));
+});
+
+test("country quality gate reviews shallow copy when the evidence plan is rich", () => {
+  const keys = ["hero", "overview", "education", "admission", "scholarships", "visa", "living", "housing"];
+  const plan = buildDetailGenerationPlan({
+    kind: "destination",
+    entityName: "Example Country",
+    facts: {
+      destination: "Example Country",
+      description: "A verified destination description with enough source context for international students.",
+      programs: [{ name: "Verified Programme", degree: "Bachelor", language: "English" }],
+      requirements: "Verified entry guidance",
+      scholarship: "Verified funding guidance",
+      housingSummary: "Verified housing guidance",
+      housingFormats: ["Residence"],
+      officialSources: keys.map(field => ({ field, sourceName: "Official portal", sourceUrl: `https://example.test/${field}` })),
+    },
+    sections: keys.map(section),
+  });
+  const content: DetailContent = {
+    version: 1,
+    kind: "destination",
+    entityId: 9,
+    locale: "en",
+    seoMode: "auto",
+    seo: { title: "Study in Example Country", description: "Compare study routes and student life in Example Country." },
+    sections: plan.sections.map(item => ({ key: item.key, title: `Plan ${item.key}`, body: "Short generic guidance that does not yet support a real student decision.", sources: [{ label: "Official", url: "https://example.test" }], reviewedOn: "2026-01-01" })),
+  };
+  const quality = evaluateDetailContentQuality({ content, plan });
+  assert.ok(quality.issues.some(issue => issue.code === "THIN_DESTINATION_DECISION_SUPPORT"));
 });
 
 test("quality gate blocks named universities and programmes outside the system catalogue", () => {

@@ -127,7 +127,7 @@ export async function readCatalogCountryFallback(localeInput: unknown, slug: str
     .groupBy(programsTable.universityId) : [];
   const countsByUniversity = new Map(programCounts.map(row => [row.universityId, Number(row.count)]));
   return {
-    destination: { id: null, catalogCountryId: entry.country.id, source: "catalog" as const,
+    destination: { id: null, catalogCountryId: entry.country.id, countryCode: entry.country.code, source: "catalog" as const,
       name: entry.country.name, country: entry.country.name, slug, canonicalPath: entry.canonicalPath,
       shortDescription: null, description: null, whyStudyHere: null, livingCost: null, climate: null,
       language: null, currency: null, visaInfo: null, workPermit: null, imageUrl: null,

@@ -134,6 +134,10 @@ test("country template renders reviewed AI hero and gallery images", () => {
   assert.match(country, /DetailHeroMedia content=\{editorial\}/);
   assert.match(country.replace(/\s+/g, " "), /detailContentSections\(editorial, lang, localePath\("\/contact"\), \["hero", "overview"\]\)/);
   assert.doesNotMatch(country.replace(/\s+/g, " "), /\["hero", "overview", "gallery"\]/);
+  assert.doesNotMatch(country, /stats\.universityCount\.toLocaleString\(lang\).*detail-country-cover/);
+  assert.doesNotMatch(country, /stats\.programCount\.toLocaleString\(lang\).*detail-country-cover/);
+  assert.match(country, /localizedCountryName\(data\.destination\.name, data\.destination\.countryCode, lang\)/);
+  assert.match(country, /ogImage: heroImage/);
 });
 
 test("public detail fees require explicit valid currencies without inventing USD", () => {

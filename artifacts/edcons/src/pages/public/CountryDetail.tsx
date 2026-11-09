@@ -7,13 +7,13 @@ import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { Link } from "wouter";
 import { DetailBreadcrumbs, DetailCard, DetailHeading, DetailImage } from "./DetailEditorial";
 import { boundDetailContent, detailContentAddon, detailContentIntro, detailContentNavigation, detailContentSections, detailContentTitle, DetailHeroMedia, detailHeroSection, detailHeroStyle } from "./DetailContentSections";
-import { catalogueCount, detailCopy, detailCountLabel } from "./detailPresentation";
+import { catalogueCount, detailCopy, localizedCountryName } from "./detailPresentation";
 
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/i18n";
 import { detailContentPresentationOverrides, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
-import { Globe2, ArrowLeft, ArrowUpRight, Building2, GraduationCap, MapPin } from "lucide-react";
+import { Globe2, ArrowLeft, ArrowUpRight, Building2, MapPin } from "lucide-react";
 import { DeferredBelowFold } from "./DeferredBelowFold";
 import { usePublicDetailPayload } from "./publicDetailQuery";
 import { DetailPageSkeleton } from "@/components/public/PublicAsyncFeedback";
@@ -26,6 +26,7 @@ interface Destination {
   id: number | null;
   source?: "catalog" | "destination";
   catalogCountryId?: number;
+  countryCode?: string | null;
   name: string;
   slug: string;
   country: string;
@@ -95,6 +96,12 @@ function fixStorageUrl(url: string | null | undefined): string | null {
   return fixed;
 }
 
+function absoluteSeoImage(url: string | null): string | undefined {
+  if (!url) return undefined;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${SITE_URL}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
 export default function CountryDetail({ slug }: { slug: string }) {
   const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
@@ -109,14 +116,22 @@ export default function CountryDetail({ slug }: { slug: string }) {
   const isLoading = detail.loading;
   const error = detail.error;
   const editorial = resolveDetailTemplateContent(boundDetailContent(data?.editorial, "destination", data?.destination.catalogCountryId, lang), detailTemplateVariableValues("destination", data, lang));
+  const localizedDestinationName = data
+    ? localizedCountryName(data.destination.name, data.destination.countryCode, lang)
+    : "";
+  const heroImage = absoluteSeoImage(fixStorageUrl(
+    detailHeroSection(editorial)?.images?.[0]?.src || data?.destination.heroImageUrl,
+  ));
 
   useSeo({
-    title: editorial?.seo?.title || (data ? t("countryDetail.studyIn", { name: data.destination.name }) : t("countryDetail.studyDestination")),
+    title: editorial?.seo?.title || (data ? t("countryDetail.studyIn", { name: localizedDestinationName }) : t("countryDetail.studyDestination")),
     description: editorial?.seo?.description || data?.destination.shortDescription || t("countryDetail.exploreOpportunities"),
     ogTitle: editorial?.seo?.ogTitle,
     ogDescription: editorial?.seo?.ogDescription,
     twitterTitle: editorial?.seo?.twitterTitle,
     twitterDescription: editorial?.seo?.twitterDescription,
+    ogImage: heroImage,
+    twitterImage: heroImage,
     canonical: data ? `${SITE_URL}${data.meta.canonicalPath}` : undefined,
     noindex: !data?.meta.indexable,
     lang,
@@ -129,25 +144,29 @@ export default function CountryDetail({ slug }: { slug: string }) {
             "@context": "https://schema.org",
             "@type": "TouristDestination",
             "@id": `${SITE_URL}${data.meta.canonicalPath}#destination`,
-            name: data.destination.name,
+            name: localizedDestinationName,
             description: editorial?.seo?.description || data.destination.shortDescription || undefined,
             url: `${SITE_URL}${data.meta.canonicalPath}`,
+            inLanguage: lang,
+            ...(heroImage ? { image: heroImage } : {}),
             touristType: { "@type": "Audience", audienceType: "International Students" },
           },
           {
             "@context": "https://schema.org",
             "@type": "WebPage",
             "@id": `${SITE_URL}${data.meta.canonicalPath}#webpage`,
-            name: editorial?.seo?.title || `Study in ${data.destination.name} — ${SITE_NAME}`,
+            name: editorial?.seo?.title || `${localizedDestinationName} — ${SITE_NAME}`,
             url: `${SITE_URL}${data.meta.canonicalPath}`,
             description: editorial?.seo?.description || data.destination.shortDescription || undefined,
+            inLanguage: lang,
+            ...(heroImage ? { primaryImageOfPage: { "@type": "ImageObject", url: heroImage } } : {}),
             isPartOf: { "@id": `${SITE_URL}/#website` },
             breadcrumb: {
               "@type": "BreadcrumbList",
               itemListElement: [
-                { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
-                { "@type": "ListItem", position: 2, name: "Countries", item: `${SITE_URL}/en/countries` },
-                { "@type": "ListItem", position: 3, name: data.destination.name, item: `${SITE_URL}${data.meta.canonicalPath}` },
+                { "@type": "ListItem", position: 1, name: t("nav.home"), item: `${SITE_URL}${localePath("/")}` },
+                { "@type": "ListItem", position: 2, name: t("nav.countries"), item: `${SITE_URL}${localePath("/countries")}` },
+                { "@type": "ListItem", position: 3, name: localizedDestinationName, item: `${SITE_URL}${data.meta.canonicalPath}` },
               ],
             },
           },
@@ -199,9 +218,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
   const programsPath = localePath(`/programs?country=${encodeURIComponent(dest.filterCountry || dest.country)}`);
   const heroSection = detailHeroSection(editorial);
   const hero = heroSection?.hero;
-  const universityCountLabel = detailCountLabel(hero?.universityCountLabel, copy.universityCount);
-  const programCountLabel = detailCountLabel(hero?.programCountLabel, copy.programCount);
-  const heroTitle = heroSection?.title || t("countryDetail.studyIn", { name: dest.name });
+  const heroTitle = heroSection?.title || t("countryDetail.studyIn", { name: localizedDestinationName });
   const heroBody = heroSection?.body || dest.shortDescription || t("countryDetail.exploreOpportunities");
   const primaryCtaHref = hero?.primaryCtaHref || programsPath;
   const primaryCtaLabel = hero?.primaryCtaLabel || t("countryDetail.browsePrograms");
@@ -214,19 +231,16 @@ export default function CountryDetail({ slug }: { slug: string }) {
         <div className="detail-hero is-destination detail-country-cover" style={detailHeroStyle(editorial)}>
           <DetailHeroMedia content={editorial} />
           <div className="detail-wrap detail-hero-top">
-            <DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: dest.name }]} />
+            <DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: localizedDestinationName }]} />
           </div>
           <div className="detail-wrap detail-country-cover-inner">
             <div className="detail-country-cover-kicker"><span>{hero?.eyebrow || `${copy.destination} · 2026–27`}</span></div>
               <h1>{heroTitle}</h1>
             <div className="detail-country-cover-rule" />
             <p className="detail-country-cover-claim">
-              <span><b>{stats.universityCount.toLocaleString(lang)}</b> {universityCountLabel}. <b>{stats.programCount.toLocaleString(lang)}</b> {programCountLabel}.</span>
               <span>{heroBody}</span>
             </p>
             <div className="detail-country-cover-foot">
-              <span><Building2 size={18} aria-hidden="true" /><strong>{stats.universityCount.toLocaleString(lang)}</strong> {universityCountLabel}</span>
-              <span><GraduationCap size={18} aria-hidden="true" /><strong>{stats.programCount.toLocaleString(lang)}</strong> {programCountLabel}</span>
               {cities.length > 0 && <a href="#cities"><MapPin size={17} aria-hidden="true" />{t("countryDetail.popularCities")}</a>}
               <Link href={primaryCtaHref}>{primaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></Link>
               <Link href={secondaryCtaHref}>{secondaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></Link>

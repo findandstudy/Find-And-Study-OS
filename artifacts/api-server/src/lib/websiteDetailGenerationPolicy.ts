@@ -261,6 +261,12 @@ export function buildDetailGenerationPlan(input: {
       "Use intent-led editorial headings that reveal the section's value; avoid one-word labels such as Overview or Highlights for generated editorial sections.",
       "Vary heading and paragraph openings across the page. No more than two editorial headings may begin with the same action verb, and adjacent sections must not use the same sentence pattern.",
       "Preserve useful editorial depth. Do not replace specific context, comparisons or trade-offs with shallow totals or generic summaries.",
+      ...(input.kind === "destination" ? [
+        "Country-page editorial copy must not narrate university or programme totals. Live catalogue components own all changing counters.",
+        "Name a city, university or programme only when that exact entity is present in VERIFIED_FACTS; never broaden the page with remembered examples.",
+        "Name an official authority or source only when it is present in officialSources. Otherwise explain the decision without inventing attribution.",
+        "Cover academic choice, admissions planning, scholarships or funding, visa planning, daily life and destination trade-offs only where the allocated evidence supports them; skip unsupported claims rather than adding filler.",
+      ] : []),
       ...(input.kind === "program" ? [
         "Make the programme page answer academic fit, verified delivery/language, entry preparation, fees or intakes when available, and one evidence-bound next step; do not reduce it to a fee card and requirement list.",
       ] : []),
@@ -321,6 +327,7 @@ const GENERIC_SECTION_TITLE = /^(?:overview|introduction|highlights|education|ga
 const TECHNICAL_OR_DRAFT_COPY = /\b(?:review and customi[sz]e|before publishing|supplied from|connected source|source records?)\b/iu;
 const LITERAL_ELLIPSIS = /(?:…|\.\.\.)/u;
 const HEADING_OPENING = /^(?:the\s+|a\s+|an\s+)?([\p{L}\p{M}]+)/iu;
+const DESTINATION_LIVE_COUNTER = /\b\d[\d.,\s]*\s+(?:universit(?:y|ies)|programme?s?|üniversite(?:ler)?|program(?:lar)?)\b/iu;
 
 export function evaluateDetailContentQuality(input: {
   content: DetailContent;
@@ -383,7 +390,23 @@ export function evaluateDetailContentQuality(input: {
       message: "The programme page does not yet provide enough distinct decision support beyond its live facts, fees and requirements.",
     });
   }
+  if (input.plan.kind === "destination" && input.plan.sections.length >= 8) {
+    const substantive = sections.filter(section => (section.body?.trim().length ?? 0) >= 180);
+    const totalCharacters = substantive.reduce((sum, section) => sum + (section.body?.trim().length ?? 0), 0);
+    if (substantive.length < 6 || totalCharacters < 2_400) issues.push({
+      code: "THIN_DESTINATION_DECISION_SUPPORT",
+      severity: substantive.length < 4 || totalCharacters < 1_500 ? "blocker" : "warning",
+      sections: sections.map(section => section.key),
+      message: "The country page does not yet provide enough distinct, evidence-bound support for study choice, admissions, funding, visa planning and student life.",
+    });
+  }
   const hero = sections.find(section => section.key === "hero");
+  if (input.plan.kind === "destination" && hero && DESTINATION_LIVE_COUNTER.test(hero.body ?? "")) issues.push({
+    code: "DESTINATION_HERO_LIVE_COUNTER",
+    severity: "blocker",
+    sections: ["hero"],
+    message: "Country hero copy narrates a changing catalogue counter that belongs to the live catalogue UI.",
+  });
   if (hero && ((hero.body?.length ?? 0) < 150 || /^explore\b/iu.test(hero.body ?? ""))) issues.push({ code: "WEAK_HERO_VALUE_PROPOSITION", severity: "warning", sections: ["hero"], message: "The hero does not yet communicate a strong, entity-specific reason to continue." });
   if ((input.plan.kind === "destination" || input.plan.kind === "city") && input.plan.sections.some(section => section.allocatedEntities.length)) {
     const allocated = [...new Set(input.plan.sections.flatMap(section => section.allocatedEntities))];

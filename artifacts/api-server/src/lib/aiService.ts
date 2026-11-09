@@ -402,7 +402,7 @@ ACCURACY AND SAFETY:
 - Follow PAGE_PLAN. Give every section its assigned objective and search intent, and do not move the same advice or evidence into another section.
 - ALLOCATED_ENTITIES are diversity guidance, not new evidence. Mention an allocated entity only when it also appears in VERIFIED_FACTS and is relevant to the section.
 - On destination and city pages, do not let one institution or programme become the recurring example. Use the named cities, institutions, programmes, fields and languages in VERIFIED_FACTS where relevant instead of repeating inventory totals.
-- A catalogue total may appear in at most one section across the entire response. Never build several sections around phrases such as "there are X programmes", "X programmes are available" or "X universities are listed".
+- On destination pages, never narrate university or programme totals in any editorial section; live catalogue components own those changing counters. On other page types, a catalogue total may appear in at most one section across the entire response.
 - Avoid shallow stock copy, repeated sentence openings and repeated verification disclaimers. Never lead with missing-data or absence statements such as "not specified", "not provided", "not confirmed", "none are shown", "no universities" or "no programmes".
 - Vary section-title and paragraph openings. Across the whole response, no more than two titles may begin with the same action verb (for example Compare, Build, Choose, Check or Explore), and adjacent sections must not mirror the same sentence pattern.
 - Use "check", "confirm", "compare", "ask the institution" or similar verification advice only when a time-sensitive fact genuinely requires it. Do not end several sections with the same disclaimer.

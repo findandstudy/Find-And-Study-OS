@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { SUPPORTED_LANGUAGES, LANGUAGE_META, buildLocalizedPath, stripLanguagePrefix, type Language } from "@/lib/i18n/index";
+import { SUPPORTED_LANGUAGES, LANGUAGE_COUNTRY_CODES, buildLocalizedPath, stripLanguagePrefix, type Language } from "@/lib/i18n/index";
 import { getActiveAgencyBusinessName, subscribeAgencyBusinessName } from "@/lib/agency-branding-store";
 
 interface SeoOptions {
@@ -48,6 +48,10 @@ function removeHreflangLinks() {
   document.querySelectorAll('link[rel="alternate"][hreflang]').forEach((el) => el.remove());
 }
 
+function localeForOpenGraph(lang: Language): string {
+  return `${lang}_${LANGUAGE_COUNTRY_CODES[lang]}`;
+}
+
 export function useSeo({ title, description, canonical, noindex = false, nofollow = false, ogImage, ogTitle, ogDescription, ogType = "website", twitterTitle, twitterDescription, twitterImage, lang, alternates }: SeoOptions) {
   const agencyBusinessName = useSyncExternalStore(
     subscribeAgencyBusinessName,
@@ -74,6 +78,7 @@ export function useSeo({ title, description, canonical, noindex = false, nofollo
     setMeta("og:site_name", siteName, true);
     setMeta("og:type", ogType, true);
     setMeta("og:url", canonicalHref, true);
+    if (lang) setMeta("og:locale", localeForOpenGraph(lang), true);
     if (ogDescription || description) setMeta("og:description", ogDescription || description || "", true);
     if (ogImage) setMeta("og:image", ogImage, true);
 
@@ -84,8 +89,9 @@ export function useSeo({ title, description, canonical, noindex = false, nofollo
 
     removeHreflangLinks();
 
-    if (lang && !noindex) {
-      const origin = window.location.origin;
+    if (lang) {
+      let origin = window.location.origin;
+      try { origin = new URL(canonicalHref).origin; } catch { /* keep the current origin */ }
       const basePath = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
       const currentPath = stripLanguagePrefix(window.location.pathname.replace(basePath, ""));
 

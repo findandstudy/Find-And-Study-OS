@@ -127,7 +127,7 @@ router.get("/public/destinations", async (req: Request, res: Response): Promise<
 
   res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=3600");
   const fallbackCountries = directory.entries.filter(entry => !entry.destination).map(entry => ({
-    id: null, catalogCountryId: entry.country.id, source: "catalog", name: entry.country.name,
+    id: null, catalogCountryId: entry.country.id, countryCode: entry.country.code, source: "catalog", name: entry.country.name,
     country: entry.country.name, slug: entry.canonicalPath.split("/").at(-1), canonicalPath: entry.canonicalPath,
     shortDescription: null, description: null, imageUrl: null, isFeatured: false,
     cardHeroImageUrl: heroImageByCountryId.get(entry.country.id) ?? null,
@@ -414,6 +414,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     destination: {
       ...destination,
       catalogCountryId: mappedCountry?.id ?? null,
+      countryCode: mappedCountry?.code ?? null,
       name: localizedDestination.name,
       shortDescription: localizedDestination.shortDescription,
       description: localizedDestination.description,

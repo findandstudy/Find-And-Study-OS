@@ -202,6 +202,48 @@ test("country directory SSR renders safe canonical links and CollectionPage data
   assert.match(html, /"@type":"CollectionPage"/);
 });
 
+test("country detail SSR keeps localized SEO metadata and alternates available for QA", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "destination_detail",
+    locale: "tr",
+    canonicalPath: "/tr/countries/turkey",
+    title: "Türkiye'de Eğitim",
+    description: "Türkiye'deki eğitim seçeneklerini ve öğrenci yaşamını karşılaştırın.",
+    indexable: false,
+    alternatePaths: { en: "/en/countries/turkey", tr: "/tr/countries/turkey" },
+    editorial: {
+      version: 1,
+      kind: "destination",
+      entityId: 1,
+      locale: "tr",
+      sections: [{ key: "hero", title: "Türkiye'de Eğitim", body: "Doğrulanmış eğitim seçeneklerini karşılaştırın.", images: [{ src: "https://cdn.example.test/turkey.jpg", alt: "Türkiye" }], sources: [{ label: "Resmî kaynak", url: "https://example.test/source" }], reviewedOn: "2026-11-09" }],
+    },
+    destination: {
+      id: 1,
+      catalogCountryId: 1,
+      name: "Türkiye",
+      country: "Turkey",
+      livingCost: null,
+      climate: null,
+      language: "Türkçe",
+      currency: "TRY",
+      visaInfo: null,
+      workPermit: null,
+      popularCities: ["İstanbul"],
+      universityCount: 10,
+      programCount: 80,
+      universities: [],
+    },
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.match(html, /property="og:locale" content="tr_TR"/);
+  assert.match(html, /property="og:image" content="https:\/\/cdn\.example\.test\/turkey\.jpg"/);
+  assert.match(html, /hreflang="tr" href="https:\/\/example\.test\/tr\/countries\/turkey"/);
+  assert.match(html, /hreflang="x-default" href="https:\/\/example\.test\/en\/countries\/turkey"/);
+  assert.match(html, /"inLanguage":"tr"/);
+  assert.match(html, /"@type":"BreadcrumbList"/);
+});
+
 test("rendered shell escapes catalogue content, emits canonical metadata, and nonces every script", () => {
   const model: PublicCatalogRenderModel = {
     kind: "program_detail",

@@ -702,6 +702,22 @@ function replaceMeta(
   return pattern.test(html) ? html.replace(pattern, tag) : html.replace("</head>", `  ${tag}\n</head>`);
 }
 
+const OG_LOCALE_COUNTRY: Record<ProgramSupportedLocale, string> = {
+  en: "GB", tr: "TR", ar: "SA", fr: "FR", ru: "RU", fa: "IR", zh: "CN", hi: "IN",
+  es: "ES", id: "ID", ur: "PK", tk: "TM", ky: "KG", kk: "KZ", uz: "UZ", tg: "TJ",
+  bn: "BD", pt: "PT", ne: "NP", vi: "VN", ko: "KR", uk: "UA", it: "IT",
+};
+
+function absolutePublicImage(value: string | undefined, siteUrl: string): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value, `${siteUrl}/`);
+    return url.protocol === "https:" || (url.protocol === "http:" && url.origin === siteUrl) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 function renderProgramList(model: Extract<PublicCatalogRenderModel, { kind: "program_list" }>): string {
   const copy = RENDER_COPY[model.locale];
   const cards = model.programs.map((program) => `
@@ -1396,6 +1412,7 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
   }
   if (model.kind === "destination_detail") {
     const destination = model.destination;
+    const heroImage = absolutePublicImage(detailContentForModel(model)?.sections.find(section => section.key === "hero")?.images?.[0]?.src, siteUrl);
     return {
       "@context": "https://schema.org",
       "@graph": [
@@ -1405,6 +1422,8 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
           name: destination.name,
           description: model.description,
           url: `${siteUrl}${model.canonicalPath}`,
+          inLanguage: model.locale,
+          ...(heroImage ? { image: heroImage } : {}),
           touristType: {
             "@type": "Audience",
             audienceType: "International students",
@@ -1419,6 +1438,22 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
             url: `${siteUrl}${university.canonicalPath}`,
             name: university.name,
           })),
+        },
+        {
+          "@type": "WebPage",
+          "@id": `${siteUrl}${model.canonicalPath}#webpage`,
+          name: model.title,
+          description: model.description,
+          url: `${siteUrl}${model.canonicalPath}`,
+          inLanguage: model.locale,
+          ...(heroImage ? { primaryImageOfPage: { "@type": "ImageObject", url: heroImage } } : {}),
+          breadcrumb: {
+            "@type": "BreadcrumbList",
+            itemListElement: [
+              { "@type": "ListItem", position: 1, name: RENDER_COPY[model.locale].countries, item: `${siteUrl}/${model.locale}/countries` },
+              { "@type": "ListItem", position: 2, name: destination.name, item: `${siteUrl}${model.canonicalPath}` },
+            ],
+          },
         },
       ],
     };
@@ -1541,8 +1576,14 @@ export function renderPublicCatalogHtml(input: {
   html = replaceMeta(html, "property", "og:title", detailSeo?.ogTitle || (typeof managedSeo?.ogTitle === "string" ? managedSeo.ogTitle : model.title));
   html = replaceMeta(html, "property", "og:description", detailSeo?.ogDescription || (typeof managedSeo?.ogDescription === "string" ? managedSeo.ogDescription : model.description));
   html = replaceMeta(html, "property", "og:url", canonicalUrl);
+  html = replaceMeta(html, "property", "og:locale", `${model.locale}_${OG_LOCALE_COUNTRY[model.locale]}`);
   html = replaceMeta(html, "name", "twitter:title", detailSeo?.twitterTitle || (typeof managedSeo?.twitterTitle === "string" ? managedSeo.twitterTitle : model.title));
   html = replaceMeta(html, "name", "twitter:description", detailSeo?.twitterDescription || (typeof managedSeo?.twitterDescription === "string" ? managedSeo.twitterDescription : model.description));
+  const detailHeroImage = absolutePublicImage(detailContentForModel(model)?.sections.find(section => section.key === "hero")?.images?.[0]?.src, siteUrl);
+  if (detailHeroImage) {
+    html = replaceMeta(html, "property", "og:image", detailHeroImage);
+    html = replaceMeta(html, "name", "twitter:image", detailHeroImage);
+  }
 
   let shell = model.kind === "country_list"
     ? renderCountryList(model)
@@ -1602,7 +1643,7 @@ export function renderPublicCatalogHtml(input: {
     || model.kind === "city_detail"
     || model.kind === "article_detail"
     || model.kind === "page_detail"
-  ) && model.indexable
+  )
     ? model.alternatePaths
     : {};
   const hreflangLinks = PROGRAM_SUPPORTED_LOCALES.flatMap((locale) => {

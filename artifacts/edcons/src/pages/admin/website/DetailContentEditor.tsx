@@ -437,7 +437,6 @@ export function detailHeroEditorContext(
   } satisfies Partial<DetailHeroSettings>;
 
   if (kind === "destination") {
-    const stats = asRecord(root?.stats);
     const country = nonEmpty(entity.filterCountry) || nonEmpty(entity.country) || name;
     const cities = Array.isArray(root?.cities) ? root.cities : [];
     const effective: Partial<DetailHeroSettings> = {
@@ -457,8 +456,6 @@ export function detailHeroEditorContext(
       secondaryCtaHref: `/${language}/contact`,
     };
     add(copy.country, name);
-    add(copy.universityCount, stats?.universityCount);
-    add(copy.programCount, stats?.programCount);
     add(translatedLabel(language, "countryDetail.language", "Language"), entity.language);
     add(translatedLabel(language, "countryDetail.currency", "Currency"), entity.currency);
     add(translatedLabel(language, "countryDetail.climate", "Climate"), entity.climate);
@@ -1086,11 +1083,11 @@ function HeroFields({
           {copy("Information box labels", "Bilgi kutusu etiketleri")}
         </h4>
         {field("countryLabel", copy("Country label", "Ülke etiketi"))}
-        {field(
+        {kind !== "destination" && field(
           "universityCountLabel",
           copy("University count label", "Üniversite sayısı etiketi"),
         )}
-        {field(
+        {kind !== "destination" && field(
           "programCountLabel",
           copy("Program count label", "Program sayısı etiketi"),
         )}

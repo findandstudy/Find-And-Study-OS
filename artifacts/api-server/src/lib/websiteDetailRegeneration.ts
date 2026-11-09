@@ -107,7 +107,6 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
   if (kind === "destination") return {
     destination: text(entity.name), country: text(entity.country), shortDescription: text(entity.shortDescription),
     description: text(entity.description), languages: entity.language, currency: entity.currency, climate: entity.climate,
-    universityCount: positiveCount(record(root.stats)?.universityCount), programCount: positiveCount(record(root.stats)?.programCount),
     cities: compactRecords(root.cities, ["name"]),
     universities: compactRecords(root.universities, ["name", "city", "type"]),
     programs: compactRecords(root.programs, ["name", "degree", "field", "language", "university"]),
