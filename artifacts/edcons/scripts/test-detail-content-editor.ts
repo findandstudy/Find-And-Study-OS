@@ -525,7 +525,7 @@ test("every detail kind hydrates hero controls from its bound public facts", () 
   assert.ok(destination);
   assert.equal(destination.effective.primaryCtaHref, "/en/programs?country=T%C3%BCrkiye");
   assert.equal(destination.effective.universityCountLabel, "Universities");
-  assert.ok(destination.facts.some((fact) => fact.value === "54"));
+  assert.equal(destination.facts.some((fact) => fact.value === "54"), false);
 
   const university = detailHeroEditorContext(
     "university",
