@@ -440,6 +440,26 @@ test("destination detail emits a semantic destination shell without inventing tr
   assert.doesNotMatch(html, /service fee|commission|contact person/i);
 });
 
+test("destination SSR localizes deterministic Turkish catalogue presentation", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "destination_detail", locale: "tr", canonicalPath: "/tr/countries/turkey",
+    title: "Türkiye'de Eğitim", description: "Türkiye için doğrulanmış eğitim rehberi.", indexable: true,
+    alternatePaths: { tr: "/tr/countries/turkey" },
+    destination: {
+      id: 3, countryCode: "TR", name: "Turkey", country: "Turkey", livingCost: null, climate: null,
+      language: "Turkish", currency: "TRY", visaInfo: null, workPermit: null,
+      popularCities: ["Istanbul", "Izmir"], universityCount: 1, programCount: 2,
+      universities: [{ id: 7, name: "Istanbul Aydin University", city: "Istanbul", universityType: "private", canonicalPath: "/tr/universities/istanbul-aydin-university-7" }],
+    },
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "tr-destination-nonce" });
+  assert.match(html, /İstanbul Aydın Üniversitesi/);
+  assert.match(html, /Vakıf \/ Özel · İstanbul/);
+  assert.match(html, />Türkiye<\/span>/);
+  assert.match(html, /"name":"İstanbul Aydın Üniversitesi"/);
+  assert.doesNotMatch(html, />private · Istanbul</);
+});
+
 test("city detail emits governed city structured data and bounded related links", () => {
   const model: PublicCatalogRenderModel = {
     kind: "city_detail",

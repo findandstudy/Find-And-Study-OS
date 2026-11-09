@@ -1052,8 +1052,9 @@ async function readDestinationDetail(
   }
 
   const policy = await getPublicCatalogPolicy();
+  const catalogCountry = matchCatalogCountry(destination.country, await db.select().from(countriesTable));
   const universityConditions: any[] = [
-    sql`lower(trim(${universitiesTable.country})) IN (${sql.join((countryAliases(matchCatalogCountry(destination.country, await db.select().from(countriesTable)) ?? { name: destination.country, code: destination.country })).map(alias => sql`${alias.toLowerCase().trim()}`), sql`, `)})`,
+    sql`lower(trim(${universitiesTable.country})) IN (${sql.join((countryAliases(catalogCountry ?? { name: destination.country, code: destination.country })).map(alias => sql`${alias.toLowerCase().trim()}`), sql`, `)})`,
   ];
   addPublicCatalogConditions(universityConditions, policy);
   const programConditions: any[] = [
@@ -1177,6 +1178,7 @@ async function readDestinationDetail(
     alternatePaths: seoState.alternates,
     destination: {
       id: destination.id,
+      countryCode: catalogCountry?.code ?? null,
       name: localizedDestination.name,
       country: destination.country,
       livingCost: localizedDestination.livingCost,

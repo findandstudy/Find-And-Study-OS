@@ -258,6 +258,7 @@ type PublicCatalogRenderModelData =
       destination: {
         id: number | null;
         catalogCountryId?: number;
+        countryCode?: string | null;
         cityLinks?: Array<{ name: string; canonicalPath: string }>;
         name: string;
         country: string;
@@ -569,6 +570,41 @@ function escapeHtml(value: unknown): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+const SSR_UNIVERSITY_TYPE_LABELS: Record<string, Partial<Record<ProgramSupportedLocale, string>>> = {
+  public: { en: "Public", tr: "Devlet", ar: "حكومية", fr: "Publique", ru: "Государственный", fa: "دولتی", zh: "公立", hi: "सार्वजनिक", es: "Pública", id: "Negeri" },
+  private: { en: "Private", tr: "Vakıf / Özel", ar: "خاصة", fr: "Privée", ru: "Частный", fa: "خصوصی", zh: "私立", hi: "निजी", es: "Privada", id: "Swasta" },
+};
+const SSR_TURKISH_NAME_PARTS: Record<string, string> = {
+  istanbul: "İstanbul", izmir: "İzmir", eskisehir: "Eskişehir", duzce: "Düzce", canakkale: "Çanakkale",
+  mugla: "Muğla", sanliurfa: "Şanlıurfa", kirikkale: "Kırıkkale", kahramanmaras: "Kahramanmaraş",
+  diyarbakir: "Diyarbakır", balikesir: "Balıkesir", agri: "Ağrı", nigde: "Niğde", gumushane: "Gümüşhane",
+  isik: "Işık", istinye: "İstinye", uskudar: "Üsküdar", acibadem: "Acıbadem", aydin: "Aydın",
+};
+function ssrTurkishNameSpelling(value: string): string {
+  return value.split(/(\s+|-)/).map(part => SSR_TURKISH_NAME_PARTS[part.toLocaleLowerCase("en-US")] ?? part).join("");
+}
+function ssrCountryName(name: string, countryCode: string | null | undefined, locale: ProgramSupportedLocale): string {
+  const code = countryCode?.trim().toUpperCase();
+  if (!code || !/^[A-Z]{2}$/.test(code)) return name;
+  try { return new Intl.DisplayNames([locale], { type: "region" }).of(code) || name; }
+  catch { return name; }
+}
+function ssrCityName(name: string, country: string, locale: ProgramSupportedLocale): string {
+  return locale === "tr" && /^(?:turkey|türkiye)$/iu.test(country.trim()) ? ssrTurkishNameSpelling(name) : name;
+}
+function ssrInstitutionName(name: string, country: string, locale: ProgramSupportedLocale): string {
+  if (locale !== "tr" || !/^(?:turkey|türkiye)$/iu.test(country.trim())) return name;
+  const distance = name.match(/\s*\(Distance Education\)\s*$/iu) ? " (Uzaktan Eğitim)" : "";
+  const base = name.replace(/\s*\(Distance Education\)\s*$/iu, "").trim();
+  const university = /\s+University$/iu.test(base) ? `${base.replace(/\s+University$/iu, "")} Üniversitesi` : base;
+  return `${ssrTurkishNameSpelling(university)}${distance}`;
+}
+function ssrUniversityType(value: string | null | undefined, locale: ProgramSupportedLocale): string | null {
+  const key = value?.trim().toLocaleLowerCase("en-US");
+  if (!key) return null;
+  return SSR_UNIVERSITY_TYPE_LABELS[key]?.[locale] ?? SSR_UNIVERSITY_TYPE_LABELS[key]?.en ?? value!.trim();
 }
 
 function renderConsentShell(model: PublicCatalogRenderModel): string {
@@ -885,19 +921,20 @@ function renderUniversityDetail(model: Extract<PublicCatalogRenderModel, { kind:
 function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind: "destination_detail" }>): string {
   const destination = model.destination;
   const copy = RENDER_COPY[model.locale];
+  const countryName = ssrCountryName(destination.name, destination.countryCode, model.locale);
   const universities = destination.universities.map((university) => `
       <article class="rounded-2xl border border-border bg-card p-5">
-        <h2 class="text-lg font-bold"><a href="${escapeHtml(university.canonicalPath)}">${escapeHtml(university.name)}</a></h2>
-        <p class="mt-2 text-muted-foreground">${escapeHtml([university.universityType, university.city].filter(Boolean).join(" · "))}</p>
+        <h2 class="text-lg font-bold"><a href="${escapeHtml(university.canonicalPath)}">${escapeHtml(ssrInstitutionName(university.name, destination.country, model.locale))}</a></h2>
+        <p class="mt-2 text-muted-foreground">${escapeHtml([ssrUniversityType(university.universityType, model.locale), university.city ? ssrCityName(university.city, destination.country, model.locale) : null].filter(Boolean).join(" · "))}</p>
       </article>`).join("");
   const cities = destination.popularCities.map((city) => {
     const path = destination.cityLinks?.find(link => link.name === city)?.canonicalPath;
-    return `<li>${locationHierarchy({ city, cityPath: path })}</li>`;
+    return `<li>${locationHierarchy({ city: ssrCityName(city, destination.country, model.locale), cityPath: path })}</li>`;
   }).join("");
   return `<main data-public-render-shell="destination-detail" class="mx-auto max-w-7xl px-4 py-24">
-    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(destination.name)}</span></nav>
+    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(countryName)}</span></nav>
     <article class="mt-8">
-      <p class="text-sm text-primary">${escapeHtml(destination.country)}</p>
+      <p class="text-sm text-primary">${escapeHtml(countryName)}</p>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(model.title)}</h1>
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
       <section data-detail-section="facts" id="facts"><dl class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -908,7 +945,7 @@ function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind
       </dl></section>
       ${cities ? `<section data-detail-section="cities" id="cities"><ul class="mt-8 flex flex-wrap gap-3" aria-label="${escapeHtml(copy.location)}">${cities}</ul></section>` : ""}
     </article>
-    <section data-detail-section="universities" class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="${escapeHtml(destination.name)}">${universities}</section>
+    <section data-detail-section="universities" class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="${escapeHtml(countryName)}">${universities}</section>
   </main>`;
 }
 
@@ -1412,6 +1449,7 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
   }
   if (model.kind === "destination_detail") {
     const destination = model.destination;
+    const destinationName = ssrCountryName(destination.name, destination.countryCode, model.locale);
     const heroImage = absolutePublicImage(detailContentForModel(model)?.sections.find(section => section.key === "hero")?.images?.[0]?.src, siteUrl);
     return {
       "@context": "https://schema.org",
@@ -1419,7 +1457,7 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
         {
           "@type": "TouristDestination",
           "@id": `${siteUrl}${model.canonicalPath}#destination`,
-          name: destination.name,
+          name: destinationName,
           description: model.description,
           url: `${siteUrl}${model.canonicalPath}`,
           inLanguage: model.locale,
@@ -1436,7 +1474,7 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
             "@type": "ListItem",
             position: index + 1,
             url: `${siteUrl}${university.canonicalPath}`,
-            name: university.name,
+            name: ssrInstitutionName(university.name, destination.country, model.locale),
           })),
         },
         {
@@ -1451,7 +1489,7 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
             "@type": "BreadcrumbList",
             itemListElement: [
               { "@type": "ListItem", position: 1, name: RENDER_COPY[model.locale].countries, item: `${siteUrl}/${model.locale}/countries` },
-              { "@type": "ListItem", position: 2, name: destination.name, item: `${siteUrl}${model.canonicalPath}` },
+              { "@type": "ListItem", position: 2, name: destinationName, item: `${siteUrl}${model.canonicalPath}` },
             ],
           },
         },
