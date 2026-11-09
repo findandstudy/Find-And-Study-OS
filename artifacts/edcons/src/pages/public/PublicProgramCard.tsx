@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { normalizeCurrency } from "@/lib/currency";
+import { localizedCityName, localizedDegreeName, localizedInstitutionName, localizedLanguageNames, localizedUniversityType } from "./detailPresentation";
 
 /** Only the public fields rendered by the shared catalogue card. */
 export interface PublicProgramCardData {
@@ -85,7 +86,7 @@ const detailsClassName = "w-9 h-9 rounded-full border-2 border-border/60 flex it
 const applyClassName = "flex-1 min-w-0 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300";
 
 export function PublicProgramCard({ program: prog, index: _index, onApply, onDetails, applyHref, applyDisabled = false, tuitionContent, omitLegacyTiming = false }: PublicProgramCardProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const effectiveFee = prog.discountedFee ?? prog.tuitionFee;
   const hasDiscount = !!(prog.discountedFee && prog.tuitionFee && prog.discountedFee < prog.tuitionFee);
   const hasTuitionOverride = tuitionContent !== undefined;
@@ -95,9 +96,14 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
   const programPath = safePublicPath(prog.canonicalPath);
   const applicationPath = safePublicPath(applyHref);
   const applicationDisabled = applyDisabled || (!onApply && !applicationPath);
+  const institutionName = localizedInstitutionName(prog.universityName, prog.universityCountry, lang);
+  const institutionCity = prog.universityCity ? localizedCityName(prog.universityCity, prog.universityCountry, lang) : null;
+  const institutionType = localizedUniversityType(prog.universityType, lang);
+  const degreeName = localizedDegreeName(prog.degree, lang);
+  const languageName = prog.language ? localizedLanguageNames([prog.language], lang) : null;
   const logo = <>
     {logoSrc ? (
-      <img src={logoSrc} alt={prog.universityName} className="w-full h-full object-contain p-0.5" loading="lazy"
+      <img src={logoSrc} alt={institutionName} className="w-full h-full object-contain p-0.5" loading="lazy"
         onError={(event) => { event.currentTarget.style.display = "none"; event.currentTarget.nextElementSibling?.classList.remove("hidden"); }}
       />
     ) : null}
@@ -111,7 +117,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
       className="public-program-card group min-w-0 bg-card rounded-2xl overflow-hidden shadow-md shadow-black/[0.04] hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary/[0.08] transition-all duration-300 border border-border/40 hover:border-primary/20 flex flex-col">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 bg-card">
         {universityWebsite ? (
-          <a href={universityWebsite} target="_blank" rel="noopener noreferrer" aria-label={prog.universityName}
+          <a href={universityWebsite} target="_blank" rel="noopener noreferrer" aria-label={institutionName}
             className="w-10 h-10 rounded-xl border border-border/60 bg-background flex items-center justify-center shrink-0 overflow-hidden hover:border-primary/40 hover:scale-105 transition-all cursor-pointer"
             onClick={(event) => event.stopPropagation()}>{logo}</a>
         ) : (
@@ -119,23 +125,23 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
         )}
         <div className="min-w-0 flex-1">
           {universityPath ? (
-            <Link href={universityPath} className="block truncate text-[12px] font-bold leading-tight text-foreground/80 hover:text-primary hover:underline"><bdi>{prog.universityName}</bdi></Link>
+            <Link href={universityPath} className="block truncate text-[12px] font-bold leading-tight text-foreground/80 hover:text-primary hover:underline"><bdi>{institutionName}</bdi></Link>
           ) : (
-            <span className="block truncate text-[12px] font-bold leading-tight text-foreground/80"><bdi>{prog.universityName}</bdi></span>
+            <span className="block truncate text-[12px] font-bold leading-tight text-foreground/80"><bdi>{institutionName}</bdi></span>
           )}
           {(prog.universityCity || prog.universityCountry) && (
             <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
               <MapPin className="w-3 h-3 shrink-0 text-primary/60" aria-hidden="true" />
-              <span className="truncate"><bdi>{[prog.universityCity, prog.universityCountry].filter(Boolean).join(", ")}</bdi></span>
+              <span className="truncate"><bdi>{[institutionCity, prog.universityCountry].filter(Boolean).join(", ")}</bdi></span>
             </div>
           )}
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0 max-w-[40%]">
-          {prog.universityType && (
-            <Badge variant="outline" className="text-[10px] px-2 py-0 h-[18px] font-medium max-w-full"><bdi className="truncate">{prog.universityType}</bdi></Badge>
+          {institutionType && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0 h-[18px] font-medium max-w-full"><bdi className="truncate">{institutionType}</bdi></Badge>
           )}
-          {prog.degree && (
-            <Badge className="text-[10px] px-2 py-0 h-[18px] bg-primary text-primary-foreground font-medium max-w-full"><bdi className="truncate">{prog.degree}</bdi></Badge>
+          {degreeName && (
+            <Badge className="text-[10px] px-2 py-0 h-[18px] bg-primary text-primary-foreground font-medium max-w-full"><bdi className="truncate">{degreeName}</bdi></Badge>
           )}
         </div>
       </div>
@@ -182,7 +188,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
           {prog.degree && (
             <div className="flex flex-col gap-0.5 min-w-0">
               <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium"><GraduationCap className="w-3 h-3 text-violet-500 shrink-0" aria-hidden="true" />{t("courseFinderPage.degree")}</span>
-              <span className="text-[11px] font-bold truncate"><bdi>{prog.degree}</bdi></span>
+              <span className="text-[11px] font-bold truncate"><bdi>{degreeName}</bdi></span>
             </div>
           )}
           {prog.field && (
@@ -194,7 +200,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
           {prog.language && (
             <div className="flex flex-col gap-0.5 min-w-0">
               <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium"><Languages className="w-3 h-3 text-blue-500 shrink-0" aria-hidden="true" />{t("courseFinderPage.language")}</span>
-              <span className="text-[11px] font-bold truncate"><bdi>{prog.language}</bdi></span>
+              <span className="text-[11px] font-bold truncate"><bdi>{languageName}</bdi></span>
             </div>
           )}
           {prog.duration && (

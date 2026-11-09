@@ -7,7 +7,7 @@ import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { Link } from "wouter";
 import { DetailBreadcrumbs, DetailCard, DetailHeading, DetailImage } from "./DetailEditorial";
 import { boundDetailContent, detailContentAddon, detailContentIntro, detailContentNavigation, detailContentSections, detailContentTitle, DetailHeroMedia, detailHeroSection, detailHeroStyle } from "./DetailContentSections";
-import { catalogueCount, detailCopy, localizedCountryName } from "./detailPresentation";
+import { catalogueCount, detailCopy, localizedCityName, localizedCountryName, localizedInstitutionName, localizedUniversityType } from "./detailPresentation";
 
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/i18n";
@@ -204,9 +204,9 @@ export default function CountryDetail({ slug }: { slug: string }) {
     [city.name.toLocaleLowerCase("en-US"), city] as const,
     [city.sourceName.toLocaleLowerCase("en-US"), city] as const,
   ]));
-  const cities = [...data.cities.map(city => ({ name: city.name, canonicalPath: city.canonicalPath, universityCount: city.universityCount })), ...cityNames
+  const cities = [...data.cities.map(city => ({ name: localizedCityName(city.name, dest.country, lang), canonicalPath: city.canonicalPath, universityCount: city.universityCount })), ...cityNames
     .filter(name => !cityLinks.has(name.toLocaleLowerCase("en-US")))
-    .map(name => ({ name, canonicalPath: null, universityCount: null }))];
+    .map(name => ({ name: localizedCityName(name, dest.country, lang), canonicalPath: null, universityCount: null }))];
   const facts = [
     { label: t("countryDetail.language"), value: dest.language },
     { label: t("countryDetail.currency"), value: dest.currency },
@@ -290,8 +290,8 @@ export default function CountryDetail({ slug }: { slug: string }) {
         <div className="detail-wrap">
           <DetailHeading number="04" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: dest.name }))} />
           {detailContentIntro(editorial, "universities")}
-          <div className="detail-grid">{universities.map((uni) => <DetailCard key={uni.id} href={uni.canonicalPath} title={uni.name} eyebrow={uni.city || dest.name} kind="university" logoUrl={fixStorageUrl(uni.logoUrl)}>
-            <p>{[uni.universityType, catalogueCount(uni.programCount, t("countryDetail.programs"))].filter(Boolean).join(" · ")}</p>
+          <div className="detail-grid">{universities.map((uni) => <DetailCard key={uni.id} href={uni.canonicalPath} title={localizedInstitutionName(uni.name, dest.country, lang)} eyebrow={localizedCityName(uni.city || dest.name, dest.country, lang)} kind="university" logoUrl={fixStorageUrl(uni.logoUrl)}>
+            <p>{[localizedUniversityType(uni.universityType, lang), catalogueCount(uni.programCount, t("countryDetail.programs"))].filter(Boolean).join(" · ")}</p>
           </DetailCard>)}</div>
         </div>
       </section>}

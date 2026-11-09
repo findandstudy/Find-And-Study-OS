@@ -53,7 +53,7 @@ test("planner keeps section identities separate and skips unsupported optional t
   assert.ok(plan.sections.find(item => item.key === "transport")?.evidenceKeys.includes("transportModes"));
 });
 
-test("planner rotates named entities instead of making one institution the default example", () => {
+test("country planner caps named catalogue examples and keeps them out of the hero", () => {
   const plan = buildDetailGenerationPlan({
     kind: "destination",
     entityName: "Example Country",
@@ -64,15 +64,44 @@ test("planner rotates named entities instead of making one institution the defau
       programs: [{ name: "Architecture", university: "Alpha University" }, { name: "Nursing", university: "Beta University" }],
       officialSources: [{ field: "description", sourceName: "Official portal", sourceUrl: "https://example.test/study" }],
     },
-    sections: [section("overview"), section("highlights"), section("education")],
+    sections: [section("hero"), section("overview"), section("highlights"), section("education")],
   });
-  assert.equal(plan.sections.length, 3);
-  assert.notDeepEqual(plan.sections[0]?.allocatedEntities, plan.sections[1]?.allocatedEntities);
+  assert.equal(plan.sections.length, 4);
+  assert.deepEqual(plan.sections.find(item => item.key === "hero")?.allocatedEntities, []);
+  assert.deepEqual(plan.sections.find(item => item.key === "overview")?.allocatedEntities, []);
+  assert.equal(plan.sections.flatMap(item => item.allocatedEntities).length, 2);
   assert.match(plan.pageRules.join(" "), /do not repeat/i);
   assert.deepEqual(plan.catalogEntities.universities.sort(), ["Alpha University", "Beta University", "Gamma University"].sort());
   assert.ok(plan.catalogEntities.programs.includes("Architecture"));
   assert.match(plan.pageRules.join(" "), /only from the system catalogue/i);
   assert.match(plan.pageRules.join(" "), /must not narrate university or programme totals/i);
+  assert.match(plan.pageRules.join(" "), /about 65% destination/i);
+});
+
+test("country quality gate blocks catalogue-led hero and excessive named examples", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "destination", entityName: "Example Country",
+    facts: {
+      destination: "Example Country", description: "Verified destination context.",
+      universities: [{ name: "Alpha University" }, { name: "Beta University" }],
+      programs: [{ name: "Architecture" }, { name: "Nursing" }],
+      officialSources: [{ field: "description" }],
+    },
+    sections: [section("hero"), section("highlights"), section("education")],
+  });
+  const content: DetailContent = {
+    version: 1, kind: "destination", entityId: 9, locale: "en", seoMode: "auto",
+    seo: { title: "Study in Example Country", description: "Compare education and student life in Example Country." },
+    sections: [
+      { key: "hero", title: "Study in Example Country", body: "Alpha University leads a catalogue-focused introduction rather than a country value proposition for international students planning their destination.", sources: [], reviewedOn: null },
+      { key: "highlights", title: "Country choices", body: "Beta University and Architecture are presented as additional named examples in a page that should primarily explain the country-level study experience and practical decisions.", sources: [], reviewedOn: null },
+      { key: "education", title: "Education structure", body: "Nursing becomes a fourth named example rather than a concise explanation of the national education structure, admissions context and student choices.", sources: [], reviewedOn: null },
+    ],
+  };
+  const quality = evaluateDetailContentQuality({ content, plan });
+  assert.equal(quality.status, "blocked");
+  assert.ok(quality.issues.some(issue => issue.code === "DESTINATION_HERO_CATALOG_ENTITY"));
+  assert.ok(quality.issues.some(issue => issue.code === "DESTINATION_CATALOG_DOMINANCE"));
 });
 
 test("country quality gate rejects changing catalogue totals in hero copy", () => {

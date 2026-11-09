@@ -61,7 +61,7 @@ type SectionPolicy = {
 };
 
 const PAGE_INTENT: Record<DetailContentKind, string> = {
-  destination: "Help a student compare the country's education system, destinations, admissions, funding, visa planning and student life.",
+  destination: "Help a student evaluate the country as a study destination: education structure, admissions, funding, visa planning, cities, daily life, costs and practical trade-offs. Institution or programme examples are supporting evidence, never the page's main story.",
   city: "Help a student judge academic fit, campus location, transport, housing, climate and daily life in the city.",
   university: "Help a student assess the institution's academic offer, admissions, fees, campus, support and recognition.",
   program: "Help a student understand the programme's curriculum, entry requirements, delivery, fees, intakes and outcomes.",
@@ -215,6 +215,8 @@ export function buildDetailGenerationPlan(input: {
 }): DetailGenerationPlan {
   const fields = sourceFields(input.facts);
   const pool = entityPool(input.facts);
+  const destinationEntitySections = new Set(["highlights", "education"]);
+  let destinationEntityCursor = 0;
   const planned: DetailGenerationSectionPlan[] = [];
   const skippedSections: DetailGenerationPlan["skippedSections"] = [];
   input.sections.forEach((section, index) => {
@@ -230,9 +232,13 @@ export function buildDetailGenerationPlan(input: {
       skippedSections.push({ key: section.key, reason: "INSUFFICIENT_EVIDENCE" });
       return;
     }
-    const allocatedEntities = pool.length
-      ? [pool[index % pool.length], pool[(index + Math.max(1, Math.floor(pool.length / 2))) % pool.length]].filter((value, entityIndex, all) => all.indexOf(value) === entityIndex)
-      : [];
+    const allocatedEntities = input.kind === "destination"
+      ? destinationEntitySections.has(section.key) && destinationEntityCursor < 2 && pool[destinationEntityCursor]
+        ? [pool[destinationEntityCursor++]!]
+        : []
+      : pool.length
+        ? [pool[index % pool.length], pool[(index + Math.max(1, Math.floor(pool.length / 2))) % pool.length]].filter((value, entityIndex, all) => all.indexOf(value) === entityIndex)
+        : [];
     planned.push({
       ...section,
       objective: policy.objective,
@@ -262,6 +268,9 @@ export function buildDetailGenerationPlan(input: {
       "Vary heading and paragraph openings across the page. No more than two editorial headings may begin with the same action verb, and adjacent sections must not use the same sentence pattern.",
       "Preserve useful editorial depth. Do not replace specific context, comparisons or trade-offs with shallow totals or generic summaries.",
       ...(input.kind === "destination" ? [
+        "Keep the country guide country-first: about 65% destination, city, daily-life, cost and practical context; about 20% education, admissions, funding and visa planning; at most 15% institution or programme examples.",
+        "Never name a university or programme in the hero. Across all editorial sections, use at most two distinct verified catalogue examples, only where they clarify a decision rather than advertise the catalogue.",
+        "Do not turn highlights, cautions, education or FAQ copy into a list of institutions or programmes. Explain the national system, student choices and trade-offs first.",
         "Country-page editorial copy must not narrate university or programme totals. Live catalogue components own all changing counters.",
         "Name a city, university or programme only when that exact entity is present in VERIFIED_FACTS; never broaden the page with remembered examples.",
         "Name an official authority or source only when it is present in officialSources. Otherwise explain the decision without inventing attribution.",
@@ -328,6 +337,16 @@ const TECHNICAL_OR_DRAFT_COPY = /\b(?:review and customi[sz]e|before publishing|
 const LITERAL_ELLIPSIS = /(?:…|\.\.\.)/u;
 const HEADING_OPENING = /^(?:the\s+|a\s+|an\s+)?([\p{L}\p{M}]+)/iu;
 const DESTINATION_LIVE_COUNTER = /\b\d[\d.,\s]*\s+(?:universit(?:y|ies)|programme?s?|üniversite(?:ler)?|program(?:lar)?)\b/iu;
+
+function destinationCatalogMentions(text: string, plan: DetailGenerationPlan) {
+  const normalizedText = normalizedEntity(text);
+  const matches = [...plan.catalogEntities.universities, ...plan.catalogEntities.programs]
+    .filter(value => {
+      const normalized = normalizedEntity(value);
+      return normalized.length >= 4 && normalizedText.includes(normalized);
+    });
+  return [...new Set(matches)];
+}
 
 export function evaluateDetailContentQuality(input: {
   content: DetailContent;
@@ -407,8 +426,26 @@ export function evaluateDetailContentQuality(input: {
     sections: ["hero"],
     message: "Country hero copy narrates a changing catalogue counter that belongs to the live catalogue UI.",
   });
+  if (input.plan.kind === "destination" && hero) {
+    const heroEntities = destinationCatalogMentions(`${hero.title}\n${hero.body ?? ""}`, input.plan);
+    if (heroEntities.length) issues.push({
+      code: "DESTINATION_HERO_CATALOG_ENTITY",
+      severity: "blocker",
+      sections: ["hero"],
+      message: "Country hero copy names a university or programme instead of leading with the destination value proposition.",
+    });
+  }
+  if (input.plan.kind === "destination") {
+    const namedExamples = destinationCatalogMentions(combined, input.plan);
+    if (namedExamples.length > 2) issues.push({
+      code: "DESTINATION_CATALOG_DOMINANCE",
+      severity: "blocker",
+      sections: sections.filter(section => destinationCatalogMentions(`${section.title}\n${section.body ?? ""}`, input.plan).length).map(section => section.key),
+      message: "Country editorial copy relies on too many named universities or programmes instead of country-level decision guidance.",
+    });
+  }
   if (hero && ((hero.body?.length ?? 0) < 150 || /^explore\b/iu.test(hero.body ?? ""))) issues.push({ code: "WEAK_HERO_VALUE_PROPOSITION", severity: "warning", sections: ["hero"], message: "The hero does not yet communicate a strong, entity-specific reason to continue." });
-  if ((input.plan.kind === "destination" || input.plan.kind === "city") && input.plan.sections.some(section => section.allocatedEntities.length)) {
+  if (input.plan.kind === "city" && input.plan.sections.some(section => section.allocatedEntities.length)) {
     const allocated = [...new Set(input.plan.sections.flatMap(section => section.allocatedEntities))];
     const mentioned = allocated.filter(entity => combined.toLocaleLowerCase("en-US").includes(entity.toLocaleLowerCase("en-US")));
     if (allocated.length >= 4 && mentioned.length < 2) issues.push({ code: "LOW_ENTITY_DIVERSITY", severity: "warning", sections: sections.map(section => section.key), message: "The page underuses the verified cities, institutions or programmes available for concrete examples." });

@@ -100,6 +100,46 @@ export function localizedUniversityType(value: string | null | undefined, locale
   return UNIVERSITY_TYPE_LABELS[value.trim().toLowerCase()]?.[locale] ?? UNIVERSITY_TYPE_LABELS[value.trim().toLowerCase()]?.en ?? value;
 }
 
+const TURKISH_NAME_PARTS: Record<string, string> = {
+  istanbul: "İstanbul", izmir: "İzmir", eskisehir: "Eskişehir", duzce: "Düzce", canakkale: "Çanakkale",
+  mugla: "Muğla", sanliurfa: "Şanlıurfa", kirikkale: "Kırıkkale", kahramanmaras: "Kahramanmaraş",
+  diyarbakir: "Diyarbakır", balikesir: "Balıkesir", agri: "Ağrı", nigde: "Niğde", gumushane: "Gümüşhane",
+  isik: "Işık", istinye: "İstinye", uskudar: "Üsküdar", acibadem: "Acıbadem", aydin: "Aydın",
+};
+
+function turkishNameSpelling(value: string): string {
+  return value.split(/(\s+|-)/).map(part => TURKISH_NAME_PARTS[part.toLocaleLowerCase("en-US")] ?? part).join("");
+}
+
+/**
+ * Localises only deterministic presentation terms. It never invents a translated
+ * institution identity: outside Türkiye (or outside Turkish UI) the canonical
+ * catalogue name is returned unchanged.
+ */
+export function localizedInstitutionName(name: string, country: string | null | undefined, locale: string): string {
+  if (locale !== "tr" || !/^(?:turkey|türkiye)$/iu.test(country?.trim() ?? "")) return name;
+  const distance = name.match(/\s*\(Distance Education\)\s*$/iu) ? " (Uzaktan Eğitim)" : "";
+  const base = name.replace(/\s*\(Distance Education\)\s*$/iu, "").trim();
+  const university = /\s+University$/iu.test(base)
+    ? `${base.replace(/\s+University$/iu, "")} Üniversitesi`
+    : base;
+  return `${turkishNameSpelling(university)}${distance}`;
+}
+
+export function localizedCityName(name: string, country: string | null | undefined, locale: string): string {
+  return locale === "tr" && /^(?:turkey|türkiye)$/iu.test(country?.trim() ?? "") ? turkishNameSpelling(name) : name;
+}
+
+const DEGREE_LABELS: Record<string, Record<string, string>> = {
+  associate: { tr: "Ön Lisans", en: "Associate" }, bachelor: { tr: "Lisans", en: "Bachelor" },
+  master: { tr: "Yüksek Lisans", en: "Master" }, doctorate: { tr: "Doktora", en: "Doctorate" },
+  phd: { tr: "Doktora", en: "PhD" }, foundation: { tr: "Hazırlık", en: "Foundation" },
+};
+export function localizedDegreeName(value: string | null | undefined, locale: string): string | null {
+  if (!value?.trim()) return null;
+  return DEGREE_LABELS[value.trim().toLocaleLowerCase("en-US")]?.[locale] ?? value;
+}
+
 export const DETAIL_COPY = {
   ...DETAIL_PRESENTATION_LOCALES,
   en: { from: "From", institutionLocation: "Institution location", campus: "Campus", legacyPrice: "Listed tuition · confirmation required", confirmPrice: "Confirm tuition with an adviser", durationAsListed: "Duration · as listed", courseInformation: "Catalogue information", catalogueNote: "Details supplied in the catalogue. Confirm the campus, study mode and duration for your selected intake.", overview: "At a glance", studyOptions: "Explore your study options", catalogue: "Study catalogue", destination: "Study destination", city: "Student city", institution: "University profile", program: "Program guide", country: "Country", mode: "Study mode", intakes: "Intakes listed", decision: "Decision time listed", scrollTable: "Scroll to see all program details", unavailable: "Details are not available yet.", next: "Your next step", priceBasis: "The displayed amount follows the published fee basis; confirm any conditions before applying.", durationNote: "Multiple durations are listed. Confirm the duration for your chosen study mode and intake.", universityCount: "Universities", programCount: "Programs" },
