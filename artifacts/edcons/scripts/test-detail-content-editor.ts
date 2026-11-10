@@ -99,6 +99,12 @@ test("AI translation preserves structural identifiers and presentation enums", (
   assert.equal(translated.sections[0].title, "Türkiye'de Eğitim");
 });
 
+test("AI translation includes visitor-facing table column labels", () => {
+  const texts = collectTranslatableText(fixture());
+  assert.ok(Object.values(texts).includes("Topic"));
+  assert.ok(Object.values(texts).includes("Notes"));
+});
+
 test("AI display-term collection is bounded to catalogue-owned names", () => {
   const terms = collectAdminDisplayTerms({
     destination: { name: "Turkey", description: "Do not send this description" },

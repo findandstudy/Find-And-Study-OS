@@ -56,8 +56,12 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
       db.select({ count: sql<number>`count(*)` }).from(programsTable).innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id)).where(countryScope),
       db.select({ id: citiesTable.id, name: citiesTable.name }).from(citiesTable)
         .where(eq(citiesTable.countryId, country.id)).orderBy(asc(citiesTable.name)).limit(24),
-      db.select({ id: universitiesTable.id, name: universitiesTable.name, city: universitiesTable.city, type: universitiesTable.universityType })
-        .from(universitiesTable).where(countryScope).orderBy(asc(universitiesTable.name)).limit(24),
+      db.select({ id: universitiesTable.id, name: universitiesTable.name, city: universitiesTable.city, type: universitiesTable.universityType, isActive: universitiesTable.isActive })
+        .from(universitiesTable).where(countryScope)
+        // Public cards prefer active catalogue rows. Keep inactive rows available
+        // to the editor, but never let them crowd the localized display-name map
+        // ahead of entities that visitors can actually see.
+        .orderBy(desc(universitiesTable.isActive), asc(universitiesTable.name)).limit(64),
       db.select({ id: programsTable.id, name: programsTable.name, degree: programsTable.degree, field: programsTable.field, language: programsTable.language, university: universitiesTable.name })
         .from(programsTable).innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
         .where(countryScope).orderBy(asc(programsTable.name)).limit(32),

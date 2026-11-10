@@ -20,7 +20,7 @@ const NON_TRANSLATABLE_KEYS = new Set([
   "id", "key", "type", "kind", "version", "entityid", "locale", "seomode",
   "sectionorder", "reviewedon", "slug", "url", "href", "src", "source",
   "icon", "image", "color", "style", "class", "layout", "position", "width",
-  "size", "column", "columns", "limit", "opacity", "visible", "enabled",
+  "size", "limit", "opacity", "visible", "enabled",
   "overlay", "tone", "spacing", "align", "minheight", "backgroundimagefit",
   "backgroundimageposition", "backgroundimagerepeat", "overlayopacity",
 ]);
