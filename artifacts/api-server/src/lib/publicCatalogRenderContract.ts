@@ -676,7 +676,7 @@ const templateWeather = (weather: PublicCityWeatherSnapshot | null | undefined, 
 });
 function detailTemplateVariablesForModel(model: PublicCatalogRenderModel): Record<string, string | null> {
   if (model.kind === "destination_detail") return {
-    "destination.name": model.destination.name, "destination.country": model.destination.country,
+    "destination.name": ssrCountryName(model.destination.name, model.destination.countryCode, model.locale), "destination.country": ssrCountryName(model.destination.country, model.destination.countryCode, model.locale),
     "destination.shortDescription": model.description, "destination.description": model.description,
     "destination.language": model.destination.language, "destination.currency": model.destination.currency,
     "destination.climate": model.destination.climate, "destination.livingCost": model.destination.livingCost,
@@ -686,7 +686,7 @@ function detailTemplateVariablesForModel(model: PublicCatalogRenderModel): Recor
     "stats.cityCount": templateNumber(model.destination.cityLinks?.length ?? model.destination.popularCities.length, model.locale),
   };
   if (model.kind === "city_detail") return {
-    "city.name": model.city.name, "city.country": model.city.country, "city.description": model.city.description,
+    "city.name": ssrCityName(model.city.name, model.city.country, model.locale), "city.country": ssrCountryName(model.city.country, null, model.locale), "city.description": model.city.description,
     "city.universityCount": templateNumber(model.city.universityCount, model.locale), "city.programCount": templateNumber(model.city.programCount, model.locale),
     "city.programLanguages": templateList(model.city.programLanguages), "city.transportModes": templateList(model.city.transportModes),
     "city.campusGeography": model.city.campusGeography ?? null, "city.climateSummary": model.city.externalFacts?.climateSummary ?? null,
@@ -695,8 +695,8 @@ function detailTemplateVariablesForModel(model: PublicCatalogRenderModel): Recor
     ...templateWeather(model.city.weather, model.locale),
   };
   if (model.kind === "university_detail") return {
-    "university.name": model.university.name, "university.country": model.university.country, "university.city": model.university.city,
-    "university.type": model.university.universityType, "stats.programCount": templateNumber(model.university.programCount, model.locale),
+    "university.name": ssrInstitutionName(model.university.name, model.university.country, model.locale), "university.country": ssrCountryName(model.university.country, null, model.locale), "university.city": model.university.city ? ssrCityName(model.university.city, model.university.country, model.locale) : null,
+    "university.type": ssrUniversityType(model.university.universityType, model.locale), "stats.programCount": templateNumber(model.university.programCount, model.locale),
     ...templateWeather(model.university.weather, model.locale),
   };
   if (model.kind === "program_detail") {
@@ -704,20 +704,94 @@ function detailTemplateVariablesForModel(model: PublicCatalogRenderModel): Recor
     const currency = model.program.verifiedTuition?.currencyCode ?? model.program.currency;
     const money = (value: number | null | undefined) => value == null || !currency ? null : new Intl.NumberFormat(model.locale, { style: "currency", currency }).format(value);
     return {
-      "program.name": model.program.name, "program.degree": model.program.degree, "program.field": model.program.field,
-      "program.language": model.program.language, "program.duration": model.program.duration, "program.tuitionFee": money(tuition),
+      "program.name": ssrProgramName(model.program.name, model.locale), "program.degree": ssrDegreeName(model.program.degree, model.locale), "program.field": ssrFieldName(model.program.field, model.locale),
+      "program.language": model.program.language, "program.duration": ssrDuration(model.program.duration, model.locale), "program.tuitionFee": money(tuition),
       "program.discountedFee": money(model.program.discountedFee), "program.currency": currency, "program.requirements": model.program.requirements ?? null,
-      "university.name": model.program.universityName, "university.country": model.program.country, "university.city": model.program.city,
+      "university.name": ssrInstitutionName(model.program.universityName, model.program.country, model.locale), "university.country": ssrCountryName(model.program.country, null, model.locale), "university.city": model.program.city ? ssrCityName(model.program.city, model.program.country, model.locale) : null,
       "stats.intakeCount": templateNumber(model.intakes?.length ?? 0, model.locale), "stats.relatedProgramCount": templateNumber(model.relatedPrograms.length, model.locale),
     };
   }
   return {};
 }
+
+function localizeTurkishDetailText(value: string, model: PublicCatalogRenderModel): string {
+  if (model.locale !== "tr" || !value) return value;
+  const replacements = new Map<string, string>([
+    ["Council of Higher Education", "Yükseköğretim Kurulu (YÖK)"],
+    ["Turkish State Meteorological Service", "Meteoroloji Genel Müdürlüğü (MGM)"],
+    ["Ministry of Foreign Affairs", "Dışişleri Bakanlığı"],
+    ["Directorate General of Migration Management", "Göç İdaresi Başkanlığı"],
+    ["Presidency of Migration Management", "Göç İdaresi Başkanlığı"],
+  ]);
+  const addInstitution = (name: string, country: string) => replacements.set(name, ssrInstitutionName(name, country, "tr"));
+  const addProgram = (name: string) => replacements.set(name, ssrProgramName(name, "tr"));
+  if (model.kind === "destination_detail") {
+    replacements.set(model.destination.name, ssrCountryName(model.destination.name, model.destination.countryCode, "tr"));
+    replacements.set(model.destination.country, ssrCountryName(model.destination.country, model.destination.countryCode, "tr"));
+    model.destination.universities.forEach(item => addInstitution(item.name, model.destination.country));
+  } else if (model.kind === "city_detail") {
+    replacements.set(model.city.name, ssrCityName(model.city.name, model.city.country, "tr"));
+    replacements.set(model.city.country, ssrCountryName(model.city.country, null, "tr"));
+    model.city.universities.forEach(item => addInstitution(item.name, model.city.country));
+    model.city.programs.forEach(item => { addInstitution(item.universityName, model.city.country); addProgram(item.name); });
+  } else if (model.kind === "university_detail") {
+    addInstitution(model.university.name, model.university.country);
+    replacements.set(model.university.country, ssrCountryName(model.university.country, null, "tr"));
+    if (model.university.city) replacements.set(model.university.city, ssrCityName(model.university.city, model.university.country, "tr"));
+    model.university.programs.forEach(item => addProgram(item.name));
+  } else if (model.kind === "program_detail") {
+    addProgram(model.program.name);
+    addInstitution(model.program.universityName, model.program.country);
+    replacements.set(model.program.country, ssrCountryName(model.program.country, null, "tr"));
+    if (model.program.city) replacements.set(model.program.city, ssrCityName(model.program.city, model.program.country, "tr"));
+    model.relatedPrograms.forEach(item => addProgram(item.name));
+  }
+  let localized = value;
+  for (const [source, target] of [...replacements].sort(([a], [b]) => b.length - a.length)) {
+    if (source && target && source !== target) localized = localized.replaceAll(source, target);
+  }
+  return localized
+    .replace(/\bTURKEY\b/g, "TÜRKİYE")
+    .replace(/\bTurkey\b/g, "Türkiye")
+    .replace(/\bIstanbul\b/g, "İstanbul")
+    .replace(/\bIzmir\b/g, "İzmir")
+    .replace(/\bEskisehir\b/g, "Eskişehir")
+    .replace(/\bDuzce\b/g, "Düzce")
+    .replace(/\bPrograms\b/g, "Programlar")
+    .replace(/\bProgram\b/g, "Program")
+    .replace(/\bUniversities\b/g, "Üniversiteler")
+    .replace(/\bUniversity\b/g, "Üniversite")
+    .replace(/\bprivate\b/giu, "özel");
+}
+
+function localizeDetailContent(content: DetailContent, model: PublicCatalogRenderModel): DetailContent {
+  if (model.locale !== "tr") return content;
+  const text = (value: string | undefined) => value === undefined ? undefined : localizeTurkishDetailText(value, model);
+  return {
+    ...content,
+    seo: content.seo ? Object.fromEntries(Object.entries(content.seo).map(([key, value]) => [key, text(value) ?? ""])) as DetailContent["seo"] : undefined,
+    templateSections: content.templateSections?.map(item => ({ ...item, title: text(item.title), body: text(item.body) })),
+    sections: content.sections.map(section => ({
+      ...section,
+      title: text(section.title) ?? "",
+      body: text(section.body),
+      hero: section.hero ? Object.fromEntries(Object.entries(section.hero).map(([key, item]) => [key, typeof item === "string" && !key.endsWith("Href") && !key.endsWith("Color") ? text(item) : item])) : undefined,
+      cards: section.cards?.map(item => ({ ...item, title: text(item.title) ?? "", body: text(item.body) ?? "" })),
+      table: section.table ? { columns: section.table.columns.map(item => text(item) ?? ""), rows: section.table.rows.map(row => row.map(item => text(item) ?? "")) } : undefined,
+      steps: section.steps?.map(item => ({ title: text(item.title) ?? "", body: text(item.body) ?? "" })),
+      images: section.images?.map(item => ({ ...item, alt: text(item.alt) ?? "", caption: text(item.caption) })),
+      questions: section.questions?.map(item => ({ question: text(item.question) ?? "", answer: text(item.answer) ?? "" })),
+      sources: section.sources.map(item => ({ ...item, label: text(item.label) ?? "" })),
+    })),
+  };
+}
 function detailContentForModel(model: PublicCatalogRenderModel): DetailContent | null {
   const content = parseDetailContent(model.editorial);
   const entityId = model.kind === "program_detail" ? model.program.id : model.kind === "university_detail" ? model.university.id
     : model.kind === "city_detail" ? model.city.id : model.kind === "destination_detail" ? model.destination.catalogCountryId : null;
-  return !content || content.locale !== model.locale || content.entityId !== entityId || `${content.kind}_detail` !== model.kind ? null : resolveDetailTemplateContent(content, detailTemplateVariablesForModel(model));
+  if (!content || content.locale !== model.locale || content.entityId !== entityId || `${content.kind}_detail` !== model.kind) return null;
+  const resolved = resolveDetailTemplateContent(content, detailTemplateVariablesForModel(model));
+  return resolved ? localizeDetailContent(resolved, model) : null;
 }
 
 function isPublicEditorInstruction(value: string | null | undefined): boolean {
