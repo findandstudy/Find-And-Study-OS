@@ -1407,12 +1407,12 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
     return {
       "@context": "https://schema.org",
       "@type": "Course",
-      name: program.name,
+      name: ssrProgramName(program.name, model.locale),
       description: model.description,
       url: `${siteUrl}${model.canonicalPath}`,
       provider: {
         "@type": "CollegeOrUniversity",
-        name: program.universityName,
+        name: ssrInstitutionName(program.universityName, program.country, model.locale),
         url: `${siteUrl}${program.universityPath}`,
       },
       ...(program.language ? { inLanguage: program.language } : {}),
@@ -1440,7 +1440,7 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
           "@type": "ListItem",
           position: index + 1,
           url: `${siteUrl}${program.canonicalPath}`,
-          name: program.name,
+          name: ssrProgramName(program.name, model.locale),
         })),
       },
     };
@@ -1469,13 +1469,13 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
     return {
       "@context": "https://schema.org",
       "@type": "CollegeOrUniversity",
-      name: university.name,
+      name: ssrInstitutionName(university.name, university.country, model.locale),
       description: model.description,
       url: `${siteUrl}${model.canonicalPath}`,
       address: {
         "@type": "PostalAddress",
-        ...(university.city ? { addressLocality: university.city } : {}),
-        addressCountry: university.country,
+        ...(university.city ? { addressLocality: ssrCityName(university.city, university.country, model.locale) } : {}),
+        addressCountry: ssrCountryName(university.country, null, model.locale),
       },
       hasOfferCatalog: {
         "@type": "OfferCatalog",
@@ -1484,7 +1484,7 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
           "@type": "ListItem",
           position: index + 1,
           url: `${siteUrl}${program.canonicalPath}`,
-          name: program.name,
+          name: ssrProgramName(program.name, model.locale),
         })),
       },
     };
@@ -1540,18 +1540,20 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
   }
   if (model.kind === "city_detail") {
     const city = model.city;
+    const cityName = ssrCityName(city.name, city.country, model.locale);
+    const countryName = ssrCountryName(city.country, null, model.locale);
     return {
       "@context": "https://schema.org",
       "@graph": [
         {
           "@type": "City",
           "@id": `${siteUrl}${model.canonicalPath}#city`,
-          name: city.name,
+          name: cityName,
           description: model.description,
           url: `${siteUrl}${model.canonicalPath}`,
           containedInPlace: {
             "@type": "Country",
-            name: city.country,
+            name: countryName,
           },
         },
         {
@@ -1561,7 +1563,7 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
             "@type": "ListItem",
             position: index + 1,
             url: `${siteUrl}${university.canonicalPath}`,
-            name: university.name,
+            name: ssrInstitutionName(university.name, city.country, model.locale),
           })),
         },
       ],
