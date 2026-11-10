@@ -17,7 +17,7 @@
     "test:page-builder-browser": "node ./scripts/test-page-builder-browser.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "test:language-flags": "tsx --test ./scripts/test-language-country-codes.ts",
-    "test:public-detail-templates": "tsx --test ./scripts/test-public-detail-templates.ts",
+    "test:public-detail-templates": "tsx --test ./scripts/test-public-detail-templates.ts ./scripts/test-catalog-display-localization.ts",
     "test:catalog-pages-inventory": "tsx --test ./scripts/test-catalog-pages-inventory.ts",
     "test:admin-ai-writing": "tsx --test ./scripts/test-admin-ai-writing.ts",
     "test:detail-content": "tsx --test ./scripts/test-detail-content-editor.ts ./scripts/test-detail-content-sections.ts ./scripts/test-detail-full-preview.ts",

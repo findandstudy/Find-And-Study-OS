@@ -133,7 +133,90 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
   };
 }
 
-function protectedTranslationTerms(kind: DetailContentKind, payload: unknown): string[] {
+const TURKISH_CATALOGUE_NAME_PARTS: Record<string, string> = {
+  istanbul: "İstanbul", izmir: "İzmir", eskisehir: "Eskişehir", duzce: "Düzce", canakkale: "Çanakkale",
+  mugla: "Muğla", sanliurfa: "Şanlıurfa", kirikkale: "Kırıkkale", kahramanmaras: "Kahramanmaraş",
+  diyarbakir: "Diyarbakır", balikesir: "Balıkesir", agri: "Ağrı", nigde: "Niğde", gumushane: "Gümüşhane",
+  isik: "Işık", istinye: "İstinye", uskudar: "Üsküdar", acibadem: "Acıbadem", aydin: "Aydın",
+};
+const TURKISH_PROGRAM_SUBJECTS: Record<string, string> = {
+  "Anesthesia": "Anestezi", "Nursing": "Hemşirelik", "Physiotherapy": "Fizyoterapi",
+  "Physiotherapy and Rehabilitation": "Fizyoterapi ve Rehabilitasyon", "Psychology": "Psikoloji",
+  "Computer Programming": "Bilgisayar Programcılığı", "Business Administration": "İşletme",
+  "Nutrition and Dietetics": "Beslenme ve Diyetetik", "Medical Imaging Techniques": "Tıbbi Görüntüleme Teknikleri",
+  "Oral and Dental Health": "Ağız ve Diş Sağlığı", "Medical Laboratory Techniques": "Tıbbi Laboratuvar Teknikleri",
+  "Computer Engineering": "Bilgisayar Mühendisliği", "Gastronomy and Culinary Arts": "Gastronomi ve Mutfak Sanatları",
+  "Industrial Engineering": "Endüstri Mühendisliği", "Midwifery": "Ebelik", "Child Development": "Çocuk Gelişimi",
+  "Opticianry": "Optisyenlik", "Management Information Systems": "Yönetim Bilişim Sistemleri",
+  "Architecture": "Mimarlık", "Dentistry": "Diş Hekimliği", "Electrical and Electronics Engineering": "Elektrik-Elektronik Mühendisliği",
+  "Interior Architecture and Environmental Design": "İç Mimarlık ve Çevre Tasarımı", "Law": "Hukuk", "Medicine": "Tıp",
+  "Visual Communication Design": "Görsel İletişim Tasarımı", "Dialysis": "Diyaliz", "Foreign Trade": "Dış Ticaret",
+  "Logistics": "Lojistik", "Pharmacy Services": "Eczane Hizmetleri", "Political Science and Public Administration": "Siyaset Bilimi ve Kamu Yönetimi",
+  "Turkish Language and Literature": "Türk Dili ve Edebiyatı", "English Language and Literature": "İngiliz Dili ve Edebiyatı",
+  "Public Relations and Advertising": "Halkla İlişkiler ve Reklamcılık", "Software Engineering": "Yazılım Mühendisliği",
+  "Audiometry": "Odyometri", "Construction Technology": "İnşaat Teknolojisi", "First and Emergency Aid": "İlk ve Acil Yardım",
+  "Graphic Design": "Grafik Tasarımı", "Operating Room Services": "Ameliyathane Hizmetleri", "Civil Engineering": "İnşaat Mühendisliği",
+  "Economics": "İktisat", "History": "Tarih", "Sociology": "Sosyoloji", "Sports Management": "Spor Yönetimi",
+  "Mechanical Engineering": "Makine Mühendisliği", "International Relations": "Uluslararası İlişkiler", "Pharmacy": "Eczacılık",
+  "Clinical Psychology": "Klinik Psikoloji", "Occupational Health and Safety": "İş Sağlığı ve Güvenliği",
+};
+
+function turkishCatalogueSpelling(value: string) {
+  return value.split(/(\s+|-)/).map(part => TURKISH_CATALOGUE_NAME_PARTS[part.toLocaleLowerCase("en-US")] ?? part).join("");
+}
+
+function turkishInstitutionDisplayName(value: string) {
+  const distance = value.match(/\s*\(Distance Education\)\s*$/iu) ? " (Uzaktan Eğitim)" : "";
+  const base = value.replace(/\s*\(Distance Education\)\s*$/iu, "").trim();
+  const localized = /\s+University$/iu.test(base) ? `${base.replace(/\s+University$/iu, "")} Üniversitesi` : base;
+  return `${turkishCatalogueSpelling(localized)}${distance}`;
+}
+
+function turkishProgramDisplayName(value: string): string | null {
+  const withoutLanguage = value.replace(/\s*\((?:English|Turkish)\)\s*$/iu, "").trim();
+  const match = /^(Associate|Bachelor|Master|PhD|Doctorate) of (.+?)(?: \((?:Thesis|Non-Thesis)\))?$/iu.exec(withoutLanguage);
+  if (!match) return null;
+  const subject = TURKISH_PROGRAM_SUBJECTS[match[2]];
+  if (!subject) return null;
+  const level = ({ associate: "Ön Lisans", bachelor: "Lisans", master: "Yüksek Lisans", phd: "Doktora", doctorate: "Doktora" } as const)[match[1].toLocaleLowerCase("en-US") as "associate" | "bachelor" | "master" | "phd" | "doctorate"];
+  const thesis = /\(Thesis\)/iu.test(withoutLanguage) ? " (Tezli)" : /\(Non-Thesis\)/iu.test(withoutLanguage) ? " (Tezsiz)" : "";
+  return `${subject} ${level} Programı${thesis} (${withoutLanguage})`;
+}
+
+function preferredTranslationTerms(kind: DetailContentKind, payload: unknown, locale: string): Record<string, string> {
+  if (locale !== "tr") return {};
+  const facts = verifiedGenerationFacts(kind, payload) as Record<string, unknown>;
+  const preferred: Record<string, string> = {
+    "Republic of Türkiye Ministry of Foreign Affairs": "Türkiye Cumhuriyeti Dışişleri Bakanlığı",
+    "Turkish State Meteorological Service": "Meteoroloji Genel Müdürlüğü (MGM)",
+    "Council of Higher Education": "Yükseköğretim Kurulu (YÖK)",
+    "Ministry of Foreign Affairs": "Dışişleri Bakanlığı",
+    "Migration Management": "Göç İdaresi Başkanlığı",
+    "Turkey": "Türkiye", "TURKEY": "TÜRKİYE", "Istanbul": "İstanbul", "Izmir": "İzmir",
+    "Eskisehir": "Eskişehir", "Duzce": "Düzce",
+  };
+  const addInstitution = (value: unknown) => {
+    if (typeof value === "string" && value.trim()) preferred[value] = turkishInstitutionDisplayName(value);
+  };
+  const addProgram = (value: unknown) => {
+    if (typeof value !== "string" || !value.trim()) return;
+    const localized = turkishProgramDisplayName(value);
+    if (localized) preferred[value] = localized;
+  };
+  if (kind === "university") addInstitution(facts.university);
+  if (kind === "program") { addProgram(facts.program); addInstitution(facts.university); }
+  for (const collection of [facts.universities, facts.programs]) if (Array.isArray(collection)) {
+    for (const item of collection) {
+      const value = record(item);
+      addInstitution(value?.university);
+      if (collection === facts.universities) addInstitution(value?.name);
+      else addProgram(value?.name);
+    }
+  }
+  return preferred;
+}
+
+function protectedTranslationTerms(kind: DetailContentKind, payload: unknown, preferred: Record<string, string> = {}): string[] {
   const facts = verifiedGenerationFacts(kind, payload) as Record<string, unknown>;
   const terms: string[] = [];
   if (kind === "university" && typeof facts.university === "string") terms.push(facts.university);
@@ -146,7 +229,7 @@ function protectedTranslationTerms(kind: DetailContentKind, payload: unknown): s
       if (typeof value?.university === "string") terms.push(value.university);
     }
   }
-  return [...new Set(terms.map(value => value.trim()).filter(value => value.length >= 3))].slice(0, 64);
+  return [...new Set(terms.map(value => value.trim()).filter(value => value.length >= 3 && !preferred[value]))].slice(0, 64);
 }
 
 function visitorFacingFallback(key: string, sectionTitle: string, facts: ReturnType<typeof entityFacts>) {
@@ -394,7 +477,11 @@ export async function regenerateDetailContentDraft(params: {
       const missing = DETAIL_CONTENT_KEYS[kind].filter(key => !target.content.sections.some(section => section.key === key));
       if (!missing.length && mode === "fill_missing") return { entityId, locale, status: "preserved", pageId: target.pageId, addedSections: 0 };
       if (!ai) return { entityId, locale, status: "failed", pageId: target.pageId, error: "AI_NOT_CONFIGURED" };
-      const translated = await translateStructuredDetailContent(englishBase, locale, ai, { protectedTerms: protectedTranslationTerms(kind, payload) });
+      const preferredTerms = preferredTranslationTerms(kind, payload, locale);
+      const translated = await translateStructuredDetailContent(englishBase, locale, ai, {
+        protectedTerms: protectedTranslationTerms(kind, payload, preferredTerms),
+        preferredTerms,
+      });
       const translatedByKey = new Map(translated.sections.map(section => [section.key, section]));
       generated = inheritEnglishDetailStructure({
         ...target.content,

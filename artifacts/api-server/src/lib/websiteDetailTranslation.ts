@@ -65,7 +65,7 @@ export async function translateStructuredDetailContent(
   content: DetailContent,
   locale: string,
   ai: AiContentService,
-  options: { protectedTerms?: string[] } = {},
+  options: { protectedTerms?: string[]; preferredTerms?: Record<string, string> } = {},
 ) {
   const source = { ...content, locale };
   const all = collectText(source);
@@ -74,7 +74,13 @@ export async function translateStructuredDetailContent(
   let chars = 0;
   const flush = async () => {
     if (!Object.keys(chunk).length) return;
-    Object.assign(translations, await ai.translateTextMap({ sourceLocale: "en", targetLocale: locale, texts: chunk, protectedTerms: options.protectedTerms }));
+    Object.assign(translations, await ai.translateTextMap({
+      sourceLocale: "en",
+      targetLocale: locale,
+      texts: chunk,
+      protectedTerms: options.protectedTerms,
+      preferredTerms: options.preferredTerms,
+    }));
     chunk = {};
     chars = 0;
   };

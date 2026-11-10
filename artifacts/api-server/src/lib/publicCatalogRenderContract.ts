@@ -574,7 +574,8 @@ function escapeHtml(value: unknown): string {
 
 const SSR_UNIVERSITY_TYPE_LABELS: Record<string, Partial<Record<ProgramSupportedLocale, string>>> = {
   public: { en: "Public", tr: "Devlet", ar: "حكومية", fr: "Publique", ru: "Государственный", fa: "دولتی", zh: "公立", hi: "सार्वजनिक", es: "Pública", id: "Negeri" },
-  private: { en: "Private", tr: "Vakıf / Özel", ar: "خاصة", fr: "Privée", ru: "Частный", fa: "خصوصی", zh: "私立", hi: "निजी", es: "Privada", id: "Swasta" },
+  private: { en: "Private", tr: "Özel", ar: "خاصة", fr: "Privée", ru: "Частный", fa: "خصوصی", zh: "私立", hi: "निजी", es: "Privada", id: "Swasta" },
+  foundation: { en: "Foundation", tr: "Vakıf" },
 };
 const SSR_TURKISH_NAME_PARTS: Record<string, string> = {
   istanbul: "İstanbul", izmir: "İzmir", eskisehir: "Eskişehir", duzce: "Düzce", canakkale: "Çanakkale",
@@ -586,7 +587,8 @@ function ssrTurkishNameSpelling(value: string): string {
   return value.split(/(\s+|-)/).map(part => SSR_TURKISH_NAME_PARTS[part.toLocaleLowerCase("en-US")] ?? part).join("");
 }
 function ssrCountryName(name: string, countryCode: string | null | undefined, locale: ProgramSupportedLocale): string {
-  const code = countryCode?.trim().toUpperCase();
+  const fallbackCodes: Record<string, string> = { turkey: "TR", "türkiye": "TR", "united kingdom": "GB", uk: "GB", canada: "CA", latvia: "LV", "united states": "US", usa: "US", "united arab emirates": "AE", uae: "AE" };
+  const code = countryCode?.trim().toUpperCase() || fallbackCodes[name.trim().toLocaleLowerCase("en-US")];
   if (!code || !/^[A-Z]{2}$/.test(code)) return name;
   try { return new Intl.DisplayNames([locale], { type: "region" }).of(code) || name; }
   catch { return name; }
@@ -605,6 +607,38 @@ function ssrUniversityType(value: string | null | undefined, locale: ProgramSupp
   const key = value?.trim().toLocaleLowerCase("en-US");
   if (!key) return null;
   return SSR_UNIVERSITY_TYPE_LABELS[key]?.[locale] ?? SSR_UNIVERSITY_TYPE_LABELS[key]?.en ?? value!.trim();
+}
+
+const SSR_TR_PROGRAM_SUBJECTS: Record<string, string> = {
+  "Anesthesia": "Anestezi", "Nursing": "Hemşirelik", "Physiotherapy": "Fizyoterapi", "Physiotherapy and Rehabilitation": "Fizyoterapi ve Rehabilitasyon",
+  "Psychology": "Psikoloji", "Computer Programming": "Bilgisayar Programcılığı", "Business Administration": "İşletme",
+  "Nutrition and Dietetics": "Beslenme ve Diyetetik", "Medical Imaging Techniques": "Tıbbi Görüntüleme Teknikleri", "Oral and Dental Health": "Ağız ve Diş Sağlığı",
+  "Medical Laboratory Techniques": "Tıbbi Laboratuvar Teknikleri", "Computer Engineering": "Bilgisayar Mühendisliği", "Gastronomy and Culinary Arts": "Gastronomi ve Mutfak Sanatları",
+  "Industrial Engineering": "Endüstri Mühendisliği", "Midwifery": "Ebelik", "Child Development": "Çocuk Gelişimi", "Opticianry": "Optisyenlik",
+  "Management Information Systems": "Yönetim Bilişim Sistemleri", "Architecture": "Mimarlık", "Dentistry": "Diş Hekimliği", "Law": "Hukuk", "Medicine": "Tıp",
+  "Software Engineering": "Yazılım Mühendisliği", "Civil Engineering": "İnşaat Mühendisliği", "Economics": "İktisat", "History": "Tarih", "Sociology": "Sosyoloji",
+  "Mechanical Engineering": "Makine Mühendisliği", "International Relations": "Uluslararası İlişkiler", "Pharmacy": "Eczacılık", "Clinical Psychology": "Klinik Psikoloji",
+};
+function ssrProgramName(value: string, locale: ProgramSupportedLocale): string {
+  if (locale !== "tr") return value;
+  const withoutLanguage = value.replace(/\s*\((?:English|Turkish)\)\s*$/iu, "").trim();
+  const match = /^(Associate|Bachelor|Master|PhD|Doctorate) of (.+?)(?: \((?:Thesis|Non-Thesis)\))?$/iu.exec(withoutLanguage);
+  if (!match || !SSR_TR_PROGRAM_SUBJECTS[match[2]]) return value;
+  const levels: Record<string, string> = { associate: "Ön Lisans", bachelor: "Lisans", master: "Yüksek Lisans", phd: "Doktora", doctorate: "Doktora" };
+  const thesis = /\(Thesis\)/iu.test(withoutLanguage) ? " (Tezli)" : /\(Non-Thesis\)/iu.test(withoutLanguage) ? " (Tezsiz)" : "";
+  return `${SSR_TR_PROGRAM_SUBJECTS[match[2]]} ${levels[match[1].toLocaleLowerCase("en-US")]} Programı${thesis} (${withoutLanguage})`;
+}
+function ssrFieldName(value: string | null | undefined, locale: ProgramSupportedLocale): string | null {
+  if (!value) return null;
+  if (locale !== "tr") return value;
+  return ({ medicine: "Tıp", engineering: "Mühendislik", business: "İşletme", "computer science": "Bilgisayar Bilimleri", "social sciences": "Sosyal Bilimler", "natural sciences": "Fen Bilimleri", health: "Sağlık Bilimleri", law: "Hukuk", arts: "Sanat", education: "Eğitim", architecture: "Mimarlık" } as Record<string, string>)[value.trim().toLocaleLowerCase("en-US")] ?? value;
+}
+function ssrDegreeName(value: string | null | undefined, locale: ProgramSupportedLocale): string | null {
+  if (!value || locale !== "tr") return value ?? null;
+  return ({ associate: "Ön Lisans", bachelor: "Lisans", master: "Yüksek Lisans", doctorate: "Doktora", phd: "Doktora", foundation: "Hazırlık" } as Record<string, string>)[value.trim().toLocaleLowerCase("en-US")] ?? value;
+}
+function ssrDuration(value: string | null | undefined, locale: ProgramSupportedLocale): string | null {
+  return value && locale === "tr" ? value.replace(/\bMonths?\b/giu, "Ay").replace(/\bYears?\b/giu, "Yıl") : value ?? null;
 }
 
 function renderConsentShell(model: PublicCatalogRenderModel): string {
@@ -758,10 +792,10 @@ function renderProgramList(model: Extract<PublicCatalogRenderModel, { kind: "pro
   const copy = RENDER_COPY[model.locale];
   const cards = model.programs.map((program) => `
       <article class="rounded-2xl border border-border bg-card p-5">
-        <p class="text-sm text-primary">${escapeHtml(program.universityName)}</p>
-        <h2 class="mt-2 text-xl font-bold"><a href="${escapeHtml(program.canonicalPath)}">${escapeHtml(program.name)}</a></h2>
-        <p class="mt-2 text-muted-foreground">${escapeHtml([program.degree, program.field, program.duration, program.language].filter(Boolean).join(" · "))}</p>
-        <p class="mt-2 text-sm text-muted-foreground">${escapeHtml([program.city, program.country].filter(Boolean).join(", "))}</p>
+        <p class="text-sm text-primary">${escapeHtml(ssrInstitutionName(program.universityName, program.country, model.locale))}</p>
+        <h2 class="mt-2 text-xl font-bold"><a href="${escapeHtml(program.canonicalPath)}">${escapeHtml(ssrProgramName(program.name, model.locale))}</a></h2>
+        <p class="mt-2 text-muted-foreground">${escapeHtml([ssrDegreeName(program.degree, model.locale), ssrFieldName(program.field, model.locale), ssrDuration(program.duration, model.locale), program.language].filter(Boolean).join(" · "))}</p>
+        <p class="mt-2 text-sm text-muted-foreground">${escapeHtml([program.city ? ssrCityName(program.city, program.country, model.locale) : null, ssrCountryName(program.country, null, model.locale)].filter(Boolean).join(", "))}</p>
       </article>`).join("");
   return `<main data-public-render-shell="program-list">
     <header class="pt-24 pb-6 bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5 text-center">
@@ -848,6 +882,8 @@ function renderWeatherSnapshot(weather: PublicCityWeatherSnapshot | null | undef
 
 function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "program_detail" }>): string {
   const program = model.program;
+  const programName = ssrProgramName(program.name, model.locale);
+  const universityName = ssrInstitutionName(program.universityName, program.country, model.locale);
   const requirements = publicCatalogRequirements(program.requirements, { canonicalPath: model.canonicalPath, id: program.id });
   const copy = RENDER_COPY[model.locale];
   const prices = model.prices ?? [];
@@ -864,22 +900,22 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
     return `<div><dt>${escapeHtml(item.componentType)}</dt><dd>${escapeHtml(formatted)} · ${escapeHtml(item.frequency.toLowerCase())}</dd></div>`;
   }).join("");
   const feeContent = priceRows || (price ? `<div><dt>${escapeHtml(copy.tuition)}</dt><dd>${escapeHtml(price)}</dd></div>` : "");
-  const related = model.relatedPrograms.map((item) => `<article class="rounded-2xl border border-border p-5"><p class="text-sm text-primary">${escapeHtml(item.universityName)}</p><h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(item.canonicalPath)}">${escapeHtml(item.name)}</a></h3><p class="mt-2 text-muted-foreground">${escapeHtml([item.degree, item.field].filter(Boolean).join(" · "))}</p></article>`).join("");
+  const related = model.relatedPrograms.map((item) => `<article class="rounded-2xl border border-border p-5"><p class="text-sm text-primary">${escapeHtml(ssrInstitutionName(item.universityName, program.country, model.locale))}</p><h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(item.canonicalPath)}">${escapeHtml(ssrProgramName(item.name, model.locale))}</a></h3><p class="mt-2 text-muted-foreground">${escapeHtml([ssrDegreeName(item.degree, model.locale), ssrFieldName(item.field, model.locale)].filter(Boolean).join(" · "))}</p></article>`).join("");
   return `<main data-public-render-shell="program-detail" class="mx-auto max-w-7xl px-4 py-24">
-    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/programs">${escapeHtml(copy.programs)}</a> / <span>${escapeHtml(program.name)}</span></nav>
-    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(program.name)}"><a href="#overview">${escapeHtml(copy.degree)}</a>${feeContent ? `<a href="#fees">${escapeHtml(copy.tuition)}</a>` : ""}${related ? `<a href="#related">${escapeHtml(copy.programs)}</a>` : ""}</nav>
+    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/programs">${escapeHtml(copy.programs)}</a> / <span>${escapeHtml(programName)}</span></nav>
+    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(programName)}"><a href="#overview">${escapeHtml(copy.degree)}</a>${feeContent ? `<a href="#fees">${escapeHtml(copy.tuition)}</a>` : ""}${related ? `<a href="#related">${escapeHtml(copy.programs)}</a>` : ""}</nav>
     <article id="overview" class="mt-8">
-      <p class="text-sm text-primary"><a href="${escapeHtml(program.universityPath)}">${escapeHtml(program.universityName)}</a></p>
-      <h1 class="mt-3 text-4xl font-bold">${escapeHtml(program.name)}</h1>
+      <p class="text-sm text-primary"><a href="${escapeHtml(program.universityPath)}">${escapeHtml(universityName)}</a></p>
+      <h1 class="mt-3 text-4xl font-bold">${escapeHtml(programName)}</h1>
       <nav aria-label="Location">${locationHierarchy(program)}</nav>
       ${program.universityIsActive === false ? `<button type="button" disabled aria-disabled="true">Applications closed</button>` : `<a data-application-cta href="/${escapeHtml(model.locale)}/programs?programId=${program.id}">Apply</a>`}
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
       <dl class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div><dt>${escapeHtml(copy.degree)}</dt><dd>${escapeHtml(program.degree || "—")}</dd></div>
-        <div><dt>${escapeHtml(copy.field)}</dt><dd>${escapeHtml(program.field || "—")}</dd></div>
-        <div><dt>${escapeHtml(copy.duration)}</dt><dd>${escapeHtml(program.duration || "—")}</dd></div>
+        <div><dt>${escapeHtml(copy.degree)}</dt><dd>${escapeHtml(ssrDegreeName(program.degree, model.locale) || "—")}</dd></div>
+        <div><dt>${escapeHtml(copy.field)}</dt><dd>${escapeHtml(ssrFieldName(program.field, model.locale) || "—")}</dd></div>
+        <div><dt>${escapeHtml(copy.duration)}</dt><dd>${escapeHtml(ssrDuration(program.duration, model.locale) || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.language)}</dt><dd>${escapeHtml(program.language || "—")}</dd></div>
-        <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([program.city, program.country].filter(Boolean).join(", "))}</dd></div>
+        <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([program.city ? ssrCityName(program.city, program.country, model.locale) : null, ssrCountryName(program.country, null, model.locale)].filter(Boolean).join(", "))}</dd></div>
         <div><dt>${escapeHtml(copy.tuition)}</dt><dd>${price === null ? "—" : escapeHtml(price)}</dd></div>
       </dl>
     </article>
@@ -893,24 +929,27 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
 function renderUniversityDetail(model: Extract<PublicCatalogRenderModel, { kind: "university_detail" }>): string {
   const university = model.university;
   const copy = RENDER_COPY[model.locale];
+  const universityName = ssrInstitutionName(university.name, university.country, model.locale);
+  const universityCity = university.city ? ssrCityName(university.city, university.country, model.locale) : null;
+  const universityCountry = ssrCountryName(university.country, null, model.locale);
   const programs = university.programs.map((program) => `
       <article class="rounded-2xl border border-border bg-card p-5">
-        <h3 class="text-lg font-bold"><a href="${escapeHtml(program.canonicalPath)}">${escapeHtml(program.name)}</a></h3>
-        <p class="mt-2 text-muted-foreground">${escapeHtml([program.degree, program.field].filter(Boolean).join(" · "))}</p>
+        <h3 class="text-lg font-bold"><a href="${escapeHtml(program.canonicalPath)}">${escapeHtml(ssrProgramName(program.name, model.locale))}</a></h3>
+        <p class="mt-2 text-muted-foreground">${escapeHtml([ssrDegreeName(program.degree, model.locale), ssrFieldName(program.field, model.locale)].filter(Boolean).join(" · "))}</p>
       </article>`).join("");
   return `<main data-public-render-shell="university-detail" class="mx-auto max-w-7xl px-4 py-24">
-    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(university.name)}</span></nav>
-    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(university.name)}"><a href="#overview">${escapeHtml(copy.institutionType)}</a><a href="#programs">${escapeHtml(copy.programs)}</a></nav>
+    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(universityName)}</span></nav>
+    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(universityName)}"><a href="#overview">${escapeHtml(copy.institutionType)}</a><a href="#programs">${escapeHtml(copy.programs)}</a></nav>
     <article id="overview" class="mt-8">
-      <p class="text-sm text-primary">${escapeHtml([university.city, university.country].filter(Boolean).join(", "))}</p>
-      <h1 class="mt-3 text-4xl font-bold">${escapeHtml(university.name)}</h1>
+      <p class="text-sm text-primary">${escapeHtml([universityCity, universityCountry].filter(Boolean).join(", "))}</p>
+      <h1 class="mt-3 text-4xl font-bold">${escapeHtml(universityName)}</h1>
       <nav aria-label="Location">${locationHierarchy(university)}</nav>
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
       <section data-detail-section="facts" id="facts"><dl class="mt-8 grid gap-4 sm:grid-cols-3">
-        <div><dt>${escapeHtml(copy.institutionType)}</dt><dd>${escapeHtml(university.universityType || "—")}</dd></div>
-        <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([university.city, university.country].filter(Boolean).join(", "))}</dd></div>
+        <div><dt>${escapeHtml(copy.institutionType)}</dt><dd>${escapeHtml(ssrUniversityType(university.universityType, model.locale) || "—")}</dd></div>
+        <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([universityCity, universityCountry].filter(Boolean).join(", "))}</dd></div>
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(university.programCount))}</dd></div>
-        ${university.weather ? `<div><dt>Weather</dt><dd>${escapeHtml(`${Math.round(university.weather.temperatureC)}°C · ${university.weather.description}`)}</dd></div>` : ""}
+        ${university.weather ? `<div><dt>${model.locale === "tr" ? "Hava durumu" : "Weather"}</dt><dd>${escapeHtml(`${Math.round(university.weather.temperatureC)}°C · ${university.weather.description}`)}</dd></div>` : ""}
       </dl></section>
     </article>
     ${renderWeatherSnapshot(university.weather, university.city || university.country, model.locale)}
@@ -938,7 +977,7 @@ function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(model.title)}</h1>
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
       <section data-detail-section="facts" id="facts"><dl class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml(destination.country)}</dd></div>
+        <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml(countryName)}</dd></div>
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(destination.programCount))}</dd></div>
         <div><dt>${escapeHtml(copy.language)}</dt><dd>${escapeHtml(destination.language || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.tuition)}</dt><dd>${escapeHtml(destination.currency || "—")}</dd></div>
@@ -952,47 +991,50 @@ function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind
 function renderCityDetail(model: Extract<PublicCatalogRenderModel, { kind: "city_detail" }>): string {
   const city = model.city;
   const copy = RENDER_COPY[model.locale];
+  const cityName = ssrCityName(city.name, city.country, model.locale);
+  const countryName = ssrCountryName(city.country, null, model.locale);
+  const cityFactCopy = model.locale === "tr" ? { weather: "Hava durumu", transport: "Ulaşım", campus: "Kampüs", housing: "Konaklama" } : { weather: "Weather", transport: "Transport", campus: "Campus", housing: "Housing" };
   const sourceFacts = [
     city.programLanguages?.length ? [copy.language, city.programLanguages.join(" · ")] : null,
-    city.weather ? ["Weather", `${Math.round(city.weather.temperatureC)}°C · ${city.weather.description}`] : null,
-    city.transportModes?.length ? ["Transport", city.transportModes.join(" · ")] : null,
-    city.campusGeography ? ["Campus", city.campusGeography] : null,
-    city.externalFacts?.housingSummary ? ["Housing", city.externalFacts.housingSummary] : null,
+    city.weather ? [cityFactCopy.weather, `${Math.round(city.weather.temperatureC)}°C · ${city.weather.description}`] : null,
+    city.transportModes?.length ? [cityFactCopy.transport, city.transportModes.join(" · ")] : null,
+    city.campusGeography ? [cityFactCopy.campus, city.campusGeography] : null,
+    city.externalFacts?.housingSummary ? [cityFactCopy.housing, city.externalFacts.housingSummary] : null,
   ].filter((item): item is [string, string] => Boolean(item));
   const heroFacts = sourceFacts.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
   const universities = city.universities.map((university) => `
       <article class="rounded-2xl border border-border bg-card p-5">
-        <h2 class="text-lg font-bold"><a href="${escapeHtml(university.canonicalPath)}">${escapeHtml(university.name)}</a></h2>
-        <p class="mt-2 text-muted-foreground">${escapeHtml(university.universityType || city.name)}</p>
+        <h2 class="text-lg font-bold"><a href="${escapeHtml(university.canonicalPath)}">${escapeHtml(ssrInstitutionName(university.name, city.country, model.locale))}</a></h2>
+        <p class="mt-2 text-muted-foreground">${escapeHtml(ssrUniversityType(university.universityType, model.locale) || cityName)}</p>
       </article>`).join("");
   const programs = city.programs.map((program) => `
       <article class="rounded-2xl border border-border bg-card p-5">
-        <p class="text-sm text-primary">${escapeHtml(program.universityName)}</p>
-        <h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(program.canonicalPath)}">${escapeHtml(program.name)}</a></h3>
-        <p class="mt-2 text-muted-foreground">${escapeHtml([program.degree, program.field].filter(Boolean).join(" · "))}</p>
+        <p class="text-sm text-primary">${escapeHtml(ssrInstitutionName(program.universityName, city.country, model.locale))}</p>
+        <h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(program.canonicalPath)}">${escapeHtml(ssrProgramName(program.name, model.locale))}</a></h3>
+        <p class="mt-2 text-muted-foreground">${escapeHtml([ssrDegreeName(program.degree, model.locale), ssrFieldName(program.field, model.locale)].filter(Boolean).join(" · "))}</p>
       </article>`).join("");
   return `<main data-public-render-shell="city-detail" class="public-detail detail-city">
     <section data-detail-section="hero"><div class="detail-hero is-city">
-      <div class="detail-wrap detail-hero-top"><nav class="detail-breadcrumbs" aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a><span aria-hidden="true"> / </span>${city.countryPath ? `<a href="${escapeHtml(city.countryPath)}">${escapeHtml(city.country)}</a><span aria-hidden="true"> / </span>` : `<span>${escapeHtml(city.country)}</span><span aria-hidden="true"> / </span>`}<span>${escapeHtml(city.name)}</span></nav></div>
+      <div class="detail-wrap detail-hero-top"><nav class="detail-breadcrumbs" aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a><span aria-hidden="true"> / </span>${city.countryPath ? `<a href="${escapeHtml(city.countryPath)}">${escapeHtml(countryName)}</a><span aria-hidden="true"> / </span>` : `<span>${escapeHtml(countryName)}</span><span aria-hidden="true"> / </span>`}<span>${escapeHtml(cityName)}</span></nav></div>
       <div class="detail-wrap detail-hero-main"><div>
         <div class="detail-cover-label"><span>${escapeHtml(copy.location)}</span></div>
-        <h1>${escapeHtml(city.name)}</h1>
-        ${city.countryPath ? `<a class="detail-hero-link" href="${escapeHtml(city.countryPath)}">${escapeHtml(city.country)}</a>` : `<p class="detail-hero-lead">${escapeHtml(city.country)}</p>`}
+        <h1>${escapeHtml(cityName)}</h1>
+        ${city.countryPath ? `<a class="detail-hero-link" href="${escapeHtml(city.countryPath)}">${escapeHtml(countryName)}</a>` : `<p class="detail-hero-lead">${escapeHtml(countryName)}</p>`}
         ${heroFacts ? `<dl class="detail-city-coverstrip">${heroFacts}</dl>` : ""}
       </div><aside class="detail-destination-summary" aria-label="${escapeHtml(copy.programs)}">
         <p class="detail-eyebrow">${escapeHtml(copy.programs)}</p>
         <div class="detail-country-stats"><div><strong>${escapeHtml(String(city.universityCount))}</strong><span>${escapeHtml(copy.institutionType)}</span></div><div><strong>${escapeHtml(String(city.programCount))}</strong><span>${escapeHtml(copy.programs)}</span></div></div>
-        <p class="detail-summary-caption">${escapeHtml(`${city.name} · ${city.country}`)}</p>
+        <p class="detail-summary-caption">${escapeHtml(`${cityName} · ${countryName}`)}</p>
       </aside></div>
     </div></section>
     <article class="detail-section is-sky"><div class="detail-wrap">
       <section data-detail-section="facts" id="facts"><dl class="mt-8 grid gap-4 sm:grid-cols-3">
-        <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml(`${city.name}, ${city.country}`)}</dd></div>
+        <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml(`${cityName}, ${countryName}`)}</dd></div>
         <div><dt>${escapeHtml(copy.institutionType)}</dt><dd>${escapeHtml(String(city.universityCount))}</dd></div>
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(city.programCount))}</dd></div>
       </dl></section></div>
     </article>
-    ${renderWeatherSnapshot(city.weather, city.name, model.locale)}
+    ${renderWeatherSnapshot(city.weather, cityName, model.locale)}
     ${universities ? `<section data-detail-section="universities" class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.institutionType)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${universities}</div></section>` : ""}
     ${programs ? `<section data-detail-section="programs" class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>` : ""}
   </main>`;

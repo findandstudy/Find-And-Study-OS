@@ -69,7 +69,11 @@ export function localDetailPath(value: string | null | undefined): string | null
 }
 
 export function localizedCountryName(name: string, countryCode: string | null | undefined, locale: string): string {
-  const code = countryCode?.trim().toUpperCase();
+  const fallbackCodes: Record<string, string> = {
+    turkey: "TR", "türkiye": "TR", "united kingdom": "GB", uk: "GB", canada: "CA", latvia: "LV",
+    "united states": "US", usa: "US", "united arab emirates": "AE", uae: "AE",
+  };
+  const code = countryCode?.trim().toUpperCase() || fallbackCodes[name.trim().toLocaleLowerCase("en-US")];
   if (!code || !/^[A-Z]{2}$/.test(code)) return name;
   try { return new Intl.DisplayNames([locale], { type: "region" }).of(code) || name; }
   catch { return name; }
@@ -93,7 +97,8 @@ export function localizedLanguageNames(values: readonly string[], locale: string
 
 const UNIVERSITY_TYPE_LABELS: Record<string, Record<string, string>> = {
   public: { en: "Public", tr: "Devlet", ar: "حكومية", fr: "Publique", ru: "Государственный", fa: "دولتی", zh: "公立", hi: "सार्वजनिक", es: "Pública", id: "Negeri" },
-  private: { en: "Private", tr: "Vakıf / Özel", ar: "خاصة", fr: "Privée", ru: "Частный", fa: "خصوصی", zh: "私立", hi: "निजी", es: "Privada", id: "Swasta" },
+  private: { en: "Private", tr: "Özel", ar: "خاصة", fr: "Privée", ru: "Частный", fa: "خصوصی", zh: "私立", hi: "निजी", es: "Privada", id: "Swasta" },
+  foundation: { en: "Foundation", tr: "Vakıf", ar: "مؤسسة", fr: "Fondation", ru: "Фонд", fa: "بنیاد", zh: "基金会", hi: "फाउंडेशन", es: "Fundación", id: "Yayasan" },
 };
 export function localizedUniversityType(value: string | null | undefined, locale: string): string | null {
   if (!value?.trim()) return null;
@@ -138,6 +143,58 @@ const DEGREE_LABELS: Record<string, Record<string, string>> = {
 export function localizedDegreeName(value: string | null | undefined, locale: string): string | null {
   if (!value?.trim()) return null;
   return DEGREE_LABELS[value.trim().toLocaleLowerCase("en-US")]?.[locale] ?? value;
+}
+
+const TURKISH_PROGRAM_SUBJECTS: Record<string, string> = {
+  "Anesthesia": "Anestezi", "Nursing": "Hemşirelik", "Physiotherapy": "Fizyoterapi",
+  "Physiotherapy and Rehabilitation": "Fizyoterapi ve Rehabilitasyon", "Psychology": "Psikoloji",
+  "Computer Programming": "Bilgisayar Programcılığı", "Business Administration": "İşletme",
+  "Nutrition and Dietetics": "Beslenme ve Diyetetik", "Medical Imaging Techniques": "Tıbbi Görüntüleme Teknikleri",
+  "Oral and Dental Health": "Ağız ve Diş Sağlığı", "Medical Laboratory Techniques": "Tıbbi Laboratuvar Teknikleri",
+  "Computer Engineering": "Bilgisayar Mühendisliği", "Gastronomy and Culinary Arts": "Gastronomi ve Mutfak Sanatları",
+  "Industrial Engineering": "Endüstri Mühendisliği", "Midwifery": "Ebelik", "Child Development": "Çocuk Gelişimi",
+  "Opticianry": "Optisyenlik", "Management Information Systems": "Yönetim Bilişim Sistemleri", "Architecture": "Mimarlık",
+  "Dentistry": "Diş Hekimliği", "Electrical and Electronics Engineering": "Elektrik-Elektronik Mühendisliği",
+  "Interior Architecture and Environmental Design": "İç Mimarlık ve Çevre Tasarımı", "Law": "Hukuk", "Medicine": "Tıp",
+  "Visual Communication Design": "Görsel İletişim Tasarımı", "Dialysis": "Diyaliz", "Foreign Trade": "Dış Ticaret",
+  "Logistics": "Lojistik", "Pharmacy Services": "Eczane Hizmetleri", "Political Science and Public Administration": "Siyaset Bilimi ve Kamu Yönetimi",
+  "Turkish Language and Literature": "Türk Dili ve Edebiyatı", "English Language and Literature": "İngiliz Dili ve Edebiyatı",
+  "Public Relations and Advertising": "Halkla İlişkiler ve Reklamcılık", "Software Engineering": "Yazılım Mühendisliği",
+  "Audiometry": "Odyometri", "Construction Technology": "İnşaat Teknolojisi", "First and Emergency Aid": "İlk ve Acil Yardım",
+  "Graphic Design": "Grafik Tasarımı", "Operating Room Services": "Ameliyathane Hizmetleri", "Civil Engineering": "İnşaat Mühendisliği",
+  "Economics": "İktisat", "History": "Tarih", "Sociology": "Sosyoloji", "Sports Management": "Spor Yönetimi",
+  "Mechanical Engineering": "Makine Mühendisliği", "International Relations": "Uluslararası İlişkiler", "Pharmacy": "Eczacılık",
+  "Clinical Psychology": "Klinik Psikoloji", "Occupational Health and Safety": "İş Sağlığı ve Güvenliği",
+};
+
+/** Localised display title with the canonical catalogue title retained for traceability. */
+export function localizedProgramDisplayName(value: string, locale: string): string {
+  if (locale !== "tr") return value;
+  const withoutLanguage = value.replace(/\s*\((?:English|Turkish)\)\s*$/iu, "").trim();
+  const match = /^(Associate|Bachelor|Master|PhD|Doctorate) of (.+?)(?: \((?:Thesis|Non-Thesis)\))?$/iu.exec(withoutLanguage);
+  if (!match) return value;
+  const subject = TURKISH_PROGRAM_SUBJECTS[match[2]];
+  if (!subject) return value;
+  const levels: Record<string, string> = { associate: "Ön Lisans", bachelor: "Lisans", master: "Yüksek Lisans", phd: "Doktora", doctorate: "Doktora" };
+  const thesis = /\(Thesis\)/iu.test(withoutLanguage) ? " (Tezli)" : /\(Non-Thesis\)/iu.test(withoutLanguage) ? " (Tezsiz)" : "";
+  return `${subject} ${levels[match[1].toLocaleLowerCase("en-US")]} Programı${thesis} (${withoutLanguage})`;
+}
+
+const FIELD_LABELS: Record<string, Record<string, string>> = {
+  medicine: { tr: "Tıp" }, engineering: { tr: "Mühendislik" }, business: { tr: "İşletme" },
+  "computer science": { tr: "Bilgisayar Bilimleri" }, "social sciences": { tr: "Sosyal Bilimler" },
+  "natural sciences": { tr: "Fen Bilimleri" }, health: { tr: "Sağlık Bilimleri" }, law: { tr: "Hukuk" },
+  arts: { tr: "Sanat" }, education: { tr: "Eğitim" }, architecture: { tr: "Mimarlık" },
+};
+export function localizedFieldName(value: string | null | undefined, locale: string): string | null {
+  if (!value?.trim()) return null;
+  return FIELD_LABELS[value.trim().toLocaleLowerCase("en-US")]?.[locale] ?? value;
+}
+
+export function localizedDuration(value: string | null | undefined, locale: string): string | null {
+  if (!value?.trim()) return null;
+  if (locale !== "tr") return value;
+  return value.replace(/\bMonths?\b/giu, "Ay").replace(/\bYears?\b/giu, "Yıl");
 }
 
 export const DETAIL_COPY = {

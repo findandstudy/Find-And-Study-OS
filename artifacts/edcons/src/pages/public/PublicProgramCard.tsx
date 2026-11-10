@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { normalizeCurrency } from "@/lib/currency";
-import { localizedCityName, localizedDegreeName, localizedInstitutionName, localizedLanguageNames, localizedUniversityType } from "./detailPresentation";
+import { localizedCityName, localizedCountryName, localizedDegreeName, localizedDuration, localizedFieldName, localizedInstitutionName, localizedLanguageNames, localizedProgramDisplayName, localizedUniversityType } from "./detailPresentation";
 
 /** Only the public fields rendered by the shared catalogue card. */
 export interface PublicProgramCardData {
@@ -98,8 +98,12 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
   const applicationDisabled = applyDisabled || (!onApply && !applicationPath);
   const institutionName = localizedInstitutionName(prog.universityName, prog.universityCountry, lang);
   const institutionCity = prog.universityCity ? localizedCityName(prog.universityCity, prog.universityCountry, lang) : null;
+  const institutionCountry = prog.universityCountry ? localizedCountryName(prog.universityCountry, null, lang) : null;
   const institutionType = localizedUniversityType(prog.universityType, lang);
   const degreeName = localizedDegreeName(prog.degree, lang);
+  const programName = localizedProgramDisplayName(prog.name, lang);
+  const fieldName = localizedFieldName(prog.field, lang);
+  const duration = localizedDuration(prog.duration, lang);
   const languageName = prog.language ? localizedLanguageNames([prog.language], lang) : null;
   const logo = <>
     {logoSrc ? (
@@ -109,7 +113,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
     ) : null}
     <Building2 className={`w-5 h-5 text-muted-foreground ${logoSrc ? "hidden" : ""}`} aria-hidden="true" />
   </>;
-  const title = <h3 className="font-bold text-foreground text-[15px] leading-snug line-clamp-2 break-words group-hover:text-primary transition-colors duration-200"><bdi>{prog.name}</bdi></h3>;
+  const title = <h3 className="font-bold text-foreground text-[15px] leading-snug line-clamp-2 break-words group-hover:text-primary transition-colors duration-200"><bdi>{programName}</bdi></h3>;
   const applyLabel = <>{t("courseFinderPage.apply")} <span aria-hidden="true" className="inline-block rtl:rotate-180">→</span></>;
 
   return (
@@ -132,7 +136,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
           {(prog.universityCity || prog.universityCountry) && (
             <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
               <MapPin className="w-3 h-3 shrink-0 text-primary/60" aria-hidden="true" />
-              <span className="truncate"><bdi>{[institutionCity, prog.universityCountry].filter(Boolean).join(", ")}</bdi></span>
+              <span className="truncate"><bdi>{[institutionCity, institutionCountry].filter(Boolean).join(", ")}</bdi></span>
             </div>
           )}
         </div>
@@ -194,7 +198,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
           {prog.field && (
             <div className="flex flex-col gap-0.5 min-w-0">
               <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium"><BookOpen className="w-3 h-3 text-orange-500 shrink-0" aria-hidden="true" />{t("courseFinderPage.field")}</span>
-              <span className="text-[11px] font-bold truncate"><bdi>{prog.field}</bdi></span>
+              <span className="text-[11px] font-bold truncate"><bdi>{fieldName}</bdi></span>
             </div>
           )}
           {prog.language && (
@@ -206,7 +210,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
           {prog.duration && (
             <div className="flex flex-col gap-0.5 min-w-0">
               <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium"><Clock className="w-3 h-3 text-green-500 shrink-0" aria-hidden="true" />{t("courseFinderPage.duration")}</span>
-              <span className="text-[11px] font-bold truncate"><bdi>{prog.duration}</bdi></span>
+              <span className="text-[11px] font-bold truncate"><bdi>{duration}</bdi></span>
             </div>
           )}
           {!omitLegacyTiming && prog.intakes && (
