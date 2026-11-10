@@ -14,6 +14,12 @@ test("dynamic SEO is generated from locale-owned content and remains page-owned"
   assert.ok(parseDetailContent(content, "2026-09-19"));
   assert.equal(parseDetailContent({ ...content, seo: { ...content.seo, title: "<bad>" } }, "2026-09-19"), null);
 });
+test("AI display terms are bounded, safe and persisted with the locale", () => {
+  const content = { ...fixture(), displayTerms: { Turkey: "Türkiye", "Anadolu University": "Anadolu Üniversitesi" } };
+  assert.deepEqual(parseDetailContent(content, "2026-09-19")?.displayTerms, content.displayTerms);
+  assert.equal(parseDetailContent({ ...fixture(), displayTerms: { Turkey: "<b>Türkiye</b>" } }, "2026-09-19"), null);
+  assert.equal(parseDetailContent({ ...fixture(), displayTerms: Object.fromEntries(Array.from({ length: 97 }, (_, index) => [`Source ${index}`, `Target ${index}`])) }, "2026-09-19"), null);
+});
 test("automatic dynamic SEO uses catalogue relationships and localized values remain stable until explicit regeneration", () => {
   const base = parseDetailContent({ version: 1, kind: "program", entityId: 7, locale: "en", sections: [{ key: "hero", title: "Computer Science", body: "Build a strong foundation for international study and career planning.", sources: [{ label: "Source", url: "https://example.com" }], reviewedOn: "2026-09-01" }] }, "2026-09-19")!;
   const automatic = ensureDetailSeo(base, { program: "Computer Science", university: "Acıbadem University", city: "Istanbul", country: "Türkiye" });

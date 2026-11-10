@@ -55,7 +55,14 @@ export type DetailSeo = {
   twitterTitle: string; twitterDescription: string;
 };
 export type DetailSeoFacts = { city?: string; country?: string; university?: string; program?: string };
-export type DetailContent = { version: 1; kind: DetailContentKind; entityId: number; locale: string; seo?: DetailSeo; seoMode?: "auto" | "manual"; sectionOrder?: string[]; sections: DetailContentSection[]; templateSections?: DetailTemplateSectionCopy[] };
+export type DetailContent = { version: 1; kind: DetailContentKind; entityId: number; locale: string; seo?: DetailSeo; seoMode?: "auto" | "manual"; displayTerms?: Record<string, string>; sectionOrder?: string[]; sections: DetailContentSection[]; templateSections?: DetailTemplateSectionCopy[] };
+
+/** Uses the reviewed AI display term saved with this locale; never translates at render time. */
+export function detailDisplayTerm(content: DetailContent | null | undefined, source: string | null | undefined, fallback?: string): string {
+  const value = source?.trim();
+  if (!value) return fallback ?? "";
+  return content?.displayTerms?.[value]?.trim() || fallback || value;
+}
 
 /**
  * AI regeneration owns editorial copy, not the page's visual composition.
@@ -203,13 +210,16 @@ export function safeDetailContentUrl(v: unknown, externalOnly = false): boolean 
   try { const u = new URL(v); return u.protocol === "https:" && !u.username && !u.password; } catch { return false; }
 }
 export function parseDetailContent(value: unknown, today = new Date().toISOString().slice(0,10)): DetailContent | null {
-  if (!record(value) || !keys(value,["version","kind","entityId","locale","seo","seoMode","sectionOrder","sections","templateSections"],["version","kind","entityId","locale","sections"])
+  if (!record(value) || !keys(value,["version","kind","entityId","locale","seo","seoMode","displayTerms","sectionOrder","sections","templateSections"],["version","kind","entityId","locale","sections"])
     || value.version !== 1 || !DETAIL_CONTENT_KINDS.includes(value.kind as DetailContentKind)
     || !Number.isSafeInteger(value.entityId) || Number(value.entityId) <= 0 || Number(value.entityId) > 2147483647
     || !DETAIL_CONTENT_LOCALES.includes(value.locale as typeof DETAIL_CONTENT_LOCALES[number])
     || !Array.isArray(value.sections) || value.sections.length > 30
     || new Set(value.sections.map(s => record(s) ? s.key : null)).size !== value.sections.length) return null;
   if (value.seoMode !== undefined && value.seoMode !== "auto" && value.seoMode !== "manual") return null;
+  if (value.displayTerms !== undefined && (!record(value.displayTerms)
+    || Object.keys(value.displayTerms).length > 96
+    || !Object.entries(value.displayTerms).every(([source, target]) => text(source, 240) && text(target, 240)))) return null;
   if (value.seo !== undefined && (!record(value.seo)
     || !keys(value.seo, ["title", "description", "ogTitle", "ogDescription", "twitterTitle", "twitterDescription"], ["title", "description", "ogTitle", "ogDescription", "twitterTitle", "twitterDescription"])
     || !text(value.seo.title, 160) || !text(value.seo.description, 320)

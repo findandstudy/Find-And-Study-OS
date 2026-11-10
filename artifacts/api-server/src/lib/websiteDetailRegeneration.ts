@@ -142,7 +142,7 @@ function catalogueDisplayTerms(kind: DetailContentKind, payload: unknown): strin
     if (normalized.length >= 2 && normalized.length <= 240 && !/^https?:\/\//iu.test(normalized)) terms.add(normalized);
   };
   for (const key of ["destination", "country", "city", "university", "program"]) add(facts[key]);
-  for (const collection of [facts.universities, facts.programs]) if (Array.isArray(collection)) {
+  for (const collection of [facts.cities, facts.universities, facts.programs]) if (Array.isArray(collection)) {
     for (const item of collection) {
       const value = record(item);
       add(value?.name);
@@ -445,6 +445,7 @@ export async function regenerateDetailContentDraft(params: {
       generated = inheritEnglishDetailStructure({
         ...target.content,
         locale,
+        displayTerms: { ...(target.content.displayTerms ?? {}), ...preferredTerms },
         seoMode: preserveManualSeo ? "manual" : "auto",
         seo: preserveManualSeo ? target.content.seo : translated.seo,
         sectionOrder: [...DETAIL_CONTENT_LAYOUT_KEYS[kind]],

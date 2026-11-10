@@ -8,12 +8,12 @@ import { DetailBreadcrumbs, DetailCard, DetailFacts, DetailHeading } from "./Det
 import { boundDetailContent, detailContentAddon, detailContentIntro, detailContentNavigation, detailContentSections, detailContentSummary, detailContentTitle, DetailHeroMedia, detailHeroSection } from "./DetailContentSections";
 import type { CityProgramCardData } from "./CityProgramCards";
 import { DeferredBelowFold } from "./DeferredBelowFold";
-import { cityHeroCopy, detailCopy, detailCountLabel, localizedCountryName, localizedInstitutionName, localizedLanguageNames, localizedUniversityType, localDetailPath } from "./detailPresentation";
+import { cityHeroCopy, detailCopy, detailCountLabel, localizedCountryName, localizedLanguageNames, localizedUniversityType, localDetailPath } from "./detailPresentation";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { useSeo } from "@/hooks/use-seo";
-import { detailContentPresentationOverrides, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
+import { detailContentPresentationOverrides, detailDisplayTerm, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { CityWeatherCard, type CityWeatherSnapshot } from "./CityWeatherCard";
 import { localizedWeatherDescription, weatherCopy } from "./weatherPresentation";
@@ -149,7 +149,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
     ...(hero?.accentColor ? { "--detail-hero-accent": hero.accentColor } : {}),
   } as CSSProperties;
   const editorialTitle = (key: string, fallback: string) => detailContentTitle(editorial, key, fallback);
-  const countryName = localizedCountryName(city.country, city.countryCode, lang);
+  const countryName = detailDisplayTerm(editorial, city.country, localizedCountryName(city.country, city.countryCode, lang));
   const localizedEditorialFact = (key: string, fallback: string, maxLength = 180) => detailContentSummary(editorial, key, fallback, maxLength);
   // Compact once more at the hero boundary. The public catalogue response can
   // legitimately fall back to a longer source fact while editorial content is
@@ -232,7 +232,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
         <div className="detail-wrap">
           <DetailHeading number={city.weather ? "04" : "03"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: city.name }))} />
           {detailContentIntro(editorial, "universities")}
-          <div className="detail-grid">{city.universities.map((university) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={localizedUniversityType(university.universityType, lang)} title={localizedInstitutionName(university.name, city.country, lang)} kind="university" />)}</div>
+          <div className="detail-grid">{city.universities.map((university) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={localizedUniversityType(university.universityType, lang)} title={detailDisplayTerm(editorial, university.name)} kind="university" />)}</div>
         </div>
       </section>}
       {city.programCount > 0 && <section data-detail-section="programs" id="programs" className="detail-section">
