@@ -6,6 +6,7 @@ import { countryAliases, countryMatches } from "./websiteCatalogFilters";
 import { readPublishedDetailLayout } from "./websiteDetailLayouts";
 import { detailTemplateSectionsForLocale } from "./websiteDetailLayoutContract";
 import { publicCatalogSources } from "./catalogSourceMetadata";
+import { addPublicCatalogConditions, getPublicCatalogPolicy } from "./publicCatalogQueryPolicy";
 
 export const detailContentSlug = (kind: DetailContentKind, entityId: number, locale: string) => `_detail-content-${kind}-${entityId}-${locale}`;
 export const detailContentDigest = (pageId: number, updatedAt: string, content: DetailContent) => createHash("sha256").update(JSON.stringify({ pageId, updatedAt, content })).digest("hex");
@@ -51,17 +52,19 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
     const destination = destinations.find(row => countryMatches(row.country, country));
     const aliases = countryAliases(country).map(value => value.toLowerCase().trim());
     const countryScope = sql`lower(trim(${universitiesTable.country})) in (${sql.join(aliases.map(value => sql`${value}`), sql`, `)})`;
+    const publicUniversityConditions: any[] = [countryScope];
+    addPublicCatalogConditions(publicUniversityConditions, await getPublicCatalogPolicy());
     const [[universityCount], [programCount], cityList, universityList, programList] = await Promise.all([
       db.select({ count: sql<number>`count(*)` }).from(universitiesTable).where(countryScope),
       db.select({ count: sql<number>`count(*)` }).from(programsTable).innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id)).where(countryScope),
       db.select({ id: citiesTable.id, name: citiesTable.name }).from(citiesTable)
         .where(eq(citiesTable.countryId, country.id)).orderBy(asc(citiesTable.name)).limit(24),
       db.select({ id: universitiesTable.id, name: universitiesTable.name, city: universitiesTable.city, type: universitiesTable.universityType, isActive: universitiesTable.isActive })
-        .from(universitiesTable).where(countryScope)
-        // Public cards prefer active catalogue rows. Keep the authoring context
-        // bounded: translated entity revisions are the reusable source of truth,
-        // while this list only covers the candidates a detail page can surface.
-        .orderBy(desc(universitiesTable.isActive), asc(universitiesTable.name)).limit(24),
+        .from(universitiesTable).where(and(...publicUniversityConditions))
+        // Match the anonymous catalogue policy and ordering used by the public
+        // country cards. This keeps the translation payload bounded while
+        // ensuring every institution that can actually be rendered is included.
+        .orderBy(asc(universitiesTable.name), asc(universitiesTable.id)).limit(24),
       db.select({ id: programsTable.id, name: programsTable.name, degree: programsTable.degree, field: programsTable.field, language: programsTable.language, university: universitiesTable.name })
         .from(programsTable).innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
         .where(countryScope).orderBy(asc(programsTable.name)).limit(32),
