@@ -108,6 +108,16 @@ test("AI display-term collection is bounded to catalogue-owned names", () => {
   });
   assert.deepEqual(terms, ["Turkey", "Istanbul", "Anadolu University", "Eskişehir", "Council of Higher Education"]);
 });
+
+test("AI display-term collection prioritizes institutions over large programme lists", () => {
+  const universities = Array.from({ length: 12 }, (_, index) => ({ name: `University ${index + 1}`, city: `City ${index + 1}` }));
+  const programs = Array.from({ length: 100 }, (_, index) => ({ name: `Programme ${index + 1}` }));
+  const terms = collectAdminDisplayTerms({ programs, universities, country: "Turkey" });
+  assert.equal(terms.length, 96);
+  assert.ok(universities.every(item => terms.includes(item.name)));
+  assert.ok(universities.every(item => terms.includes(item.city)));
+  assert.ok(terms.includes("Turkey"));
+});
 function render(content: DetailContent) {
   const before = Reflect.get(globalThis, "React");
   const existed = Object.hasOwn(globalThis, "React");

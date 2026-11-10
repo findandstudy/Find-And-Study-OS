@@ -90,20 +90,29 @@ const DISPLAY_TERM_FIELDS = new Set([
 
 /** Collects catalogue-owned entity/source names without sending descriptions or private fields. */
 export function collectAdminDisplayTerms(value: unknown): string[] {
-  const terms = new Set<string>();
-  const visit = (current: unknown, key = "", depth = 0) => {
-    if (depth > 7 || terms.size >= 64) return;
+  const priorityTerms = new Set<string>();
+  const programTerms = new Set<string>();
+  const visit = (current: unknown, key = "", path = "", depth = 0) => {
+    if (depth > 7) return;
     if (typeof current === "string") {
       const normalized = current.trim();
-      if (DISPLAY_TERM_FIELDS.has(key.toLowerCase()) && normalized.length >= 2 && normalized.length <= 240 && !/^https?:\/\//iu.test(normalized)) terms.add(normalized);
+      if (DISPLAY_TERM_FIELDS.has(key.toLowerCase()) && normalized.length >= 2 && normalized.length <= 240 && !/^https?:\/\//iu.test(normalized)) {
+        // A country page can expose hundreds of programmes. Preserve the
+        // scarcer country, city, institution and source names before using
+        // the bounded map capacity for programme titles.
+        const bucket = /(?:^|\.)programs(?:\.|\[)/iu.test(path) || key.toLowerCase() === "programname"
+          ? programTerms
+          : priorityTerms;
+        bucket.add(normalized);
+      }
       return;
     }
-    if (Array.isArray(current)) return current.slice(0, 64).forEach((item) => visit(item, key, depth + 1));
+    if (Array.isArray(current)) return current.slice(0, 96).forEach((item, index) => visit(item, key, `${path}[${index}]`, depth + 1));
     if (!current || typeof current !== "object") return;
-    for (const [childKey, child] of Object.entries(current as Record<string, unknown>)) visit(child, childKey, depth + 1);
+    for (const [childKey, child] of Object.entries(current as Record<string, unknown>)) visit(child, childKey, path ? `${path}.${childKey}` : childKey, depth + 1);
   };
   visit(value);
-  return [...terms].slice(0, 64);
+  return [...priorityTerms, ...programTerms].slice(0, 96);
 }
 
 /** Produces a reviewed locale-owned map used by live catalogue cards and labels. */

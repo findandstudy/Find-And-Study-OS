@@ -135,25 +135,31 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
 
 function catalogueDisplayTerms(kind: DetailContentKind, payload: unknown): string[] {
   const facts = verifiedGenerationFacts(kind, payload) as Record<string, unknown>;
-  const terms = new Set<string>();
-  const add = (value: unknown) => {
+  const priorityTerms = new Set<string>();
+  const programTerms = new Set<string>();
+  const add = (value: unknown, target = priorityTerms) => {
     if (typeof value !== "string") return;
     const normalized = value.trim();
-    if (normalized.length >= 2 && normalized.length <= 240 && !/^https?:\/\//iu.test(normalized)) terms.add(normalized);
+    if (normalized.length >= 2 && normalized.length <= 240 && !/^https?:\/\//iu.test(normalized)) target.add(normalized);
   };
   for (const key of ["destination", "country", "city", "university", "program"]) add(facts[key]);
-  for (const collection of [facts.cities, facts.universities, facts.programs]) if (Array.isArray(collection)) {
+  for (const collection of [facts.cities, facts.universities]) if (Array.isArray(collection)) {
     for (const item of collection) {
       const value = record(item);
       add(value?.name);
       add(value?.university);
     }
   }
+  if (Array.isArray(facts.programs)) for (const item of facts.programs) {
+    const value = record(item);
+    add(value?.university);
+    add(value?.name, programTerms);
+  }
   if (Array.isArray(facts.officialSources)) for (const item of facts.officialSources) {
     const value = record(item);
     add(value?.sourceName);
   }
-  return [...terms].slice(0, 64);
+  return [...priorityTerms, ...programTerms].slice(0, 96);
 }
 
 async function aiPreferredTranslationTerms(kind: DetailContentKind, payload: unknown, locale: string, ai: AiContentService): Promise<Record<string, string>> {
