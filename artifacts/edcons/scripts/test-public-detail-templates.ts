@@ -232,7 +232,7 @@ test("editorial presentation keeps honest counts, localized copy and safe naviga
   assert.equal(localizedCountryName("Turkey", "TR", "tr"), "Türkiye");
   assert.equal(localizedLanguageNames(["English", "Turkish"], "tr"), "İngilizce · Türkçe");
   assert.equal(localizedLanguageNames(["Unknown teaching language"], "tr"), "Unknown teaching language");
-  assert.equal(localizedUniversityType("private", "tr"), "Vakıf / Özel");
+  assert.equal(localizedUniversityType("private", "tr"), "Özel");
   assert.equal(localizedInstitutionName("Istanbul Aydin University", "Turkey", "tr"), "İstanbul Aydın Üniversitesi");
   assert.equal(localizedInstitutionName("Anadolu University (Distance Education)", "Turkey", "tr"), "Anadolu Üniversitesi (Uzaktan Eğitim)");
   assert.equal(localizedInstitutionName("University of London", "United Kingdom", "tr"), "University of London");
@@ -332,11 +332,11 @@ test("university programs are responsive factual cards with accessible navigatio
   assert.match(university, /<UniversityProgramBrowser/);
   assert.match(universityBrowser, /className="university-program-browser" role="region" aria-label=/);
   assert.match(universityBrowser, /className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">\{result\.data\.map\(\(program, index\) => <PublicProgramCard/);
-  assert.match(programCard, /<h3 className="[^"]*text-\[15px\][^"]*line-clamp-2[^\n]*<bdi>\{prog\.name\}/);
+  assert.match(programCard, /<h3 className="[^"]*text-\[15px\][^"]*line-clamp-2[^\n]*<bdi>\{programName\}/);
   assert.match(programCard, /programPath \? <Link href=\{programPath\}/);
   assert.match(programCard, /prog\.language &&/);
   assert.match(programCard, /prog\.duration &&/);
-  assert.match(programCard, /<bdi>\{prog\.duration\}<\/bdi>/);
+  assert.match(programCard, /<bdi>\{duration\}<\/bdi>/);
   assert.match(programCard, /aria-label=\{t\("programs\.programDetails"\)\}/);
   assert.match(programCard, /public-program-card group min-w-0/);
   assert.match(university, /\?universityId=\$\{university\.id\}/);
