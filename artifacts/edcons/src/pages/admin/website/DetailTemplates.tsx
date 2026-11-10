@@ -28,6 +28,14 @@ type PreviewInventory = { items: PreviewItem[]; pagination: { total: number } };
 type PreviewContent = { content: DetailContent; published: DetailContent | null };
 export type DetailTemplatesHandle = { requestLeave: (action: () => void) => void };
 
+const linesToList = (value: string) => [...new Set(value.split(/\r?\n/).map(item => item.trim()).filter(Boolean))].slice(0, 80);
+const listToLines = (value: string[]) => value.join("\n");
+const replacementsToText = (value: Record<string, string>) => Object.entries(value).map(([source, target]) => `${source} => ${target}`).join("\n");
+const textToReplacements = (value: string) => Object.fromEntries(value.split(/\r?\n/).flatMap(line => {
+  const [source, ...targetParts] = line.split("=>");
+  const target = targetParts.join("=>").trim();
+  return source?.trim() && target ? [[source.trim(), target]] : [];
+}).slice(0, 80));
 
 const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplates(_props, ref) {
   const { lang, t } = useI18n();
@@ -51,6 +59,7 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
   const [selectedVariable, setSelectedVariable] = useState("");
   const [variableSearch, setVariableSearch] = useState("");
   const [translationBusy, setTranslationBusy] = useState(false);
+  const [replacementDraft, setReplacementDraft] = useState("");
   const titleCopyRef = useRef<HTMLInputElement | null>(null);
   const bodyCopyRef = useRef<HTMLTextAreaElement | null>(null);
   const confirmationOpener = useRef<HTMLElement | null>(null);
@@ -134,7 +143,8 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
         && [...layout.hidden].sort().join() === [...entry.layout.hidden].sort().join()
         && JSON.stringify(layout.presentation) === JSON.stringify(entry.layout.presentation)
         && JSON.stringify(layout.copy) === JSON.stringify(entry.layout.copy)
-        && JSON.stringify(layout.generation) === JSON.stringify(entry.layout.generation);
+        && JSON.stringify(layout.generation) === JSON.stringify(entry.layout.generation)
+        && JSON.stringify(layout.contentPolicy) === JSON.stringify(entry.layout.contentPolicy);
       if (unchanged) delete next[layout.kind];
       else next[layout.kind] = { layout, expectedUpdatedAt: old[layout.kind] ? old[layout.kind].expectedUpdatedAt : entry.updatedAt };
       return next;
@@ -142,6 +152,7 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
   };
   const openEditor = (entry: Entry) => {
     const layout = edits[entry.layout.kind]?.layout ?? entry.layout;
+    setReplacementDraft(replacementsToText(layout.contentPolicy.preferredReplacements));
     setEditingKind(layout.kind); setSelectedSection(layout.sections[0] ?? null); setMobilePane("sections");
   };
   const closeEditor = () => setEditingKind(null);
@@ -177,6 +188,10 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
     const current = editingLayout.generation[selectedSection];
     change(editingEntry, { ...editingLayout, generation: { ...editingLayout.generation, [selectedSection]: { ...current, ...next } } });
   };
+  const updateContentPolicy = (next: Partial<DetailLayout["contentPolicy"]>) => {
+    if (!editingEntry || !editingLayout) return;
+    change(editingEntry, { ...editingLayout, contentPolicy: { ...editingLayout.contentPolicy, ...next } });
+  };
   const insertSelectedVariable = (field: "title" | "body") => {
     if (!editingLayout || !selectedSection || !selectedVariable) return;
     const element = field === "title" ? titleCopyRef.current : bodyCopyRef.current;
@@ -202,7 +217,15 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
     setTranslationBusy(true);
     setNotice("");
     try {
-      const translated = await translateStructuredDraft(englishCopy, previewLocale, "en");
+      const translated = await translateStructuredDraft(englishCopy, previewLocale, "en", JSON.stringify({
+        direction: editingLayout.contentPolicy.direction,
+        tone: editingLayout.contentPolicy.tone,
+        style: editingLayout.contentPolicy.style,
+        phrasesToAvoid: editingLayout.contentPolicy.prohibitedPhrases,
+        preferredWording: editingLayout.contentPolicy.preferredReplacements,
+        preferredOrganizations: editingLayout.contentPolicy.preferredOrganizations,
+        translationInstruction: editingLayout.contentPolicy.translationInstruction,
+      }));
       change(editingEntry, { ...editingLayout, copy: { ...editingLayout.copy, [previewLocale]: translated } });
       setNotice(copy("AI translation draft created. Review it in the real-page preview, then save the template draft.", "AI çeviri taslağı oluşturuldu. Gerçek sayfa önizlemesinde kontrol edip şablon taslağını kaydedin."));
     } catch (reason) {
@@ -263,6 +286,16 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
               <div className="border-b p-3"><h3 className="text-xs font-bold uppercase text-muted-foreground">{copy("Edit section", "Bölümü düzenle")}</h3></div>
               <div className="min-h-0 flex-1 overflow-y-auto p-5">{selectedSection && selectedIndex >= 0 ? <div className="space-y-5">
                 <div><p className="text-xs text-muted-foreground">{copy("Selected section", "Seçili bölüm")}</p><h4 className="mt-1 text-xl font-semibold">{label(selectedSection)}</h4></div>
+                <div className="space-y-4 rounded-xl border border-violet-200 bg-violet-50/40 p-4 dark:border-violet-900 dark:bg-violet-950/20">
+                  <div><h5 className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-violet-600" />{copy("Template-wide content direction", "Şablon geneli içerik yönü")}</h5><p className="mt-1 text-xs text-muted-foreground">{copy("These preferences guide AI writing and translation for every section and language generated from this template. They do not block publication or replace verified catalogue facts.", "Bu tercihler, bu şablondan üretilen tüm bölüm ve dillerde AI yazımını ve çeviriyi yönlendirir. Yayını engellemez ve doğrulanmış katalog bilgilerinin yerini almaz.")}</p></div>
+                  <div className="space-y-1.5"><Label htmlFor="template-policy-direction">{copy("Overall direction", "Genel metin yönü")}</Label><Textarea id="template-policy-direction" rows={4} maxLength={3000} value={editingLayout.contentPolicy.direction} onChange={event => updateContentPolicy({ direction: event.target.value })} placeholder={copy("Example: Keep the country guide destination-first and decision-oriented.", "Örnek: Ülke rehberini destinasyon odaklı ve karar vermeye yardımcı tut.")} /></div>
+                  <div className="space-y-1.5"><Label htmlFor="template-policy-tone">{copy("Tone", "Metin tonu")}</Label><Input id="template-policy-tone" maxLength={600} value={editingLayout.contentPolicy.tone} onChange={event => updateContentPolicy({ tone: event.target.value })} placeholder={copy("Clear, expert and reassuring", "Açık, uzman ve güven veren")} /></div>
+                  <div className="space-y-1.5"><Label htmlFor="template-policy-style">{copy("Writing style", "Yazım tarzı")}</Label><Textarea id="template-policy-style" rows={3} maxLength={1200} value={editingLayout.contentPolicy.style} onChange={event => updateContentPolicy({ style: event.target.value })} placeholder={copy("Example: Use short paragraphs, practical comparisons and natural headings.", "Örnek: Kısa paragraflar, pratik karşılaştırmalar ve doğal başlıklar kullan.")} /></div>
+                  <div className="space-y-1.5"><Label htmlFor="template-policy-prohibited">{copy("Phrases to avoid", "Kaçınılacak ifadeler")}</Label><Textarea id="template-policy-prohibited" rows={4} maxLength={12880} value={listToLines(editingLayout.contentPolicy.prohibitedPhrases)} onChange={event => updateContentPolicy({ prohibitedPhrases: linesToList(event.target.value) })} placeholder={copy("One phrase per line", "Her satıra bir ifade")} /><p className="text-xs text-muted-foreground">{copy("Prompt guidance only; no publication audit is added.", "Yalnız AI yönlendirmesidir; yayın denetimi eklenmez.")}</p></div>
+                  <div className="space-y-1.5"><Label htmlFor="template-policy-replacements">{copy("Preferred wording", "Tercih edilen karşılıklar")}</Label><Textarea id="template-policy-replacements" rows={4} maxLength={25800} value={replacementDraft} onChange={event => setReplacementDraft(event.target.value)} onBlur={() => updateContentPolicy({ preferredReplacements: textToReplacements(replacementDraft) })} placeholder={copy("Study in Türkiye => official study information resources", "Study in Türkiye => resmî eğitim bilgi kaynakları")} /><p className="text-xs text-muted-foreground">{copy("Write one source => preferred form per line.", "Her satıra eski ifade => tercih edilen ifade yazın.")}</p></div>
+                  <div className="space-y-1.5"><Label htmlFor="template-policy-organizations">{copy("Preferred organisations or companies", "Adı tercih edilen kurum veya firmalar")}</Label><Textarea id="template-policy-organizations" rows={4} maxLength={12880} value={listToLines(editingLayout.contentPolicy.preferredOrganizations)} onChange={event => updateContentPolicy({ preferredOrganizations: linesToList(event.target.value) })} placeholder={copy("One verified organisation per line", "Her satıra doğrulanmış bir kurum veya firma")} /><p className="text-xs text-muted-foreground">{copy("AI may name these only when the page's verified sources support them.", "AI bu adları yalnız sayfanın doğrulanmış kaynakları destekliyorsa kullanabilir.")}</p></div>
+                  <div className="space-y-1.5"><Label htmlFor="template-policy-translation">{copy("Translation direction", "Çeviri yönlendirmesi")}</Label><Textarea id="template-policy-translation" rows={3} maxLength={1600} value={editingLayout.contentPolicy.translationInstruction} onChange={event => updateContentPolicy({ translationInstruction: event.target.value })} placeholder={copy("Example: Localise generic institution and programme terms naturally; preserve verified brand identity.", "Örnek: Genel kurum ve program terimlerini doğal biçimde yerelleştir; doğrulanmış marka kimliğini koru.")} /></div>
+                </div>
                 <div className="rounded-xl border p-4"><label className="flex items-start gap-3"><input type="checkbox" className="mt-1" checked={!editingLayout.hidden.includes(selectedSection)} disabled={selectedLocked} onChange={event => change(editingEntry, { ...editingLayout, hidden: event.target.checked ? editingLayout.hidden.filter(key => key !== selectedSection) : [...editingLayout.hidden, selectedSection] })} /><span><strong className="block text-sm">{copy("Visible on public pages", "Halka açık sayfalarda görünür")}</strong><span className="text-xs text-muted-foreground">{selectedLocked ? copy("This structural section is required.", "Bu yapısal bölüm zorunludur.") : copy("Hidden sections keep their content but are not rendered.", "Gizlenen bölümlerin içeriği korunur fakat gösterilmez.")}</span></span></label></div>
                 <DetailSectionAppearanceFields value={editingLayout.presentation[selectedSection] ?? {}} copy={copy} onChange={next => {
                   const presentation = { ...editingLayout.presentation };
@@ -325,7 +358,7 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
                   </div>
                   <AiWritingAssistant
                     locale={previewLocale}
-                    context={`${label(editingLayout.kind)} template\nSection: ${label(selectedSection)}\nThis copy is shared by every matching detail page and may use approved template variables.`}
+                    context={`${label(editingLayout.kind)} template\nSection: ${label(selectedSection)}\nThis copy is shared by every matching detail page and may use approved template variables.\nTemplate-wide content direction: ${JSON.stringify(editingLayout.contentPolicy)}`}
                     fields={[
                       ...(selectedSection === "hero" ? [] : [{ path: "root.title", label: copy("Default section title", "Varsayılan bölüm başlığı"), value: editingLayout.copy[previewLocale]?.[selectedSection]?.title ?? "", maxLength: 160, format: "plain" as const }]),
                       { path: "root.body", label: selectedSection === "hero" ? copy("Default supporting text", "Varsayılan destek metni") : copy("Default introduction", "Varsayılan giriş metni"), value: editingLayout.copy[previewLocale]?.[selectedSection]?.body ?? "", maxLength: 6000, format: "plain" as const },

@@ -19,6 +19,15 @@ export type DetailSectionPresentation = {
 };
 export type DetailSectionCopy = { title?: string; body?: string };
 export type DetailSectionGeneration = { enabled: boolean; instruction: string };
+export type DetailTemplateContentPolicy = {
+  direction: string;
+  tone: string;
+  style: string;
+  prohibitedPhrases: string[];
+  preferredReplacements: Record<string, string>;
+  preferredOrganizations: string[];
+  translationInstruction: string;
+};
 export type DetailTemplateVariable = { key: string; label: string; group: string };
 const variable = (key: string, label: string, group: string): DetailTemplateVariable => ({ key, label, group });
 export const DETAIL_TEMPLATE_VARIABLES: Record<DetailLayoutKind, readonly DetailTemplateVariable[]> = {
@@ -68,7 +77,7 @@ export const DETAIL_TEMPLATE_VARIABLES: Record<DetailLayoutKind, readonly Detail
     variable("stats.intakeCount", "Intake count", "Live counts"), variable("stats.relatedProgramCount", "Related program count", "Live counts"),
   ],
 };
-export type DetailLayout = { version: 5; kind: DetailLayoutKind; sections: string[]; hidden: string[]; presentation: Record<string, DetailSectionPresentation>; copy: Record<string, Record<string, DetailSectionCopy>>; generation: Record<string, DetailSectionGeneration> };
+export type DetailLayout = { version: 6; kind: DetailLayoutKind; sections: string[]; hidden: string[]; presentation: Record<string, DetailSectionPresentation>; copy: Record<string, Record<string, DetailSectionCopy>>; generation: Record<string, DetailSectionGeneration>; contentPolicy: DetailTemplateContentPolicy };
 const LEGACY_SECTIONS: Record<DetailLayoutKind, readonly string[]> = {
   program: ["hero", "navigation", "overview", "related"],
   university: ["hero", "navigation", "overview", "programs"],
@@ -110,8 +119,19 @@ export function defaultDetailSectionGeneration(kind: DetailLayoutKind, section: 
 export function defaultDetailGeneration(kind: DetailLayoutKind) {
   return Object.fromEntries(DETAIL_LAYOUT_SECTIONS[kind].map(section => [section, defaultDetailSectionGeneration(kind, section)]));
 }
+export function defaultDetailContentPolicy(): DetailTemplateContentPolicy {
+  return {
+    direction: "",
+    tone: "",
+    style: "",
+    prohibitedPhrases: [],
+    preferredReplacements: {},
+    preferredOrganizations: [],
+    translationInstruction: "",
+  };
+}
 export function defaultDetailLayout(kind: DetailLayoutKind): DetailLayout {
-  return { version: 5, kind, sections: [...DETAIL_LAYOUT_SECTIONS[kind]], hidden: [], presentation: {}, copy: {}, generation: defaultDetailGeneration(kind) };
+  return { version: 6, kind, sections: [...DETAIL_LAYOUT_SECTIONS[kind]], hidden: [], presentation: {}, copy: {}, generation: defaultDetailGeneration(kind), contentPolicy: defaultDetailContentPolicy() };
 }
 const DETAIL_LAYOUT_LOCALES = ["en","tr","ar","fr","ru","fa","zh","hi","es","id","ur","tk","ky","kk","uz","tg","bn","pt","ne","vi","ko","uk","it"] as const;
 const CATALOGUE_WORD = /catalog(?:ue)?|katalog|каталог|目录|कैटलॉग|کیٹلاگ|فهرست|فهرست|феҳрист|ক্যাটালগ|catálogo|क्याटलग|danh mục|카탈로그/giu;
@@ -170,8 +190,8 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
   const keys = Object.keys(v).sort().join();
-  const expectedKeys = v.version === 5 ? ["copy,generation,hidden,kind,presentation,sections,version", "copy,hidden,kind,presentation,sections,version"] : v.version === 4 ? ["hidden,kind,presentation,sections,version"] : ["hidden,kind,sections,version"];
-  if (!expectedKeys.includes(keys) || ![1, 2, 3, 4, 5].includes(v.version as number)
+  const expectedKeys = v.version === 6 ? ["contentPolicy,copy,generation,hidden,kind,presentation,sections,version"] : v.version === 5 ? ["copy,generation,hidden,kind,presentation,sections,version", "copy,hidden,kind,presentation,sections,version"] : v.version === 4 ? ["hidden,kind,presentation,sections,version"] : ["hidden,kind,sections,version"];
+  if (!expectedKeys.includes(keys) || ![1, 2, 3, 4, 5, 6].includes(v.version as number)
       || !DETAIL_LAYOUT_KINDS.includes(v.kind as DetailLayoutKind)) return null;
   const kind = v.kind as DetailLayoutKind;
   const allowed = v.version === 1 ? LEGACY_SECTIONS[kind] : v.version === 2 ? V2_SECTIONS[kind] : DETAIL_LAYOUT_SECTIONS[kind];
@@ -202,7 +222,7 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
     else sections.push(section);
   }
   const presentation: Record<string, DetailSectionPresentation> = {};
-  if (v.version === 4 || v.version === 5) {
+  if (v.version === 4 || v.version === 5 || v.version === 6) {
     if (!v.presentation || typeof v.presentation !== "object" || Array.isArray(v.presentation)) return null;
     for (const [key, raw] of Object.entries(v.presentation as Record<string, unknown>)) {
       const setting = parseDetailSectionPresentation(raw);
@@ -211,7 +231,7 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
     }
   }
   const copy: Record<string, Record<string, DetailSectionCopy>> = {};
-  if (v.version === 5) {
+  if (v.version === 5 || v.version === 6) {
     if (!v.copy || typeof v.copy !== "object" || Array.isArray(v.copy)) return null;
     for (const [locale, rawSections] of Object.entries(v.copy as Record<string, unknown>)) {
       if (!(DETAIL_LAYOUT_LOCALES as readonly string[]).includes(locale) || !rawSections || typeof rawSections !== "object" || Array.isArray(rawSections)) return null;
@@ -232,7 +252,7 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
     }
   }
   const generation = defaultDetailGeneration(kind);
-  if (v.version === 5 && v.generation !== undefined) {
+  if ((v.version === 5 || v.version === 6) && v.generation !== undefined) {
     if (!v.generation || typeof v.generation !== "object" || Array.isArray(v.generation)) return null;
     for (const [section, raw] of Object.entries(v.generation as Record<string, unknown>)) {
       if (!allowed.includes(section) || !raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -243,7 +263,28 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
       generation[section] = { enabled: setting.enabled, instruction: setting.instruction.trim() };
     }
   }
-  const parsed = { version: 5 as const, kind, sections, hidden: [...v.hidden] as string[], presentation, copy, generation };
+  const contentPolicy = defaultDetailContentPolicy();
+  if (v.version === 6) {
+    if (!v.contentPolicy || typeof v.contentPolicy !== "object" || Array.isArray(v.contentPolicy)) return null;
+    const policy = v.contentPolicy as Record<string, unknown>;
+    if (Object.keys(policy).sort().join() !== "direction,preferredOrganizations,preferredReplacements,prohibitedPhrases,style,tone,translationInstruction") return null;
+    const policyText = (key: string, max: number) => typeof policy[key] === "string" && String(policy[key]).length <= max && !/[<>\u0000-\u001f\u007f]/.test(String(policy[key]));
+    const policyList = (key: string, maxItems: number) => Array.isArray(policy[key]) && (policy[key] as unknown[]).length <= maxItems
+      && (policy[key] as unknown[]).every(item => typeof item === "string" && item.trim().length > 0 && item.length <= 160 && !/[<>\u0000-\u001f\u007f]/.test(item));
+    if (!policyText("direction", 3000) || !policyText("tone", 600) || !policyText("style", 1200) || !policyText("translationInstruction", 1600)
+      || !policyList("prohibitedPhrases", 80) || !policyList("preferredOrganizations", 80)
+      || !policy.preferredReplacements || typeof policy.preferredReplacements !== "object" || Array.isArray(policy.preferredReplacements)) return null;
+    const replacements = Object.entries(policy.preferredReplacements as Record<string, unknown>);
+    if (replacements.length > 80 || replacements.some(([source, target]) => source.trim().length < 1 || source.length > 160 || typeof target !== "string" || target.trim().length < 1 || target.length > 160 || /[<>\u0000-\u001f\u007f]/.test(`${source}${target}`))) return null;
+    contentPolicy.direction = String(policy.direction).trim();
+    contentPolicy.tone = String(policy.tone).trim();
+    contentPolicy.style = String(policy.style).trim();
+    contentPolicy.translationInstruction = String(policy.translationInstruction).trim();
+    contentPolicy.prohibitedPhrases = [...new Set((policy.prohibitedPhrases as string[]).map(item => item.trim()))];
+    contentPolicy.preferredOrganizations = [...new Set((policy.preferredOrganizations as string[]).map(item => item.trim()))];
+    contentPolicy.preferredReplacements = Object.fromEntries(replacements.map(([source, target]) => [source.trim(), String(target).trim()]));
+  }
+  const parsed = { version: 6 as const, kind, sections, hidden: [...v.hidden] as string[], presentation, copy, generation, contentPolicy };
   return JSON.stringify(parsed).length <= 180000 ? parsed : null;
 }
 

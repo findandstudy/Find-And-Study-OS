@@ -1859,8 +1859,9 @@ router.post("/website/ai/translate", ...adminOnly, async (req: Request, res: Res
     const sourceLocale = typeof req.body?.sourceLocale === "string" && /^[a-z]{2,5}$/i.test(req.body.sourceLocale) ? req.body.sourceLocale.toLowerCase() : "";
     const targetLocale = typeof req.body?.targetLocale === "string" && /^[a-z]{2,5}$/i.test(req.body.targetLocale) ? req.body.targetLocale.toLowerCase() : "";
     const mode = req.body?.mode === undefined || req.body.mode === "content" ? "content" : req.body.mode === "display_terms" ? "display_terms" : null;
+    const editorialGuidance = req.body?.editorialGuidance === undefined ? "" : typeof req.body.editorialGuidance === "string" && req.body.editorialGuidance.length <= 12_000 && !/[<>\u0000-\u001f\u007f]/.test(req.body.editorialGuidance) ? req.body.editorialGuidance.trim() : null;
     const input = req.body?.texts;
-    if (!mode || !sourceLocale || !targetLocale || sourceLocale === targetLocale || !input || typeof input !== "object" || Array.isArray(input)) {
+    if (editorialGuidance === null || !mode || !sourceLocale || !targetLocale || sourceLocale === targetLocale || !input || typeof input !== "object" || Array.isArray(input)) {
       return void res.status(400).json({ error: "A different source and target language plus a text map are required" });
     }
     if (!policy.allowedLocales.includes(targetLocale)) return void res.status(403).json({ error: "Target language is not enabled for AI translation" });
@@ -1881,7 +1882,7 @@ router.post("/website/ai/translate", ...adminOnly, async (req: Request, res: Res
     if (usage.requests >= policy.dailyRequestLimit || usage.estimatedTokens + estimatedTokens > policy.dailyEstimatedTokenLimit) return void res.status(429).json({ error: "Daily AI content budget has been reached" });
     const { AiContentService } = await import("../lib/aiService");
     const aiService = new AiContentService(aiConfig);
-    const translations = await aiService.translateTextMap({ sourceLocale, targetLocale, texts, mode });
+    const translations = await aiService.translateTextMap({ sourceLocale, targetLocale, texts, mode, editorialGuidance });
     await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "website_ai_content_execute", resource: "website_page", changes: JSON.stringify({ operation: "translate", sourceLocale, targetLocale, requests: 1, estimatedTokens, succeeded: 1, failed: 0, provider: aiService.getProvider(), publication: "draft_only" }) });
     res.json({ translations, provider: aiService.getProvider(), sourceLocale, targetLocale });
   } catch (e: unknown) {

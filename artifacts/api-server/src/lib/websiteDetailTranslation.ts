@@ -65,7 +65,7 @@ export async function translateStructuredDetailContent(
   content: DetailContent,
   locale: string,
   ai: AiContentService,
-  options: { protectedTerms?: string[]; preferredTerms?: Record<string, string> } = {},
+  options: { protectedTerms?: string[]; preferredTerms?: Record<string, string>; editorialGuidance?: string } = {},
 ) {
   const source = { ...content, locale };
   const all = collectText(source);
@@ -80,6 +80,7 @@ export async function translateStructuredDetailContent(
       texts: chunk,
       protectedTerms: options.protectedTerms,
       preferredTerms: options.preferredTerms,
+      editorialGuidance: options.editorialGuidance,
     }));
     chunk = {};
     chars = 0;

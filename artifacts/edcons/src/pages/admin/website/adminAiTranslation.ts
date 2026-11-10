@@ -5,11 +5,12 @@ export async function translateAdminTextMap(
   targetLocale: string,
   sourceLocale = "en",
   mode: "content" | "display_terms" = "content",
+  editorialGuidance = "",
 ): Promise<Record<string, string>> {
   const result = await customFetch<{ translations: Record<string, string> }>("/api/website/ai/translate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sourceLocale, targetLocale, texts, mode }),
+    body: JSON.stringify({ sourceLocale, targetLocale, texts, mode, editorialGuidance }),
   });
   return result.translations;
 }
@@ -63,7 +64,7 @@ export function applyTranslatedText<T>(value: T, translations: Record<string, st
   return visit(value, "root", "root") as T;
 }
 
-export async function translateStructuredDraft<T>(value: T, targetLocale: string, sourceLocale = "en"): Promise<T> {
+export async function translateStructuredDraft<T>(value: T, targetLocale: string, sourceLocale = "en", editorialGuidance = ""): Promise<T> {
   const texts = collectTranslatableText(value);
   if (!Object.keys(texts).length) throw new Error("No translatable text was found");
   const translations: Record<string, string> = {};
@@ -71,7 +72,7 @@ export async function translateStructuredDraft<T>(value: T, targetLocale: string
   let chunkSize = 0;
   const flush = async () => {
     if (!Object.keys(chunk).length) return;
-    Object.assign(translations, await translateAdminTextMap(chunk, targetLocale, sourceLocale));
+    Object.assign(translations, await translateAdminTextMap(chunk, targetLocale, sourceLocale, "content", editorialGuidance));
     chunk = {};
     chunkSize = 0;
   };

@@ -211,11 +211,21 @@ test("editorial layouts upgrade saved v1 layouts and keep frontend/backend parse
   const frontend = readFileSync(new URL("../src/lib/website/detailLayoutContract.ts", import.meta.url), "utf8");
   assert.equal(frontend.replaceAll("\r\n", "\n"), backend.replaceAll("\r\n", "\n"));
   const upgraded = parseDetailLayout({ version: 1, kind: "destination", sections: ["hero", "overview", "cta", "universities"], hidden: ["universities"] });
-  assert.equal(upgraded?.version, 5);
+  assert.equal(upgraded?.version, 6);
   assert.deepEqual(upgraded?.sections.filter(key => !key.startsWith("editorial-")), ["hero", "navigation", "overview", "facts", "cities", "programs", "cta", "universities"]);
   assert.deepEqual(upgraded?.hidden, ["universities"]);
   const current = defaultDetailLayout("program");
   assert.deepEqual(parseDetailLayout(current), current);
+  assert.deepEqual(current.contentPolicy, {
+    direction: "", tone: "", style: "", prohibitedPhrases: [], preferredReplacements: {}, preferredOrganizations: [], translationInstruction: "",
+  });
+  const governed = parseDetailLayout({ ...current, contentPolicy: {
+    direction: "Keep the guide decision-led.", tone: "Clear and expert", style: "Short practical paragraphs",
+    prohibitedPhrases: ["Study in Türkiye"], preferredReplacements: { "Study in Türkiye": "official study information resources" },
+    preferredOrganizations: ["Find & Study"], translationInstruction: "Localise generic institution terms naturally.",
+  } });
+  assert.equal(governed?.contentPolicy.prohibitedPhrases[0], "Study in Türkiye");
+  assert.equal(governed?.contentPolicy.preferredReplacements["Study in Türkiye"], "official study information resources");
   const cityLayout = defaultDetailLayout("city");
   assert.equal(cityLayout.generation.facts.enabled, true);
   assert.match(cityLayout.generation.facts.instruction, /90–160 words/);

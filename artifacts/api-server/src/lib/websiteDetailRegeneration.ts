@@ -350,6 +350,7 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
     facts,
     sections: plan.sections,
     plan,
+    contentPolicy: layout.contentPolicy,
   });
   const skipped = new Set(plan.skippedSections.map(item => item.key));
   const generatedKeys = new Set(Object.keys(generated));
@@ -446,6 +447,15 @@ export async function regenerateDetailContentDraft(params: {
       const translated = await translateStructuredDetailContent(englishBase, locale, ai, {
         protectedTerms: protectedTranslationTerms(kind, payload, preferredTerms),
         preferredTerms,
+        editorialGuidance: JSON.stringify({
+          direction: layout.contentPolicy.direction,
+          tone: layout.contentPolicy.tone,
+          style: layout.contentPolicy.style,
+          phrasesToAvoid: layout.contentPolicy.prohibitedPhrases,
+          preferredWording: layout.contentPolicy.preferredReplacements,
+          preferredOrganizations: layout.contentPolicy.preferredOrganizations,
+          translationInstruction: layout.contentPolicy.translationInstruction,
+        }),
       });
       const translatedByKey = new Map(translated.sections.map(section => [section.key, section]));
       generated = inheritEnglishDetailStructure({
