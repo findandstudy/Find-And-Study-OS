@@ -58,10 +58,10 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
         .where(eq(citiesTable.countryId, country.id)).orderBy(asc(citiesTable.name)).limit(24),
       db.select({ id: universitiesTable.id, name: universitiesTable.name, city: universitiesTable.city, type: universitiesTable.universityType, isActive: universitiesTable.isActive })
         .from(universitiesTable).where(countryScope)
-        // Public cards prefer active catalogue rows. Keep inactive rows available
-        // to the editor, but never let them crowd the localized display-name map
-        // ahead of entities that visitors can actually see.
-        .orderBy(desc(universitiesTable.isActive), asc(universitiesTable.name)).limit(64),
+        // Public cards prefer active catalogue rows. Keep the authoring context
+        // bounded: translated entity revisions are the reusable source of truth,
+        // while this list only covers the candidates a detail page can surface.
+        .orderBy(desc(universitiesTable.isActive), asc(universitiesTable.name)).limit(24),
       db.select({ id: programsTable.id, name: programsTable.name, degree: programsTable.degree, field: programsTable.field, language: programsTable.language, university: universitiesTable.name })
         .from(programsTable).innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
         .where(countryScope).orderBy(asc(programsTable.name)).limit(32),
