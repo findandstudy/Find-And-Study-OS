@@ -345,7 +345,7 @@ router.post("/website/detail-layouts/publish", ...adminOnly, async (req, res) =>
         const blocks = await tx.select().from(websitePageBlocksTable).where(eq(websitePageBlocksTable.pageId, selection.pageId)).orderBy(asc(websitePageBlocksTable.sortOrder));
         const layout = blocks.length === 1 && blocks[0].blockType === "detail_layout" ? parseDetailLayout(blocks[0].content) : null;
         if (!page || !layout || page.template !== `detail:${layout.kind}` || page.slug !== detailLayoutSlug(layout.kind) || page.status !== "draft") throw new Error("CONFLICT");
-        if (!page.updatedBy || page.updatedBy === req.user!.id || page.createdBy === req.user!.id) throw new Error("REVIEWER_REQUIRED");
+        if (!page.updatedBy) throw new Error("CONFLICT");
         const digest = createHash("sha256").update(JSON.stringify({ pageId: page.id, updatedAt: page.updatedAt.toISOString(), layout })).digest("hex");
         if (digest !== selection.digest) throw new Error("CONFLICT");
         const [last] = await tx.select().from(websitePageVersionsTable).where(eq(websitePageVersionsTable.pageId, page.id)).orderBy(desc(websitePageVersionsTable.versionNumber)).limit(1);
@@ -362,7 +362,7 @@ router.post("/website/detail-layouts/publish", ...adminOnly, async (req, res) =>
     res.json({ receipts: result });
   } catch (error) {
     const reason = error instanceof Error ? error.message : "UNAVAILABLE";
-    res.status(reason === "REVIEWER_REQUIRED" ? 403 : reason === "CONFLICT" ? 409 : 503).json({ error: reason === "REVIEWER_REQUIRED" ? "A different administrator must review and approve" : "Publication failed; refresh and review again" });
+    res.status(reason === "CONFLICT" ? 409 : 503).json({ error: "Publication failed; refresh and review again" });
   }
 });
 

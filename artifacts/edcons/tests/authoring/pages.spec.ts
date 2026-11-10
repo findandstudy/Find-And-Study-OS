@@ -4,24 +4,24 @@ import { defaultDetailLayout } from "../../src/lib/website/detailLayoutContract"
 const draft = { id: 1, title: "Catalogue preview", slug: "catalogue-preview", status: "draft", template: "default", locale: "ar", translationsJson: {}, publishedAt: null };
 const block = { id: 1, blockType: "catalog_grid", content: { source: "programs", title: "Current programmes", limit: 6, items: [{ title: "STALE CMS FACT" }] }, settings: {}, sortOrder: 0, isVisible: true };
 
-test("shared template review is explicit, bounded and mobile usable", async ({ page }) => {
+test("shared template publication is explicit, bounded and mobile usable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const writes = await mock(page);
   const entry = { pageId: 21, digest: "a".repeat(64), updatedAt: "2026-09-17T00:00:00.000Z", status: "draft", layout: defaultDetailLayout("city") };
   await page.route("**/api/website/detail-layouts", route => route.fulfill({ json: [entry] }));
   await page.route("**/api/website/detail-layouts/publish", async route => {
     writes.push({ path: "/api/website/detail-layouts/publish", body: route.request().postDataJSON() });
-    await route.fulfill({ status: 403, json: { error: "Different reviewer required" } });
+    await route.fulfill({ status: 200, json: { receipts: [{ pageId: 21, version: 1, kind: "city" }] } });
   });
   await page.goto("/tests/fixtures/page-authoring.html");
   await expect(page.getByRole("heading", { name: "Shared detail templates" })).toBeVisible();
   await expect(page.getByLabel("Hero", { exact: true })).toBeDisabled();
-  await page.getByLabel("Include saved draft in review").check();
-  const publish = page.getByRole("button", { name: "Publish approved layouts" });
+  await page.getByLabel("Include saved draft in publication").check();
+  const publish = page.getByRole("button", { name: "Publish selected templates" });
   await expect(publish).toBeDisabled();
   await page.getByLabel("I reviewed these exact saved layouts and approve publication.").check();
   await publish.click();
-  await expect(page.getByRole("alert")).toContainText("different administrator");
+  await expect(page.getByText("Approved layouts published.")).toBeVisible();
   expect(writes).toEqual([{ path: "/api/website/detail-layouts/publish", body: { approved: true, selections: [{ pageId: 21, digest: entry.digest }] } }]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByLabel("Programs", { exact: true }).uncheck();

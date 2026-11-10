@@ -422,12 +422,6 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
       approved: true,
       selections: [{ pageId: entry.pageId, digest: entry.digest }],
     };
-    assert.equal(
-      (await request("/website/detail-layouts/publish", "admin", approval))
-        .status,
-      403,
-      "self approval denied",
-    );
     await pool.query(
       "UPDATE sessions SET sess=jsonb_set(sess::jsonb,'{originalSid}','\"impersonated\"'::jsonb) WHERE sid=$1",
       [fixtureSid("super_admin")],
@@ -540,7 +534,7 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
     }
     assert.equal(
       (
-        await request("/website/detail-layouts/publish", "super_admin", {
+        await request("/website/detail-layouts/publish", "admin", {
           ...approval,
           selections: [{ pageId: entry.pageId, digest: "a".repeat(64) }],
         })
@@ -549,21 +543,13 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
     );
     assert.equal(
       (
-        await request(
-          "/website/detail-layouts/publish",
-          "super_admin",
-          approval,
-        )
+        await request("/website/detail-layouts/publish", "admin", approval)
       ).status,
       200,
     );
     assert.equal(
       (
-        await request(
-          "/website/detail-layouts/publish",
-          "super_admin",
-          approval,
-        )
+        await request("/website/detail-layouts/publish", "admin", approval)
       ).status,
       409,
       "replay cannot create another publication",

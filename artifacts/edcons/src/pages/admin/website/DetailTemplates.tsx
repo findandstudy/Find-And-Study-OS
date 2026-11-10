@@ -253,7 +253,7 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
       <h2 id="detail-templates-title" className="text-xl font-semibold">{copy("Shared detail templates", "Ortak detay şablonları")}</h2>
       <Button variant="outline" disabled={busy || query.isFetching} onClick={() => requestAction(() => void reload())}>{copy("Reload drafts", "Taslakları yenile")}</Button>
     </div>
-    <p className="text-sm text-muted-foreground">{copy("Layouts reuse current catalogue data, SEO and Apply. Save a draft, then have a different administrator review and publish. No catalogue records are published by this action.", "Şablonlar mevcut katalog verilerini, SEO ve başvuru akışını kullanır. Taslağı kaydedin; farklı bir yönetici inceleyip yayınlasın. Bu işlem katalog kayıtlarını yayınlamaz.")}</p>
+    <p className="text-sm text-muted-foreground">{copy("Layouts reuse current catalogue data, SEO and Apply. Save a draft, then publish the exact saved version when it is ready. No catalogue records are published by this action.", "Şablonlar mevcut katalog verilerini, SEO ve başvuru akışını kullanır. Taslağı kaydedin; hazır olduğunda kaydedilmiş sürümü doğrudan yayınlayın. Bu işlem katalog kayıtlarını yayınlamaz.")}</p>
     <p className="text-sm text-muted-foreground">{copy("Hero, page navigation and overview are required. Other sections can be hidden, reordered and given shared presentation defaults; they appear on public pages only when content is available.", "Üst bölüm, bölüm gezinmesi ve genel bakış zorunludur. Diğer bölümler gizlenebilir, sıralanabilir ve ortak görünüm varsayılanları alabilir; halka açık sayfalarda yalnız içerik varsa görünür.")}</p>
     {busy ? <p role="status">{save.isPending ? copy("Saving layout draft…", "Şablon taslağı kaydediliyor…") : copy("Publishing approved layouts…", "Onaylanan şablonlar yayınlanıyor…")}</p>
       : dirty && <p role="status">{copy("You have unsaved layout changes.", "Kaydedilmemiş şablon değişiklikleriniz var.")}</p>}
@@ -269,7 +269,7 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
         <div className="flex items-center justify-between gap-3"><div><Badge variant={entry.status === "published" ? "default" : "secondary"}>{label(entry.status)}</Badge><p className="mt-2 text-sm text-muted-foreground">{visible.length}/{layout.sections.length} {copy("sections visible", "bölüm görünür")}</p></div><LayoutTemplate className="h-8 w-8 text-primary" /></div>
         <div className="flex flex-wrap gap-1">{visible.slice(0, 6).map(section => <Badge variant="outline" key={section}>{label(section)}</Badge>)}{visible.length > 6 && <Badge variant="outline">+{visible.length - 6}</Badge>}</div>
         <Button className="w-full" onClick={() => openEditor(entry)}>{copy("Edit template", "Şablonu düzenle")}</Button>
-        {entry.pageId && entry.status === "draft" && !dirty && <label className="flex gap-2 text-sm"><input type="checkbox" checked={selected.includes(entry.pageId)} onChange={e => { setApproved(false); setSelected(old => e.target.checked ? [...old, entry.pageId!] : old.filter(id => id !== entry.pageId)); }} />{copy("Include saved draft in review", "Kaydedilmiş taslağı incelemeye dahil et")}</label>}
+        {entry.pageId && entry.status === "draft" && !dirty && <label className="flex gap-2 text-sm"><input type="checkbox" checked={selected.includes(entry.pageId)} onChange={e => { setApproved(false); setSelected(old => e.target.checked ? [...old, entry.pageId!] : old.filter(id => id !== entry.pageId)); }} />{copy("Include saved draft in publication", "Kaydedilmiş taslağı yayına dahil et")}</label>}
       </fieldset>;
     })}</div>
     <Dialog open={!!editingEntry && !!editingLayout} onOpenChange={open => { if (!open) closeEditor(); }}>
@@ -393,13 +393,13 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
       </DialogContent>
     </Dialog>
     {!!selected.length && <div className="space-y-3 rounded-lg border p-4">
-      <h3 className="font-semibold">{copy(`Review ${selected.length} saved templates`, `${selected.length} kaydedilmiş şablonu incele`)}</h3>
-      <p className="text-sm">{copy("This affects every public detail page of the selected types. A different administrator must approve.", "Bu işlem seçilen türlerdeki tüm halka açık detay sayfalarını etkiler. Farklı bir yönetici onaylamalıdır.")}</p>
+      <h3 className="font-semibold">{copy(`Publish ${selected.length} saved templates`, `${selected.length} kaydedilmiş şablonu yayınla`)}</h3>
+      <p className="text-sm">{copy("This affects every public detail page of the selected types. Confirm the exact saved versions before publication.", "Bu işlem seçilen türlerdeki tüm halka açık detay sayfalarını etkiler. Yayınlamadan önce kaydedilmiş sürümleri doğrulayın.")}</p>
       {query.data?.filter(e => e.pageId && selected.includes(e.pageId)).map(e => <p key={e.pageId} className="break-words text-sm">{label(e.layout.kind)}: {e.layout.sections.filter(s => !e.layout.hidden.includes(s)).map(label).join(" → ")}; {copy("hidden", "gizli")}: {e.layout.hidden.map(label).join(", ") || copy("none", "yok")}</p>)}
       <label className="flex gap-2 text-sm"><input type="checkbox" checked={approved} disabled={busy || query.isFetching} onChange={e => setApproved(e.target.checked)} />{copy("I reviewed these exact saved layouts and approve publication.", "Bu kaydedilmiş şablonları inceledim ve yayınlanmalarını onaylıyorum.")}</label>
-      <Button disabled={!approved || busy || query.isFetching} onClick={() => publish.mutate()}>{copy("Publish approved layouts", "Onaylanan şablonları yayınla")}</Button>
+      <Button disabled={!approved || busy || query.isFetching} onClick={() => publish.mutate()}>{copy("Publish selected templates", "Seçilen şablonları yayınla")}</Button>
     </div>}
-    {(save.isError || publish.isError) && <p role="alert" className="text-destructive">{copy("Not completed. Your local edits are preserved. Publication requires a different administrator; changed drafts must be reviewed again. Reload the saved state before retrying an unconfirmed operation.", "İşlem tamamlanamadı. Yerel düzenlemeleriniz korunuyor. Yayın için farklı bir yönetici gerekir; değişen taslaklar yeniden incelenmelidir. Sonucu doğrulanamayan işlemi tekrarlamadan önce kaydedilmiş durumu yenileyin.")}</p>}
+    {(save.isError || publish.isError) && <p role="alert" className="text-destructive">{copy("Not completed. Your local edits are preserved. Reload the saved state before retrying an unconfirmed operation.", "İşlem tamamlanamadı. Yerel düzenlemeleriniz korunuyor. Sonucu doğrulanamayan işlemi tekrarlamadan önce kaydedilmiş durumu yenileyin.")}</p>}
     {save.isSuccess && !busy && <p role="status">{copy("Layout draft saved. It has not been published.", "Şablon taslağı kaydedildi. Yayınlanmadı.")}</p>}
     {publish.isSuccess && <p role="status">{copy("Approved layouts published.", "Onaylanan şablonlar yayınlandı.")}</p>}
     <AlertDialog open={pendingAction !== null} onOpenChange={open => { if (!open) setPendingAction(null); }}>
