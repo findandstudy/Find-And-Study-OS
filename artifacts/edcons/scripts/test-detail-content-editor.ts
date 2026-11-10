@@ -19,6 +19,11 @@ import {
   parseDetailContent,
   type DetailContent,
 } from "../src/lib/website/detailContentContract";
+import {
+  applyTranslatedText,
+  collectAdminDisplayTerms,
+  collectTranslatableText,
+} from "../src/pages/admin/website/adminAiTranslation";
 
 const editor = readFileSync(
   new URL(
@@ -67,6 +72,41 @@ const fixture = (): DetailContent => ({
       ],
     },
   ],
+});
+
+test("AI translation preserves structural identifiers and presentation enums", () => {
+  const source = {
+    version: 1,
+    kind: "destination",
+    entityId: 1,
+    locale: "en",
+    seoMode: "auto",
+    sectionOrder: ["hero", "navigation", "overview"],
+    sections: [{
+      key: "hero",
+      title: "Study in Turkey",
+      reviewedOn: "2026-10-28",
+      presentation: { tone: "dark", width: "wide", spacing: "comfortable", align: "start", minHeight: "tall", backgroundImageFit: "cover" },
+    }],
+  };
+  const texts = collectTranslatableText(source);
+  assert.deepEqual(Object.values(texts), ["Study in Turkey"]);
+  const translated = applyTranslatedText(source, Object.fromEntries(Object.keys(texts).map(key => [key, "Türkiye'de Eğitim"])));
+  assert.equal(translated.kind, "destination");
+  assert.equal(translated.sections[0].key, "hero");
+  assert.equal(translated.sections[0].reviewedOn, "2026-10-28");
+  assert.deepEqual(translated.sections[0].presentation, source.sections[0].presentation);
+  assert.equal(translated.sections[0].title, "Türkiye'de Eğitim");
+});
+
+test("AI display-term collection is bounded to catalogue-owned names", () => {
+  const terms = collectAdminDisplayTerms({
+    destination: { name: "Turkey", description: "Do not send this description" },
+    cities: [{ name: "Istanbul", country: "Turkey" }],
+    universities: [{ name: "Anadolu University", city: "Eskişehir" }],
+    sourceMetadata: { name: { sourceName: "Council of Higher Education", sourceUrl: "https://example.com" } },
+  });
+  assert.deepEqual(terms, ["Turkey", "Istanbul", "Anadolu University", "Eskişehir", "Council of Higher Education"]);
 });
 function render(content: DetailContent) {
   const before = Reflect.get(globalThis, "React");

@@ -4,16 +4,26 @@ export async function translateAdminTextMap(
   texts: Record<string, string>,
   targetLocale: string,
   sourceLocale = "en",
+  mode: "content" | "display_terms" = "content",
 ): Promise<Record<string, string>> {
   const result = await customFetch<{ translations: Record<string, string> }>("/api/website/ai/translate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sourceLocale, targetLocale, texts }),
+    body: JSON.stringify({ sourceLocale, targetLocale, texts, mode }),
   });
   return result.translations;
 }
 
-const NON_TRANSLATABLE_KEYS = new Set(["id", "key", "type", "locale", "slug", "url", "href", "src", "source", "icon", "image", "color", "style", "class", "layout", "position", "width", "size", "column", "columns", "limit", "opacity", "visible", "enabled", "overlay"]);
+// This set contains normalized (lower-case, punctuation-free) field names.
+// Structural identifiers and presentation enums must never be sent to AI.
+const NON_TRANSLATABLE_KEYS = new Set([
+  "id", "key", "type", "kind", "version", "entityid", "locale", "seomode",
+  "sectionorder", "reviewedon", "slug", "url", "href", "src", "source",
+  "icon", "image", "color", "style", "class", "layout", "position", "width",
+  "size", "column", "columns", "limit", "opacity", "visible", "enabled",
+  "overlay", "tone", "spacing", "align", "minheight", "backgroundimagefit",
+  "backgroundimageposition", "backgroundimagerepeat", "overlayopacity",
+]);
 
 function shouldTranslate(key: string, value: string): boolean {
   const normalizedKey = key.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
@@ -72,4 +82,42 @@ export async function translateStructuredDraft<T>(value: T, targetLocale: string
   }
   await flush();
   return applyTranslatedText(value, translations);
+}
+
+const DISPLAY_TERM_FIELDS = new Set([
+  "name", "programname", "universityname", "country", "city", "sourcename",
+]);
+
+/** Collects catalogue-owned entity/source names without sending descriptions or private fields. */
+export function collectAdminDisplayTerms(value: unknown): string[] {
+  const terms = new Set<string>();
+  const visit = (current: unknown, key = "", depth = 0) => {
+    if (depth > 7 || terms.size >= 64) return;
+    if (typeof current === "string") {
+      const normalized = current.trim();
+      if (DISPLAY_TERM_FIELDS.has(key.toLowerCase()) && normalized.length >= 2 && normalized.length <= 240 && !/^https?:\/\//iu.test(normalized)) terms.add(normalized);
+      return;
+    }
+    if (Array.isArray(current)) return current.slice(0, 64).forEach((item) => visit(item, key, depth + 1));
+    if (!current || typeof current !== "object") return;
+    for (const [childKey, child] of Object.entries(current as Record<string, unknown>)) visit(child, childKey, depth + 1);
+  };
+  visit(value);
+  return [...terms].slice(0, 64);
+}
+
+/** Produces a reviewed locale-owned map used by live catalogue cards and labels. */
+export async function translateAdminDisplayTerms(
+  value: unknown,
+  targetLocale: string,
+  sourceLocale = "en",
+): Promise<Record<string, string>> {
+  const terms = collectAdminDisplayTerms(value);
+  if (!terms.length) return {};
+  const keyed = Object.fromEntries(terms.map((term, index) => [`term_${index}`, term]));
+  const translated = await translateAdminTextMap(keyed, targetLocale, sourceLocale, "display_terms");
+  return Object.fromEntries(terms.flatMap((source, index) => {
+    const target = translated[`term_${index}`]?.trim();
+    return target && target.length <= 240 && !/[<>\u0000-\u001f\u007f]/u.test(target) ? [[source, target]] : [];
+  }));
 }

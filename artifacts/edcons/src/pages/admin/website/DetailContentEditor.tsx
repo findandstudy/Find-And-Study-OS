@@ -63,7 +63,7 @@ import { DETAIL_LAYOUT_SECTIONS, DETAIL_TEMPLATE_VARIABLES } from "@/lib/website
 import { cityHeroCopy, detailCopy } from "@/pages/public/detailPresentation";
 import { detailTemplateLabel } from "./detailTemplateLabels";
 import { DetailSectionAppearanceFields } from "./DetailSectionAppearanceFields";
-import { translateStructuredDraft } from "./adminAiTranslation";
+import { translateAdminDisplayTerms, translateStructuredDraft } from "./adminAiTranslation";
 import { AiWritingAssistant } from "./AiWritingAssistant";
 import { applyAiWritingField, collectAiWritingFields, detailAiPageFacts, detailAiWritingContext, type DetailAiPageFacts } from "./adminAiWriting";
 
@@ -1947,8 +1947,16 @@ export default function DetailContentEditor({
       const source = parseDetailContent(sourceEntry.content);
       if (!source || source.kind !== target.kind || source.entityId !== target.entityId || source.locale !== "en") throw new Error(copy("The English source content is unavailable.", "İngilizce kaynak içerik kullanılamıyor."));
       const hydratedSource = hydrateDetailContentForEditor(source, sourceEntry.editorContext ?? null, target.title);
-      const translated = await translateStructuredDraft(hydratedSource, locale, "en");
-      change({ ...translated, locale, templateSections: undefined });
+      const [translated, displayTerms] = await Promise.all([
+        translateStructuredDraft(hydratedSource, locale, "en"),
+        translateAdminDisplayTerms(sourceEntry.editorContext ?? null, locale, "en"),
+      ]);
+      change({
+        ...translated,
+        locale,
+        displayTerms: { ...(translated.displayTerms ?? {}), ...displayTerms },
+        templateSections: undefined,
+      });
       setMessage(copy(
         "AI created a translation draft from English. Review every section and save changes when ready; nothing was published automatically.",
         "AI, İngilizceden bir çeviri taslağı oluşturdu. Her bölümü kontrol edip hazır olduğunuzda değişiklikleri kaydedin; hiçbir şey otomatik yayınlanmadı.",
