@@ -577,15 +577,6 @@ const SSR_UNIVERSITY_TYPE_LABELS: Record<string, Partial<Record<ProgramSupported
   private: { en: "Private", tr: "Özel", ar: "خاصة", fr: "Privée", ru: "Частный", fa: "خصوصی", zh: "私立", hi: "निजी", es: "Privada", id: "Swasta" },
   foundation: { en: "Foundation", tr: "Vakıf" },
 };
-const SSR_TURKISH_NAME_PARTS: Record<string, string> = {
-  istanbul: "İstanbul", izmir: "İzmir", eskisehir: "Eskişehir", duzce: "Düzce", canakkale: "Çanakkale",
-  mugla: "Muğla", sanliurfa: "Şanlıurfa", kirikkale: "Kırıkkale", kahramanmaras: "Kahramanmaraş",
-  diyarbakir: "Diyarbakır", balikesir: "Balıkesir", agri: "Ağrı", nigde: "Niğde", gumushane: "Gümüşhane",
-  isik: "Işık", istinye: "İstinye", uskudar: "Üsküdar", acibadem: "Acıbadem", aydin: "Aydın",
-};
-function ssrTurkishNameSpelling(value: string): string {
-  return value.split(/(\s+|-)/).map(part => SSR_TURKISH_NAME_PARTS[part.toLocaleLowerCase("en-US")] ?? part).join("");
-}
 function ssrCountryName(name: string, countryCode: string | null | undefined, locale: ProgramSupportedLocale): string {
   const fallbackCodes: Record<string, string> = { turkey: "TR", "türkiye": "TR", "united kingdom": "GB", uk: "GB", canada: "CA", latvia: "LV", "united states": "US", usa: "US", "united arab emirates": "AE", uae: "AE" };
   const code = countryCode?.trim().toUpperCase() || fallbackCodes[name.trim().toLocaleLowerCase("en-US")];
@@ -594,14 +585,12 @@ function ssrCountryName(name: string, countryCode: string | null | undefined, lo
   catch { return name; }
 }
 function ssrCityName(name: string, country: string, locale: ProgramSupportedLocale): string {
-  return locale === "tr" && /^(?:turkey|türkiye)$/iu.test(country.trim()) ? ssrTurkishNameSpelling(name) : name;
+  // Localized entity snapshots own public display names. The renderer must not
+  // invent locale-specific spellings that can drift from AI-reviewed content.
+  return name;
 }
 function ssrInstitutionName(name: string, country: string, locale: ProgramSupportedLocale): string {
-  if (locale !== "tr" || !/^(?:turkey|türkiye)$/iu.test(country.trim())) return name;
-  const distance = name.match(/\s*\(Distance Education\)\s*$/iu) ? " (Uzaktan Eğitim)" : "";
-  const base = name.replace(/\s*\(Distance Education\)\s*$/iu, "").trim();
-  const university = /\s+University$/iu.test(base) ? `${base.replace(/\s+University$/iu, "")} Üniversitesi` : base;
-  return `${ssrTurkishNameSpelling(university)}${distance}`;
+  return name;
 }
 function ssrUniversityType(value: string | null | undefined, locale: ProgramSupportedLocale): string | null {
   const key = value?.trim().toLocaleLowerCase("en-US");
@@ -609,24 +598,8 @@ function ssrUniversityType(value: string | null | undefined, locale: ProgramSupp
   return SSR_UNIVERSITY_TYPE_LABELS[key]?.[locale] ?? SSR_UNIVERSITY_TYPE_LABELS[key]?.en ?? value!.trim();
 }
 
-const SSR_TR_PROGRAM_SUBJECTS: Record<string, string> = {
-  "Anesthesia": "Anestezi", "Nursing": "Hemşirelik", "Physiotherapy": "Fizyoterapi", "Physiotherapy and Rehabilitation": "Fizyoterapi ve Rehabilitasyon",
-  "Psychology": "Psikoloji", "Computer Programming": "Bilgisayar Programcılığı", "Business Administration": "İşletme",
-  "Nutrition and Dietetics": "Beslenme ve Diyetetik", "Medical Imaging Techniques": "Tıbbi Görüntüleme Teknikleri", "Oral and Dental Health": "Ağız ve Diş Sağlığı",
-  "Medical Laboratory Techniques": "Tıbbi Laboratuvar Teknikleri", "Computer Engineering": "Bilgisayar Mühendisliği", "Gastronomy and Culinary Arts": "Gastronomi ve Mutfak Sanatları",
-  "Industrial Engineering": "Endüstri Mühendisliği", "Midwifery": "Ebelik", "Child Development": "Çocuk Gelişimi", "Opticianry": "Optisyenlik",
-  "Management Information Systems": "Yönetim Bilişim Sistemleri", "Architecture": "Mimarlık", "Dentistry": "Diş Hekimliği", "Law": "Hukuk", "Medicine": "Tıp",
-  "Software Engineering": "Yazılım Mühendisliği", "Civil Engineering": "İnşaat Mühendisliği", "Economics": "İktisat", "History": "Tarih", "Sociology": "Sosyoloji",
-  "Mechanical Engineering": "Makine Mühendisliği", "International Relations": "Uluslararası İlişkiler", "Pharmacy": "Eczacılık", "Clinical Psychology": "Klinik Psikoloji",
-};
 function ssrProgramName(value: string, locale: ProgramSupportedLocale): string {
-  if (locale !== "tr") return value;
-  const withoutLanguage = value.replace(/\s*\((?:English|Turkish)\)\s*$/iu, "").trim();
-  const match = /^(Associate|Bachelor|Master|PhD|Doctorate) of (.+?)(?: \((?:Thesis|Non-Thesis)\))?$/iu.exec(withoutLanguage);
-  if (!match || !SSR_TR_PROGRAM_SUBJECTS[match[2]]) return value;
-  const levels: Record<string, string> = { associate: "Ön Lisans", bachelor: "Lisans", master: "Yüksek Lisans", phd: "Doktora", doctorate: "Doktora" };
-  const thesis = /\(Thesis\)/iu.test(withoutLanguage) ? " (Tezli)" : /\(Non-Thesis\)/iu.test(withoutLanguage) ? " (Tezsiz)" : "";
-  return `${SSR_TR_PROGRAM_SUBJECTS[match[2]]} ${levels[match[1].toLocaleLowerCase("en-US")]} Programı${thesis} (${withoutLanguage})`;
+  return value;
 }
 function ssrFieldName(value: string | null | undefined, locale: ProgramSupportedLocale): string | null {
   if (!value) return null;
@@ -715,53 +688,7 @@ function detailTemplateVariablesForModel(model: PublicCatalogRenderModel): Recor
 }
 
 function localizeTurkishDetailText(value: string, model: PublicCatalogRenderModel): string {
-  if (model.locale !== "tr" || !value) return value;
-  const replacements = new Map<string, string>([
-    ["Council of Higher Education", "Yükseköğretim Kurulu (YÖK)"],
-    ["Turkish State Meteorological Service", "Meteoroloji Genel Müdürlüğü (MGM)"],
-    ["Ministry of Foreign Affairs", "Dışişleri Bakanlığı"],
-    ["Directorate General of Migration Management", "Göç İdaresi Başkanlığı"],
-    ["Presidency of Migration Management", "Göç İdaresi Başkanlığı"],
-  ]);
-  const addInstitution = (name: string, country: string) => replacements.set(name, ssrInstitutionName(name, country, "tr"));
-  const addProgram = (name: string) => replacements.set(name, ssrProgramName(name, "tr"));
-  if (model.kind === "destination_detail") {
-    replacements.set(model.destination.name, ssrCountryName(model.destination.name, model.destination.countryCode, "tr"));
-    replacements.set(model.destination.country, ssrCountryName(model.destination.country, model.destination.countryCode, "tr"));
-    model.destination.universities.forEach(item => addInstitution(item.name, model.destination.country));
-  } else if (model.kind === "city_detail") {
-    replacements.set(model.city.name, ssrCityName(model.city.name, model.city.country, "tr"));
-    replacements.set(model.city.country, ssrCountryName(model.city.country, null, "tr"));
-    model.city.universities.forEach(item => addInstitution(item.name, model.city.country));
-    model.city.programs.forEach(item => { addInstitution(item.universityName, model.city.country); addProgram(item.name); });
-  } else if (model.kind === "university_detail") {
-    addInstitution(model.university.name, model.university.country);
-    replacements.set(model.university.country, ssrCountryName(model.university.country, null, "tr"));
-    if (model.university.city) replacements.set(model.university.city, ssrCityName(model.university.city, model.university.country, "tr"));
-    model.university.programs.forEach(item => addProgram(item.name));
-  } else if (model.kind === "program_detail") {
-    addProgram(model.program.name);
-    addInstitution(model.program.universityName, model.program.country);
-    replacements.set(model.program.country, ssrCountryName(model.program.country, null, "tr"));
-    if (model.program.city) replacements.set(model.program.city, ssrCityName(model.program.city, model.program.country, "tr"));
-    model.relatedPrograms.forEach(item => addProgram(item.name));
-  }
-  let localized = value;
-  for (const [source, target] of [...replacements].sort(([a], [b]) => b.length - a.length)) {
-    if (source && target && source !== target) localized = localized.replaceAll(source, target);
-  }
-  return localized
-    .replace(/\bTURKEY\b/g, "TÜRKİYE")
-    .replace(/\bTurkey\b/g, "Türkiye")
-    .replace(/\bIstanbul\b/g, "İstanbul")
-    .replace(/\bIzmir\b/g, "İzmir")
-    .replace(/\bEskisehir\b/g, "Eskişehir")
-    .replace(/\bDuzce\b/g, "Düzce")
-    .replace(/\bPrograms\b/g, "Programlar")
-    .replace(/\bProgram\b/g, "Program")
-    .replace(/\bUniversities\b/g, "Üniversiteler")
-    .replace(/\bUniversity\b/g, "Üniversite")
-    .replace(/\bprivate\b/giu, "özel");
+  return value;
 }
 
 function localizeDetailContent(content: DetailContent, model: PublicCatalogRenderModel): DetailContent {

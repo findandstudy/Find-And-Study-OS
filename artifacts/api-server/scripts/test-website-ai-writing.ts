@@ -54,6 +54,61 @@ test("field-aware AI writing rejects unsupported variables and unverified URLs",
   } finally { restore(); }
 });
 
+test("catalogue display terms are localized by AI without a language-specific hard-coded glossary", async () => {
+  let capturedPrompt = "";
+  const restore = mockOpenAi(prompt => {
+    capturedPrompt = prompt;
+    return JSON.stringify({
+      term_0: "Acıbadem Mehmet Ali Aydınlar Üniversitesi",
+      term_1: "Türkiye Cumhuriyeti Dışişleri Bakanlığı",
+      term_2: "Türkiye",
+    });
+  });
+  try {
+    const service = new AiContentService({ provider: "openai", apiKey: "test" });
+    const result = await service.translateTextMap({
+      sourceLocale: "en",
+      targetLocale: "tr",
+      mode: "display_terms",
+      texts: {
+        term_0: "Acıbadem Mehmet Ali Aydınlar University",
+        term_1: "Republic of Türkiye Ministry of Foreign Affairs",
+        term_2: "Turkey",
+      },
+    });
+    assert.equal(result.term_0, "Acıbadem Mehmet Ali Aydınlar Üniversitesi");
+    assert.equal(result.term_1, "Türkiye Cumhuriyeti Dışişleri Bakanlığı");
+    assert.match(capturedPrompt, /public catalogue display terms/i);
+    assert.match(capturedPrompt, /translate generic institutional suffixes/i);
+    assert.doesNotMatch(capturedPrompt, /TARGET_GLOSSARY|University=Üniversite/);
+  } finally { restore(); }
+});
+
+test("AI-derived display terms are applied consistently throughout translated page copy", async () => {
+  let translatedInput = "";
+  const restore = mockOpenAi(prompt => {
+    translatedInput = prompt;
+    const serialized = prompt.split("INPUT_JSON=")[1].split("\nEditorial guidance")[0];
+    const input = JSON.parse(serialized) as Record<string, string>;
+    return JSON.stringify(Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value.replace("offers study options in", "eğitim seçenekleri sunar:")])));
+  });
+  try {
+    const service = new AiContentService({ provider: "openai", apiKey: "test" });
+    const result = await service.translateTextMap({
+      sourceLocale: "en",
+      targetLocale: "tr",
+      texts: { body: "Acıbadem Mehmet Ali Aydınlar University offers study options in Turkey." },
+      preferredTerms: {
+        "Acıbadem Mehmet Ali Aydınlar University": "Acıbadem Mehmet Ali Aydınlar Üniversitesi",
+        Turkey: "Türkiye",
+      },
+    });
+    assert.equal(result.body, "Acıbadem Mehmet Ali Aydınlar Üniversitesi eğitim seçenekleri sunar: Türkiye.");
+    assert.match(translatedInput, /__FAS_PROTECTED_/);
+    assert.doesNotMatch(translatedInput, /Acıbadem Mehmet Ali Aydınlar University/);
+  } finally { restore(); }
+});
+
 test("city key facts generation asks for decision-useful copy without repeating live counters", async () => {
   let capturedPrompt = "";
   const body = "Ankara combines a continental climate with a multi-mode public transport network. Students should compare the exact teaching site, the daily route and suitable housing together before deciding where to live.";
