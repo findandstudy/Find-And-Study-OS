@@ -3,7 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
-import { parseDetailContent, resolveDetailTemplateContent, DETAIL_CONTENT_KEYS, DETAIL_CONTENT_LAYOUT_KEYS, DETAIL_CONTENT_LOCALES, DETAIL_GENERATED_CONTENT_KEYS, type DetailContent } from "../src/lib/website/detailContentContract";
+import { parseDetailContent, resolveDetailTemplateContent, DETAIL_CONTENT_KEYS, DETAIL_CONTENT_KINDS, DETAIL_CONTENT_LAYOUT_KEYS, DETAIL_CONTENT_LOCALES, DETAIL_GENERATED_CONTENT_KEYS, type DetailContent } from "../src/lib/website/detailContentContract";
 import { defaultDetailLayout } from "../src/lib/website/detailLayoutContract";
 import { resolveCmsValue } from "../src/lib/website/cmsTextVariables";
 import { DetailHeroMedia, boundDetailContent, detailContentAddon, detailContentIntro, detailContentLabels, detailContentNavigation, detailContentSections, detailContentSummary, detailContentTitle, detailSectionKicker, isDetailEditorInstruction } from "../src/pages/public/DetailContentSections";
@@ -83,6 +83,22 @@ test("all supported content keys are orderable and hideable in the existing layo
   for (const key of ["requirements", "living", "climate", "transport", "housing", "visa"]) assert.ok(DETAIL_CONTENT_KEYS.city.includes(key), `city:${key}`);
   for (const key of ["requirements", "living", "climate", "housing", "services", "studentStory"]) assert.ok(DETAIL_CONTENT_KEYS.program.includes(key), `program:${key}`);
   for (const key of ["admission", "intakeGuide", "support", "campus", "housing", "reviews"]) assert.ok(DETAIL_CONTENT_KEYS.university.includes(key), `university:${key}`);
+});
+
+test("persisted page orders keep the language service beside teaching-language facts", () => {
+  for (const kind of DETAIL_CONTENT_KINDS) {
+    const legacyOrder = [...DETAIL_CONTENT_LAYOUT_KEYS[kind]];
+    legacyOrder.splice(legacyOrder.indexOf("languageCourses"), 1);
+    const oldAnchor = legacyOrder.includes("editorial-education") ? "editorial-education" : "editorial-highlights";
+    legacyOrder.splice(legacyOrder.indexOf(oldAnchor) + 1, 0, "languageCourses");
+    const parsed = parseDetailContent({
+      ...fixture,
+      kind,
+      sectionOrder: legacyOrder,
+    });
+    assert.ok(parsed);
+    assert.equal(parsed.sectionOrder?.indexOf("languageCourses"), parsed.sectionOrder?.indexOf("overview") + 1);
+  }
 });
 
 test("a validated page-level order overrides the shared layout in preview and public rendering", () => {

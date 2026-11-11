@@ -252,6 +252,13 @@ export function parseDetailContent(value: unknown, today = new Date().toISOStrin
       const next = expected.slice(index + 1).find(candidate => normalizedSectionOrder!.includes(candidate));
       if (next) normalizedSectionOrder.splice(normalizedSectionOrder.indexOf(next), 0, key); else normalizedSectionOrder.push(key);
     }
+    // Language learning is a shared service attached to the teaching-language
+    // facts in Overview, not an AI-authored editorial chapter. Older generated
+    // pages placed it after Education. Normalize those persisted orders at read
+    // time so existing and future pages share one discoverable position without
+    // rewriting their stored editorial content.
+    normalizedSectionOrder = normalizedSectionOrder.filter(key => key !== "languageCourses");
+    normalizedSectionOrder.splice(normalizedSectionOrder.indexOf("overview") + 1, 0, "languageCourses");
   }
   for (const s of value.sections) {
     if (!record(s) || !keys(s,["key","title","body","hero","presentation","cards","table","steps","images","questions","sources","reviewedOn"],["key","title","sources","reviewedOn"])
