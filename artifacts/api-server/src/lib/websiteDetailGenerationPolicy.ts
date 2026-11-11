@@ -115,6 +115,11 @@ function sourceFields(facts: Record<string, unknown>): Set<string> {
     const field = record(item)?.field;
     if (typeof field === "string" && field.trim()) fields.add(field.trim());
   }
+  const topics = Array.isArray(facts.sourceTopics) ? facts.sourceTopics : [];
+  for (const item of topics) {
+    const topicTitle = record(item)?.topicTitle;
+    if (typeof topicTitle === "string" && topicTitle.trim()) fields.add(topicTitle.trim());
+  }
   return fields;
 }
 
@@ -262,6 +267,7 @@ export function buildDetailGenerationPlan(input: {
       "Use deterministic catalogue facts as facts; use AI only to explain their significance.",
       "University and programme names, levels, languages, durations, fees and availability may come only from the system catalogue fields in VERIFIED_FACTS.",
       "External-source metadata may support general context, official guidance, climate, transport, housing or institutional background, but it must never introduce a university, programme or academic offering absent from the system catalogue inventory.",
+      "Use sourceTopics as verified editorial evidence. Match each row to a section by its Topic title; the title is a routing key, not public copy and not a heading that must be repeated.",
       "Do not use model memory or general world knowledge to add named universities or programmes. Use only CATALOG_ENTITIES supplied by the planner.",
       "Write an entity-specific, source-bound value proposition in the hero; do not reduce it to a neutral inventory summary.",
       "Use intent-led editorial headings that reveal the section's value; avoid one-word labels such as Overview or Highlights for generated editorial sections.",

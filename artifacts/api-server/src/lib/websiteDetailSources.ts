@@ -44,6 +44,8 @@ const SECTION_SOURCE_FIELDS: Record<string, readonly string[]> = {
   mobileActions: ["cta", "applyGuide"],
 };
 
+const DOCUMENT_SOURCE_FIELDS = new Set(["countryGuide"]);
+
 const record = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
@@ -93,7 +95,9 @@ export function detailSectionSources(
   const selected = preferred.flatMap(field => byField.get(field) ?? []).filter((source, index, all) =>
     all.findIndex(candidate => candidate.sourceUrl === source.sourceUrl) === index,
   ).slice(0, 8);
-  const resolved = selected.length ? selected : sources.filter(source => ["description", "website", "name"].includes(source.field)).slice(0, 1);
+  const resolved = selected.length
+    ? selected
+    : sources.filter(source => ["description", "website", "name"].includes(source.field) || DOCUMENT_SOURCE_FIELDS.has(source.field)).slice(0, 1);
   if (resolved.length) return resolved.map(source => ({ label: source.sourceName!, url: source.sourceUrl! }));
   return fallback ? [fallback] : [];
 }

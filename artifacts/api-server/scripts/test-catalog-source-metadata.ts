@@ -10,6 +10,18 @@ test("normalizes field sources and rejects unsafe evidence", () => {
   assert.throws(() => normalizeCatalogSourceMetadata("country", { tuitionFee: { sourceName: "x" } }), /Unsupported source field/);
 });
 
+test("accepts one country briefing sheet as a first-class source", () => {
+  const result = normalizeCatalogSourceMetadata("country", {
+    countryGuide: {
+      sourceName: "Find & Study verified country briefing",
+      sourceUrl: "https://docs.google.com/spreadsheets/d/18mRq1weX4s-j5oatC4WwB8U5UwIlTLbDevv_jV5EG_0/edit",
+      verifiedAt: "2026-11-11",
+    },
+  });
+  assert.equal(result.countryGuide.sourceName, "Find & Study verified country briefing");
+  assert.match(result.countryGuide.sourceUrl!, /docs\.google\.com\/spreadsheets/);
+});
+
 test("round-trips readable import columns", () => {
   const result = normalizeCatalogSourceMetadataFromRow("city", {
     "Source · Climate [climate] · Source / institution": "Meteorological authority",

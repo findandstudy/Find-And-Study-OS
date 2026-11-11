@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "verifiedAt": "2026-11-11",
+  "sourceName": "Find & Study verified country briefing",
+  "columnContract": {
+    "topic": "Topic title",
+    "content": "Verified content"
+  },
+  "countries": [
+    { "code": "AZ", "catalogName": "Azerbaijan", "sourceUrl": "https://docs.google.com/spreadsheets/d/1_foHHaLiNas4WxiytxZyzpO-rKSgF59Jxgk9gK4tOaY/edit?usp=drivesdk" },
+    { "code": "BY", "catalogName": "Belarus", "sourceUrl": "https://docs.google.com/spreadsheets/d/1t2Ur33GKA8frfplze08cMgPiplEoJkQyIM-GAY64MJo/edit?usp=drivesdk" },
+    { "code": "CA", "catalogName": "Canada", "sourceUrl": "https://docs.google.com/spreadsheets/d/1ZPfFqvE-ZHReSvjMw-RGgKE56_xmUxCrA3iJzxO8soU/edit?usp=drivesdk" },
+    { "code": "CN", "catalogName": "China", "sourceUrl": "https://docs.google.com/spreadsheets/d/1o8FsdmR4xycP_BNnOMvs8Fha-2bJ5w0_OgucHBBZB0c/edit?usp=drivesdk" },
+    { "code": "CZ", "catalogName": "Czech Republic", "sourceUrl": "https://docs.google.com/spreadsheets/d/1cg-Erx78EYj8iFj4YRzWWlIIba2PvixuT74Y_RFJ1Vw/edit?usp=drivesdk" },
+    { "code": "EE", "catalogName": "Estonia", "sourceUrl": "https://docs.google.com/spreadsheets/d/1S5qX8hhRubvMpsWBNsCpm_6ad16JN10a38a0ud6qVjQ/edit?usp=drivesdk" },
+    { "code": "DE", "catalogName": "Germany", "sourceUrl": "https://docs.google.com/spreadsheets/d/1Xv9CXdM6LVfQtCekR8q4OwnpDSL3_IGBrO0lMLS6gck/edit?usp=drivesdk" },
+    { "code": "IT", "catalogName": "Italy", "sourceUrl": "https://docs.google.com/spreadsheets/d/1IPZiX6pc2LSIenN3PMENEyaSMumiAeJ-swHYyDSQkuA/edit?usp=drivesdk" },
+    { "code": "LV", "catalogName": "Latvia", "sourceUrl": "https://docs.google.com/spreadsheets/d/1qSDXONLta5vcfUH0vTtDx7imiM5cZVjEXRpLrLdPTMU/edit?usp=drivesdk" },
+    { "code": "LT", "catalogName": "Lithuania", "sourceUrl": "https://docs.google.com/spreadsheets/d/155Y_-Qo7tDhlm5Nv1n91ZNaPVjFOyO6tQARv9SDziRo/edit?usp=drivesdk" },
+    { "code": "MT", "catalogName": "Malta", "sourceUrl": "https://docs.google.com/spreadsheets/d/1CB7aEkmLmzG9kasGriYHv8_rsWKfa3A_d-x11-Lem4c/edit?usp=drivesdk" },
+    { "code": "PL", "catalogName": "Poland", "sourceUrl": "https://docs.google.com/spreadsheets/d/1in7Gcc2a_htPbo03hFQakBeod9ZcfIWp0KRudLlIJto/edit?usp=drivesdk" },
+    { "code": "ES", "catalogName": "Spain", "sourceUrl": "https://docs.google.com/spreadsheets/d/198BkEEHUjwTMezeIUZz_bnj5WZ-vYYlIQyoy1llmCZY/edit?usp=drivesdk" },
+    { "code": "TR", "catalogName": "Turkey", "sourceUrl": "https://docs.google.com/spreadsheets/d/18mRq1weX4s-j5oatC4WwB8U5UwIlTLbDevv_jV5EG_0/edit?usp=drivesdk" },
+    { "code": "US", "catalogName": "United States", "sourceUrl": "https://docs.google.com/spreadsheets/d/1266C-2nVaJImw4QuIlUpdq85ETDfj5sTTDKp2Yx2ASI/edit?usp=drivesdk" },
+    { "code": "GB", "catalogName": "United Kingdom", "sourceUrl": "https://docs.google.com/spreadsheets/d/1K9iLIYnkDKMKzke_AMmNBptuPdi432o2T_GcMLm2vtM/edit?usp=drivesdk" }
+  ]
+}

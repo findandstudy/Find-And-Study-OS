@@ -32,3 +32,10 @@ test("section review date follows its linked source verification date", () => {
   assert.equal(detailSectionReviewedOn("climate", sources, "2026-10-28"), "2026-10-01");
   assert.equal(detailSectionReviewedOn("housing", sources, "2026-10-28"), "2026-10-28");
 });
+
+test("country briefing sheet is the section fallback when no narrower source exists", () => {
+  const sources = detailGenerationSources("destination", {
+    destination: { sourceMetadata: { countryGuide: { sourceName: "Verified country briefing", sourceUrl: "https://docs.google.com/spreadsheets/d/18mRq1weX4s-j5oatC4WwB8U5UwIlTLbDevv_jV5EG_0/edit" } } },
+  });
+  assert.deepEqual(detailSectionSources("visa", sources), [{ label: "Verified country briefing", url: "https://docs.google.com/spreadsheets/d/18mRq1weX4s-j5oatC4WwB8U5UwIlTLbDevv_jV5EG_0/edit" }]);
+});

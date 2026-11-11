@@ -209,6 +209,7 @@ type SourceFieldOption = readonly [key: string, label: string, group: string];
 
 const SOURCE_FIELDS = {
   country: [
+    ["countryGuide", "Country source sheet", "Verified briefing"],
     ["name", "Country name", "Identity"], ["code", "ISO code", "Identity"], ["flagEmoji", "Flag", "Identity"], ["dialCode", "Dial code", "Identity"],
     ["shortDescription", "Short description", "Overview"], ["description", "Full description", "Overview"], ["languages", "Languages", "Key facts"], ["currency", "Currency", "Key facts"],
     ["climate", "Climate and weather", "Living & planning"], ["livingCost", "Living costs", "Living & planning"], ["visaInfo", "Visa information", "Living & planning"], ["workPermit", "Work rights", "Living & planning"],
@@ -290,6 +291,7 @@ function SourceMetadataEditor({ value, fields, onChange }: { value?: CatalogSour
       <summary className="cursor-pointer font-medium text-sm">External sources & verification <span className="text-muted-foreground font-normal">({Object.keys(metadata).length} added · {fields.length} available)</span></summary>
       <p className="mt-2 text-xs text-muted-foreground">Add the official source used for identity fields, factual data and editorial sections on the public detail page. This verification information stays in the admin catalogue and is not displayed publicly.</p>
       <p className="mt-1 text-[11px] text-muted-foreground">Live counts and catalogue lists are calculated by the system from linked records, so they do not require a manual source.</p>
+      {fields.some(([key]) => key === "countryGuide") && <p className="mt-1 text-[11px] text-muted-foreground"><strong>Country source sheet:</strong> use one Google Sheet per country with the exact columns <code>Topic title</code> and <code>Verified content</code>. Allow link viewing or share the file with the Google Sheets service account configured in Integrations. Topic titles route verified rows to the relevant AI section; they are guidance keys, not public headings or hardcoded copy.</p>}
       <div className="mt-3 flex gap-2">
         <Select value={selectedField} onValueChange={setSelectedField}>
           <SelectTrigger className="flex-1"><SelectValue placeholder="Choose a field" /></SelectTrigger>

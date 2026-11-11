@@ -22,6 +22,7 @@ import { readPublishedDetailLayout } from "./websiteDetailLayouts";
 import { detailTemplateSectionsForLocale } from "./websiteDetailLayoutContract";
 import { translateStructuredDetailContent } from "./websiteDetailTranslation";
 import { detailGenerationSources, detailSectionReviewedOn, detailSectionSources } from "./websiteDetailSources";
+import { hydrateDetailSourceDocuments } from "./websiteDetailSourceDocuments";
 import {
   buildDetailGenerationPlan,
   evaluateDetailContentQuality,
@@ -91,6 +92,12 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
       })
     : [];
   const officialSources = detailGenerationSources(kind, payload);
+  const sourceTopics = Array.isArray(entity.sourceTopics) ? entity.sourceTopics.slice(0, 96).flatMap(item => {
+    const topic = record(item);
+    const topicTitle = text(topic?.topicTitle);
+    const verifiedContent = text(topic?.verifiedContent);
+    return topicTitle && verifiedContent ? [{ topicTitle, verifiedContent }] : [];
+  }) : [];
   if (kind === "city") {
     const external = record(entity.externalFacts) ?? {};
     return {
@@ -101,7 +108,7 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
       housingSummary: external.housingSummary, housingFormats: external.housingFormats,
       universities: compactRecords(entity.universities, ["name", "type"]),
       programs: compactRecords(entity.programs, ["name", "degree", "field", "language", "university"]),
-      officialSources,
+      officialSources, sourceTopics,
     };
   }
   if (kind === "destination") return {
@@ -110,7 +117,7 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
     cities: compactRecords(root.cities, ["name"]),
     universities: compactRecords(root.universities, ["name", "city", "type"]),
     programs: compactRecords(root.programs, ["name", "degree", "field", "language", "university"]),
-    officialSources,
+    officialSources, sourceTopics,
   };
   if (kind === "university") return {
     university: text(entity.name), country: text(entity.country), city: text(entity.city), description: text(entity.description),
@@ -118,7 +125,7 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
     timesRanking: entity.timesRanking, shanghaiRanking: entity.shanghaiRanking, leidenRanking: entity.cwtsLeidenRanking,
     programCount: positiveCount(record(root.meta)?.programCount),
     programs: compactRecords(root.programs, ["name", "degree", "field", "language", "duration"]),
-    officialSources,
+    officialSources, sourceTopics,
   };
   return {
     // The editor projection exposes the catalogue programme title as `name`.
@@ -129,7 +136,7 @@ function verifiedGenerationFacts(kind: DetailContentKind, payload: unknown) {
     discountedFee: entity.discountedFee, currency: text(entity.currency), scholarship: entity.scholarship,
     intakes: entity.intakesText, requirements: entity.requirements, quota: entity.quota,
     university: text(entity.universityName), city: text(entity.universityCity), country: text(entity.universityCountry),
-    officialSources,
+    officialSources, sourceTopics,
   };
 }
 
@@ -398,8 +405,9 @@ export async function regenerateDetailContentDraft(params: {
 }): Promise<DetailRegenerationResult> {
   const { kind, entityId, locale, actorId, ai, mode = "fill_missing" } = params;
   try {
-    const payload = await readDetailContentEditorContext(kind, entityId, locale);
-    if (!payload) return { entityId, locale, status: "failed", error: "SOURCE_NOT_FOUND" };
+    const rawPayload = await readDetailContentEditorContext(kind, entityId, locale);
+    if (!rawPayload) return { entityId, locale, status: "failed", error: "SOURCE_NOT_FOUND" };
+    const payload = await hydrateDetailSourceDocuments(kind, rawPayload);
     const [target, english, layout] = await Promise.all([
       readDetailContentDraft(kind, entityId, locale),
       locale === "en" ? Promise.resolve(null) : readDetailContentDraft(kind, entityId, "en"),
