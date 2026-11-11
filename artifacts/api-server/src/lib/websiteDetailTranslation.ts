@@ -72,16 +72,38 @@ export async function translateStructuredDetailContent(
   const translations: Record<string, string> = {};
   let chunk: Record<string, string> = {};
   let chars = 0;
+  const translateBatch = async (texts: Record<string, string>): Promise<Record<string, string>> => {
+    try {
+      return await ai.translateTextMap({
+        sourceLocale: "en",
+        targetLocale: locale,
+        texts,
+        protectedTerms: options.protectedTerms,
+        preferredTerms: options.preferredTerms,
+        editorialGuidance: options.editorialGuidance,
+      });
+    } catch (error) {
+      const entries = Object.entries(texts);
+      const canSplit = error instanceof Error
+        && error.message === "AI translation changed the field set"
+        && entries.length > 1;
+      if (!canSplit) throw error;
+
+      // Large structured pages can occasionally make a provider omit or add a
+      // JSON key even though the copy itself is valid. Preserve the strict
+      // field-set contract and retry smaller deterministic batches instead of
+      // accepting partial output or falling back to stale source-language copy.
+      const middle = Math.ceil(entries.length / 2);
+      const [left, right] = await Promise.all([
+        translateBatch(Object.fromEntries(entries.slice(0, middle))),
+        translateBatch(Object.fromEntries(entries.slice(middle))),
+      ]);
+      return { ...left, ...right };
+    }
+  };
   const flush = async () => {
     if (!Object.keys(chunk).length) return;
-    Object.assign(translations, await ai.translateTextMap({
-      sourceLocale: "en",
-      targetLocale: locale,
-      texts: chunk,
-      protectedTerms: options.protectedTerms,
-      preferredTerms: options.preferredTerms,
-      editorialGuidance: options.editorialGuidance,
-    }));
+    Object.assign(translations, await translateBatch(chunk));
     chunk = {};
     chars = 0;
   };
