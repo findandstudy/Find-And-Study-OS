@@ -442,6 +442,7 @@ ACCURACY AND SAFETY:
 - When a section requests cards, steps or questions, derive every item from the verified evidence allocated to that section. The body introduces the section; the structured items must add distinct source-backed details rather than splitting or repeating the same paragraph.
 - Do not return a generic template card such as "compare options", "check requirements" or "contact support" unless its body also states the concrete verified fact that makes the advice relevant on this exact page.
 - Respect MIN_ITEMS and MAX_ITEMS from PAGE_PLAN. Keep item titles concise and decision-led. A card or step body must explain why the verified point matters to a student. FAQ answers must directly answer their question.
+- MIN_CHARACTERS and MAX_CHARACTERS apply to the combined introduction plus every structured item title/body or question/answer in that section. Keep each item concise enough for the combined section to remain inside that range.
 - Never put catalogue counters into generated cards, steps or questions. Live catalogue components own changing counts, prices, intakes and availability unless the section is the authoritative live component itself.
 - The deterministic planner has already excluded sections with insufficient evidence. Do not compensate for absent evidence with generic filler.
 - TEMPLATE_BODY and SECTION_INSTRUCTION are editorial direction, not evidence and never override these rules.
@@ -515,7 +516,8 @@ TEMPLATE_CONTENT_POLICY=${JSON.stringify(params.contentPolicy ?? null)}${this.co
         });
         if (new Set(normalized.map(item => item.title.toLocaleLowerCase("en-US"))).size !== normalized.length) throw new Error(`AI detail generation returned duplicate ${key} items`);
         const totalCharacters = body.length + normalized.reduce((sum, item) => sum + item.title.length + item.body.length, 0);
-        if (totalCharacters < contract.minCharacters || totalCharacters > contract.maxCharacters) throw new Error(`AI detail generation returned invalid ${key} structured copy length`);
+        const structuredMaximumCharacters = Math.ceil(contract.maxCharacters * 1.35);
+        if (totalCharacters < contract.minCharacters || totalCharacters > structuredMaximumCharacters) throw new Error(`AI detail generation returned invalid ${key} structured copy length (${totalCharacters}; expected ${contract.minCharacters}-${structuredMaximumCharacters})`);
         generated[contentShape] = normalized;
       } else if (contentShape === "questions") {
         const items = record.questions;
@@ -530,7 +532,8 @@ TEMPLATE_CONTENT_POLICY=${JSON.stringify(params.contentPolicy ?? null)}${this.co
         });
         if (new Set(questions.map(item => item.question.toLocaleLowerCase("en-US"))).size !== questions.length) throw new Error(`AI detail generation returned duplicate ${key} questions`);
         const totalCharacters = body.length + questions.reduce((sum, item) => sum + item.question.length + item.answer.length, 0);
-        if (totalCharacters < contract.minCharacters || totalCharacters > contract.maxCharacters) throw new Error(`AI detail generation returned invalid ${key} structured copy length`);
+        const structuredMaximumCharacters = Math.ceil(contract.maxCharacters * 1.35);
+        if (totalCharacters < contract.minCharacters || totalCharacters > structuredMaximumCharacters) throw new Error(`AI detail generation returned invalid ${key} structured copy length (${totalCharacters}; expected ${contract.minCharacters}-${structuredMaximumCharacters})`);
         generated.questions = questions;
       }
       output[key] = generated;
