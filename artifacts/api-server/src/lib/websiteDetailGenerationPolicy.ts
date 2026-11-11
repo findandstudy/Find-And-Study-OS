@@ -327,6 +327,19 @@ export function buildDetailGenerationPlan(input: {
 const normalizedEntity = (value: string) => value.toLocaleLowerCase("en-US").normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 const INSTITUTION_MENTION = /\b(?:[\p{Lu}][\p{L}\p{M}'’.-]*[ \t]+){1,8}(?:University|College|Institute|Academy)\b/gu;
 const PROGRAM_MENTION = /\b(?:Associate|Bachelor|Master|Doctorate)\s+of\s+[\p{Lu}][\p{L}\p{M}'’.-]*(?:\s+(?:(?:and|of|in|for|the)\s+)?[\p{Lu}][\p{L}\p{M}'’.-]*){0,7}/gu;
+const GENERIC_INSTITUTION_PREFIXES = new Set([
+  "a", "an", "the", "your", "chosen", "target", "host", "receiving", "prospective",
+  "public", "private", "foundation", "partner", "selected", "preferred", "individual",
+  "turkish", "national", "local", "international", "accredited", "recognized", "recognised",
+  "degree awarding", "degree-awarding", "higher education",
+]);
+
+function isGenericInstitutionReference(value: string) {
+  const normalized = normalizedEntity(value)
+    .replace(/\s+(?:university|college|institute|academy)$/u, "")
+    .trim();
+  return GENERIC_INSTITUTION_PREFIXES.has(normalized);
+}
 
 function unsupportedCatalogEntityMentions(text: string, plan: DetailGenerationPlan) {
   const allowedUniversities = plan.catalogEntities.universities.map(normalizedEntity);
@@ -337,6 +350,11 @@ function unsupportedCatalogEntityMentions(text: string, plan: DetailGenerationPl
   };
   const universities = [...text.matchAll(new RegExp(INSTITUTION_MENTION.source, INSTITUTION_MENTION.flags))]
     .map(match => match[0].trim())
+    // Sentence-initial guidance such as "Your University" or "Public
+    // University" is a category, not a named catalogue entity. Keep the
+    // fail-closed check for real proper names while avoiding false blockers
+    // caused by these generic student-planning phrases.
+    .filter(value => !isGenericInstitutionReference(value))
     .filter(value => !supported(value, allowedUniversities));
   const programs = [...text.matchAll(new RegExp(PROGRAM_MENTION.source, PROGRAM_MENTION.flags))]
     .map(match => match[0].trim())

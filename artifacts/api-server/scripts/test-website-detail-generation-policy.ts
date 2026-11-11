@@ -257,6 +257,17 @@ test("quality gate blocks named universities and programmes outside the system c
     plan,
   });
   assert.equal(allowed.issues.some(issue => issue.code === "OUT_OF_CATALOG_NAMED_ENTITY"), false);
+  const genericReferences = evaluateDetailContentQuality({
+    content: {
+      ...base,
+      sections: [{
+        ...base.sections[0]!,
+        body: "Your University may request intake-specific evidence. Compare a Public University and a Foundation University by verified admission rules rather than treating those categories as institution names.",
+      }],
+    },
+    plan,
+  });
+  assert.equal(genericReferences.issues.some(issue => issue.code === "OUT_OF_CATALOG_NAMED_ENTITY"), false);
 });
 
 test("quality gate blocks internal wording and highly repeated section copy", () => {
