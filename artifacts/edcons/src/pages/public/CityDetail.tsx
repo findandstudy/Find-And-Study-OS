@@ -18,6 +18,7 @@ import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { CityWeatherCard, type CityWeatherSnapshot } from "./CityWeatherCard";
 import { localizedWeatherDescription, weatherCopy } from "./weatherPresentation";
 import { usePublicDetailPayload } from "./publicDetailQuery";
+import { languageCourseNavigationLabel } from "./LanguageCourseBanner";
 import { DetailPageSkeleton } from "@/components/public/PublicAsyncFeedback";
 
 type CityPayload = {
@@ -201,7 +202,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
         </div>
       </section>
       <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", city.name)}><div className="detail-wrap">
-        {(overviewDescription || hasEditorialOverview) && <a href="#overview">{copy.overview}</a>}<a href="#facts">{t("countryDetail.quickFacts")}</a>
+        {(overviewDescription || hasEditorialOverview) && <a href="#overview">{copy.overview}</a>}<a href="#language-courses">{languageCourseNavigationLabel(lang)}</a><a href="#facts">{t("countryDetail.quickFacts")}</a>
         {city.weather && <a href="#weather">{lang === "tr" ? "Hava" : "Weather"}</a>}
         {city.universities.length > 0 && <a href="#universities">{t("countryDetail.universities")}</a>}
         {city.programCount > 0 && <a href="#programs">{t("countryDetail.programs")}</a>}

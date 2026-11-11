@@ -48,6 +48,11 @@ const courses = [
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
+/** Keeps the chapter-navigation label in sync with the banner locale copy. */
+export function languageCourseNavigationLabel(locale: string) {
+  return (copyByLocale[locale] ?? copyByLocale.en).eyebrow;
+}
+
 /** Shared service banner for every public destination, city, university and programme detail page. */
 export function LanguageCourseBanner({ className = "", ...sectionProps }: HTMLAttributes<HTMLElement>) {
   const { lang } = useI18n();

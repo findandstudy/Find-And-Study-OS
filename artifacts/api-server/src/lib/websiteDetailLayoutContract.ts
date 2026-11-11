@@ -77,7 +77,7 @@ export const DETAIL_TEMPLATE_VARIABLES: Record<DetailLayoutKind, readonly Detail
     variable("stats.intakeCount", "Intake count", "Live counts"), variable("stats.relatedProgramCount", "Related program count", "Live counts"),
   ],
 };
-export type DetailLayout = { version: 6; kind: DetailLayoutKind; sections: string[]; hidden: string[]; presentation: Record<string, DetailSectionPresentation>; copy: Record<string, Record<string, DetailSectionCopy>>; generation: Record<string, DetailSectionGeneration>; contentPolicy: DetailTemplateContentPolicy };
+export type DetailLayout = { version: 7; kind: DetailLayoutKind; sections: string[]; hidden: string[]; presentation: Record<string, DetailSectionPresentation>; copy: Record<string, Record<string, DetailSectionCopy>>; generation: Record<string, DetailSectionGeneration>; contentPolicy: DetailTemplateContentPolicy };
 const LEGACY_SECTIONS: Record<DetailLayoutKind, readonly string[]> = {
   program: ["hero", "navigation", "overview", "related"],
   university: ["hero", "navigation", "overview", "programs"],
@@ -94,12 +94,12 @@ const editorial = (...keys: string[]) => keys.map(key => `editorial-${key}`);
 export const DETAIL_LAYOUT_SECTIONS: Record<DetailLayoutKind, readonly string[]> = {
   // Order mirrors programv2-revised.html: experience, learning, admission,
   // destination/living, housing, services, apply, alternatives and FAQ.
-  program: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "curriculum"), "languageCourses", "requirements", ...editorial("admission"), "fees", "intakes", ...editorial("scholarships", "living", "campus", "climate", "housing", "services", "applyGuide", "studentStory", "recognition"), "related", ...editorial("faq"), "mobileActions"],
+  program: ["hero", "navigation", "overview", "languageCourses", ...editorial("gallery", "highlights", "curriculum"), "requirements", ...editorial("admission"), "fees", "intakes", ...editorial("scholarships", "living", "campus", "climate", "housing", "services", "applyGuide", "studentStory", "recognition"), "related", ...editorial("faq"), "mobileActions"],
   // Order mirrors university-revised.html: overview, programmes, admission,
   // fees/intakes content, support/campus, recognition, reviews and FAQ.
-  university: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "cautions"), "programs", ...editorial("admission", "scholarships", "intakeGuide"), "facts", "weather", ...editorial("education"), "languageCourses", ...editorial("support", "services", "campus", "housing", "recognition", "living", "reviews", "faq", "applyGuide"), "mobileActions"],
-  destination: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "cautions", "education"), "languageCourses", "facts", ...editorial("admission", "requirements", "scholarships", "living", "climate", "housing", "visa", "services", "recognition"), "cities", "universities", "programs", ...editorial("faq", "applyGuide"), "cta"],
-  city: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "cautions", "education"), "languageCourses", "facts", "weather", ...editorial("living", "climate", "transport", "campus", "housing", "requirements", "visa", "services"), "universities", "programs", ...editorial("faq", "applyGuide")],
+  university: ["hero", "navigation", "overview", "languageCourses", ...editorial("gallery", "highlights", "cautions"), "programs", ...editorial("admission", "scholarships", "intakeGuide"), "facts", "weather", ...editorial("education", "support", "services", "campus", "housing", "recognition", "living", "reviews", "faq", "applyGuide"), "mobileActions"],
+  destination: ["hero", "navigation", "overview", "languageCourses", ...editorial("gallery", "highlights", "cautions", "education"), "facts", ...editorial("admission", "requirements", "scholarships", "living", "climate", "housing", "visa", "services", "recognition"), "cities", "universities", "programs", ...editorial("faq", "applyGuide"), "cta"],
+  city: ["hero", "navigation", "overview", "languageCourses", ...editorial("gallery", "highlights", "cautions", "education"), "facts", "weather", ...editorial("living", "climate", "transport", "campus", "housing", "requirements", "visa", "services"), "universities", "programs", ...editorial("faq", "applyGuide")],
 };
 const LIVE_GENERATION_SECTIONS = new Set(["navigation", "languageCourses", "weather", "fees", "intakes", "related", "programs", "universities", "cities", "mobileActions"]);
 const CITY_KEY_FACTS_INSTRUCTION = `Write a substantial but concise Key facts introduction of 90–160 words for prospective international students. Explain the city's role as a study destination and connect only the available verified climate, teaching-language, transport, campus-geography and housing evidence to practical student decisions. Do not repeat the country, university or programme counters already displayed in the live fact grid. Do not mention connected source records, catalogues, AI, prompts or missing data. Never invent population, living costs, rankings, counts or other facts. If evidence is limited, use the verified facts that exist and give practical comparison guidance without generic filler or absence disclaimers.`;
@@ -131,7 +131,7 @@ export function defaultDetailContentPolicy(): DetailTemplateContentPolicy {
   };
 }
 export function defaultDetailLayout(kind: DetailLayoutKind): DetailLayout {
-  return { version: 6, kind, sections: [...DETAIL_LAYOUT_SECTIONS[kind]], hidden: [], presentation: {}, copy: {}, generation: defaultDetailGeneration(kind), contentPolicy: defaultDetailContentPolicy() };
+  return { version: 7, kind, sections: [...DETAIL_LAYOUT_SECTIONS[kind]], hidden: [], presentation: {}, copy: {}, generation: defaultDetailGeneration(kind), contentPolicy: defaultDetailContentPolicy() };
 }
 const DETAIL_LAYOUT_LOCALES = ["en","tr","ar","fr","ru","fa","zh","hi","es","id","ur","tk","ky","kk","uz","tg","bn","pt","ne","vi","ko","uk","it"] as const;
 const CATALOGUE_WORD = /catalog(?:ue)?|katalog|каталог|目录|कैटलॉग|کیٹلاگ|فهرست|فهرست|феҳрист|ক্যাটালগ|catálogo|क्याटलग|danh mục|카탈로그/giu;
@@ -190,8 +190,8 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
   const keys = Object.keys(v).sort().join();
-  const expectedKeys = v.version === 6 ? ["contentPolicy,copy,generation,hidden,kind,presentation,sections,version"] : v.version === 5 ? ["copy,generation,hidden,kind,presentation,sections,version", "copy,hidden,kind,presentation,sections,version"] : v.version === 4 ? ["hidden,kind,presentation,sections,version"] : ["hidden,kind,sections,version"];
-  if (!expectedKeys.includes(keys) || ![1, 2, 3, 4, 5, 6].includes(v.version as number)
+  const expectedKeys = v.version === 6 || v.version === 7 ? ["contentPolicy,copy,generation,hidden,kind,presentation,sections,version"] : v.version === 5 ? ["copy,generation,hidden,kind,presentation,sections,version", "copy,hidden,kind,presentation,sections,version"] : v.version === 4 ? ["hidden,kind,presentation,sections,version"] : ["hidden,kind,sections,version"];
+  if (!expectedKeys.includes(keys) || ![1, 2, 3, 4, 5, 6, 7].includes(v.version as number)
       || !DETAIL_LAYOUT_KINDS.includes(v.kind as DetailLayoutKind)) return null;
   const kind = v.kind as DetailLayoutKind;
   const allowed = v.version === 1 ? LEGACY_SECTIONS[kind] : v.version === 2 ? V2_SECTIONS[kind] : DETAIL_LAYOUT_SECTIONS[kind];
@@ -221,8 +221,17 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
     if (next) sections.splice(sections.indexOf(next), 0, section);
     else sections.push(section);
   }
+  // v7 moves the shared language-learning service directly beneath the
+  // language facts in Overview. Existing v6 layouts keep every other custom
+  // section position, presentation and hidden state, while receiving this
+  // one-time discoverability upgrade. A subsequently saved v7 template can
+  // still be reordered normally by an administrator.
+  if (Number(v.version) < 7) {
+    sections = sections.filter(section => section !== "languageCourses");
+    sections.splice(sections.indexOf("overview") + 1, 0, "languageCourses");
+  }
   const presentation: Record<string, DetailSectionPresentation> = {};
-  if (v.version === 4 || v.version === 5 || v.version === 6) {
+  if (v.version === 4 || v.version === 5 || v.version === 6 || v.version === 7) {
     if (!v.presentation || typeof v.presentation !== "object" || Array.isArray(v.presentation)) return null;
     for (const [key, raw] of Object.entries(v.presentation as Record<string, unknown>)) {
       const setting = parseDetailSectionPresentation(raw);
@@ -231,7 +240,7 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
     }
   }
   const copy: Record<string, Record<string, DetailSectionCopy>> = {};
-  if (v.version === 5 || v.version === 6) {
+  if (v.version === 5 || v.version === 6 || v.version === 7) {
     if (!v.copy || typeof v.copy !== "object" || Array.isArray(v.copy)) return null;
     for (const [locale, rawSections] of Object.entries(v.copy as Record<string, unknown>)) {
       if (!(DETAIL_LAYOUT_LOCALES as readonly string[]).includes(locale) || !rawSections || typeof rawSections !== "object" || Array.isArray(rawSections)) return null;
@@ -252,7 +261,7 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
     }
   }
   const generation = defaultDetailGeneration(kind);
-  if ((v.version === 5 || v.version === 6) && v.generation !== undefined) {
+  if ((v.version === 5 || v.version === 6 || v.version === 7) && v.generation !== undefined) {
     if (!v.generation || typeof v.generation !== "object" || Array.isArray(v.generation)) return null;
     for (const [section, raw] of Object.entries(v.generation as Record<string, unknown>)) {
       if (!allowed.includes(section) || !raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -264,7 +273,7 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
     }
   }
   const contentPolicy = defaultDetailContentPolicy();
-  if (v.version === 6) {
+  if (v.version === 6 || v.version === 7) {
     if (!v.contentPolicy || typeof v.contentPolicy !== "object" || Array.isArray(v.contentPolicy)) return null;
     const policy = v.contentPolicy as Record<string, unknown>;
     if (Object.keys(policy).sort().join() !== "direction,preferredOrganizations,preferredReplacements,prohibitedPhrases,style,tone,translationInstruction") return null;
@@ -284,7 +293,7 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
     contentPolicy.preferredOrganizations = [...new Set((policy.preferredOrganizations as string[]).map(item => item.trim()))];
     contentPolicy.preferredReplacements = Object.fromEntries(replacements.map(([source, target]) => [source.trim(), String(target).trim()]));
   }
-  const parsed = { version: 6 as const, kind, sections, hidden: [...v.hidden] as string[], presentation, copy, generation, contentPolicy };
+  const parsed = { version: 7 as const, kind, sections, hidden: [...v.hidden] as string[], presentation, copy, generation, contentPolicy };
   return JSON.stringify(parsed).length <= 180000 ? parsed : null;
 }
 

@@ -85,6 +85,7 @@ export function DetailLayout({ kind, children, sectionOrder, sectionPresentation
     .join(""), [effectiveLayout, sectionPresentation]);
   const root = useRef<HTMLDivElement>(null);
   const [activeSection, setActiveSection] = useState("");
+  const layoutKeyFromHash = (hash: string) => hash === "language-courses" ? "languageCourses" : hash;
   useEffect(() => {
     if (preview) return;
     const serverLayout = embedded();
@@ -123,14 +124,14 @@ export function DetailLayout({ kind, children, sectionOrder, sectionPresentation
   }, [kind, effectiveLayout, children]);
   const cleanLinks = (node: ReactNode, insideNavigation = false): ReactNode => {
     if (!isValidElement<{ href?: string; children?: ReactNode; "data-detail-section"?: string; "aria-current"?: "location" }>(node)) return node;
-    if (node.type === "a" && node.props.href?.startsWith("#") && effectiveLayout.hidden.includes(node.props.href.slice(1))) return null;
+    if (node.type === "a" && node.props.href?.startsWith("#") && effectiveLayout.hidden.includes(layoutKeyFromHash(node.props.href.slice(1)))) return null;
     const inNavigation = insideNavigation || node.props["data-detail-section"] === "navigation";
     const props = inNavigation && node.type === "a" && node.props.href?.startsWith("#")
       ? { "aria-current": node.props.href.slice(1) === activeSection ? "location" as const : undefined } : {};
     let nested = node.props.children ? Children.toArray(node.props.children).map(child => cleanLinks(child, inNavigation)).filter(Boolean) : null;
     if (inNavigation && nested?.every(child => isValidElement<{ href?: string }>(child) && child.props.href?.startsWith("#"))) {
       nested.sort((a, b) => {
-        const index = (child: ReactNode) => isValidElement<{ href?: string }>(child) ? effectiveLayout.sections.indexOf(child.props.href!.slice(1)) : -1;
+        const index = (child: ReactNode) => isValidElement<{ href?: string }>(child) ? effectiveLayout.sections.indexOf(layoutKeyFromHash(child.props.href!.slice(1))) : -1;
         return index(a) - index(b);
       });
     }

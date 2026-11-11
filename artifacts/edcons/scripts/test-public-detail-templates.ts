@@ -211,7 +211,7 @@ test("editorial layouts upgrade saved v1 layouts and keep frontend/backend parse
   const frontend = readFileSync(new URL("../src/lib/website/detailLayoutContract.ts", import.meta.url), "utf8");
   assert.equal(frontend.replaceAll("\r\n", "\n"), backend.replaceAll("\r\n", "\n"));
   const upgraded = parseDetailLayout({ version: 1, kind: "destination", sections: ["hero", "overview", "cta", "universities"], hidden: ["universities"] });
-  assert.equal(upgraded?.version, 6);
+  assert.equal(upgraded?.version, 7);
   assert.deepEqual(upgraded?.sections.filter(key => !key.startsWith("editorial-")), ["hero", "navigation", "overview", "languageCourses", "facts", "cities", "programs", "cta", "universities"]);
   assert.deepEqual(upgraded?.hidden, ["universities"]);
   const current = defaultDetailLayout("program");
@@ -232,7 +232,11 @@ test("editorial layouts upgrade saved v1 layouts and keep frontend/backend parse
   assert.match(cityLayout.generation.facts.instruction, /Do not repeat the country, university or programme counters/);
   const previous = parseDetailLayout({ version: 2, kind: "program", sections: ["hero", "navigation", "overview", "fees", "requirements", "intakes", "related"], hidden: ["fees"] });
   assert.ok(previous);
-  assert.deepEqual(previous.sections.filter(key => !key.startsWith("editorial-") && key !== "mobileActions"), ["hero", "navigation", "overview", "fees", "languageCourses", "requirements", "intakes", "related"]);
+  assert.deepEqual(previous.sections.filter(key => !key.startsWith("editorial-") && key !== "mobileActions"), ["hero", "navigation", "overview", "languageCourses", "fees", "requirements", "intakes", "related"]);
+  for (const kind of ["program", "university", "destination", "city"] as const) {
+    const layout = defaultDetailLayout(kind);
+    assert.equal(layout.sections.indexOf("languageCourses"), layout.sections.indexOf("overview") + 1);
+  }
   assert.equal(parseDetailLayout({ ...current, hidden: ["hero"] }), null);
   assert.equal(parseDetailLayout({ ...current, sections: [...current.sections, "reviews"] }), null);
   assert.equal(parseDetailLayout({ ...current, html: "<script>" }), null);
@@ -743,7 +747,8 @@ test("active section navigation is local, follows visible DOM order and cleans u
   assert.match(effect, /window\.addEventListener\("resize", schedule\)/);
   assert.match(effect, /return \(\) => \{ window\.cancelAnimationFrame\(frame\); window\.removeEventListener\("scroll", schedule\); window\.removeEventListener\("resize", schedule\); \}/);
   assert.match(effect, /\[kind, effectiveLayout, children\]/);
-  assert.match(layout, /node\.props\.href\?\.startsWith\("#"\) && effectiveLayout\.hidden\.includes\(node\.props\.href\.slice\(1\)\)\) return null/);
+  assert.match(layout, /const layoutKeyFromHash = \(hash: string\) => hash === "language-courses" \? "languageCourses" : hash/);
+  assert.match(layout, /node\.props\.href\?\.startsWith\("#"\) && effectiveLayout\.hidden\.includes\(layoutKeyFromHash\(node\.props\.href\.slice\(1\)\)\)\) return null/);
   assert.match(layout, /const inNavigation = insideNavigation \|\| node\.props\["data-detail-section"\] === "navigation"/);
   assert.match(layout, /"aria-current": node\.props\.href\.slice\(1\) === activeSection \? "location"/);
   assert.match(layout, /cleanLinks\(child, inNavigation\)/);

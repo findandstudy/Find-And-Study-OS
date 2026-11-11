@@ -17,6 +17,7 @@ import { Globe2, ArrowLeft, ArrowUpRight, Building2, MapPin } from "lucide-react
 import { DeferredBelowFold } from "./DeferredBelowFold";
 import { usePublicDetailPayload } from "./publicDetailQuery";
 import { DetailPageSkeleton } from "@/components/public/PublicAsyncFeedback";
+import { languageCourseNavigationLabel } from "./LanguageCourseBanner";
 
 const DetailProgramBrowser = lazy(() => import("./UniversityProgramBrowser").then(module => ({ default: module.DetailProgramBrowser })));
 
@@ -251,6 +252,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
       </section>
       <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", dest.name)}><div className="detail-wrap">
         {(hasOverview || hasEditorialOverview) && <a href="#overview">{copy.overview}</a>}
+        <a href="#language-courses">{languageCourseNavigationLabel(lang)}</a>
         {facts.length > 0 && <a href="#facts">{t("countryDetail.quickFacts")}</a>}
         {cities.length > 0 && <a href="#cities">{t("countryDetail.popularCities")}</a>}
         {stats.programCount > 0 && <a href="#programs">{t("countryDetail.programs")}</a>}

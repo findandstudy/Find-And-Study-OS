@@ -16,6 +16,7 @@ import { detailContentPresentationOverrides, resolveDetailTemplateContent } from
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { usePublicDetailPayload } from "./publicDetailQuery";
 import { DetailPageSkeleton } from "@/components/public/PublicAsyncFeedback";
+import { languageCourseNavigationLabel } from "./LanguageCourseBanner";
 
 import { ArrowLeft, BookOpen, ArrowUpRight, Building2, GraduationCap, Clock3, Languages, MapPin, CalendarDays, FileText, Wallet } from "lucide-react";
 
@@ -275,6 +276,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", t("programs.programDetails"))}>
         <div className="detail-wrap">
           <a href="#overview">{copy.overview}</a>
+          <a href="#language-courses">{languageCourseNavigationLabel(lang)}</a>
           {(requirements.length > 0 || hasEditorialRequirements) && <a href="#requirements">{t("programs.requirements")}</a>}
           {payload.intakes.length > 0 && <a href="#intakes">{t("catalogDetail.availableIntakes")}</a>}
           {hasFees && <a href="#fees">{t("courseFinderPage.tuitionFee")}</a>}

@@ -17,6 +17,7 @@ import { CityWeatherCard, type CityWeatherSnapshot } from "./CityWeatherCard";
 import { weatherCopy } from "./weatherPresentation";
 import { usePublicDetailPayload } from "./publicDetailQuery";
 import { DetailPageSkeleton } from "@/components/public/PublicAsyncFeedback";
+import { languageCourseNavigationLabel } from "./LanguageCourseBanner";
 
 
 type UniversityPayload = {
@@ -217,7 +218,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
         {detailContentAddon(editorial, "hero", lang, localePath("/contact"))}
       </section>
       <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", university.name)}><div className="detail-wrap">
-        <a href="#overview">{copy.overview}</a><a href="#facts">{t("countryDetail.quickFacts")}</a>{university.weather && <a href="#weather">{weatherText.section}</a>}<a href="#programs">{t("catalogDetail.availablePrograms")}</a>
+        <a href="#overview">{copy.overview}</a><a href="#language-courses">{languageCourseNavigationLabel(lang)}</a><a href="#facts">{t("countryDetail.quickFacts")}</a>{university.weather && <a href="#weather">{weatherText.section}</a>}<a href="#programs">{t("catalogDetail.availablePrograms")}</a>
         {detailContentNavigation(editorial)}
       </div></nav>
       <section data-detail-section="overview" id="overview" className="detail-section">
