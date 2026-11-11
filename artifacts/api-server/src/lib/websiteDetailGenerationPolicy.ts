@@ -19,6 +19,7 @@ export type DetailGenerationSectionPlan = DetailGenerationSectionInput & {
   readiness: DetailSourceReadiness;
   evidenceKeys: string[];
   allocatedEntities: string[];
+  allocatedSourceTopicTitles?: string[];
   contentShape?: DetailGeneratedContentShape;
   minItems?: number;
   maxItems?: number;
@@ -77,7 +78,7 @@ const PAGE_INTENT: Record<DetailContentKind, string> = {
 
 const COMMON_POLICIES: Record<string, SectionPolicy> = {
   hero: { objective: "Introduce the exact page entity with a source-bound value proposition and the most useful verified study decision point.", intent: "What is this study option, what makes it relevant and why should I continue reading?", evidence: [["name", "destination", "city", "university", "program"]], minCharacters: 150, maxCharacters: 520 },
-  overview: { objective: "Give a durable, entity-specific orientation with context, fit and trade-offs without repeating the hero.", intent: "What should I know first?", evidence: [["description", "shortDescription"], ["officialSources"]], minCharacters: 280, maxCharacters: 950 },
+  overview: { objective: "Give a durable, entity-specific orientation with context, fit and trade-offs without repeating the hero.", intent: "What should I know first?", evidence: [["description", "shortDescription"], ["officialSources"]], minCharacters: 280, maxCharacters: 950, contentShape: "cards", minItems: 3, maxItems: 4 },
   gallery: { objective: "Explain what a prospective student should assess in the available imagery and why those visual cues matter.", intent: "What can I learn from the location or campus visuals?", evidence: [["description", "shortDescription", "campusGeography", "address"], ["officialSources"]], minCharacters: 200, maxCharacters: 760 },
   highlights: { objective: "Present distinct, decision-useful strengths supported by named facts and explain their practical value.", intent: "What meaningfully differentiates this option?", evidence: [["programs", "universities", "teachingLanguages", "degree", "field"], ["description", "officialSources"]], minCharacters: 260, maxCharacters: 900, contentShape: "cards", minItems: 3, maxItems: 4 },
   cautions: { objective: "Explain practical trade-offs and planning decisions without fear, filler or repeated disclaimers.", intent: "What should I plan carefully?", evidence: [["requirements", "transportModes", "housingSummary", "programs"], ["officialSources"]], minCharacters: 230, maxCharacters: 820, contentShape: "cards", minItems: 3, maxItems: 4 },
@@ -133,21 +134,21 @@ function sourceFields(facts: Record<string, unknown>): Set<string> {
 
 const SECTION_SOURCE_ALIASES: Record<string, string[]> = {
   hero: ["name", "description", "shortdescription", "website", "heromedia"],
-  overview: ["description", "shortdescription", "website"],
+  overview: ["overview", "generaloverview", "countryprofile", "destinationoverview", "description", "shortdescription", "website"],
   gallery: ["gallery", "heromedia", "campus", "description"],
   highlights: ["highlights", "education", "program", "universit", "description"],
-  cautions: ["cautions", "admission", "requirement", "education", "housing", "transport"],
-  education: ["education", "program", "language"], curriculum: ["curriculum", "education", "program"],
+  cautions: ["cautions", "thingstoconsider", "planning", "limitations", "admission", "requirement", "education", "housing", "transport"],
+  education: ["education", "highereducation", "educationsystem", "studyoptions", "program", "language"], curriculum: ["curriculum", "education", "program"],
   facts: ["keyfacts", "language", "currency", "transport", "campus", "climate", "housing", "description"],
-  admission: ["admission", "requirement", "intake"], requirements: ["requirement", "admission"],
+  admission: ["admission", "applicationprocess", "howtoapply", "entry", "requirement", "intake"], requirements: ["requirement", "admission", "entry"],
   fees: ["fee", "tuition", "currency"], intakes: ["intake", "admission"], intakeGuide: ["intake", "admission"],
-  scholarships: ["scholarship", "discount", "fee"], living: ["living", "housing", "cost"],
+  scholarships: ["scholarship", "funding", "financialaid", "discount", "fee"], living: ["living", "housing", "cost"],
   climate: ["climate", "weather", "coordinate"], transport: ["transport", "campus", "coordinate"],
   campus: ["campus", "address", "gallery"], housing: ["housing", "accommodation", "living"],
-  visa: ["visa", "permit", "immigration"], services: ["service", "support"], support: ["support", "service"],
+  visa: ["visa", "studentvisa", "residence", "permit", "immigration"], services: ["service", "studentsupport", "supportservice", "arrival", "orientation", "support"], support: ["support", "service"],
   recognition: ["recognition", "accredit", "ranking", "education"], studentStory: ["studentstory", "campus", "service"],
   reviews: ["review", "service"], faq: ["faq", "admission", "requirement", "housing", "transport"],
-  applyGuide: ["apply", "admission", "requirement", "visa", "intake"],
+  applyGuide: ["applyguide", "applicationguide", "applicationprocess", "howtoapply", "nextsteps", "apply", "admission", "requirement", "visa", "intake"],
 };
 
 function sourceSupportsSection(fields: Set<string>, sectionKey: string): boolean {
@@ -156,6 +157,20 @@ function sourceSupportsSection(fields: Set<string>, sectionKey: string): boolean
     const normalized = field.toLocaleLowerCase("en-US").replace(/[^a-z0-9]/g, "");
     return aliases.some(alias => normalized.includes(alias));
   });
+}
+
+function sourceTopicTitlesForSection(facts: Record<string, unknown>, sectionKey: string) {
+  const aliases = SECTION_SOURCE_ALIASES[sectionKey] ?? [sectionKey.toLocaleLowerCase("en-US")];
+  const normalizedAliases = aliases.map(alias => alias.replace(/[^a-z0-9]/g, "")).filter(Boolean);
+  const topics = Array.isArray(facts.sourceTopics) ? facts.sourceTopics : [];
+  return topics.flatMap(item => {
+    const value = record(item);
+    const topicTitle = typeof value?.topicTitle === "string" ? value.topicTitle.trim() : "";
+    const verifiedContent = typeof value?.verifiedContent === "string" ? value.verifiedContent.trim() : "";
+    const normalizedTitle = topicTitle.toLocaleLowerCase("en-US").replace(/[^a-z0-9]/g, "");
+    if (!topicTitle || !verifiedContent || !normalizedAliases.some(alias => normalizedTitle.includes(alias))) return [];
+    return [topicTitle];
+  }).slice(0, 12);
 }
 
 function evidenceForGroup(facts: Record<string, unknown>, fields: Set<string>, group: string[], sectionKey: string): string[] {
@@ -261,6 +276,7 @@ export function buildDetailGenerationPlan(input: {
       readiness,
       evidenceKeys,
       allocatedEntities,
+      allocatedSourceTopicTitles: sourceTopicTitlesForSection(input.facts, section.key),
       contentShape: policy.contentShape ?? "prose",
       minItems: policy.contentShape ? policy.minItems ?? 2 : 0,
       maxItems: policy.contentShape ? policy.maxItems ?? 4 : 0,
@@ -279,6 +295,7 @@ export function buildDetailGenerationPlan(input: {
       "University and programme names, levels, languages, durations, fees and availability may come only from the system catalogue fields in VERIFIED_FACTS.",
       "External-source metadata may support general context, official guidance, climate, transport, housing or institutional background, but it must never introduce a university, programme or academic offering absent from the system catalogue inventory.",
       "Use sourceTopics as verified editorial evidence. Match each row to a section by its Topic title; the title is a routing key, not public copy and not a heading that must be repeated.",
+      "For each section, allocatedSourceTopicTitles names the exact SOURCE_TOPICS rows routed to that section. Structured cards, steps and questions must use those rows when present; generic template items must never be preserved in their place.",
       "Do not use model memory or general world knowledge to add named universities or programmes. Use only CATALOG_ENTITIES supplied by the planner.",
       "Write an entity-specific, source-bound value proposition in the hero; do not reduce it to a neutral inventory summary.",
       "Use intent-led editorial headings that reveal the section's value; avoid one-word labels such as Overview or Highlights for generated editorial sections.",

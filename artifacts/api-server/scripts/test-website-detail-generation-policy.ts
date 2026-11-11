@@ -100,6 +100,28 @@ test("country planner caps named catalogue examples and keeps them out of the he
   assert.match(plan.pageRules.join(" "), /about 65% destination/i);
 });
 
+test("planner routes source-sheet topics to matching structured sections", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "destination",
+    entityName: "Example Country",
+    facts: {
+      destination: "Example Country",
+      description: "Verified destination context.",
+      officialSources: [{ field: "countryGuide", sourceName: "Verified sheet", sourceUrl: "https://example.test/sheet" }],
+      sourceTopics: [
+        { topicTitle: "Country overview", verifiedContent: "The destination has several distinct student-city settings." },
+        { topicTitle: "Admission process", verifiedContent: "Applications follow institution-published document and calendar rules." },
+        { topicTitle: "Scholarships and funding", verifiedContent: "Funding terms vary by institution and intake." },
+      ],
+    },
+    sections: [section("overview"), section("admission"), section("scholarships")],
+  });
+  assert.equal(plan.sections.find(item => item.key === "overview")?.contentShape, "cards");
+  assert.deepEqual(plan.sections.find(item => item.key === "overview")?.allocatedSourceTopicTitles, ["Country overview"]);
+  assert.deepEqual(plan.sections.find(item => item.key === "admission")?.allocatedSourceTopicTitles, ["Admission process"]);
+  assert.deepEqual(plan.sections.find(item => item.key === "scholarships")?.allocatedSourceTopicTitles, ["Scholarships and funding"]);
+});
+
 test("country quality gate blocks catalogue-led hero and excessive named examples", () => {
   const plan = buildDetailGenerationPlan({
     kind: "destination", entityName: "Example Country",
