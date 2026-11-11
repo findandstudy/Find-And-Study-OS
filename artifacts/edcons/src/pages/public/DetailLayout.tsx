@@ -2,6 +2,7 @@ import { Children, cloneElement, isValidElement, useEffect, useMemo, useRef, use
 import { DetailPreviewContext } from "./DetailPreviewContext";
 import { customFetch } from "@workspace/api-client-react";
 import { defaultDetailLayout, parseDetailLayout, type DetailLayoutKind, type DetailSectionPresentation } from "@/lib/website/detailLayoutContract";
+import { LanguageCourseBanner } from "./LanguageCourseBanner";
 
 const previewSectionLabels: Record<string, string> = {
   gallery: "Image gallery", highlights: "Highlights", cautions: "Things to consider", curriculum: "Curriculum",
@@ -9,7 +10,7 @@ const previewSectionLabels: Record<string, string> = {
   living: "Living costs", climate: "Weather and climate", transport: "Transport", campus: "Campus", housing: "Housing",
   visa: "Visa and calendar", services: "Student services", support: "Student support", intakeGuide: "Intakes and calendar",
   studentStory: "Student experience", reviews: "Student reviews", recognition: "Recognition and outcomes",
-  faq: "Frequently asked questions", applyGuide: "Application guide",
+  faq: "Frequently asked questions", applyGuide: "Application guide", languageCourses: "Free language courses",
 };
 
 function PreviewEmptySection({ layoutKey }: { layoutKey: string }) {
@@ -150,7 +151,11 @@ export function DetailLayout({ kind, children, sectionOrder, sectionPresentation
       style: { ...((node.props.style as CSSProperties | undefined) ?? {}), ...detailSectionPresentationStyle(setting) },
     });
   };
-  const sourceNodes = Children.toArray(children).map(child => applyPresentation(cleanLinks(child))).filter(node => !isValidElement(node) || !effectiveLayout.hidden.includes((node.props as Record<string, string>)["data-detail-section"]));
+  const childNodes = Children.toArray(children);
+  const hasLanguageCourses = childNodes.some(node => isValidElement(node) && (node.props as Record<string, unknown>)["data-detail-section"] === "languageCourses");
+  const sourceNodes = [...childNodes, ...(hasLanguageCourses ? [] : [<LanguageCourseBanner key="shared-language-courses" data-detail-section="languageCourses" />])]
+    .map(child => applyPresentation(cleanLinks(child)))
+    .filter(node => !isValidElement(node) || !effectiveLayout.hidden.includes((node.props as Record<string, string>)["data-detail-section"]));
   const renderedKeys = new Set(sourceNodes.flatMap(node => isValidElement(node) && typeof (node.props as Record<string, unknown>)["data-detail-section"] === "string" ? [(node.props as Record<string, string>)["data-detail-section"]] : []));
   const previewPlaceholders = templatePreview ? effectiveLayout.sections.filter(section => section.startsWith("editorial-") && !effectiveLayout.hidden.includes(section) && !renderedKeys.has(section)).map(section => <PreviewEmptySection key={section} layoutKey={section} />) : [];
   const nodes = [...sourceNodes, ...previewPlaceholders]

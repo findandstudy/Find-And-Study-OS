@@ -212,7 +212,7 @@ test("editorial layouts upgrade saved v1 layouts and keep frontend/backend parse
   assert.equal(frontend.replaceAll("\r\n", "\n"), backend.replaceAll("\r\n", "\n"));
   const upgraded = parseDetailLayout({ version: 1, kind: "destination", sections: ["hero", "overview", "cta", "universities"], hidden: ["universities"] });
   assert.equal(upgraded?.version, 6);
-  assert.deepEqual(upgraded?.sections.filter(key => !key.startsWith("editorial-")), ["hero", "navigation", "overview", "facts", "cities", "programs", "cta", "universities"]);
+  assert.deepEqual(upgraded?.sections.filter(key => !key.startsWith("editorial-")), ["hero", "navigation", "overview", "languageCourses", "facts", "cities", "programs", "cta", "universities"]);
   assert.deepEqual(upgraded?.hidden, ["universities"]);
   const current = defaultDetailLayout("program");
   assert.deepEqual(parseDetailLayout(current), current);
@@ -232,7 +232,7 @@ test("editorial layouts upgrade saved v1 layouts and keep frontend/backend parse
   assert.match(cityLayout.generation.facts.instruction, /Do not repeat the country, university or programme counters/);
   const previous = parseDetailLayout({ version: 2, kind: "program", sections: ["hero", "navigation", "overview", "fees", "requirements", "intakes", "related"], hidden: ["fees"] });
   assert.ok(previous);
-  assert.deepEqual(previous.sections.filter(key => !key.startsWith("editorial-") && key !== "mobileActions"), ["hero", "navigation", "overview", "fees", "requirements", "intakes", "related"]);
+  assert.deepEqual(previous.sections.filter(key => !key.startsWith("editorial-") && key !== "mobileActions"), ["hero", "navigation", "overview", "fees", "languageCourses", "requirements", "intakes", "related"]);
   assert.equal(parseDetailLayout({ ...current, hidden: ["hero"] }), null);
   assert.equal(parseDetailLayout({ ...current, sections: [...current.sections, "reviews"] }), null);
   assert.equal(parseDetailLayout({ ...current, html: "<script>" }), null);

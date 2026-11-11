@@ -4,7 +4,7 @@ const labels: Record<string, readonly [string, string]> = {
   hero: ["Hero", "Üst bölüm"], navigation: ["Page navigation", "Bölüm gezinmesi"], overview: ["Overview", "Genel bakış"],
   requirements: ["Requirements", "Gereklilikler"], intakes: ["Intakes", "Başvuru dönemleri"], fees: ["Fees", "Ücretler"], related: ["Related programs", "İlgili programlar"],
   facts: ["Key facts", "Temel bilgiler"], weather: ["Stored weather", "Saklanan hava durumu"], programs: ["Programs", "Programlar"], universities: ["Universities", "Üniversiteler"], cities: ["Cities", "Şehirler"],
-  cta: ["Next step", "Sonraki adım"], mobileActions: ["Mobile actions", "Mobil işlem düğmeleri"],
+  languageCourses: ["Free language courses", "Ücretsiz dil kursları"], cta: ["Next step", "Sonraki adım"], mobileActions: ["Mobile actions", "Mobil işlem düğmeleri"],
   "editorial-gallery": ["Image gallery", "Görsel galerisi"], "editorial-highlights": ["Highlights", "Öne çıkanlar"],
   "editorial-cautions": ["Things to consider", "Dikkat edilmesi gerekenler"], "editorial-curriculum": ["Curriculum", "Müfredat"],
   "editorial-education": ["Education", "Eğitim"], "editorial-admission": ["Admission information", "Kabul bilgileri"],

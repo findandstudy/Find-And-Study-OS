@@ -4,25 +4,25 @@ import { parseDetailSectionPresentation, resolveDetailTemplateText, validDetailT
 export const DETAIL_CONTENT_KINDS = ["program", "university", "destination", "city"] as const;
 export type DetailContentKind = typeof DETAIL_CONTENT_KINDS[number];
 export const DETAIL_CONTENT_KEYS: Record<DetailContentKind, readonly string[]> = {
-  program: ["hero", "navigation", "overview", "gallery", "highlights", "curriculum", "requirements", "admission", "fees", "intakes", "scholarships", "living", "campus", "climate", "housing", "services", "applyGuide", "studentStory", "recognition", "related", "faq", "mobileActions"],
-  university: ["hero", "navigation", "overview", "gallery", "highlights", "cautions", "programs", "admission", "scholarships", "intakeGuide", "facts", "weather", "education", "support", "services", "campus", "housing", "recognition", "living", "reviews", "faq", "applyGuide", "mobileActions"],
-  destination: ["hero", "navigation", "overview", "gallery", "highlights", "cautions", "education", "facts", "admission", "requirements", "scholarships", "living", "climate", "housing", "visa", "services", "recognition", "cities", "universities", "programs", "faq", "applyGuide", "cta"],
-  city: ["hero", "navigation", "overview", "gallery", "highlights", "cautions", "education", "facts", "weather", "living", "climate", "transport", "campus", "housing", "requirements", "visa", "services", "universities", "programs", "faq", "applyGuide"],
+  program: ["hero", "navigation", "overview", "gallery", "highlights", "curriculum", "languageCourses", "requirements", "admission", "fees", "intakes", "scholarships", "living", "campus", "climate", "housing", "services", "applyGuide", "studentStory", "recognition", "related", "faq", "mobileActions"],
+  university: ["hero", "navigation", "overview", "gallery", "highlights", "cautions", "programs", "admission", "scholarships", "intakeGuide", "facts", "weather", "education", "languageCourses", "support", "services", "campus", "housing", "recognition", "living", "reviews", "faq", "applyGuide", "mobileActions"],
+  destination: ["hero", "navigation", "overview", "gallery", "highlights", "cautions", "education", "languageCourses", "facts", "admission", "requirements", "scholarships", "living", "climate", "housing", "visa", "services", "recognition", "cities", "universities", "programs", "faq", "applyGuide", "cta"],
+  city: ["hero", "navigation", "overview", "gallery", "highlights", "cautions", "education", "languageCourses", "facts", "weather", "living", "climate", "transport", "campus", "housing", "requirements", "visa", "services", "universities", "programs", "faq", "applyGuide"],
 };
 
 const editorialLayoutKeys = (...keys: string[]) => keys.map((key) => `editorial-${key}`);
 /** Complete page-level order. The first three structural sections stay fixed. */
 export const DETAIL_CONTENT_LAYOUT_KEYS: Record<DetailContentKind, readonly string[]> = {
-  program: ["hero", "navigation", "overview", ...editorialLayoutKeys("gallery", "highlights", "curriculum"), "requirements", ...editorialLayoutKeys("admission"), "fees", "intakes", ...editorialLayoutKeys("scholarships", "living", "campus", "climate", "housing", "services", "applyGuide", "studentStory", "recognition"), "related", ...editorialLayoutKeys("faq"), "mobileActions"],
-  university: ["hero", "navigation", "overview", ...editorialLayoutKeys("gallery", "highlights", "cautions"), "programs", ...editorialLayoutKeys("admission", "scholarships", "intakeGuide"), "facts", "weather", ...editorialLayoutKeys("education", "support", "services", "campus", "housing", "recognition", "living", "reviews", "faq", "applyGuide"), "mobileActions"],
-  destination: ["hero", "navigation", "overview", ...editorialLayoutKeys("gallery", "highlights", "cautions", "education"), "facts", ...editorialLayoutKeys("admission", "requirements", "scholarships", "living", "climate", "housing", "visa", "services", "recognition"), "cities", "universities", "programs", ...editorialLayoutKeys("faq", "applyGuide"), "cta"],
-  city: ["hero", "navigation", "overview", ...editorialLayoutKeys("gallery", "highlights", "cautions", "education"), "facts", "weather", ...editorialLayoutKeys("living", "climate", "transport", "campus", "housing", "requirements", "visa", "services"), "universities", "programs", ...editorialLayoutKeys("faq", "applyGuide")],
+  program: ["hero", "navigation", "overview", ...editorialLayoutKeys("gallery", "highlights", "curriculum"), "languageCourses", "requirements", ...editorialLayoutKeys("admission"), "fees", "intakes", ...editorialLayoutKeys("scholarships", "living", "campus", "climate", "housing", "services", "applyGuide", "studentStory", "recognition"), "related", ...editorialLayoutKeys("faq"), "mobileActions"],
+  university: ["hero", "navigation", "overview", ...editorialLayoutKeys("gallery", "highlights", "cautions"), "programs", ...editorialLayoutKeys("admission", "scholarships", "intakeGuide"), "facts", "weather", ...editorialLayoutKeys("education"), "languageCourses", ...editorialLayoutKeys("support", "services", "campus", "housing", "recognition", "living", "reviews", "faq", "applyGuide"), "mobileActions"],
+  destination: ["hero", "navigation", "overview", ...editorialLayoutKeys("gallery", "highlights", "cautions", "education"), "languageCourses", "facts", ...editorialLayoutKeys("admission", "requirements", "scholarships", "living", "climate", "housing", "visa", "services", "recognition"), "cities", "universities", "programs", ...editorialLayoutKeys("faq", "applyGuide"), "cta"],
+  city: ["hero", "navigation", "overview", ...editorialLayoutKeys("gallery", "highlights", "cautions", "education"), "languageCourses", "facts", "weather", ...editorialLayoutKeys("living", "climate", "transport", "campus", "housing", "requirements", "visa", "services"), "universities", "programs", ...editorialLayoutKeys("faq", "applyGuide")],
 };
 
 /** Sections whose records stay authoritative in the catalogue while CMS controls presentation copy. */
 export const DETAIL_GENERATED_CONTENT_KEYS = [
   "navigation", "facts", "weather", "fees", "intakes", "related", "programs",
-  "universities", "cities", "cta", "mobileActions",
+  "universities", "cities", "languageCourses", "cta", "mobileActions",
 ] as const;
 export const DETAIL_CONTENT_LOCALES = ["en","tr","ar","fr","ru","fa","zh","hi","es","id","ur","tk","ky","kk","uz","tg","bn","pt","ne","vi","ko","uk","it"] as const;
 const LEGACY_CATALOGUE_COUNT_QUALIFIER = /catalog(?:ue)?|katalog|каталог|目录|कैटलॉग|کیٹلاگ|феҳрист|ক্যাটালগ|catálogo|क्याटलग|danh mục|카탈로그/iu;
@@ -242,7 +242,7 @@ export function parseDetailContent(value: unknown, today = new Date().toISOStrin
     const saved = Array.isArray(value.sectionOrder) ? value.sectionOrder : [];
     const missing = expected.filter(key => !saved.includes(key));
     if (!Array.isArray(value.sectionOrder) || (saved.length !== expected.length && !(
-      missing.length > 0 && missing.every(key => key === "programs" || key === "weather") && saved.length + missing.length === expected.length
+      missing.length > 0 && missing.every(key => key === "programs" || key === "weather" || key === "languageCourses") && saved.length + missing.length === expected.length
     ))
       || new Set(saved).size !== saved.length
       || !value.sectionOrder.every((key) => typeof key === "string" && expected.includes(key))

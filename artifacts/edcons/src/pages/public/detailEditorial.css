@@ -22,6 +22,204 @@
   font-family: "Source Sans 3", var(--font-sans), system-ui, sans-serif;
 }
 
+/* Shared free-language service banner used by all public detail templates. */
+.detail-language-courses {
+  background:
+    radial-gradient(circle at 9% 16%, rgba(94, 234, 212, 0.14), transparent 29rem),
+    radial-gradient(circle at 92% 84%, rgba(96, 165, 250, 0.18), transparent 32rem),
+    #07152f;
+  color: #f8fafc;
+  overflow: hidden;
+}
+
+.detail-language-banner {
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.76fr) minmax(0, 1.24fr);
+  gap: clamp(1.75rem, 4vw, 4.5rem);
+  align-items: center;
+  position: relative;
+}
+
+.detail-language-banner::before {
+  content: "";
+  position: absolute;
+  inset: -4rem -9rem auto auto;
+  width: 18rem;
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3rem rgba(255, 255, 255, 0.025), 0 0 0 7rem rgba(255, 255, 255, 0.018);
+  pointer-events: none;
+}
+
+.detail-language-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 39rem;
+}
+
+.detail-language-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 4rem;
+  margin-bottom: 1.25rem;
+  padding: 0.25rem 0.8rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 1rem 2.8rem rgba(0, 0, 0, 0.18);
+}
+
+.detail-language-brand img {
+  display: block;
+  width: clamp(8.5rem, 13vw, 11rem);
+  height: auto;
+}
+
+.detail-language-copy .detail-eyebrow {
+  color: #5eead4;
+}
+
+.detail-language-copy h2 {
+  max-width: 14ch;
+  margin: 0.65rem 0 1rem;
+  color: #fff;
+  font-size: clamp(2rem, 4vw, 4.25rem);
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+}
+
+.detail-language-copy > p:not(.detail-eyebrow) {
+  max-width: 42rem;
+  margin: 0;
+  color: rgba(241, 245, 249, 0.82);
+  font-size: clamp(1rem, 1.35vw, 1.12rem);
+  line-height: 1.75;
+}
+
+.detail-language-free {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 1.35rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid rgba(94, 234, 212, 0.35);
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.18);
+  color: #ccfbf1;
+  font-size: 0.82rem;
+  font-weight: 750;
+  letter-spacing: 0.035em;
+}
+
+.detail-language-course-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  position: relative;
+  z-index: 1;
+}
+
+.detail-language-course-list a {
+  display: flex;
+  min-width: 0;
+  min-height: 6.35rem;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 0.65rem 2rem 0.65rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.15rem;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 1rem 2.4rem rgba(0, 0, 0, 0.14);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.detail-language-course-list a:first-child {
+  grid-column: 1 / -1;
+}
+
+.detail-language-course-list a:hover,
+.detail-language-course-list a:focus-visible {
+  transform: translateY(-3px);
+  border-color: rgba(94, 234, 212, 0.9);
+  box-shadow: 0 1.35rem 3.2rem rgba(0, 0, 0, 0.22);
+}
+
+.detail-language-course-list a:focus-visible {
+  outline: 3px solid #5eead4;
+  outline-offset: 3px;
+}
+
+.detail-language-course-list img {
+  display: block;
+  width: min(100%, 10.5rem);
+  height: 4.5rem;
+  object-fit: contain;
+}
+
+.detail-language-course-list svg {
+  position: absolute;
+  inset-inline-end: 0.85rem;
+  inset-block-start: 0.85rem;
+  color: #0f3d77;
+}
+
+@media (max-width: 900px) {
+  .detail-language-banner {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-language-copy h2 {
+    max-width: 18ch;
+  }
+
+  .detail-language-course-list {
+    display: flex;
+    margin-inline: calc(var(--detail-gutter, 1rem) * -1);
+    padding: 0.35rem var(--detail-gutter, 1rem) 1rem;
+    overflow-x: auto;
+    scroll-snap-type: inline mandatory;
+    scrollbar-width: thin;
+  }
+
+  .detail-language-course-list a,
+  .detail-language-course-list a:first-child {
+    flex: 0 0 min(15.5rem, 76vw);
+    scroll-snap-align: start;
+  }
+}
+
+@media (max-width: 520px) {
+  .detail-language-copy h2 {
+    font-size: clamp(2rem, 10vw, 3rem);
+  }
+
+  .detail-language-brand {
+    margin-bottom: 1rem;
+  }
+
+  .detail-language-course-list a,
+  .detail-language-course-list a:first-child {
+    min-height: 5.75rem;
+    flex-basis: min(13.75rem, 80vw);
+  }
+
+  .detail-language-course-list img {
+    height: 4rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-language-course-list a {
+    transition: none;
+  }
+
+  .detail-language-course-list a:hover {
+    transform: none;
+  }
+}
+
 /* Server-cached city weather. The public page never calls the provider. */
 .detail-weather-card { overflow: hidden; border: 1px solid color-mix(in srgb, var(--detail-accent, #2563eb) 20%, #dbe4f0); border-radius: 28px; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 52%, #f0fdfa 100%); box-shadow: 0 24px 70px rgba(15, 23, 42, .08); }
 .detail-weather-primary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: clamp(24px, 4vw, 42px); }

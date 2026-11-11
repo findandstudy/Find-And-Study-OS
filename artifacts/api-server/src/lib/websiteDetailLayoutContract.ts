@@ -94,14 +94,14 @@ const editorial = (...keys: string[]) => keys.map(key => `editorial-${key}`);
 export const DETAIL_LAYOUT_SECTIONS: Record<DetailLayoutKind, readonly string[]> = {
   // Order mirrors programv2-revised.html: experience, learning, admission,
   // destination/living, housing, services, apply, alternatives and FAQ.
-  program: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "curriculum"), "requirements", ...editorial("admission"), "fees", "intakes", ...editorial("scholarships", "living", "campus", "climate", "housing", "services", "applyGuide", "studentStory", "recognition"), "related", ...editorial("faq"), "mobileActions"],
+  program: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "curriculum"), "languageCourses", "requirements", ...editorial("admission"), "fees", "intakes", ...editorial("scholarships", "living", "campus", "climate", "housing", "services", "applyGuide", "studentStory", "recognition"), "related", ...editorial("faq"), "mobileActions"],
   // Order mirrors university-revised.html: overview, programmes, admission,
   // fees/intakes content, support/campus, recognition, reviews and FAQ.
-  university: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "cautions"), "programs", ...editorial("admission", "scholarships", "intakeGuide"), "facts", "weather", ...editorial("education", "support", "services", "campus", "housing", "recognition", "living", "reviews", "faq", "applyGuide"), "mobileActions"],
-  destination: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "cautions", "education"), "facts", ...editorial("admission", "requirements", "scholarships", "living", "climate", "housing", "visa", "services", "recognition"), "cities", "universities", "programs", ...editorial("faq", "applyGuide"), "cta"],
-  city: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "cautions", "education"), "facts", "weather", ...editorial("living", "climate", "transport", "campus", "housing", "requirements", "visa", "services"), "universities", "programs", ...editorial("faq", "applyGuide")],
+  university: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "cautions"), "programs", ...editorial("admission", "scholarships", "intakeGuide"), "facts", "weather", ...editorial("education"), "languageCourses", ...editorial("support", "services", "campus", "housing", "recognition", "living", "reviews", "faq", "applyGuide"), "mobileActions"],
+  destination: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "cautions", "education"), "languageCourses", "facts", ...editorial("admission", "requirements", "scholarships", "living", "climate", "housing", "visa", "services", "recognition"), "cities", "universities", "programs", ...editorial("faq", "applyGuide"), "cta"],
+  city: ["hero", "navigation", "overview", ...editorial("gallery", "highlights", "cautions", "education"), "languageCourses", "facts", "weather", ...editorial("living", "climate", "transport", "campus", "housing", "requirements", "visa", "services"), "universities", "programs", ...editorial("faq", "applyGuide")],
 };
-const LIVE_GENERATION_SECTIONS = new Set(["navigation", "weather", "fees", "intakes", "related", "programs", "universities", "cities", "mobileActions"]);
+const LIVE_GENERATION_SECTIONS = new Set(["navigation", "languageCourses", "weather", "fees", "intakes", "related", "programs", "universities", "cities", "mobileActions"]);
 const CITY_KEY_FACTS_INSTRUCTION = `Write a substantial but concise Key facts introduction of 90–160 words for prospective international students. Explain the city's role as a study destination and connect only the available verified climate, teaching-language, transport, campus-geography and housing evidence to practical student decisions. Do not repeat the country, university or programme counters already displayed in the live fact grid. Do not mention connected source records, catalogues, AI, prompts or missing data. Never invent population, living costs, rankings, counts or other facts. If evidence is limited, use the verified facts that exist and give practical comparison guidance without generic filler or absence disclaimers.`;
 export function defaultDetailSectionGeneration(kind: DetailLayoutKind, section: string): DetailSectionGeneration {
   const name = section.replace(/^editorial-/, "").replace(/([A-Z])/g, " $1").toLowerCase();
@@ -197,7 +197,7 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
   const allowed = v.version === 1 ? LEGACY_SECTIONS[kind] : v.version === 2 ? V2_SECTIONS[kind] : DETAIL_LAYOUT_SECTIONS[kind];
   const savedSections = Array.isArray(v.sections) ? v.sections : [];
   const additiveUpgrade = Number(v.version) >= 3
-    && allowed.filter(section => !savedSections.includes(section)).every(section => ["weather", "programs"].includes(section));
+    && allowed.filter(section => !savedSections.includes(section)).every(section => ["weather", "programs", "languageCourses"].includes(section));
   if (!Array.isArray(v.sections) || !Array.isArray(v.hidden) || v.sections.length === 0
       || (v.sections.length !== allowed.length && !additiveUpgrade)
       || new Set(v.sections).size !== v.sections.length

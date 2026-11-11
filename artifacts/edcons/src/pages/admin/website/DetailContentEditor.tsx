@@ -297,6 +297,7 @@ const initialSectionBody = (
     "programs",
     "universities",
     "cities",
+    "languageCourses",
     "cta",
     "mobileActions",
   ]).has(key);
@@ -553,6 +554,7 @@ const sectionLabels: Record<string, [string, string]> = {
   transport: ["Transport", "Ulaşım"],
   visa: ["Visa and calendar", "Vize ve takvim"],
   intakeGuide: ["Intakes and calendar", "Başvuru dönemleri ve takvim"],
+  languageCourses: ["Free language courses", "Ücretsiz dil kursları"],
   support: ["Student support", "Öğrenci desteği"],
   reviews: ["Student reviews", "Öğrenci yorumları"],
   studentStory: ["Student experience", "Öğrenci deneyimi"],

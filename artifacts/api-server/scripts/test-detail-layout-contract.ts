@@ -19,14 +19,14 @@ test("optional sections reorder without moving ahead of identity and facts", () 
   const sections = ["hero", "navigation", "overview", "facts", "programs", "universities"];
   const upgraded = parseDetailLayout({ version: 2, kind: "city", sections, hidden: ["universities"] });
   assert.ok(upgraded);
-  assert.equal(upgraded.version, 5);
+  assert.equal(upgraded.version, 6);
   assert.deepEqual(upgraded.sections.filter(key => sections.includes(key)), sections, "v2 relative order survives additive sections");
   assert.deepEqual(new Set(upgraded.sections), new Set(layout.sections));
   assert.deepEqual(upgraded.hidden, ["universities"]);
-  assert.deepEqual(parseDetailLayout(upgraded), upgraded, "complete v5 layout round trips");
-  assert.equal(parseDetailLayout({ ...layout, sections, hidden: ["universities"] }), null, "v5 cannot omit additive section keys");
-  const preWeatherV5 = { ...layout, sections: layout.sections.filter(key => key !== "weather") };
-  assert.deepEqual(parseDetailLayout(preWeatherV5)?.sections, layout.sections, "the newly added weather section upgrades existing v5 layouts in place");
+  assert.deepEqual(parseDetailLayout(upgraded), upgraded, "complete v6 layout round trips");
+  assert.equal(parseDetailLayout({ ...layout, sections, hidden: ["universities"] }), null, "v6 cannot omit its required section set");
+  const preAdditiveV6 = { ...layout, sections: layout.sections.filter(key => !["weather", "languageCourses"].includes(key)) };
+  assert.deepEqual(parseDetailLayout(preAdditiveV6)?.sections, layout.sections, "new live sections upgrade existing v6 layouts in place");
   assert.equal(parseDetailLayout({ ...layout, sections: ["hero", "navigation", "programs", "overview", "facts", "universities"] }), null);
   assert.equal(parseDetailLayout({ version: 2, kind: "city", hidden: [], sections: ["hero", "overview", "programs", "universities"] }), null, "v2 cannot silently omit its mandatory section set");
   assert.deepEqual(parseDetailLayout({ version: 1, kind: "city", sections: ["hero", "overview", "programs", "universities"], hidden: ["universities"] }),
