@@ -351,12 +351,31 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
     sections: requested,
   });
   if (!plan.sections.length) return { content: base, plan, generatedSections: 0, generatedImages: 0, imageFailures: 0 };
+  // Country editorial copy must remain destination-first. The live catalogue
+  // components already own institution/programme discovery, counts and links;
+  // exposing those inventories to the writing model repeatedly tempted it to
+  // turn country guidance into a catalogue advert. Keep the complete plan for
+  // post-generation validation, but give the model a destination-safe view
+  // that contains cities, source topics and official guidance without named
+  // academic inventory.
+  const aiFacts = kind === "destination"
+    ? Object.fromEntries(Object.entries(facts).filter(([key]) => !["universities", "programs"].includes(key)))
+    : facts;
+  const aiPlan: DetailGenerationPlan = kind === "destination" ? {
+    ...plan,
+    catalogEntities: { universities: [], programs: [] },
+    pageRules: [
+      ...plan.pageRules,
+      "Do not name any university, college, institute, academy or programme in country editorial copy. Institution and programme discovery belongs only to the live catalogue components.",
+    ],
+    sections: plan.sections.map(section => ({ ...section, allocatedEntities: [] })),
+  } : plan;
   const generated = await ai.generateDetailSections({
     kind,
     entityName: entityFacts(kind, payload, entityId).name,
-    facts,
-    sections: plan.sections,
-    plan,
+    facts: aiFacts,
+    sections: aiPlan.sections,
+    plan: aiPlan,
     contentPolicy: layout.contentPolicy,
   });
   const skipped = new Set(plan.skippedSections.map(item => item.key));
