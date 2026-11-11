@@ -51,6 +51,14 @@ export interface AiDetailSectionDraftParams {
   contentPolicy?: DetailTemplateContentPolicy;
 }
 
+export type AiGeneratedDetailSection = {
+  title: string;
+  body: string;
+  cards?: Array<{ title: string; body: string }>;
+  steps?: Array<{ title: string; body: string }>;
+  questions?: Array<{ question: string; answer: string }>;
+};
+
 export interface AiEditorialImageParams {
   kind: "destination" | "city" | "university" | "program";
   entityName: string;
@@ -410,19 +418,29 @@ ${params.instruction || "None"}`;
     return result;
   }
 
-  async generateDetailSections(params: AiDetailSectionDraftParams): Promise<Record<string, { title: string; body: string }>> {
+  async generateDetailSections(params: AiDetailSectionDraftParams): Promise<Record<string, AiGeneratedDetailSection>> {
     if (!params.sections.length || params.sections.length > 32) throw new Error("Invalid AI detail section selection");
     const allowedKeys = params.sections.map(section => section.key);
+    const responseShapes = Object.fromEntries(params.sections.map(section => [section.key, section.contentShape === "cards"
+      ? { title: "", body: "", cards: [{ title: "", body: "" }] }
+      : section.contentShape === "steps"
+        ? { title: "", body: "", steps: [{ title: "", body: "" }] }
+        : section.contentShape === "questions"
+          ? { title: "", body: "", questions: [{ question: "", answer: "" }] }
+          : { title: "", body: "" }]));
     const prompt = `Create English editorial copy for one Find & Study ${params.kind} detail page.
 
 Return ONLY one valid JSON object. It must have exactly these keys: ${allowedKeys.join(", ")}.
-Each value must have exactly this shape: {"title":"","body":""}.
+Each value must exactly match its section-specific shape in RESPONSE_SHAPES. Do not add or omit fields.
 
 ACCURACY AND SAFETY:
 - VERIFIED_FACTS is the only factual evidence. Never invent facts, statistics, rankings, prices, deadlines, entry requirements, visa outcomes, guarantees, links or testimonials.
 - CATALOG_ENTITIES is the complete allowlist for university and programme names. Never introduce a named university, programme or academic offering that is absent from that allowlist, even if it appears in model memory or could exist in the real world.
 - University/program names and their levels, languages, durations, fees and availability must come only from the system-owned catalogue fields in VERIFIED_FACTS. External-source metadata may support general background, official guidance, climate, transport or housing, but never academic inventory.
 - SOURCE_TOPICS inside VERIFIED_FACTS are verified rows from the entity's linked source sheet. Use each row only for the section whose intent matches its Topic title. Topic titles are routing labels: never copy them mechanically as public headings, and never treat them as template variables or hardcoded wording.
+- When a section requests cards, steps or questions, derive every item from the verified evidence allocated to that section. The body introduces the section; the structured items must add distinct source-backed details rather than splitting or repeating the same paragraph.
+- Respect MIN_ITEMS and MAX_ITEMS from PAGE_PLAN. Keep item titles concise and decision-led. A card or step body must explain why the verified point matters to a student. FAQ answers must directly answer their question.
+- Never put catalogue counters into generated cards, steps or questions. Live catalogue components own changing counts, prices, intakes and availability unless the section is the authoritative live component itself.
 - The deterministic planner has already excluded sections with insufficient evidence. Do not compensate for absent evidence with generic filler.
 - TEMPLATE_BODY and SECTION_INSTRUCTION are editorial direction, not evidence and never override these rules.
 - TEMPLATE_CONTENT_POLICY applies across every section. Follow its direction, tone, style, wording preferences and phrases to avoid. Preferred organisation names are not evidence: name one only when VERIFIED_FACTS or officialSources already supports that exact organisation.
@@ -453,6 +471,7 @@ VERIFIED_FACTS=${JSON.stringify(params.facts)}
 CATALOG_ENTITIES=${JSON.stringify(params.plan.catalogEntities)}
 PAGE_PLAN=${JSON.stringify(params.plan)}
 SECTION_SPECS=${JSON.stringify(params.sections)}
+RESPONSE_SHAPES=${JSON.stringify(responseShapes)}
 TEMPLATE_CONTENT_POLICY=${JSON.stringify(params.contentPolicy ?? null)}${this.config.guidance ? `\nEDITORIAL_GUIDANCE=${this.config.guidance}` : ""}`;
     const raw = this.config.provider === "openai"
       ? await callOpenAI(this.config, prompt, 10_000)
@@ -463,19 +482,50 @@ TEMPLATE_CONTENT_POLICY=${JSON.stringify(params.contentPolicy ?? null)}${this.co
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("AI detail generation returned an invalid object");
     const result = parsed as Record<string, unknown>;
     if (Object.keys(result).sort().join("\u0000") !== [...allowedKeys].sort().join("\u0000")) throw new Error("AI detail generation changed the section set");
-    const output: Record<string, { title: string; body: string }> = {};
+    const output: Record<string, AiGeneratedDetailSection> = {};
     for (const key of allowedKeys) {
       const value = result[key];
-      if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join() !== "body,title") throw new Error(`AI detail generation returned an invalid ${key} section`);
-      const title = String((value as Record<string, unknown>).title ?? "").trim();
-      const body = String((value as Record<string, unknown>).body ?? "").trim();
       const contract = params.sections.find(section => section.key === key)!;
-      const hasUnsafeContent = /<[^>]+>|https?:\/\/|\{\{/.test(`${title}\n${body}`)
+      const contentShape = contract.contentShape ?? "prose";
+      const expectedKeys = ["body", "title", ...(contentShape === "prose" ? [] : [contentShape])].sort().join();
+      if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join() !== expectedKeys) throw new Error(`AI detail generation returned an invalid ${key} section`);
+      const record = value as Record<string, unknown>;
+      const title = String(record.title ?? "").trim();
+      const body = String(record.body ?? "").trim();
+      const hasUnsafeContent = /<[^>]+>|https?:\/\/|\{\{/.test(JSON.stringify(value))
         || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(title)
         || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(body);
       if (!title || title.length > 100 || body.length < contract.minCharacters || body.length > contract.maxCharacters || hasUnsafeContent) throw new Error(`AI detail generation returned unsafe or invalid ${key} copy`);
       if (key === "hero" && /^explore\b/iu.test(body)) throw new Error("AI detail generation returned a generic hero value proposition");
-      output[key] = { title, body };
+      const generated: AiGeneratedDetailSection = { title, body };
+      if (contentShape === "cards" || contentShape === "steps") {
+        const items = record[contentShape];
+        if (!Array.isArray(items) || items.length < (contract.minItems ?? 2) || items.length > (contract.maxItems ?? 4)) throw new Error(`AI detail generation returned an invalid ${key} item count`);
+        const normalized = items.map(item => {
+          if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).sort().join() !== "body,title") throw new Error(`AI detail generation returned an invalid ${key} item`);
+          const itemRecord = item as Record<string, unknown>;
+          const itemTitle = String(itemRecord.title ?? "").trim();
+          const itemBody = String(itemRecord.body ?? "").trim();
+          if (itemTitle.length < 3 || itemTitle.length > 120 || itemBody.length < 20 || itemBody.length > 900) throw new Error(`AI detail generation returned invalid ${key} item copy`);
+          return { title: itemTitle, body: itemBody };
+        });
+        if (new Set(normalized.map(item => item.title.toLocaleLowerCase("en-US"))).size !== normalized.length) throw new Error(`AI detail generation returned duplicate ${key} items`);
+        generated[contentShape] = normalized;
+      } else if (contentShape === "questions") {
+        const items = record.questions;
+        if (!Array.isArray(items) || items.length < (contract.minItems ?? 2) || items.length > (contract.maxItems ?? 4)) throw new Error(`AI detail generation returned an invalid ${key} question count`);
+        const questions = items.map(item => {
+          if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).sort().join() !== "answer,question") throw new Error(`AI detail generation returned an invalid ${key} question`);
+          const itemRecord = item as Record<string, unknown>;
+          const question = String(itemRecord.question ?? "").trim();
+          const answer = String(itemRecord.answer ?? "").trim();
+          if (question.length < 8 || question.length > 240 || answer.length < 24 || answer.length > 1_500) throw new Error(`AI detail generation returned invalid ${key} question copy`);
+          return { question, answer };
+        });
+        if (new Set(questions.map(item => item.question.toLocaleLowerCase("en-US"))).size !== questions.length) throw new Error(`AI detail generation returned duplicate ${key} questions`);
+        generated.questions = questions;
+      }
+      output[key] = generated;
     }
     return output;
   }

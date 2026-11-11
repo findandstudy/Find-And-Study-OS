@@ -9,6 +9,8 @@ export type DetailGenerationSectionInput = {
   instruction: string;
 };
 
+export type DetailGeneratedContentShape = "prose" | "cards" | "steps" | "questions";
+
 export type DetailGenerationSectionPlan = DetailGenerationSectionInput & {
   objective: string;
   searchIntent: string;
@@ -17,6 +19,9 @@ export type DetailGenerationSectionPlan = DetailGenerationSectionInput & {
   readiness: DetailSourceReadiness;
   evidenceKeys: string[];
   allocatedEntities: string[];
+  contentShape?: DetailGeneratedContentShape;
+  minItems?: number;
+  maxItems?: number;
 };
 
 export type DetailGenerationPlan = {
@@ -58,6 +63,9 @@ type SectionPolicy = {
   evidence: string[][];
   minCharacters?: number;
   maxCharacters?: number;
+  contentShape?: DetailGeneratedContentShape;
+  minItems?: number;
+  maxItems?: number;
 };
 
 const PAGE_INTENT: Record<DetailContentKind, string> = {
@@ -71,30 +79,30 @@ const COMMON_POLICIES: Record<string, SectionPolicy> = {
   hero: { objective: "Introduce the exact page entity with a source-bound value proposition and the most useful verified study decision point.", intent: "What is this study option, what makes it relevant and why should I continue reading?", evidence: [["name", "destination", "city", "university", "program"]], minCharacters: 150, maxCharacters: 520 },
   overview: { objective: "Give a durable, entity-specific orientation with context, fit and trade-offs without repeating the hero.", intent: "What should I know first?", evidence: [["description", "shortDescription"], ["officialSources"]], minCharacters: 280, maxCharacters: 950 },
   gallery: { objective: "Explain what a prospective student should assess in the available imagery and why those visual cues matter.", intent: "What can I learn from the location or campus visuals?", evidence: [["description", "shortDescription", "campusGeography", "address"], ["officialSources"]], minCharacters: 200, maxCharacters: 760 },
-  highlights: { objective: "Present distinct, decision-useful strengths supported by named facts and explain their practical value.", intent: "What meaningfully differentiates this option?", evidence: [["programs", "universities", "teachingLanguages", "degree", "field"], ["description", "officialSources"]], minCharacters: 260, maxCharacters: 900 },
-  cautions: { objective: "Explain practical trade-offs and planning decisions without fear, filler or repeated disclaimers.", intent: "What should I plan carefully?", evidence: [["requirements", "transportModes", "housingSummary", "programs"], ["officialSources"]], minCharacters: 230, maxCharacters: 820 },
-  education: { objective: "Explain the verified academic options, meaningful variety and how a student should compare them.", intent: "What can I study and in which language or level?", evidence: [["programs", "teachingLanguages", "degree", "field"], ["officialSources"]], minCharacters: 260, maxCharacters: 920 },
-  curriculum: { objective: "Describe verified curriculum or study-format evidence and its learning significance without inventing modules.", intent: "What will the learning experience cover?", evidence: [["curriculum", "programs", "field", "description"], ["officialSources"]], minCharacters: 240, maxCharacters: 900 },
+  highlights: { objective: "Present distinct, decision-useful strengths supported by named facts and explain their practical value.", intent: "What meaningfully differentiates this option?", evidence: [["programs", "universities", "teachingLanguages", "degree", "field"], ["description", "officialSources"]], minCharacters: 260, maxCharacters: 900, contentShape: "cards", minItems: 3, maxItems: 4 },
+  cautions: { objective: "Explain practical trade-offs and planning decisions without fear, filler or repeated disclaimers.", intent: "What should I plan carefully?", evidence: [["requirements", "transportModes", "housingSummary", "programs"], ["officialSources"]], minCharacters: 230, maxCharacters: 820, contentShape: "cards", minItems: 3, maxItems: 4 },
+  education: { objective: "Explain the verified academic options, meaningful variety and how a student should compare them.", intent: "What can I study and in which language or level?", evidence: [["programs", "teachingLanguages", "degree", "field"], ["officialSources"]], minCharacters: 260, maxCharacters: 920, contentShape: "cards", minItems: 3, maxItems: 4 },
+  curriculum: { objective: "Describe verified curriculum or study-format evidence and its learning significance without inventing modules.", intent: "What will the learning experience cover?", evidence: [["curriculum", "programs", "field", "description"], ["officialSources"]], minCharacters: 240, maxCharacters: 900, contentShape: "cards", minItems: 3, maxItems: 4 },
   facts: { objective: "Interpret verified facts for a student decision; connect them to practical choices and never narrate live counters.", intent: "Which facts affect my shortlist and why?", evidence: [["teachingLanguages", "transportModes", "campusGeography", "climateSummary", "housingSummary", "type", "address", "degree", "duration"], ["officialSources"]], minCharacters: 480, maxCharacters: 1100 },
-  admission: { objective: "Explain the verified admissions path, its sequence and what must be confirmed for the exact intake.", intent: "How does admission work and what should I prepare?", evidence: [["requirements", "intakes"], ["officialSources"]], minCharacters: 250, maxCharacters: 900 },
-  requirements: { objective: "Summarise only verified entry requirements and distinguish them from planning guidance.", intent: "What do I need to qualify?", evidence: [["requirements"], ["officialSources"]], minCharacters: 160 },
+  admission: { objective: "Explain the verified admissions path, its sequence and what must be confirmed for the exact intake.", intent: "How does admission work and what should I prepare?", evidence: [["requirements", "intakes"], ["officialSources"]], minCharacters: 250, maxCharacters: 900, contentShape: "steps", minItems: 3, maxItems: 5 },
+  requirements: { objective: "Summarise only verified entry requirements and distinguish them from planning guidance.", intent: "What do I need to qualify?", evidence: [["requirements"], ["officialSources"]], minCharacters: 160, contentShape: "cards", minItems: 2, maxItems: 4 },
   fees: { objective: "Explain authoritative fee components without inventing or estimating prices.", intent: "What verified fees should I budget for?", evidence: [["tuitionFee", "discountedFee", "currency"], ["officialSources"]], minCharacters: 140 },
   intakes: { objective: "Explain verified intake timing and deadline evidence without guessing dates.", intent: "When can I start and apply?", evidence: [["intakes"], ["officialSources"]], minCharacters: 140 },
-  intakeGuide: { objective: "Help students interpret verified intake and application timing.", intent: "How should I plan the application calendar?", evidence: [["intakes"], ["officialSources"]], minCharacters: 160 },
-  scholarships: { objective: "Describe verified scholarship or discount evidence and its limitations.", intent: "Which funding options are documented?", evidence: [["scholarship", "discountedFee"], ["officialSources"]], minCharacters: 150 },
-  living: { objective: "Give practical, sourced planning guidance for daily student life and costs.", intent: "How should I plan daily life and my budget?", evidence: [["housingSummary", "housingFormats"], ["officialSources"]], minCharacters: 180 },
-  climate: { objective: "Interpret verified climate evidence for study and arrival planning.", intent: "How can climate affect daily student life?", evidence: [["climateSummary", "climateAnnualAverageC", "climate"], ["officialSources"]], minCharacters: 150 },
-  transport: { objective: "Connect verified transport modes to campus and housing decisions.", intent: "How will I travel between campus and housing?", evidence: [["transportModes", "campusGeography"], ["officialSources"]], minCharacters: 170 },
-  campus: { objective: "Explain the verified campus location and what it means for the student's shortlist.", intent: "Where will I study and what should I assess?", evidence: [["campusGeography", "address"], ["officialSources"]], minCharacters: 160 },
-  housing: { objective: "Explain verified accommodation formats or practical selection criteria.", intent: "Which accommodation routes can I compare?", evidence: [["housingSummary", "housingFormats"], ["officialSources"]], minCharacters: 170 },
-  visa: { objective: "Give source-bound planning guidance without predicting visa outcomes.", intent: "Which official visa and residence steps should I plan?", evidence: [["officialSources"]], minCharacters: 160 },
-  services: { objective: "Describe documented student services and how to verify access.", intent: "Which support services can I use?", evidence: [["officialSources"], ["description"]], minCharacters: 150 },
-  support: { objective: "Explain documented academic and student support without generic promises.", intent: "What support is documented for students?", evidence: [["officialSources"], ["description"]], minCharacters: 150 },
-  recognition: { objective: "Explain only documented recognition, accreditation or ranking evidence.", intent: "How is this option recognised?", evidence: [["ranking", "qsRanking", "timesRanking", "shanghaiRanking", "leidenRanking"], ["officialSources"]], minCharacters: 150 },
+  intakeGuide: { objective: "Help students interpret verified intake and application timing.", intent: "How should I plan the application calendar?", evidence: [["intakes"], ["officialSources"]], minCharacters: 160, contentShape: "steps", minItems: 3, maxItems: 5 },
+  scholarships: { objective: "Describe verified scholarship or discount evidence and its limitations.", intent: "Which funding options are documented?", evidence: [["scholarship", "discountedFee"], ["officialSources"]], minCharacters: 150, contentShape: "cards", minItems: 2, maxItems: 4 },
+  living: { objective: "Give practical, sourced planning guidance for daily student life and costs.", intent: "How should I plan daily life and my budget?", evidence: [["housingSummary", "housingFormats"], ["officialSources"]], minCharacters: 180, contentShape: "cards", minItems: 3, maxItems: 4 },
+  climate: { objective: "Interpret verified climate evidence for study and arrival planning.", intent: "How can climate affect daily student life?", evidence: [["climateSummary", "climateAnnualAverageC", "climate"], ["officialSources"]], minCharacters: 150, contentShape: "cards", minItems: 3, maxItems: 4 },
+  transport: { objective: "Connect verified transport modes to campus and housing decisions.", intent: "How will I travel between campus and housing?", evidence: [["transportModes", "campusGeography"], ["officialSources"]], minCharacters: 170, contentShape: "cards", minItems: 3, maxItems: 4 },
+  campus: { objective: "Explain the verified campus location and what it means for the student's shortlist.", intent: "Where will I study and what should I assess?", evidence: [["campusGeography", "address"], ["officialSources"]], minCharacters: 160, contentShape: "cards", minItems: 2, maxItems: 4 },
+  housing: { objective: "Explain verified accommodation formats or practical selection criteria.", intent: "Which accommodation routes can I compare?", evidence: [["housingSummary", "housingFormats"], ["officialSources"]], minCharacters: 170, contentShape: "cards", minItems: 3, maxItems: 4 },
+  visa: { objective: "Give source-bound planning guidance without predicting visa outcomes.", intent: "Which official visa and residence steps should I plan?", evidence: [["officialSources"]], minCharacters: 160, contentShape: "steps", minItems: 3, maxItems: 5 },
+  services: { objective: "Describe documented student services and how to verify access.", intent: "Which support services can I use?", evidence: [["officialSources"], ["description"]], minCharacters: 150, contentShape: "cards", minItems: 3, maxItems: 4 },
+  support: { objective: "Explain documented academic and student support without generic promises.", intent: "What support is documented for students?", evidence: [["officialSources"], ["description"]], minCharacters: 150, contentShape: "cards", minItems: 3, maxItems: 4 },
+  recognition: { objective: "Explain only documented recognition, accreditation or ranking evidence.", intent: "How is this option recognised?", evidence: [["ranking", "qsRanking", "timesRanking", "shanghaiRanking", "leidenRanking"], ["officialSources"]], minCharacters: 150, contentShape: "cards", minItems: 2, maxItems: 4 },
   studentStory: { objective: "Describe a plausible decision journey, never a fabricated testimonial.", intent: "How might a student evaluate this option?", evidence: [["programs", "campusGeography", "city"], ["officialSources"]], minCharacters: 170 },
   reviews: { objective: "Explain how to evaluate reliable student feedback without inventing reviews.", intent: "How should I assess student feedback?", evidence: [["officialSources"], ["description"]], minCharacters: 140 },
-  faq: { objective: "Answer distinct high-intent questions using only the evidence allocated to this page.", intent: "What are the most important remaining questions?", evidence: [["officialSources"], ["requirements", "programs", "housingSummary", "transportModes"]], minCharacters: 180 },
-  applyGuide: { objective: "Give an ordered, evidence-bound application checklist without promising admission.", intent: "What should I do next?", evidence: [["requirements", "intakes"], ["officialSources"]], minCharacters: 180 },
+  faq: { objective: "Answer distinct high-intent questions using only the evidence allocated to this page.", intent: "What are the most important remaining questions?", evidence: [["officialSources"], ["requirements", "programs", "housingSummary", "transportModes"]], minCharacters: 180, contentShape: "questions", minItems: 3, maxItems: 5 },
+  applyGuide: { objective: "Give an ordered, evidence-bound application checklist without promising admission.", intent: "What should I do next?", evidence: [["requirements", "intakes"], ["officialSources"]], minCharacters: 180, contentShape: "steps", minItems: 3, maxItems: 5 },
 };
 
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -253,6 +261,9 @@ export function buildDetailGenerationPlan(input: {
       readiness,
       evidenceKeys,
       allocatedEntities,
+      contentShape: policy.contentShape ?? "prose",
+      minItems: policy.contentShape ? policy.minItems ?? 2 : 0,
+      maxItems: policy.contentShape ? policy.maxItems ?? 4 : 0,
     });
   });
   return {
@@ -317,6 +328,14 @@ function unsupportedCatalogEntityMentions(text: string, plan: DetailGenerationPl
 }
 
 const words = (value: string) => new Set(value.toLocaleLowerCase("en-US").replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(token => token.length > 3));
+const sectionCopy = (section: DetailContent["sections"][number]) => [
+  section.title,
+  section.body ?? "",
+  ...(section.cards ?? []).flatMap(item => [item.title, item.body]),
+  ...(section.steps ?? []).flatMap(item => [item.title, item.body]),
+  ...(section.questions ?? []).flatMap(item => [item.question, item.answer]),
+  ...(section.table ? [...section.table.columns, ...section.table.rows.flat()] : []),
+].filter(Boolean).join("\n");
 const similarity = (left: string, right: string) => {
   const a = words(left), b = words(right);
   if (!a.size || !b.size) return 0;
@@ -362,6 +381,18 @@ export function evaluateDetailContentQuality(input: {
   const issues: DetailContentQualityIssue[] = [];
   const generatedKeys = new Set(input.plan.sections.map(section => section.key));
   const sections = input.content.sections.filter(section => generatedKeys.has(section.key) && section.body?.trim());
+  const planByKey = new Map(input.plan.sections.map(section => [section.key, section] as const));
+  const missingStructuredContent = sections.filter(section => {
+    const expected = planByKey.get(section.key)?.contentShape ?? "prose";
+    if (!expected || expected === "prose") return false;
+    return !section[expected]?.length;
+  }).map(section => section.key);
+  if (missingStructuredContent.length) issues.push({
+    code: "MISSING_SOURCE_STRUCTURED_CONTENT",
+    severity: "blocker",
+    sections: missingStructuredContent,
+    message: "A source-backed section is missing the cards, steps or questions required by its template contract.",
+  });
   const duplicatePairs: Array<[string, string]> = [];
   for (let left = 0; left < sections.length; left += 1) for (let right = left + 1; right < sections.length; right += 1) {
     if (similarity(sections[left]!.body!, sections[right]!.body!) >= 0.72) duplicatePairs.push([sections[left]!.key, sections[right]!.key]);
@@ -372,18 +403,18 @@ export function evaluateDetailContentQuality(input: {
     sections: [...new Set(duplicatePairs.flat())],
     message: "Sections repeat too much of the same vocabulary and decision guidance.",
   });
-  const combined = sections.map(section => `${section.title}\n${section.body}`).join("\n");
+  const combined = sections.map(sectionCopy).join("\n");
   const unsupportedEntities = unsupportedCatalogEntityMentions(combined, input.plan);
   if (unsupportedEntities.length) issues.push({
     code: "OUT_OF_CATALOG_NAMED_ENTITY",
     severity: "blocker",
-    sections: sections.filter(section => unsupportedCatalogEntityMentions(`${section.title}\n${section.body}`, input.plan).length).map(section => section.key),
+    sections: sections.filter(section => unsupportedCatalogEntityMentions(sectionCopy(section), input.plan).length).map(section => section.key),
     message: `Generated copy introduced named universities or programmes outside the system catalogue: ${unsupportedEntities.slice(0, 5).join(", ")}.`,
   });
   const internalMatches = combined.match(INTERNAL_WORDING) ?? [];
-  if (internalMatches.length) issues.push({ code: "INTERNAL_WORDING", severity: "blocker", sections: sections.filter(section => new RegExp(INTERNAL_WORDING.source, "iu").test(`${section.title}\n${section.body}`)).map(section => section.key), message: "Public copy exposes internal catalogue, source or generation language." });
+  if (internalMatches.length) issues.push({ code: "INTERNAL_WORDING", severity: "blocker", sections: sections.filter(section => new RegExp(INTERNAL_WORDING.source, "iu").test(sectionCopy(section))).map(section => section.key), message: "Public copy exposes internal catalogue, source or generation language." });
   INTERNAL_WORDING.lastIndex = 0;
-  const technicalCopy = sections.filter(section => TECHNICAL_OR_DRAFT_COPY.test(`${section.title}\n${section.body}`)).map(section => section.key);
+  const technicalCopy = sections.filter(section => TECHNICAL_OR_DRAFT_COPY.test(sectionCopy(section))).map(section => section.key);
   if (technicalCopy.length) issues.push({ code: "TECHNICAL_FALLBACK_COPY", severity: "blocker", sections: technicalCopy, message: "Public copy contains drafting, publishing or source-system instructions." });
   const genericTitles = sections.filter(section => section.key !== "hero" && GENERIC_SECTION_TITLE.test(section.title.trim())).map(section => section.key);
   if (genericTitles.length >= 2) issues.push({ code: "GENERIC_SECTION_TITLES", severity: "warning", sections: genericTitles, message: "Too many editorial sections use generic labels instead of entity-specific, intent-led headings." });
@@ -402,7 +433,6 @@ export function evaluateDetailContentQuality(input: {
   });
   const disclaimerCount = (combined.match(STOCK_DISCLAIMER) ?? []).length;
   if (disclaimerCount > 3) issues.push({ code: "REPEATED_VERIFICATION_DISCLAIMER", severity: "warning", sections: [], message: "Verification advice is repeated as stock copy instead of adding information." });
-  const planByKey = new Map(input.plan.sections.map(section => [section.key, section] as const));
   const thin = sections.filter(section => (section.body?.length ?? 0) < (planByKey.get(section.key)?.minCharacters ?? 80)).map(section => section.key);
   if (thin.length) issues.push({ code: "THIN_SECTION_COPY", severity: "warning", sections: thin, message: "One or more generated sections are below their information-value target." });
   if (input.plan.kind === "program") {
@@ -446,7 +476,7 @@ export function evaluateDetailContentQuality(input: {
     if (namedExamples.length > 2) issues.push({
       code: "DESTINATION_CATALOG_DOMINANCE",
       severity: "blocker",
-      sections: sections.filter(section => destinationCatalogMentions(`${section.title}\n${section.body ?? ""}`, input.plan).length).map(section => section.key),
+      sections: sections.filter(section => destinationCatalogMentions(sectionCopy(section), input.plan).length).map(section => section.key),
       message: "Country editorial copy relies on too many named universities or programmes instead of country-level decision guidance.",
     });
   }
@@ -486,7 +516,7 @@ export function evaluateDetailContentQuality(input: {
         code: "SOURCE_LANGUAGE_LEAKAGE",
         severity: strongLeakage.length ? "blocker" : "warning",
         sections: sections
-          .filter(section => leakagePattern.test(`${section.title}\n${section.body}`))
+          .filter(section => leakagePattern.test(sectionCopy(section)))
           .map(section => section.key),
         message: strongLeakage.length
           ? "Unmistakably English interface or weather phrasing remains in localized content."

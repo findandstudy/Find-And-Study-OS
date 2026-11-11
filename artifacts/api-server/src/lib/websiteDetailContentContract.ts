@@ -73,17 +73,19 @@ export function detailDisplayTerm(content: DetailContent | null | undefined, sou
 export function preserveDetailSectionDesign(
   generated: DetailContentSection,
   existing: DetailContentSection | undefined,
+  options: { preserveStructuredContent?: boolean } = {},
 ): DetailContentSection {
   if (!existing) return generated;
+  const preserveStructuredContent = options.preserveStructuredContent !== false;
   return {
     ...generated,
     ...(existing.hero ? { hero: { ...(generated.hero ?? {}), ...existing.hero } } : {}),
     ...(existing.presentation ? { presentation: existing.presentation } : {}),
-    ...(existing.cards?.length ? { cards: existing.cards } : {}),
-    ...(existing.table?.columns.length ? { table: existing.table } : {}),
-    ...(existing.steps?.length ? { steps: existing.steps } : {}),
+    ...(preserveStructuredContent && existing.cards?.length ? { cards: existing.cards } : {}),
+    ...(preserveStructuredContent && existing.table?.columns.length ? { table: existing.table } : {}),
+    ...(preserveStructuredContent && existing.steps?.length ? { steps: existing.steps } : {}),
     ...(existing.images?.length ? { images: existing.images } : {}),
-    ...(existing.questions?.length ? { questions: existing.questions } : {}),
+    ...(preserveStructuredContent && existing.questions?.length ? { questions: existing.questions } : {}),
   };
 }
 const SEO_FALLBACKS: Record<string, (name: string) => string> = {

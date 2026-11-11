@@ -86,6 +86,19 @@ test("AI copy regeneration preserves the existing section design", () => {
   assert.deepEqual(result.images, existing.images);
   assert.deepEqual(result.questions, existing.questions);
 });
+test("source-backed regeneration replaces old structured copy while preserving visual composition", () => {
+  const generated = { ...fixture().sections[0], title: "Generated title", body: "Generated body", cards: [{ title: "Source-backed card", body: "Verified source-backed detail" }] };
+  const existing = {
+    ...fixture().sections[0],
+    presentation: { tone: "sand", width: "full" },
+    cards: [{ title: "Old card", body: "Old body" }],
+    images: [{ src: "https://example.org/image.jpg", alt: "Image" }],
+  };
+  const result = preserveDetailSectionDesign(generated as any, existing as any, { preserveStructuredContent: false });
+  assert.deepEqual(result.cards, generated.cards);
+  assert.deepEqual(result.presentation, existing.presentation);
+  assert.deepEqual(result.images, existing.images);
+});
 test("page-level section order is a complete bounded permutation with fixed structural sections", () => {
   const sectionOrder = [...DETAIL_CONTENT_LAYOUT_KEYS.program];
   [sectionOrder[3], sectionOrder[4]] = [sectionOrder[4], sectionOrder[3]];

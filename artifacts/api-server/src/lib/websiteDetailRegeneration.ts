@@ -365,10 +365,15 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
   const content = {
       ...base,
       sections: base.sections.flatMap(section => {
-        if (generatedKeys.has(section.key)) return [preserveDetailSectionDesign(
-          { ...section, title: section.key === "hero" ? section.title : contextualSectionTitle(section.key, generated[section.key]!.title, entityName), body: generated[section.key]!.body },
-          existingByKey.get(section.key),
-        )];
+        if (generatedKeys.has(section.key)) {
+          const generatedSection = generated[section.key]!;
+          const replacesStructuredContent = !!(generatedSection.cards?.length || generatedSection.steps?.length || generatedSection.questions?.length);
+          return [preserveDetailSectionDesign(
+            { ...section, ...generatedSection, title: section.key === "hero" ? section.title : contextualSectionTitle(section.key, generatedSection.title, entityName), body: generatedSection.body },
+            existingByKey.get(section.key),
+            { preserveStructuredContent: !replacesStructuredContent },
+          )];
+        }
         if (skipped.has(section.key)) {
           const current = existingByKey.get(section.key);
           if (current?.body && !generatedPlaceholder.test(current.body)) return [current];

@@ -141,3 +141,34 @@ test("city key facts generation asks for decision-useful copy without repeating 
     assert.match(capturedPrompt, /no more than two titles may begin with the same action verb/i);
   } finally { restore(); }
 });
+
+test("source-backed editorial sections generate structured cards instead of preserving prose only", async () => {
+  let capturedPrompt = "";
+  const body = "Students can compare the verified teaching setting, transport links and accommodation routes as connected parts of the same study decision. Each point below explains a distinct practical consideration supported by the linked city evidence.";
+  const cards = [
+    { title: "Teaching setting", body: "Compare the documented teaching languages with the language requirements of your intended programme." },
+    { title: "Daily connections", body: "Use the verified transport network to assess realistic travel between housing and the teaching site." },
+    { title: "Housing choice", body: "Compare the documented accommodation formats by location, routine and the support each route provides." },
+  ];
+  const restore = mockOpenAi(prompt => {
+    capturedPrompt = prompt;
+    return JSON.stringify({ highlights: { title: "Build a practical shortlist", body, cards } });
+  });
+  try {
+    const service = new AiContentService({ provider: "openai", apiKey: "test" });
+    const plan = {
+      version: 1 as const, kind: "city" as const, entityName: "Example City", audience: "prospective international students" as const,
+      primaryIntent: "Help students compare Example City.", catalogEntities: { universities: [], programs: [] }, pageRules: [], skippedSections: [],
+      sections: [{ key: "highlights", title: "Highlights", templateBody: "", instruction: "Use verified city evidence.", objective: "Explain strengths.", searchIntent: "What matters?", minCharacters: 180, maxCharacters: 900, readiness: "authoritative" as const, evidenceKeys: ["sourceTopics"], allocatedEntities: [], contentShape: "cards" as const, minItems: 3, maxItems: 4 }],
+    };
+    const result = await service.generateDetailSections({
+      kind: "city", entityName: "Example City",
+      facts: { city: "Example City", sourceTopics: [{ topicTitle: "Highlights", verifiedContent: "Teaching, transport and housing evidence." }] },
+      sections: plan.sections, plan,
+    });
+    assert.deepEqual(result.highlights.cards, cards);
+    assert.match(capturedPrompt, /RESPONSE_SHAPES=/);
+    assert.match(capturedPrompt, /derive every item from the verified evidence/i);
+    assert.match(capturedPrompt, /"contentShape":"cards"/);
+  } finally { restore(); }
+});

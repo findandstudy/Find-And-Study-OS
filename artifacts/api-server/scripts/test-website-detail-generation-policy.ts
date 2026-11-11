@@ -338,3 +338,30 @@ test("programme quality gate reviews thin decision support and repetitive headin
   assert.ok(quality.issues.some(issue => issue.code === "REPETITIVE_HEADING_OPENINGS"));
   assert.ok(quality.issues.some(issue => issue.code === "THIN_PROGRAM_DECISION_SUPPORT"));
 });
+
+test("quality gate blocks source-backed box sections that contain prose but no structured items", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "city",
+    entityName: "Example City",
+    facts: {
+      city: "Example City",
+      description: "Verified city context for prospective students.",
+      teachingLanguages: ["English"],
+      officialSources: [{ field: "highlights" }, { field: "description" }],
+    },
+    sections: [section("highlights")],
+  });
+  assert.equal(plan.sections[0]?.contentShape, "cards");
+  const content: DetailContent = {
+    version: 1, kind: "city", entityId: 11, locale: "en", seoMode: "auto",
+    seo: { title: "Study in Example City | Find & Study", description: "Compare student life and study planning in Example City.", ogTitle: "Study in Example City", ogDescription: "City guide", twitterTitle: "Study in Example City", twitterDescription: "City guide" },
+    sections: [{
+      key: "highlights", title: "Plan around the verified setting",
+      body: "This source-backed introduction is long enough to explain the verified teaching context and its practical importance to an international student's shortlist, but it intentionally contains no cards so the structured-content quality gate can detect the incomplete generation result.",
+      sources: [{ label: "Official", url: "https://example.test" }], reviewedOn: "2026-01-01",
+    }],
+  };
+  const quality = evaluateDetailContentQuality({ content, plan });
+  assert.equal(quality.status, "blocked");
+  assert.ok(quality.issues.some(issue => issue.code === "MISSING_SOURCE_STRUCTURED_CONTENT"));
+});
