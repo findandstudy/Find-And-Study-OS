@@ -128,7 +128,7 @@ test("country quality gate blocks catalogue-led hero and excessive named example
     facts: {
       destination: "Example Country", description: "Verified destination context.",
       universities: [{ name: "Alpha University" }, { name: "Beta University" }],
-      programs: [{ name: "Architecture" }, { name: "Nursing" }],
+      programs: [{ name: "Bachelor of Architecture" }, { name: "Bachelor of Nursing" }],
       officialSources: [{ field: "description" }],
     },
     sections: [section("hero"), section("highlights"), section("education")],
@@ -138,14 +138,37 @@ test("country quality gate blocks catalogue-led hero and excessive named example
     seo: { title: "Study in Example Country", description: "Compare education and student life in Example Country." },
     sections: [
       { key: "hero", title: "Study in Example Country", body: "Alpha University leads a catalogue-focused introduction rather than a country value proposition for international students planning their destination.", sources: [], reviewedOn: null },
-      { key: "highlights", title: "Country choices", body: "Beta University and Architecture are presented as additional named examples in a page that should primarily explain the country-level study experience and practical decisions.", sources: [], reviewedOn: null },
-      { key: "education", title: "Education structure", body: "Nursing becomes a fourth named example rather than a concise explanation of the national education structure, admissions context and student choices.", sources: [], reviewedOn: null },
+      { key: "highlights", title: "Country choices", body: "Beta University and Bachelor of Architecture are presented as additional named examples in a page that should primarily explain the country-level study experience and practical decisions.", sources: [], reviewedOn: null },
+      { key: "education", title: "Education structure", body: "Bachelor of Nursing becomes a fourth named example rather than a concise explanation of the national education structure, admissions context and student choices.", sources: [], reviewedOn: null },
     ],
   };
   const quality = evaluateDetailContentQuality({ content, plan });
   assert.equal(quality.status, "blocked");
   assert.ok(quality.issues.some(issue => issue.code === "DESTINATION_HERO_CATALOG_ENTITY"));
   assert.ok(quality.issues.some(issue => issue.code === "DESTINATION_CATALOG_DOMINANCE"));
+});
+
+test("country quality gate does not treat generic one-word study fields as named catalogue dominance", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "destination", entityName: "Example Country",
+    facts: {
+      destination: "Example Country",
+      universities: [{ name: "Alpha University" }],
+      programs: [{ name: "Medicine" }, { name: "Business" }, { name: "English" }],
+      officialSources: [{ field: "description" }],
+    },
+    sections: [section("overview"), section("education")],
+  });
+  const content: DetailContent = {
+    version: 1, kind: "destination", entityId: 9, locale: "en", seoMode: "auto",
+    seo: { title: "Study in Example Country", description: "Compare education and student life in Example Country." },
+    sections: [
+      { key: "overview", title: "Plan by study setting", body: "Students can compare medicine, business and English study routes while keeping city choice, budget and entry preparation central to the destination decision.", sources: [], reviewedOn: null },
+      { key: "education", title: "Understand the education structure", body: "The national education structure gives students several ways to compare academic level, teaching language and progression without turning a country guide into a programme directory.", sources: [], reviewedOn: null },
+    ],
+  };
+  const quality = evaluateDetailContentQuality({ content, plan });
+  assert.equal(quality.issues.some(issue => issue.code === "DESTINATION_CATALOG_DOMINANCE"), false);
 });
 
 test("country quality gate rejects changing catalogue totals in hero copy", () => {
@@ -351,6 +374,42 @@ test("quality gate counts structured items when checking regeneration content lo
   };
   const quality = evaluateDetailContentQuality({ content, plan, previous });
   assert.ok(!quality.issues.some(issue => issue.code === "EXCESSIVE_CONTENT_LOSS"));
+});
+
+test("source-routed country sections may become materially more concise without being blocked", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "destination",
+    entityName: "Example Country",
+    facts: {
+      destination: "Example Country",
+      description: "Verified destination context.",
+      officialSources: [{ field: "countryGuide" }],
+      sourceTopics: [{ topicTitle: "Country overview", verifiedContent: "Verified planning evidence for the destination." }],
+    },
+    sections: [section("overview")],
+  });
+  const previousBody = "A detailed legacy overview repeats destination context, planning guidance and practical comparisons across several sentences. It explains study settings, city choice, student support, budgeting, academic routes and preparation considerations in a long prose format that is useful but not especially scannable for prospective international students.";
+  const previous: DetailContent = {
+    version: 1, kind: "destination", entityId: 9, locale: "en", seoMode: "auto",
+    seo: { title: "Study in Example Country", description: "Compare study routes in Example Country." },
+    sections: [{ key: "overview", title: "Plan the destination", body: previousBody, sources: [], reviewedOn: null }],
+  };
+  const content: DetailContent = {
+    ...previous,
+    sections: [{
+      key: "overview", title: "Plan the destination",
+      body: "Use verified context to compare the destination.",
+      cards: [
+        { title: "Compare settings", body: "Match the study setting and city to your priorities." },
+        { title: "Plan costs", body: "Build a realistic budget from verified local context." },
+        { title: "Prepare early", body: "Use published requirements and timelines for each route." },
+      ],
+      sources: [], reviewedOn: null,
+    }],
+  };
+  const quality = evaluateDetailContentQuality({ content, plan, previous });
+  const issue = quality.issues.find(item => item.code === "EXCESSIVE_CONTENT_LOSS");
+  assert.notEqual(issue?.severity, "blocker");
 });
 
 test("quality gate reviews pages dominated by generic editorial headings", () => {

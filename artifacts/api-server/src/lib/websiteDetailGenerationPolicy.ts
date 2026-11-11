@@ -382,7 +382,17 @@ const DESTINATION_LIVE_COUNTER = /\b\d[\d.,\s]*\s+(?:universit(?:y|ies)|programm
 
 function destinationCatalogMentions(text: string, plan: DetailGenerationPlan) {
   const normalizedText = normalizedEntity(text);
-  const matches = [...plan.catalogEntities.universities, ...plan.catalogEntities.programs]
+  // A one-word programme label such as "Medicine", "Business" or "English"
+  // is also ordinary country-guide vocabulary. Counting those words as named
+  // catalogue examples made source-rich destination copy fail even when it did
+  // not advertise a particular programme. Universities remain exact catalogue
+  // entities; programme dominance is measured only for specific multi-token
+  // programme names.
+  const specificPrograms = plan.catalogEntities.programs.filter(value => {
+    const normalized = normalizedEntity(value);
+    return normalized.length >= 12 && normalized.split(/\s+/u).length >= 2;
+  });
+  const matches = [...plan.catalogEntities.universities, ...specificPrograms]
     .filter(value => {
       const normalized = normalizedEntity(value);
       return normalized.length >= 4 && normalizedText.includes(normalized);
@@ -510,13 +520,23 @@ export function evaluateDetailContentQuality(input: {
       const previousSection = previousByKey.get(section.key);
       const previousLength = previousSection ? sectionCopy(previousSection).length - previousSection.title.length : 0;
       const currentLength = sectionCopy(section).length - section.title.length;
-      return previousLength >= 220 && currentLength < previousLength * 0.8 ? [{ key: section.key, ratio: currentLength / previousLength }] : [];
+      const planSection = planByKey.get(section.key);
+      const sourceRoutedDestination = input.plan.kind === "destination"
+        && Boolean(planSection?.allocatedSourceTopicTitles?.length);
+      // Source-routed country regeneration often replaces repetitive legacy
+      // prose with shorter cards or steps. Preserve a hard floor against real
+      // information loss without requiring the new layout to retain 80% of
+      // every legacy section's raw character count.
+      const minimumRatio = sourceRoutedDestination ? 0.65 : 0.8;
+      return previousLength >= 220 && currentLength < previousLength * minimumRatio
+        ? [{ key: section.key, ratio: currentLength / previousLength, sourceRoutedDestination }]
+        : [];
     });
     if (regressions.length) issues.push({
       code: "EXCESSIVE_CONTENT_LOSS",
-      severity: regressions.some(item => item.ratio < 0.55) ? "blocker" : "warning",
+      severity: regressions.some(item => item.ratio < (item.sourceRoutedDestination ? 0.4 : 0.55)) ? "blocker" : "warning",
       sections: regressions.map(item => item.key),
-      message: "Regeneration removed too much useful editorial depth compared with the existing page.",
+      message: `Regeneration removed too much useful editorial depth compared with the existing page (${regressions.map(item => `${item.key}:${Math.round(item.ratio * 100)}%`).join(", ")}).`,
     });
   }
   let languageStatus: DetailContentQualityReport["languageStatus"] = "pass";
