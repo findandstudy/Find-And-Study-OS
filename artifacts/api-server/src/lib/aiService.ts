@@ -465,6 +465,7 @@ ACCURACY AND SAFETY:
 - Do not mention internal catalogues, prompts, sources, AI, missing data or editorial review.
 - Do not output HTML, Markdown, citations, URLs or template variables.
 - Respect each section's MIN_CHARACTERS and MAX_CHARACTERS in PAGE_PLAN. Keep every title under 100 characters.
+- For a prose section, MIN_CHARACTERS and MAX_CHARACTERS apply to the body. For cards, steps or questions, they apply to the combined body and structured item copy; keep the introductory body concise but substantive.
 
 PAGE=${JSON.stringify({ kind: params.kind, entityName: params.entityName })}
 VERIFIED_FACTS=${JSON.stringify(params.facts)}
@@ -495,7 +496,8 @@ TEMPLATE_CONTENT_POLICY=${JSON.stringify(params.contentPolicy ?? null)}${this.co
       const hasUnsafeContent = /<[^>]+>|https?:\/\/|\{\{/.test(JSON.stringify(value))
         || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(title)
         || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(body);
-      if (!title || title.length > 100 || body.length < contract.minCharacters || body.length > contract.maxCharacters || hasUnsafeContent) throw new Error(`AI detail generation returned unsafe or invalid ${key} copy`);
+      const minimumBodyCharacters = contentShape === "prose" ? contract.minCharacters : Math.min(80, Math.max(40, Math.floor(contract.minCharacters * 0.25)));
+      if (!title || title.length > 100 || body.length < minimumBodyCharacters || body.length > contract.maxCharacters || hasUnsafeContent) throw new Error(`AI detail generation returned unsafe or invalid ${key} copy`);
       if (key === "hero" && /^explore\b/iu.test(body)) throw new Error("AI detail generation returned a generic hero value proposition");
       const generated: AiGeneratedDetailSection = { title, body };
       if (contentShape === "cards" || contentShape === "steps") {
@@ -510,6 +512,8 @@ TEMPLATE_CONTENT_POLICY=${JSON.stringify(params.contentPolicy ?? null)}${this.co
           return { title: itemTitle, body: itemBody };
         });
         if (new Set(normalized.map(item => item.title.toLocaleLowerCase("en-US"))).size !== normalized.length) throw new Error(`AI detail generation returned duplicate ${key} items`);
+        const totalCharacters = body.length + normalized.reduce((sum, item) => sum + item.title.length + item.body.length, 0);
+        if (totalCharacters < contract.minCharacters || totalCharacters > contract.maxCharacters) throw new Error(`AI detail generation returned invalid ${key} structured copy length`);
         generated[contentShape] = normalized;
       } else if (contentShape === "questions") {
         const items = record.questions;
@@ -523,6 +527,8 @@ TEMPLATE_CONTENT_POLICY=${JSON.stringify(params.contentPolicy ?? null)}${this.co
           return { question, answer };
         });
         if (new Set(questions.map(item => item.question.toLocaleLowerCase("en-US"))).size !== questions.length) throw new Error(`AI detail generation returned duplicate ${key} questions`);
+        const totalCharacters = body.length + questions.reduce((sum, item) => sum + item.question.length + item.answer.length, 0);
+        if (totalCharacters < contract.minCharacters || totalCharacters > contract.maxCharacters) throw new Error(`AI detail generation returned invalid ${key} structured copy length`);
         generated.questions = questions;
       }
       output[key] = generated;

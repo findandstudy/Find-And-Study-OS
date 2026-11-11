@@ -172,3 +172,28 @@ test("source-backed editorial sections generate structured cards instead of pres
     assert.match(capturedPrompt, /"contentShape":"cards"/);
   } finally { restore(); }
 });
+
+test("structured section length is evaluated across its introduction and cards", async () => {
+  const body = "Compare these verified points before you shortlist this destination.";
+  const cards = [
+    { title: "Teaching setting", body: "Compare documented teaching languages with the language requirements of your intended programme." },
+    { title: "Daily connections", body: "Assess realistic travel between accommodation and the teaching location using verified transport evidence." },
+    { title: "Housing choice", body: "Compare documented accommodation formats by location, routine and the support attached to each route." },
+  ];
+  const restore = mockOpenAi(JSON.stringify({ highlights: { title: "Build a practical shortlist", body, cards } }));
+  try {
+    const service = new AiContentService({ provider: "openai", apiKey: "test" });
+    const plan = {
+      version: 1 as const, kind: "destination" as const, entityName: "Example Country", audience: "prospective international students" as const,
+      primaryIntent: "Help students compare Example Country.", catalogEntities: { universities: [], programs: [] }, pageRules: [], skippedSections: [],
+      sections: [{ key: "highlights", title: "Highlights", templateBody: "", instruction: "Use verified evidence.", objective: "Explain strengths.", searchIntent: "What matters?", minCharacters: 260, maxCharacters: 900, readiness: "authoritative" as const, evidenceKeys: ["sourceTopics"], allocatedEntities: [], contentShape: "cards" as const, minItems: 3, maxItems: 4 }],
+    };
+    const result = await service.generateDetailSections({
+      kind: "destination", entityName: "Example Country",
+      facts: { destination: "Example Country", sourceTopics: [{ topicTitle: "Highlights", verifiedContent: "Teaching, transport and housing evidence." }] },
+      sections: plan.sections, plan,
+    });
+    assert.equal(result.highlights.body, body);
+    assert.deepEqual(result.highlights.cards, cards);
+  } finally { restore(); }
+});

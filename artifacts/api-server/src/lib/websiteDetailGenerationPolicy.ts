@@ -433,11 +433,12 @@ export function evaluateDetailContentQuality(input: {
   });
   const disclaimerCount = (combined.match(STOCK_DISCLAIMER) ?? []).length;
   if (disclaimerCount > 3) issues.push({ code: "REPEATED_VERIFICATION_DISCLAIMER", severity: "warning", sections: [], message: "Verification advice is repeated as stock copy instead of adding information." });
-  const thin = sections.filter(section => (section.body?.length ?? 0) < (planByKey.get(section.key)?.minCharacters ?? 80)).map(section => section.key);
+  const sectionCharacterCount = (section: DetailContent["sections"][number]) => sectionCopy(section).length - section.title.length;
+  const thin = sections.filter(section => sectionCharacterCount(section) < (planByKey.get(section.key)?.minCharacters ?? 80)).map(section => section.key);
   if (thin.length) issues.push({ code: "THIN_SECTION_COPY", severity: "warning", sections: thin, message: "One or more generated sections are below their information-value target." });
   if (input.plan.kind === "program") {
-    const substantive = sections.filter(section => (section.body?.trim().length ?? 0) >= 160);
-    const totalCharacters = substantive.reduce((sum, section) => sum + (section.body?.trim().length ?? 0), 0);
+    const substantive = sections.filter(section => sectionCharacterCount(section) >= 160);
+    const totalCharacters = substantive.reduce((sum, section) => sum + sectionCharacterCount(section), 0);
     if (substantive.length < 4 || totalCharacters < 900) issues.push({
       code: "THIN_PROGRAM_DECISION_SUPPORT",
       severity: "warning",
@@ -446,8 +447,8 @@ export function evaluateDetailContentQuality(input: {
     });
   }
   if (input.plan.kind === "destination" && input.plan.sections.length >= 8) {
-    const substantive = sections.filter(section => (section.body?.trim().length ?? 0) >= 180);
-    const totalCharacters = substantive.reduce((sum, section) => sum + (section.body?.trim().length ?? 0), 0);
+    const substantive = sections.filter(section => sectionCharacterCount(section) >= 180);
+    const totalCharacters = substantive.reduce((sum, section) => sum + sectionCharacterCount(section), 0);
     if (substantive.length < 6 || totalCharacters < 2_400) issues.push({
       code: "THIN_DESTINATION_DECISION_SUPPORT",
       severity: substantive.length < 4 || totalCharacters < 1_500 ? "blocker" : "warning",
