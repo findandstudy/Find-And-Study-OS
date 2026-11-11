@@ -26,6 +26,7 @@ const blockTypes = readFileSync(new URL("../src/lib/website/blockTypes.ts", impo
 const editorial = readFileSync(new URL("../src/pages/public/DetailEditorial.tsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("../src/pages/public/detailEditorial.css", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../src/pages/public/DetailLayout.tsx", import.meta.url), "utf8");
+const languageCourseBanner = readFileSync(new URL("../src/pages/public/LanguageCourseBanner.tsx", import.meta.url), "utf8");
 const programs = readFileSync(new URL("../src/pages/public/Programs.tsx", import.meta.url), "utf8");
 const programApplicationDialog = readFileSync(new URL("../src/pages/public/PublicProgramApplicationDialog.tsx", import.meta.url), "utf8");
 const programCard = readFileSync(new URL("../src/pages/public/PublicProgramCard.tsx", import.meta.url), "utf8");
@@ -48,6 +49,12 @@ test("detail sections collapse safely across tablet and mobile layouts", () => {
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-facts \{ grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(css, /\.detail-editorial-gallery,[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(programCard, /grid grid-cols-1 min-\[420px\]:grid-cols-2 sm:grid-cols-3/);
+});
+
+test("the shared language banner features English first", () => {
+  const english = languageCourseBanner.indexOf('{ name: "Free English Course"');
+  const turkish = languageCourseBanner.indexOf('{ name: "Free Turkish Course"');
+  assert.ok(english >= 0 && turkish > english);
 });
 
 const cardFixture: PublicProgramCardData = {

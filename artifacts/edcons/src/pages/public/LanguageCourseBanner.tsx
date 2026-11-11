@@ -37,8 +37,8 @@ const copyByLocale: Record<string, BannerCopy> = {
 };
 
 const courses = [
-  { name: "Free Turkish Course", image: "free-turkish-course.png", href: "https://freeturkishcourse.com/" },
   { name: "Free English Course", image: "free-english-course.png", href: "https://freeenglishcourse.org/" },
+  { name: "Free Turkish Course", image: "free-turkish-course.png", href: "https://freeturkishcourse.com/" },
   { name: "Free Spanish Course", image: "free-spanish-course.png", href: "https://freespanishcourse.com/" },
   { name: "Free German Course", image: "free-german-course.png", href: "https://freegermancourse.com/" },
   { name: "Free French Course", image: "free-french-course.png", href: "https://freefrenchcourse.com/" },
