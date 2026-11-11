@@ -487,7 +487,17 @@ export async function regenerateDetailContentDraft(params: {
     const valid = parseDetailContent(generated);
     if (!valid) return { entityId, locale, status: "failed", pageId: target.pageId, error: "INVALID_GENERATED_CONTENT" };
     const quality = mode === "regenerate" ? evaluateDetailContentQuality({ content: valid, plan: qualityPlan, previous: target.content }) : undefined;
-    if (quality?.status === "blocked") return { entityId, locale, status: "failed", pageId: target.pageId, quality, error: "QUALITY_BLOCKED" };
+    if (quality?.status === "blocked") {
+      console.warn("[website-detail-regeneration] quality blocked", {
+        kind,
+        entityId,
+        locale,
+        score: quality.score,
+        sourceCoverage: quality.sourceCoverage,
+        issues: quality.issues.map(issue => ({ code: issue.code, severity: issue.severity, sections: issue.sections })),
+      });
+      return { entityId, locale, status: "failed", pageId: target.pageId, quality, error: "QUALITY_BLOCKED" };
+    }
     if (mode !== "regenerate" && !addedSections && target.pageId && manualSeo) return { entityId, locale, status: "preserved", pageId: target.pageId, addedSections: 0 };
     const saved = await saveGeneratedDetailContentDraft(valid, actorId, target.updatedAt);
     return { entityId, locale, status: target.pageId ? "completed" : "created", pageId: saved.pageId, addedSections, generatedSections: aiEnglish.generatedSections, generatedImages: aiEnglish.generatedImages, imageFailures: aiEnglish.imageFailures, ...(quality ? { quality } : {}) };

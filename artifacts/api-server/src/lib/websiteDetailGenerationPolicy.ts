@@ -507,8 +507,9 @@ export function evaluateDetailContentQuality(input: {
   if (input.previous) {
     const previousByKey = new Map(input.previous.sections.map(section => [section.key, section] as const));
     const regressions = sections.flatMap(section => {
-      const previousLength = previousByKey.get(section.key)?.body?.trim().length ?? 0;
-      const currentLength = section.body?.trim().length ?? 0;
+      const previousSection = previousByKey.get(section.key);
+      const previousLength = previousSection ? sectionCopy(previousSection).length - previousSection.title.length : 0;
+      const currentLength = sectionCopy(section).length - section.title.length;
       return previousLength >= 220 && currentLength < previousLength * 0.8 ? [{ key: section.key, ratio: currentLength / previousLength }] : [];
     });
     if (regressions.length) issues.push({

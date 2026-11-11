@@ -316,6 +316,43 @@ test("quality gate blocks literal SEO truncation and material content loss", () 
   assert.ok(quality.issues.some(issue => issue.code === "EXCESSIVE_CONTENT_LOSS"));
 });
 
+test("quality gate counts structured items when checking regeneration content loss", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "destination",
+    entityName: "Example Country",
+    facts: {
+      destination: "Example Country",
+      description: "Verified destination context.",
+      officialSources: [{ field: "countryGuide" }],
+      sourceTopics: [{ topicTitle: "Country overview", verifiedContent: "Verified planning evidence for the destination." }],
+    },
+    sections: [section("overview")],
+  });
+  const previous: DetailContent = {
+    version: 1, kind: "destination", entityId: 9, locale: "en", seoMode: "auto",
+    seo: { title: "Study in Example Country | Find & Study", description: "Compare study routes and practical planning in Example Country.", ogTitle: "Study in Example Country", ogDescription: "Guide", twitterTitle: "Study in Example Country", twitterDescription: "Guide" },
+    sections: [{
+      key: "overview", title: "Build a realistic country shortlist",
+      body: "This established overview contains enough verified destination context to explain study planning, location choice, student support and the practical comparisons a prospective international student should make before creating a shortlist for the country.",
+      sources: [{ label: "Verified", url: "https://example.test" }], reviewedOn: "2026-01-01",
+    }],
+  };
+  const content: DetailContent = {
+    ...previous,
+    sections: [{
+      ...previous.sections[0]!,
+      body: "Use these verified planning points to compare the destination.",
+      cards: [
+        { title: "Compare study settings", body: "Verified source evidence distinguishes the destination's different student-city settings and explains why location should shape the shortlist." },
+        { title: "Plan the application route", body: "Published institutional calendars and document requirements remain the authoritative basis for each application." },
+        { title: "Budget with evidence", body: "Funding and living-cost conditions vary, so students should compare the verified terms relevant to their chosen route." },
+      ],
+    }],
+  };
+  const quality = evaluateDetailContentQuality({ content, plan, previous });
+  assert.ok(!quality.issues.some(issue => issue.code === "EXCESSIVE_CONTENT_LOSS"));
+});
+
 test("quality gate reviews pages dominated by generic editorial headings", () => {
   const plan = buildDetailGenerationPlan({
     kind: "destination",
