@@ -8,6 +8,9 @@ export type PublicCatalogPolicy = {
   allowedUniversityTypes: string[];
   // Missing key = inherit default, [] = hidden, non-empty = explicit types.
   countryRules: PublicCatalogCountryRules;
+  // Catalog-managed aliases keyed by the option value. This keeps public
+  // filtering data-driven while preserving legacy university_type values.
+  universityTypeAliases?: Record<string, string[]>;
 };
 
 export function normaliseStringList(value: unknown): string[] {
@@ -50,8 +53,11 @@ export function isPublicUniversityVisible(
   country: string,
   universityType: string,
 ): boolean {
-  return universityTypesForPublicCountry(policy, country)
-    .some((value) => value.toLocaleLowerCase() === universityType.trim().toLocaleLowerCase());
+  const normalizedType = universityType.trim().toLocaleLowerCase();
+  return universityTypesForPublicCountry(policy, country).some((value) => {
+    const candidates = [value, ...(policy.universityTypeAliases?.[value] || [])];
+    return candidates.some((candidate) => candidate.trim().toLocaleLowerCase() === normalizedType);
+  });
 }
 
 export function publicCatalogPolicyCacheKey(policy: PublicCatalogPolicy): string {
@@ -63,5 +69,9 @@ export function publicCatalogPolicyCacheKey(policy: PublicCatalogPolicy): string
     policy.allowedCountries.join("|"),
     policy.allowedUniversityTypes.join("|"),
     rules,
+    Object.entries(policy.universityTypeAliases || {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([value, aliases]) => `${value}=${[...aliases].sort().join(",")}`)
+      .join(";"),
   ].join(":");
 }

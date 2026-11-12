@@ -25,6 +25,8 @@ const leadsPage = read("../../edcons/src/pages/staff/Leads.tsx");
 const studentsPage = read("../../edcons/src/pages/staff/Students.tsx");
 const applicationsPage = read("../../edcons/src/pages/staff/Applications.tsx");
 const catalogPage = read("../../edcons/src/pages/admin/Catalog.tsx");
+const catalogRoute = read("../src/routes/catalog.ts");
+const universityTypeSeed = read("../../../lib/db/drizzle/0140_catalog_university_type_options.sql");
 
 test("public catalogue uses an explicit public scope for programs and facets", () => {
   assert.match(publicPrograms, /p\.set\("scope", "public"\)/);
@@ -45,6 +47,16 @@ test("public visibility is persisted as first-class settings", () => {
   assert.match(courseFinder, /requireRole\(\.\.\.ADMIN_ROLES\)/);
 });
 
+test("country public institution rules are edited from catalog-managed university types", () => {
+  assert.match(catalogRoute, /\/countries\/:id\/public-university-types/);
+  assert.match(catalogRoute, /category, "university_type"/);
+  assert.match(catalogPage, /country-public-university-types/);
+  assert.match(catalogPage, /grouped\?\.university_type/);
+  for (const value of ["Public", "Private", "Language School", "Vocational School", "Pathway Provider"]) {
+    assert.ok(universityTypeSeed.includes(`'${value}'`), `missing university type seed: ${value}`);
+  }
+});
+
 test("country-specific public policy supports Turkey private and Latvia mixed", () => {
   const policy: PublicCatalogPolicy = {
     allowedCountries: [],
@@ -61,6 +73,17 @@ test("country-specific public policy supports Turkey private and Latvia mixed", 
   assert.equal(isPublicUniversityVisible(policy, "Latvia", "Public"), true);
   assert.equal(isPublicUniversityVisible(policy, "Hiddenland", "Private"), false);
   assert.deepEqual(universityTypesForPublicCountry(policy, "Germany"), ["Private"]);
+});
+
+test("country-specific public policy resolves catalog-managed aliases", () => {
+  const policy: PublicCatalogPolicy = {
+    allowedCountries: [],
+    allowedUniversityTypes: ["Language School"],
+    countryRules: {},
+    universityTypeAliases: { "Language School": ["Language Centre", "Language Center"] },
+  };
+  assert.equal(isPublicUniversityVisible(policy, "Turkey", "Language Centre"), true);
+  assert.equal(isPublicUniversityVisible(policy, "Turkey", "College"), false);
 });
 
 test("country rules are canonical and legacy country allow-lists remain fail-closed", () => {

@@ -6,7 +6,7 @@ import { parsePublicWebInternalLinkMode } from "../lib/publicCatalogRouteContrac
 import { readPublicCatalogPrices } from "../lib/publicCatalogPriceReadModel";
 import { projectPublicTuition } from "../lib/publicCatalogTuition";
 import { getPublicCatalogCacheGeneration, invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
-import { db, programsTable, programTranslationsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable, documentsTable, auditLogsTable } from "@workspace/db";
+import { db, programsTable, programTranslationsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable, documentsTable, auditLogsTable, catalogOptionsTable } from "@workspace/db";
 import { eq, ilike, sql, and, inArray, isNull, desc, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
@@ -632,20 +632,21 @@ router.get(
   requireRole(...ADMIN_ROLES),
   async (_req, res): Promise<void> => {
     const policy = await getPublicCatalogPolicy();
-    const join = eq(programsTable.universityId, universitiesTable.id);
     const [countries, universityTypes] = await Promise.all([
       db
         .selectDistinct({ value: universitiesTable.country })
         .from(universitiesTable)
-        .innerJoin(programsTable, join)
+        .innerJoin(programsTable, eq(programsTable.universityId, universitiesTable.id))
         .where(and(eq(programsTable.isActive, true), sql`${universitiesTable.country} IS NOT NULL`))
         .orderBy(universitiesTable.country),
       db
-        .selectDistinct({ value: universitiesTable.universityType })
-        .from(universitiesTable)
-        .innerJoin(programsTable, join)
-        .where(and(eq(programsTable.isActive, true), sql`${universitiesTable.universityType} IS NOT NULL`))
-        .orderBy(universitiesTable.universityType),
+        .select({ value: catalogOptionsTable.value })
+        .from(catalogOptionsTable)
+        .where(and(
+          eq(catalogOptionsTable.category, "university_type"),
+          eq(catalogOptionsTable.isActive, true),
+        ))
+        .orderBy(catalogOptionsTable.sortOrder, catalogOptionsTable.id),
     ]);
     res.json({
       ...policy,
@@ -668,12 +669,14 @@ router.patch(
       return;
     }
 
-    const join = eq(programsTable.universityId, universitiesTable.id);
     const [countryRows, typeRows] = await Promise.all([
-      db.selectDistinct({ value: universitiesTable.country }).from(universitiesTable).innerJoin(programsTable, join)
+      db.selectDistinct({ value: universitiesTable.country }).from(universitiesTable).innerJoin(programsTable, eq(programsTable.universityId, universitiesTable.id))
         .where(eq(programsTable.isActive, true)),
-      db.selectDistinct({ value: universitiesTable.universityType }).from(universitiesTable).innerJoin(programsTable, join)
-        .where(eq(programsTable.isActive, true)),
+      db.select({ value: catalogOptionsTable.value }).from(catalogOptionsTable)
+        .where(and(
+          eq(catalogOptionsTable.category, "university_type"),
+          eq(catalogOptionsTable.isActive, true),
+        )),
     ]);
     const availableCountries = new Set(countryRows.map((row) => row.value).filter(Boolean));
     const availableTypes = new Set(typeRows.map((row) => row.value).filter(Boolean));

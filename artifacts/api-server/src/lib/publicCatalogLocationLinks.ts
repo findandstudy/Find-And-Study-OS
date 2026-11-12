@@ -5,6 +5,7 @@ import { publicCatalogSlug, publicCatalogRouteKey, publicCatalogPath } from "./p
 import { normalizeProgramLocale } from "./programTranslationContract";
 import { addPublicCatalogConditions, getPublicCatalogPolicy } from "./publicCatalogQueryPolicy";
 import { readPublishedLocalizedEntity } from "./publicWebDiscoveryReadModel";
+import { readPublishedDetailContentEntityIds } from "./websiteDetailContent";
 
 type Country = { id: number; name: string; code: string; isActive: boolean };
 type Destination = { id: number; country: string; slug: string; isActive: boolean };
@@ -43,11 +44,19 @@ export async function readPublicCatalogCountryDirectory(localeInput: unknown) {
       .from(universitiesTable).leftJoin(programsTable, and(eq(programsTable.universityId, universitiesTable.id), eq(programsTable.isActive, true)))
       .where(and(...conditions)).groupBy(universitiesTable.country),
   ]);
+  const publishedCountryIds = await readPublishedDetailContentEntityIds(
+    "destination",
+    countries.map((country) => country.id),
+    locale,
+  );
   const entries = countries.flatMap(country => {
     const canonicalPath = catalogCountryRoute(country, countries, destinations, locale);
     const sourceCounts = counts.filter(row => matchCatalogCountry(row.country, countries)?.id === country.id);
-    if (!canonicalPath || !sourceCounts.length) return [];
+    const catalogEligible = sourceCounts.length > 0;
+    const editorialPublished = publishedCountryIds.has(country.id);
+    if (!canonicalPath || (!catalogEligible && !editorialPublished)) return [];
     return [{ country, canonicalPath, destination: destinations.find(row => countryMatches(row.country, country)) ?? null,
+      catalogEligible, editorialPublished,
       sourceCountryNames: sourceCounts.map(row => row.country),
       universityCount: sourceCounts.reduce((sum, row) => sum + Number(row.universityCount), 0),
       programCount: sourceCounts.reduce((sum, row) => sum + Number(row.programCount), 0) }];
@@ -92,6 +101,8 @@ export async function readCatalogCountryFallback(localeInput: unknown, slug: str
     country: routeOnlyCountry,
     canonicalPath: `/${directory.locale}/countries/${slug}`,
     destination: null,
+    catalogEligible: false,
+    editorialPublished: false,
     sourceCountryNames: countryAliases(routeOnlyCountry),
     universityCount: 0,
     programCount: 0,
@@ -136,6 +147,6 @@ export async function readCatalogCountryFallback(localeInput: unknown, slug: str
     programs: [], cities: cityLinks,
     stats: { universityCount: entry.universityCount, programCount: entry.programCount },
     meta: { locale: directory.locale, indexable: false, canonicalPath: entry.canonicalPath, alternatePaths: {},
-      contentPolicy: "CATALOG_SOURCE_FALLBACK", catalogEligible: Boolean(listedEntry) },
+      contentPolicy: "CATALOG_SOURCE_FALLBACK", catalogEligible: Boolean(entry.catalogEligible) },
   };
 }

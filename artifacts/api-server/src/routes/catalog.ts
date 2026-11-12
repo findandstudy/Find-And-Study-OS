@@ -1,5 +1,5 @@
 import { Router, type IRouter, json } from "express";
-import { db, countriesTable, citiesTable, cityExternalFactsTable, cityWeatherSnapshotsTable, universitiesTable, programsTable, catalogOptionsTable, programDocumentRequirementsTable, degreeDocumentRequirementsTable, integrationsTable, auditLogsTable } from "@workspace/db";
+import { db, countriesTable, citiesTable, cityExternalFactsTable, cityWeatherSnapshotsTable, universitiesTable, programsTable, catalogOptionsTable, programDocumentRequirementsTable, degreeDocumentRequirementsTable, integrationsTable, auditLogsTable, settingsTable } from "@workspace/db";
 import { eq, ilike, sql, and, or, asc, inArray, notInArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, MANAGER_ROLES } from "../lib/roles";
@@ -9,7 +9,9 @@ import { normalizeDialCode } from "../lib/dialCodes";
 import { normalizeProgramImportRows, collectUniversitiesToCreate } from "../lib/programImportHeaders";
 import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
 import { invalidatePublicWebDiscoveryCache } from "../lib/publicWebDiscoveryReadModel";
-import { canonicalCountryName } from "../lib/websiteCatalogFilters";
+import { canonicalCountryName, countryMatches } from "../lib/websiteCatalogFilters";
+import { clearPublicCatalogPolicyCache } from "../lib/publicCatalogQueryPolicy";
+import { normaliseCountryRules, normaliseStringList } from "../lib/publicCatalogPolicy";
 import { CATALOG_SOURCE_FIELDS, isCatalogSourceMetadataColumn, normalizeCatalogSourceMetadata, normalizeCatalogSourceMetadataFromRow, omitCatalogSourceMetadata } from "../lib/catalogSourceMetadata";
 import {
   publicCityWeatherRuntime,
@@ -103,6 +105,25 @@ function parseDocCellValue(v: any): { value: "mandatory" | "optional" | null; in
 
 const router: IRouter = Router();
 
+async function activeUniversityTypeOptions(executor: Pick<typeof db, "select"> = db) {
+  return executor.select({
+    id: catalogOptionsTable.id,
+    value: catalogOptionsTable.value,
+    sortOrder: catalogOptionsTable.sortOrder,
+    metadata: catalogOptionsTable.metadata,
+  }).from(catalogOptionsTable).where(and(
+    eq(catalogOptionsTable.category, "university_type"),
+    eq(catalogOptionsTable.isActive, true),
+  )).orderBy(catalogOptionsTable.sortOrder, catalogOptionsTable.id);
+}
+
+function universityTypeOptionLabel(option: { value: string; metadata: Record<string, unknown> | null }) {
+  const label = option.metadata && typeof option.metadata.label === "string"
+    ? option.metadata.label.trim()
+    : "";
+  return label || option.value;
+}
+
 /* ─── COUNTRIES ─────────────────────────────────────────────── */
 
 router.get("/countries", async (req, res): Promise<void> => {
@@ -188,6 +209,102 @@ router.post("/countries/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROL
   }
   await logAudit(req.user!.id, "bulk_import_countries", "country", undefined, { count: inserted.length }, req.ip);
   res.json({ inserted: inserted.length, skipped: rows.length - inserted.length });
+});
+
+router.get("/countries/:id/public-university-types", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  const [country] = await db.select().from(countriesTable).where(eq(countriesTable.id, id)).limit(1);
+  if (!country) { res.status(404).json({ error: "Not found" }); return; }
+
+  const [[settings], optionRows, observedCountries] = await Promise.all([
+    db.select({
+      defaultTypes: settingsTable.publicCatalogAllowedUniversityTypes,
+      countryRules: settingsTable.publicCatalogCountryRules,
+    }).from(settingsTable).limit(1),
+    activeUniversityTypeOptions(),
+    db.selectDistinct({ value: universitiesTable.country }).from(universitiesTable),
+  ]);
+  const rules = normaliseCountryRules(settings?.countryRules);
+  const matchingKeys = [...new Set([
+    country.name,
+    ...observedCountries.map((row) => row.value).filter((value) => countryMatches(value, country)),
+    ...Object.keys(rules).filter((value) => countryMatches(value, country)),
+  ])];
+  const explicitRules = matchingKeys
+    .filter((key) => Object.prototype.hasOwnProperty.call(rules, key))
+    .map((key) => rules[key]);
+  const inherited = explicitRules.length === 0;
+  const defaultTypes = normaliseStringList(settings?.defaultTypes);
+  const selectedTypes = inherited
+    ? defaultTypes
+    : [...new Set(explicitRules.flat())];
+
+  res.json({
+    countryId: country.id,
+    inherited,
+    selectedTypes,
+    effectiveTypes: inherited ? defaultTypes : selectedTypes,
+    defaultTypes,
+    options: optionRows.map((option) => ({
+      id: option.id,
+      value: option.value,
+      label: universityTypeOptionLabel(option),
+    })),
+  });
+});
+
+router.patch("/countries/:id/public-university-types", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  const inheritDefault = req.body?.inheritDefault === true;
+  const selectedTypes = normaliseStringList(req.body?.universityTypes);
+  const saved = await db.transaction(async (tx) => {
+    const [country] = await tx.select().from(countriesTable).where(eq(countriesTable.id, id)).limit(1).for("update");
+    if (!country) return { kind: "missing" as const };
+    const [optionRows, observedCountries] = await Promise.all([
+      activeUniversityTypeOptions(tx),
+      tx.selectDistinct({ value: universitiesTable.country }).from(universitiesTable),
+    ]);
+    const availableTypes = new Set(optionRows.map((option) => option.value));
+    if (!inheritDefault && selectedTypes.some((value) => !availableTypes.has(value))) {
+      return { kind: "invalid" as const };
+    }
+
+    let [settings] = await tx.select().from(settingsTable).limit(1).for("update");
+    if (!settings) {
+      [settings] = await tx.insert(settingsTable).values({}).returning();
+    }
+    const rules = normaliseCountryRules(settings.publicCatalogCountryRules);
+    for (const key of Object.keys(rules)) {
+      if (countryMatches(key, country)) delete rules[key];
+    }
+    const sourceCountryNames = [...new Set(observedCountries
+      .map((row) => row.value)
+      .filter((value) => countryMatches(value, country)))];
+    if (!inheritDefault) {
+      for (const key of [...new Set([country.name, ...sourceCountryNames])]) {
+        rules[key] = selectedTypes;
+      }
+    }
+    await tx.update(settingsTable).set({
+      publicCatalogCountryRules: rules,
+      updatedAt: new Date(),
+    }).where(eq(settingsTable.id, settings.id));
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "update_country_public_university_types",
+      resource: "country",
+      resourceId: country.id,
+      changes: JSON.stringify({ inheritDefault, universityTypes: selectedTypes, sourceCountryNames }),
+      ipAddress: req.ip || null,
+    });
+    return { kind: "saved" as const, country, optionRows };
+  });
+  if (saved.kind === "missing") { res.status(404).json({ error: "Not found" }); return; }
+  if (saved.kind === "invalid") { res.status(400).json({ error: "Invalid university type option" }); return; }
+  clearPublicCatalogPolicyCache();
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
+  res.json({ inherited: inheritDefault, selectedTypes });
 });
 
 router.patch("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {

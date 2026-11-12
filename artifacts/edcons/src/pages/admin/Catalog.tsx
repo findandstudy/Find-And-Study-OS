@@ -178,6 +178,14 @@ function useDebounce<T>(value: T, delay = 300): T {
 type CatalogFieldSource = { sourceName?: string; sourceUrl?: string; verifiedAt?: string; validUntil?: string; notes?: string };
 type CatalogSourceMetadata = Record<string, CatalogFieldSource>;
 type Country = { id: number; name: string; code: string; flagEmoji?: string | null; dialCode?: string | null; sourceMetadata?: CatalogSourceMetadata; isActive: boolean };
+type CountryUniversityTypeRule = {
+  countryId: number;
+  inherited: boolean;
+  selectedTypes: string[];
+  effectiveTypes: string[];
+  defaultTypes: string[];
+  options: Array<{ id: number; value: string; label: string }>;
+};
 type City = { id: number; name: string; countryId: number; transportModes: string[]; campusGeography: string | null; latitude: number | null; longitude: number | null; sourceMetadata?: CatalogSourceMetadata; isActive: boolean };
 type CityExternalFacts = { climateProvider?: string | null; climateSourceUrl?: string | null; climateSummary?: string | null; climateAnnualAverageC?: number | null; climateVerifiedAt?: string | null; housingProvider?: string | null; housingSourceUrl?: string | null; housingSummary?: string | null; housingVerifiedAt?: string | null };
 type CityWeatherAdminState = {
@@ -631,6 +639,8 @@ function CountriesTab() {
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
+  const [inheritUniversityTypes, setInheritUniversityTypes] = useState(true);
+  const [countryUniversityTypes, setCountryUniversityTypes] = useState<string[]>([]);
 
   const [fName, setFName] = useState("");
   const [fCode, setFCode] = useState("");
@@ -653,6 +663,39 @@ function CountriesTab() {
   useOpenCatalogEntry("countries", countries, setForm);
   const totalPages = Math.ceil((data?.meta?.total ?? 0) / 50);
 
+  const catalogOptionsQuery = useQuery({
+    queryKey: ["catalog-options"],
+    queryFn: () => api("/api/catalog-options"),
+  });
+  const countryTypeRuleQuery = useQuery<CountryUniversityTypeRule>({
+    queryKey: ["country-public-university-types", form?.id],
+    queryFn: () => api(`/api/countries/${form!.id}/public-university-types`),
+    enabled: Boolean(form?.id),
+  });
+  const universityTypeOptions: Array<{ id: number; value: string; label: string }> = form?.id
+    ? countryTypeRuleQuery.data?.options || []
+    : ((catalogOptionsQuery.data as any)?.grouped?.university_type || [])
+      .filter((option: any) => option.isActive)
+      .map((option: any) => ({
+        id: option.id,
+        value: option.value,
+        label: typeof option.metadata?.label === "string" && option.metadata.label.trim()
+          ? option.metadata.label.trim()
+          : option.value,
+      }));
+
+  useEffect(() => {
+    if (!form) return;
+    if (!form.id) {
+      setInheritUniversityTypes(true);
+      setCountryUniversityTypes([]);
+      return;
+    }
+    if (!countryTypeRuleQuery.data) return;
+    setInheritUniversityTypes(countryTypeRuleQuery.data.inherited);
+    setCountryUniversityTypes(countryTypeRuleQuery.data.selectedTypes || []);
+  }, [form?.id, countryTypeRuleQuery.data]);
+
   const sorted = useMemo(() => {
     const colMap: Record<string, keyof Country> = { name: "name", code: "code", dialCode: "dialCode", status: "isActive" };
     const key = colMap[sort.col] ?? "name";
@@ -673,10 +716,31 @@ function CountriesTab() {
   }
 
   const save = useMutation({
-    mutationFn: async (f: Partial<Country>) => f.id
-      ? api(`/api/countries/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) })
-      : api("/api/countries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["countries"] }); setForm(null); },
+    mutationFn: async (f: Partial<Country>) => {
+      const saved = f.id
+        ? await api(`/api/countries/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) })
+        : await api("/api/countries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
+      await api(`/api/countries/${saved.id}/public-university-types`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inheritDefault: inheritUniversityTypes,
+          universityTypes: inheritUniversityTypes ? [] : countryUniversityTypes,
+        }),
+      });
+      return saved;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["countries"] });
+      qc.invalidateQueries({ queryKey: ["public-catalog-settings"] });
+      qc.invalidateQueries({ queryKey: ["country-public-university-types"] });
+      setForm(null);
+    },
+    onError: (error: Error) => toast({
+      title: t("adminCatalog.publicCatalogSaveFailed"),
+      description: error.message,
+      variant: "destructive",
+    }),
   });
 
   const del = useMutation({
@@ -832,6 +896,55 @@ function CountriesTab() {
             <div><Label>{t("catalogPage.isoCode2Req")}</Label><Input className="mt-1 uppercase" maxLength={2} value={form?.code ?? ""} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} /></div>
             <div><Label>{t("catalogPage.flagEmoji")}</Label><Input className="mt-1" placeholder="🇹🇷" value={form?.flagEmoji ?? ""} onChange={e => setForm(f => ({ ...f, flagEmoji: e.target.value }))} /></div>
             <div><Label>{t("catalogPage.dialCodeOptional")}</Label><Input className="mt-1 font-mono" placeholder="+90" value={form?.dialCode ?? ""} onChange={e => setForm(f => ({ ...f, dialCode: e.target.value }))} /></div>
+            <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+              <div>
+                <Label className="text-sm font-semibold">{t("adminCatalog.publicCatalogCountryRules")}</Label>
+                <p className="mt-1 text-xs text-muted-foreground">{t("adminCatalog.publicCatalogCountryRulesHelp")}</p>
+              </div>
+              {form?.id && countryTypeRuleQuery.isLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t("adminCatalog.publicCatalogLoading")}
+                </div>
+              ) : (
+                <>
+                  <label className="flex cursor-pointer items-center justify-between gap-4 rounded-md border bg-background p-3">
+                    <span>
+                      <span className="block text-sm font-medium">{t("adminCatalog.publicCatalogUseDefault")}</span>
+                      <span className="block text-xs text-muted-foreground">{t("adminCatalog.publicCatalogDefaultTypesHelp")}</span>
+                    </span>
+                    <Switch checked={inheritUniversityTypes} onCheckedChange={setInheritUniversityTypes} />
+                  </label>
+                  {!inheritUniversityTypes && (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {universityTypeOptions.map((option) => {
+                        const checked = countryUniversityTypes.includes(option.value);
+                        return (
+                          <label key={option.id} className={cn(
+                            "flex cursor-pointer items-start gap-2 rounded-md border bg-background p-3 text-sm hover:bg-muted/40",
+                            checked && "border-primary/40 bg-primary/5",
+                          )}>
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={() => setCountryUniversityTypes((current) => checked
+                                ? current.filter((value) => value !== option.value)
+                                : [...current, option.value])}
+                            />
+                            <span className="min-w-0">
+                              <span className="block font-medium">{option.label}</span>
+                              {option.label !== option.value && <span className="block text-xs text-muted-foreground">{option.value}</span>}
+                            </span>
+                          </label>
+                        );
+                      })}
+                      {universityTypeOptions.length === 0 && (
+                        <p className="text-sm text-muted-foreground">{t("adminCatalog.publicCatalogTypesHelp")}</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
             <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.country} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
             <div className="flex items-center justify-between">
               <Label>{t("common.active")}</Label>
@@ -840,7 +953,7 @@ function CountriesTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
-            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.code}>{t("common.save")}</Button>
+            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.code || Boolean(form?.id && countryTypeRuleQuery.isLoading)}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

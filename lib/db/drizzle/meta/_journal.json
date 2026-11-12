@@ -981,6 +981,13 @@
       "when": 1793192400000,
       "tag": "0139_website_translation_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1793196000000,
+      "tag": "0140_catalog_university_type_options",
+      "breakpoints": true
     }
   ]
 }

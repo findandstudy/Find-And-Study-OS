@@ -28,4 +28,8 @@ test("public university type policy maps regional foundation/state labels withou
   assert.deepEqual(publicUniversityTypeAliases(["Private"]), ["Private", "Foundation", "Foundation University", "Vakıf", "Vakıf Üniversitesi"]);
   assert.deepEqual(publicUniversityTypeAliases(["Public"]), ["Public", "State", "State University", "Devlet", "Devlet Üniversitesi"]);
   assert.deepEqual(publicUniversityTypeAliases(["College"]), ["College"]);
+  assert.deepEqual(
+    publicUniversityTypeAliases(["Language School"], { "Language School": ["Language Centre"] }),
+    ["Language School", "Language Centre"],
+  );
 });

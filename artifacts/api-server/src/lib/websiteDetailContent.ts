@@ -289,6 +289,27 @@ export async function readPublishedDetailContent(kind: DetailContentKind, entity
   } as DetailContent;
 }
 
+/** Bulk exact-locale publication lookup used by public directory pages. */
+export async function readPublishedDetailContentEntityIds(
+  kind: DetailContentKind,
+  entityIds: number[],
+  locale: string,
+): Promise<Set<number>> {
+  const ids = [...new Set(entityIds.filter((entityId) => Number.isInteger(entityId) && entityId > 0))];
+  if (!ids.length) return new Set();
+  const slugs = ids.map((entityId) => detailContentSlug(kind, entityId, locale));
+  const rows = await db.select({ slug: pages.slug }).from(pages)
+    .innerJoin(versions, eq(versions.pageId, pages.id))
+    .where(and(
+      inArray(pages.slug, slugs),
+      eq(pages.template, `detail-content:${kind}`),
+      isNotNull(versions.publishedAt),
+      lte(versions.publishedAt, new Date()),
+    ));
+  const publishedSlugs = new Set(rows.map((row) => row.slug));
+  return new Set(ids.filter((entityId) => publishedSlugs.has(detailContentSlug(kind, entityId, locale))));
+}
+
 /**
  * Resolve the same reviewed hero image used by public detail pages without an
  * N+1 read for directory cards. A localized page may inherit the English
