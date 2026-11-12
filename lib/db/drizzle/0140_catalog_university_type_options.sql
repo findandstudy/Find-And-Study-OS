@@ -22,10 +22,19 @@ WHERE NOT EXISTS (
 UPDATE catalog_options existing
 SET metadata = seed.metadata::jsonb,
     sort_order = seed.sort_order,
+    is_active = TRUE,
     updated_at = now()
 FROM (VALUES
   ('Public', 10, '{"label":"Public University","aliases":["Public University","State","State University","Devlet","Devlet Üniversitesi"]}'),
-  ('Private', 20, '{"label":"Private University","aliases":["Private University","Özel","Ozel","Özel Üniversite","Foundation","Foundation University","Vakıf","Vakıf Üniversitesi"]}')
+  ('Private', 20, '{"label":"Private University","aliases":["Private University","Özel","Ozel","Özel Üniversite","Foundation","Foundation University","Vakıf","Vakıf Üniversitesi"]}'),
+  ('Foundation University', 30, '{"label":"Foundation University","aliases":["Foundation","Vakıf","Vakıf Üniversitesi"]}'),
+  ('College', 40, '{"label":"College","aliases":[]}'),
+  ('Community College', 50, '{"label":"Community College","aliases":[]}'),
+  ('Language School', 60, '{"label":"Language School","aliases":["Language Centre","Language Center"]}'),
+  ('Vocational School', 70, '{"label":"Vocational School","aliases":["Vocational College"]}'),
+  ('Institute / Academy', 80, '{"label":"Institute / Academy","aliases":["Institute","Academy"]}'),
+  ('Pathway Provider', 90, '{"label":"Pathway Provider","aliases":["Pathway College","Pathway Centre","Pathway Center"]}'),
+  ('High School', 100, '{"label":"High School","aliases":["Secondary School"]}')
 ) AS seed(value, sort_order, metadata)
 WHERE existing.category = 'university_type'
   AND lower(trim(existing.value)) = lower(trim(seed.value));
