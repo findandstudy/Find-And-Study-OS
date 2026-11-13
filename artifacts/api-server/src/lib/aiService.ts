@@ -499,8 +499,25 @@ TEMPLATE_CONTENT_POLICY=${JSON.stringify(params.contentPolicy ?? null)}${this.co
       const hasUnsafeContent = /<[^>]+>|https?:\/\/|\{\{/.test(JSON.stringify(value))
         || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(title)
         || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(body);
-      const minimumBodyCharacters = contentShape === "prose" ? contract.minCharacters : Math.min(80, Math.max(40, Math.floor(contract.minCharacters * 0.25)));
-      if (!title || title.length > 100 || body.length < minimumBodyCharacters || body.length > contract.maxCharacters || hasUnsafeContent) throw new Error(`AI detail generation returned unsafe or invalid ${key} copy`);
+      // Structured sections are validated again below using the combined
+      // introduction + item copy. Keep the introduction threshold deliberately
+      // light so a concise lead does not invalidate an otherwise substantial,
+      // source-backed card/step/FAQ section.
+      const minimumBodyCharacters = contentShape === "prose"
+        ? contract.minCharacters
+        : Math.min(60, Math.max(24, Math.floor(contract.minCharacters * 0.15)));
+      if (!title || title.length > 100 || body.length < minimumBodyCharacters || body.length > contract.maxCharacters || hasUnsafeContent) {
+        const reason = hasUnsafeContent
+          ? "unsafe-content"
+          : !title
+            ? "missing-title"
+            : title.length > 100
+              ? "title-too-long"
+              : body.length < minimumBodyCharacters
+                ? `body-too-short:${body.length}<${minimumBodyCharacters}`
+                : `body-too-long:${body.length}>${contract.maxCharacters}`;
+        throw new Error(`AI detail generation returned unsafe or invalid ${key} copy (${reason})`);
+      }
       if (key === "hero" && /^explore\b/iu.test(body)) throw new Error("AI detail generation returned a generic hero value proposition");
       const generated: AiGeneratedDetailSection = { title, body };
       if (contentShape === "cards" || contentShape === "steps") {
