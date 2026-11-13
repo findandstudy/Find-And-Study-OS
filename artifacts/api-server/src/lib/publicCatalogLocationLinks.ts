@@ -18,6 +18,17 @@ export function catalogCountryRouteAccessible(input: {
   return input.catalogEligible || input.editorialPublished || input.directoryListed === true;
 }
 
+export function catalogCountryDirectoryIncluded(input: {
+  directoryRestricted: boolean;
+  directoryListed: boolean;
+  catalogEligible: boolean;
+  editorialPublished: boolean;
+}): boolean {
+  return input.directoryRestricted
+    ? input.directoryListed
+    : input.catalogEligible || input.editorialPublished;
+}
+
 /** Match only a unique existing identity; never guess among aliases or duplicate slugs. */
 export function matchCatalogCountry(value: string, countries: Country[]): Country | null {
   const matches = countries.filter(country => countryMatches(value, country) || publicCatalogSlug(country.name) === value);
@@ -58,13 +69,19 @@ export async function readPublicCatalogCountryDirectory(localeInput: unknown) {
     const country = matchCatalogCountry(name, countries);
     return country ? [country.id] : [];
   }));
+  const directoryRestricted = policy.allowedCountries.length > 0;
   const entries = countries.flatMap(country => {
     const canonicalPath = catalogCountryRoute(country, countries, destinations, locale);
     const sourceCounts = counts.filter(row => matchCatalogCountry(row.country, countries)?.id === country.id);
     const catalogEligible = sourceCounts.length > 0;
     const editorialPublished = publishedCountryIds.has(country.id);
     const directoryListed = explicitlyListedCountryIds.has(country.id);
-    if (!canonicalPath || (!catalogEligible && !editorialPublished && !directoryListed)) return [];
+    if (!canonicalPath || !catalogCountryDirectoryIncluded({
+      directoryRestricted,
+      directoryListed,
+      catalogEligible,
+      editorialPublished,
+    })) return [];
     return [{ country, canonicalPath, destination: destinations.find(row => countryMatches(row.country, country)) ?? null,
       catalogEligible, editorialPublished, directoryListed,
       sourceCountryNames: sourceCounts.map(row => row.country),

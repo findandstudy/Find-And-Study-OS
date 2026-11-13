@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { catalogCountryRoute, catalogCountryRouteAccessible, matchCatalogCountry } from "../src/lib/publicCatalogLocationLinks";
+import { catalogCountryDirectoryIncluded, catalogCountryRoute, catalogCountryRouteAccessible, matchCatalogCountry } from "../src/lib/publicCatalogLocationLinks";
 import { publicUniversityTypeAliases } from "../src/lib/publicCatalogQueryPolicy";
 const gb = { id: 1, name: "United Kingdom", code: "GB", isActive: true };
 const tr = { id: 2, name: "Türkiye", code: "TR", isActive: true };
@@ -24,6 +24,12 @@ test("authored country pages can open independently while empty catalogue record
   assert.equal(catalogCountryRouteAccessible({ catalogEligible: false, editorialPublished: true }), true);
   assert.equal(catalogCountryRouteAccessible({ catalogEligible: false, editorialPublished: false }), false);
   assert.equal(catalogCountryRouteAccessible({ catalogEligible: false, editorialPublished: false, directoryListed: true }), true);
+});
+test("an explicit public directory cohort excludes older editorial and catalogue records outside it", () => {
+  assert.equal(catalogCountryDirectoryIncluded({ directoryRestricted: true, directoryListed: true, catalogEligible: false, editorialPublished: false }), true);
+  assert.equal(catalogCountryDirectoryIncluded({ directoryRestricted: true, directoryListed: false, catalogEligible: true, editorialPublished: true }), false);
+  assert.equal(catalogCountryDirectoryIncluded({ directoryRestricted: false, directoryListed: false, catalogEligible: true, editorialPublished: false }), true);
+  assert.equal(catalogCountryDirectoryIncluded({ directoryRestricted: false, directoryListed: false, catalogEligible: false, editorialPublished: true }), true);
 });
 test("public university type policy maps regional foundation/state labels without guessing unrelated values", () => {
   assert.deepEqual(publicUniversityTypeAliases(["Private"]), ["Private", "Foundation", "Foundation University", "Vakıf", "Vakıf Üniversitesi"]);
