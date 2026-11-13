@@ -43,6 +43,7 @@ import {
   readPublishedSitemapPage,
   resolvePublicWebRouteAlias,
 } from "./lib/publicWebDiscoveryReadModel";
+import { readWebsiteSeoTechnicalPolicy } from "./lib/websiteSeoTechnicalPolicyStore";
 
 // Local integration credentials must survive an API restart. Production keeps
 // using process-manager supplied secrets; development may load the ignored
@@ -78,7 +79,7 @@ app.get(["/llms.txt", "/.well-known/llms.txt"], (_req, res) => {
     .send(llmsText);
 });
 
-app.get("/robots.txt", (_req, res) => {
+app.get("/robots.txt", async (_req, res) => {
   res.setHeader(
     "Cache-Control",
     publicWebRobotsConfig.mode === "published"
@@ -86,7 +87,8 @@ app.get("/robots.txt", (_req, res) => {
       : "no-store",
   );
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.type("text/plain; charset=utf-8").send(renderPublicWebRobots(publicWebRobotsConfig));
+  const policy = await readWebsiteSeoTechnicalPolicy();
+  res.type("text/plain; charset=utf-8").send(renderPublicWebRobots(publicWebRobotsConfig, policy));
 });
 
 type FatalShutdown = (reason: string, exitCode: number) => Promise<void>;
@@ -407,12 +409,14 @@ function serveStaticFrontend() {
         return;
       }
       const nonce = crypto.randomBytes(18).toString("base64url");
+      const seoTechnicalPolicy = await readWebsiteSeoTechnicalPolicy();
       const html = renderPublicCatalogHtml({
         indexHtml,
         model: rendered.value,
         siteUrl: configuredSiteUrl,
         nonce,
         preloadHrefs: resolvePublicAssetPreloads(publicAssetManifest, rendered.value),
+        seoTechnicalPolicy,
       });
       const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
       res.setHeader(

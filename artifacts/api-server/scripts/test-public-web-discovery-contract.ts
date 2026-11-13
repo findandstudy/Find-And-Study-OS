@@ -37,10 +37,28 @@ test("robots publication is explicit and invalid configuration fails closed", ()
   });
   assert.equal(published.mode, "published");
   const robots = renderPublicWebRobots(published);
+  assert.match(robots, /^User-agent: OAI-SearchBot\nAllow: \/$/m);
+  assert.match(robots, /User-agent: OAI-SearchBot\nAllow: \/\n(?:Disallow: [^\n]+\n)*Disallow: \/admin\//);
+  assert.match(robots, /^User-agent: GPTBot\nDisallow: \/$/m);
+  assert.match(robots, /^User-agent: Google-Extended\nDisallow: \/$/m);
   assert.match(robots, /^User-agent: \*\nAllow: \/$/m);
   assert.match(robots, /^Disallow: \/institution\/$/m);
   assert.match(robots, /^Sitemap: https:\/\/findandstudy\.com\/sitemap\.xml$/m);
   assert.equal(renderPublicWebRobots(parsePublicWebRobotsConfig({})), "User-agent: *\nDisallow: /\n");
+  const permissive = renderPublicWebRobots(published, {
+    version: 1,
+    allowOaiSearchBot: false,
+    allowGptBot: true,
+    allowGoogleExtended: true,
+    maxSnippet: 120,
+    maxImagePreview: "standard",
+    maxVideoPreview: 30,
+    xDefaultLocale: "tr",
+    indexNowEnabled: false,
+  });
+  assert.match(permissive, /^User-agent: OAI-SearchBot\nDisallow: \/$/m);
+  assert.match(permissive, /^User-agent: GPTBot\nAllow: \/$/m);
+  assert.match(permissive, /^User-agent: Google-Extended\nAllow: \/$/m);
 });
 
 test("discovery rollout and tenant scope fail closed", () => {

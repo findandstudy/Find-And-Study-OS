@@ -60,7 +60,7 @@ test("admissions-closed program remains rendered and indexable without an availa
   const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
   assert.match(html, /data-public-render-shell="program-detail"/);
   assert.match(html, /Example program/);
-  assert.match(html, /content="index, follow"/);
+  assert.match(html, /content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"/);
   assert.doesNotMatch(html, /"@type":"Offer"/);
   assert.doesNotMatch(html, /data-application-cta/);
   assert.match(html, /Applications closed/);

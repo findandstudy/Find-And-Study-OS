@@ -1,3 +1,8 @@
+import {
+  DEFAULT_WEBSITE_SEO_TECHNICAL_POLICY,
+  type WebsiteSeoTechnicalPolicy,
+} from "./websiteSeoTechnicalPolicy";
+
 export type PublicWebRobotsMode = "disallow" | "published";
 
 export type PublicWebRobotsConfig = {
@@ -38,13 +43,14 @@ export function parsePublicWebRobotsConfig(input: {
     : { mode: "disallow", siteUrl: null, reason: "invalid_site_url" };
 }
 
-export function renderPublicWebRobots(config: PublicWebRobotsConfig): string {
+export function renderPublicWebRobots(
+  config: PublicWebRobotsConfig,
+  policy: WebsiteSeoTechnicalPolicy = DEFAULT_WEBSITE_SEO_TECHNICAL_POLICY,
+): string {
   if (config.mode !== "published" || !config.siteUrl) {
     return "User-agent: *\nDisallow: /\n";
   }
-  return [
-    "User-agent: *",
-    "Allow: /",
+  const privatePathRules = [
     "Disallow: /api/",
     "Disallow: /admin/",
     "Disallow: /staff/",
@@ -56,6 +62,22 @@ export function renderPublicWebRobots(config: PublicWebRobotsConfig): string {
     "Disallow: /login",
     "Disallow: /*/login",
     "Disallow: /sign/",
+  ];
+  const crawlerRules = [
+    ["OAI-SearchBot", policy.allowOaiSearchBot],
+    ["GPTBot", policy.allowGptBot],
+    ["Google-Extended", policy.allowGoogleExtended],
+  ].flatMap(([agent, allowed]) => [
+    `User-agent: ${agent}`,
+    allowed ? "Allow: /" : "Disallow: /",
+    ...(allowed ? privatePathRules : []),
+    "",
+  ]);
+  return [
+    ...crawlerRules,
+    "User-agent: *",
+    "Allow: /",
+    ...privatePathRules,
     `Sitemap: ${config.siteUrl}/sitemap.xml`,
     "",
   ].join("\n");

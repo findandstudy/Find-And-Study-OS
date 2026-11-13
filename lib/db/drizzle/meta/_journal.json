@@ -988,6 +988,13 @@
       "when": 1793196000000,
       "tag": "0140_catalog_university_type_options",
       "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1793199600000,
+      "tag": "0141_website_seo_technical_policy",
+      "breakpoints": true
     }
   ]
 }

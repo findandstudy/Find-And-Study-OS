@@ -12,6 +12,7 @@ import {
   parsePublicCatalogRouteKey,
   type PublicCatalogRouteIdentity,
 } from "./publicCatalogRouteContract";
+import { websiteRobotsDirective, type WebsiteSeoTechnicalPolicy } from "./websiteSeoTechnicalPolicy";
 
 export type PublicWebRenderMode = "off" | "allowlist" | "all";
 
@@ -1638,6 +1639,7 @@ export function renderPublicCatalogHtml(input: {
   siteUrl: string;
   nonce: string;
   preloadHrefs?: string[];
+  seoTechnicalPolicy?: WebsiteSeoTechnicalPolicy;
 }): string {
   const siteUrl = input.siteUrl.replace(/\/$/, "");
   const detailSeo = detailContentForModel(input.model)?.seo;
@@ -1655,11 +1657,16 @@ export function renderPublicCatalogHtml(input: {
   html = html.replace(/\s*<link\s+[^>]*rel=["']alternate["'][^>]*hreflang=["'][^"']+["'][^>]*>/gi, "");
 
   html = replaceMeta(html, "name", "description", model.description);
-  html = replaceMeta(html, "name", "robots", model.indexable ? "index, follow" : "noindex, follow");
+  html = replaceMeta(html, "name", "robots", websiteRobotsDirective({
+    indexable: model.indexable,
+    policy: input.seoTechnicalPolicy,
+  }));
   html = replaceMeta(html, "property", "og:title", detailSeo?.ogTitle || (typeof managedSeo?.ogTitle === "string" ? managedSeo.ogTitle : model.title));
   html = replaceMeta(html, "property", "og:description", detailSeo?.ogDescription || (typeof managedSeo?.ogDescription === "string" ? managedSeo.ogDescription : model.description));
   html = replaceMeta(html, "property", "og:url", canonicalUrl);
   html = replaceMeta(html, "property", "og:locale", `${model.locale}_${OG_LOCALE_COUNTRY[model.locale]}`);
+  html = replaceMeta(html, "property", "og:type", "website");
+  html = replaceMeta(html, "name", "twitter:card", "summary_large_image");
   html = replaceMeta(html, "name", "twitter:title", detailSeo?.twitterTitle || (typeof managedSeo?.twitterTitle === "string" ? managedSeo.twitterTitle : model.title));
   html = replaceMeta(html, "name", "twitter:description", detailSeo?.twitterDescription || (typeof managedSeo?.twitterDescription === "string" ? managedSeo.twitterDescription : model.description));
   const detailHeroImage = absolutePublicImage(detailContentForModel(model)?.sections.find(section => section.key === "hero")?.images?.[0]?.src, siteUrl);
@@ -1735,8 +1742,10 @@ export function renderPublicCatalogHtml(input: {
       ? [`  <link rel="alternate" hreflang="${locale}" href="${escapeHtml(`${siteUrl}${path}`)}" />`]
       : [];
   });
-  if (alternatePaths.en) {
-    hreflangLinks.push(`  <link rel="alternate" hreflang="x-default" href="${escapeHtml(`${siteUrl}${alternatePaths.en}`)}" />`);
+  const xDefaultLocale = (input.seoTechnicalPolicy?.xDefaultLocale ?? "en") as ProgramSupportedLocale;
+  const xDefaultPath = alternatePaths[xDefaultLocale] ?? alternatePaths.en;
+  if (xDefaultPath) {
+    hreflangLinks.push(`  <link rel="alternate" hreflang="x-default" href="${escapeHtml(`${siteUrl}${xDefaultPath}`)}" />`);
   }
   const preloadLinks = [...new Set(input.preloadHrefs ?? [])]
     .filter((href) => /^\/assets\/[A-Za-z0-9._-]+\.js$/.test(href))

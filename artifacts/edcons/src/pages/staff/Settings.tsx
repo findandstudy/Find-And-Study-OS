@@ -888,6 +888,21 @@ export default function SettingsPage() {
     const s = settings;
     const titleLen = (s.seoMetaTitle || "").length;
     const descLen = (s.seoMetaDescription || "").length;
+    const technicalPolicy = {
+      version: 1,
+      allowOaiSearchBot: true,
+      allowGptBot: false,
+      allowGoogleExtended: false,
+      maxSnippet: -1,
+      maxImagePreview: "large",
+      maxVideoPreview: -1,
+      xDefaultLocale: "en",
+      indexNowEnabled: false,
+      ...(s.seoTechnicalPolicy || {}),
+    };
+    const updateTechnicalPolicy = (partial: Record<string, unknown>) => updateSettings({
+      seoTechnicalPolicy: { ...technicalPolicy, ...partial, version: 1 },
+    });
     return (
       <div className="space-y-6">
         <Card className="border-none shadow-lg shadow-black/5 p-6">
@@ -915,9 +930,9 @@ export default function SettingsPage() {
             <FieldGroup label="Meta Description" description={`${descLen}/160 characters recommended`}>
               <Textarea value={s.seoMetaDescription || ""} onChange={e => updateSettings({ seoMetaDescription: e.target.value })} maxLength={200} className="rounded-xl min-h-[70px]" />
             </FieldGroup>
-            <FieldGroup label="Keywords" description="Comma-separated keywords">
-              <Input value={s.seoKeywords || ""} onChange={e => updateSettings({ seoKeywords: e.target.value })} placeholder="education, consultancy, study abroad" className="rounded-xl" />
-            </FieldGroup>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              Meta keywords are intentionally not published. Search intent and catalogue taxonomy remain separate from page metadata.
+            </div>
           </div>
         </Card>
 
@@ -935,6 +950,53 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
               <div><p className="text-sm font-semibold">Staging Noindex</p><p className="text-xs text-muted-foreground">Block indexing on staging/development environments</p></div>
               <Switch checked={s.stagingNoindex === true} onCheckedChange={v => updateSettings({ stagingNoindex: v })} />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="AI Discovery & Answer Engines" description="Manage search discovery and model-training preferences independently. These settings improve technical eligibility; they do not guarantee ranking or citation." />
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
+              <div><p className="text-sm font-semibold">Allow ChatGPT Search discovery</p><p className="text-xs text-muted-foreground">Allows OAI-SearchBot to discover public pages for ChatGPT search.</p></div>
+              <Switch checked={technicalPolicy.allowOaiSearchBot} onCheckedChange={v => updateTechnicalPolicy({ allowOaiSearchBot: v })} />
+            </div>
+            <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
+              <div><p className="text-sm font-semibold">Allow OpenAI model-training crawler</p><p className="text-xs text-muted-foreground">Controls GPTBot separately from ChatGPT Search.</p></div>
+              <Switch checked={technicalPolicy.allowGptBot} onCheckedChange={v => updateTechnicalPolicy({ allowGptBot: v })} />
+            </div>
+            <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
+              <div><p className="text-sm font-semibold">Allow Google-Extended</p><p className="text-xs text-muted-foreground">Controls use by Google's extended generative systems; normal Google Search uses Googlebot.</p></div>
+              <Switch checked={technicalPolicy.allowGoogleExtended} onCheckedChange={v => updateTechnicalPolicy({ allowGoogleExtended: v })} />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <FieldGroup label="Maximum snippet" description="-1 means no explicit limit">
+                <Input type="number" min={-1} max={10000} value={technicalPolicy.maxSnippet} onChange={e => updateTechnicalPolicy({ maxSnippet: Number(e.target.value) })} className="rounded-xl" />
+              </FieldGroup>
+              <FieldGroup label="Image preview">
+                <Select value={technicalPolicy.maxImagePreview} onValueChange={v => updateTechnicalPolicy({ maxImagePreview: v })}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="large">Large</SelectItem><SelectItem value="standard">Standard</SelectItem><SelectItem value="none">None</SelectItem></SelectContent>
+                </Select>
+              </FieldGroup>
+              <FieldGroup label="Maximum video preview" description="-1 means no explicit limit">
+                <Input type="number" min={-1} max={10000} value={technicalPolicy.maxVideoPreview} onChange={e => updateTechnicalPolicy({ maxVideoPreview: Number(e.target.value) })} className="rounded-xl" />
+              </FieldGroup>
+              <FieldGroup label="x-default locale">
+                <Select value={technicalPolicy.xDefaultLocale} onValueChange={v => updateTechnicalPolicy({ xDefaultLocale: v })}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>{LANGUAGES.map(language => <SelectItem key={language.code} value={language.code}>{language.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </FieldGroup>
+            </div>
+            <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
+              <div><p className="text-sm font-semibold">IndexNow change notifications</p><p className="text-xs text-muted-foreground">Stores the policy now. Delivery remains off until a verified key and durable outbox are configured.</p></div>
+              <Switch checked={technicalPolicy.indexNowEnabled} onCheckedChange={v => updateTechnicalPolicy({ indexNowEnabled: v })} />
+            </div>
+            <div className="rounded-xl border bg-muted/30 p-4 text-xs text-muted-foreground">
+              <p className="font-semibold text-foreground">Crawler policy preview</p>
+              <code className="mt-2 block whitespace-pre-wrap">{`OAI-SearchBot: ${technicalPolicy.allowOaiSearchBot ? "Allow" : "Disallow"}\nGPTBot: ${technicalPolicy.allowGptBot ? "Allow" : "Disallow"}\nGoogle-Extended: ${technicalPolicy.allowGoogleExtended ? "Allow" : "Disallow"}`}</code>
+              <p className="mt-3">The existing llms.txt remains a supplementary, deterministic identity document. It is not treated as a ranking signal or an alternative to robots, sitemap, canonical or structured data.</p>
             </div>
           </div>
         </Card>
@@ -988,8 +1050,9 @@ export default function SettingsPage() {
         <SaveButton onClick={() => saveSection("seo", {
           siteName: s.siteName || null, siteTitleTemplate: s.siteTitleTemplate || null,
           seoMetaTitle: s.seoMetaTitle || null, seoMetaDescription: s.seoMetaDescription || null,
-          canonicalBaseUrl: s.canonicalBaseUrl || null, seoKeywords: s.seoKeywords || null,
+          canonicalBaseUrl: s.canonicalBaseUrl || null,
           robotsIndex: s.robotsIndex, robotsFollow: s.robotsFollow, stagingNoindex: s.stagingNoindex,
+          seoTechnicalPolicy: technicalPolicy,
           ogTitle: s.ogTitle || null, ogDescription: s.ogDescription || null, ogImageUrl: s.ogImageUrl || null,
           twitterTitle: s.twitterTitle || null, twitterDescription: s.twitterDescription || null,
           twitterImageUrl: s.twitterImageUrl || null, shareImageUrl: s.shareImageUrl || null,

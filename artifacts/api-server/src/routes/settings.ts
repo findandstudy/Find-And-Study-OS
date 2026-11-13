@@ -10,6 +10,8 @@ import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
 import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import { createHeaderLogoDerivative, isEffectivelyBlankBrandingImage, type HeaderLogoDerivative } from "../lib/brandingLogoDerivative";
+import { parseWebsiteSeoTechnicalPolicy } from "../lib/websiteSeoTechnicalPolicy";
+import { invalidateWebsiteSeoTechnicalPolicyCache } from "../lib/websiteSeoTechnicalPolicyStore";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -68,7 +70,7 @@ const SETTINGS_PATCH_FIELDS = [
   "canonicalBaseUrl", "robotsIndex", "robotsFollow", "stagingNoindex",
   "ogTitle", "ogDescription", "ogImageUrl",
   "twitterTitle", "twitterDescription", "twitterImageUrl", "shareImageUrl",
-  "seoKeywords", "googleSearchConsoleCode", "googleAnalyticsId", "metaPixelId", "tiktokPixelId",
+  "seoKeywords", "seoTechnicalPolicy", "googleSearchConsoleCode", "googleAnalyticsId", "metaPixelId", "tiktokPixelId",
   "orgSchemaName", "orgSchemaUrl", "orgSchemaLogoUrl", "orgSchemaSocials",
   "emailSenderName", "emailSenderEmail", "emailReplyTo",
   "emailFooterText", "emailSignatureBlock", "emailButtonColor", "emailDisclaimerText",
@@ -230,6 +232,13 @@ router.patch("/settings", requireAuth, requireRole("super_admin"), async (req, r
     }
     updates.defaultLanguage = normalizedDefault;
   }
+  if (updates.seoTechnicalPolicy !== undefined) {
+    if (!updates.seoTechnicalPolicy || typeof updates.seoTechnicalPolicy !== "object" || Array.isArray(updates.seoTechnicalPolicy)) {
+      res.status(400).json({ error: "seoTechnicalPolicy must be an object" });
+      return;
+    }
+    updates.seoTechnicalPolicy = parseWebsiteSeoTechnicalPolicy(updates.seoTechnicalPolicy);
+  }
   if (updates.defaultSigningDeadlineDays !== undefined) {
     const n = parseInt(String(updates.defaultSigningDeadlineDays), 10);
     if (!Number.isInteger(n) || n < 1 || n > 365) {
@@ -324,6 +333,7 @@ router.patch("/settings", requireAuth, requireRole("super_admin"), async (req, r
   }
   if (updates.availableYears !== undefined) invalidateSeasonCache();
   if (updates.suppressAutomationAppNotifications !== undefined) invalidateSuppressAutomationCache();
+  if (updates.seoTechnicalPolicy !== undefined) invalidateWebsiteSeoTechnicalPolicyCache();
   const safe: Record<string, any> = { ...updated };
   for (const f of CREDENTIAL_FIELDS) {
     delete safe[f];

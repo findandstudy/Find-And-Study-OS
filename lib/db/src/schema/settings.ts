@@ -81,6 +81,27 @@ export const settingsTable = pgTable("settings", {
   twitterImageUrl: text("twitter_image_url"),
   shareImageUrl: text("share_image_url"),
   seoKeywords: text("seo_keywords"),
+  seoTechnicalPolicy: jsonb("seo_technical_policy").$type<{
+    version: 1;
+    allowOaiSearchBot: boolean;
+    allowGptBot: boolean;
+    allowGoogleExtended: boolean;
+    maxSnippet: number;
+    maxImagePreview: "none" | "standard" | "large";
+    maxVideoPreview: number;
+    xDefaultLocale: string;
+    indexNowEnabled: boolean;
+  }>().notNull().default({
+    version: 1,
+    allowOaiSearchBot: true,
+    allowGptBot: false,
+    allowGoogleExtended: false,
+    maxSnippet: -1,
+    maxImagePreview: "large",
+    maxVideoPreview: -1,
+    xDefaultLocale: "en",
+    indexNowEnabled: false,
+  }),
   googleSearchConsoleCode: text("google_search_console_code"),
   googleAnalyticsId: text("google_analytics_id"),
   metaPixelId: text("meta_pixel_id"),

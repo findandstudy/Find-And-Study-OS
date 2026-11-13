@@ -29,6 +29,9 @@ import {
   leadsTable,
   pipelineStagesTable,
   auditLogsTable,
+  publicWebContentRecordsTable,
+  publicWebContentRevisionsTable,
+  publicWebPublicationStatesTable,
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
@@ -75,6 +78,9 @@ import { regenerateDetailContentDraft } from "../lib/websiteDetailRegeneration";
 import { decryptConfig, isEncrypted } from "../lib/encryption";
 import { DEFAULT_WEBSITE_AI_SETTINGS, mergeWebsiteAiSettings, parseWebsiteAiSettings, readWebsiteAiSettings } from "../lib/websiteAiContentPolicy";
 import { applyGeneratedSeoFields, buildWebsiteSeoDraft, enrichWebsiteTranslationSeo } from "../lib/websiteSeoDraft";
+import { publicWebDiscoveryConfigFromEnvironment } from "../lib/publicWebDiscoveryReadModel";
+import { readWebsiteSeoTechnicalPolicy } from "../lib/websiteSeoTechnicalPolicyStore";
+import { validateWebsiteSeoOverride } from "../lib/websiteSeoTechnicalPolicy";
 
 const router = Router();
 router.use("/website/detail-content", detailContentRouter);
@@ -1653,10 +1659,138 @@ router.get("/website/seo-overview", ...adminOnly, async (_req: Request, res: Res
       twitterDescription: websitePagesTable.twitterDescription,
       twitterImageUrl: websitePagesTable.twitterImageUrl,
     }).from(websitePagesTable).orderBy(asc(websitePagesTable.sortOrder));
-    res.json(pages);
+    const [globalSettings] = await db.select({ canonicalBaseUrl: settingsTable.canonicalBaseUrl }).from(settingsTable).limit(1);
+    const titleCounts = new Map<string, number>();
+    const descriptionCounts = new Map<string, number>();
+    for (const page of pages) {
+      const title = String(page.metaTitle ?? "").trim().toLocaleLowerCase("en-US");
+      const description = String(page.metaDescription ?? "").trim().toLocaleLowerCase("en-US");
+      if (title) titleCounts.set(title, (titleCounts.get(title) ?? 0) + 1);
+      if (description) descriptionCounts.set(description, (descriptionCounts.get(description) ?? 0) + 1);
+    }
+    res.json(pages.map((page) => {
+      const validation = validateWebsiteSeoOverride({
+        metaTitle: page.metaTitle,
+        metaDescription: page.metaDescription,
+        canonicalUrl: page.canonicalUrl,
+        canonicalBaseUrl: globalSettings?.canonicalBaseUrl,
+      });
+      const issues = [...validation.errors, ...validation.warnings];
+      const normalizedTitle = String(page.metaTitle ?? "").trim().toLocaleLowerCase("en-US");
+      const normalizedDescription = String(page.metaDescription ?? "").trim().toLocaleLowerCase("en-US");
+      if (!page.metaTitle) issues.push("SEO_TITLE_MISSING");
+      if (!page.metaDescription) issues.push("SEO_DESCRIPTION_MISSING");
+      if (!page.ogImageUrl) issues.push("SEO_SOCIAL_IMAGE_MISSING");
+      if (normalizedTitle && (titleCounts.get(normalizedTitle) ?? 0) > 1) issues.push("SEO_TITLE_DUPLICATE");
+      if (normalizedDescription && (descriptionCounts.get(normalizedDescription) ?? 0) > 1) issues.push("SEO_DESCRIPTION_DUPLICATE");
+      return { ...page, issues: [...new Set(issues)] };
+    }));
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
     res.status(500).json({ error: msg });
+  }
+});
+
+router.get("/website/seo-health", ...adminOnly, async (_req: Request, res: Response): Promise<void> => {
+  res.setHeader("Cache-Control", "private, no-store");
+  try {
+    const scope = publicWebDiscoveryConfigFromEnvironment().scope;
+    const managedPages = await db.select({
+      id: websitePagesTable.id,
+      status: websitePagesTable.status,
+      metaTitle: websitePagesTable.metaTitle,
+      metaDescription: websitePagesTable.metaDescription,
+      canonicalUrl: websitePagesTable.canonicalUrl,
+      robotsIndex: websitePagesTable.robotsIndex,
+    }).from(websitePagesTable).limit(10_001);
+
+    const dynamicRows = scope ? await db.select({
+      entityType: publicWebContentRecordsTable.entityType,
+      locale: publicWebContentRecordsTable.locale,
+      canonicalPath: publicWebContentRecordsTable.canonicalPath,
+      seoStatus: publicWebContentRevisionsTable.seoStatus,
+      structuredDataStatus: publicWebContentRevisionsTable.structuredDataStatus,
+      seoJson: publicWebContentRevisionsTable.seoJson,
+      indexState: publicWebPublicationStatesTable.indexState,
+    }).from(publicWebContentRecordsTable)
+      .innerJoin(publicWebPublicationStatesTable, and(
+        eq(publicWebPublicationStatesTable.tenantId, publicWebContentRecordsTable.tenantId),
+        eq(publicWebPublicationStatesTable.organizationId, publicWebContentRecordsTable.organizationId),
+        eq(publicWebPublicationStatesTable.contentRecordId, publicWebContentRecordsTable.id),
+      ))
+      .innerJoin(publicWebContentRevisionsTable, and(
+        eq(publicWebContentRevisionsTable.tenantId, publicWebPublicationStatesTable.tenantId),
+        eq(publicWebContentRevisionsTable.organizationId, publicWebPublicationStatesTable.organizationId),
+        eq(publicWebContentRevisionsTable.contentRecordId, publicWebPublicationStatesTable.contentRecordId),
+        eq(publicWebContentRevisionsTable.id, publicWebPublicationStatesTable.revisionId),
+      ))
+      .where(and(
+        eq(publicWebContentRecordsTable.tenantId, scope.tenantId),
+        eq(publicWebContentRecordsTable.organizationId, scope.organizationId),
+        eq(publicWebPublicationStatesTable.status, "PUBLISHED"),
+      )).limit(10_001) : [];
+
+    if (managedPages.length > 10_000 || dynamicRows.length > 10_000) {
+      res.status(503).json({ error: "SEO_HEALTH_DENOMINATOR_EXCEEDED" });
+      return;
+    }
+    const dynamicTitles = new Map<string, number>();
+    const dynamicDescriptions = new Map<string, number>();
+    for (const row of dynamicRows) {
+      const seo = row.seoJson && typeof row.seoJson === "object" ? row.seoJson as Record<string, unknown> : {};
+      const title = String(seo.title ?? seo.metaTitle ?? "").trim().toLocaleLowerCase("en-US");
+      const description = String(seo.description ?? seo.metaDescription ?? "").trim().toLocaleLowerCase("en-US");
+      if (title) dynamicTitles.set(title, (dynamicTitles.get(title) ?? 0) + 1);
+      if (description) dynamicDescriptions.set(description, (dynamicDescriptions.get(description) ?? 0) + 1);
+    }
+    const duplicateDynamicTitles = [...dynamicTitles.values()].filter(count => count > 1).reduce((sum, count) => sum + count, 0);
+    const duplicateDynamicDescriptions = [...dynamicDescriptions.values()].filter(count => count > 1).reduce((sum, count) => sum + count, 0);
+    const policy = await readWebsiteSeoTechnicalPolicy();
+    const failedSeo = dynamicRows.filter(row => row.seoStatus === "FAIL").length;
+    const failedSchema = dynamicRows.filter(row => row.structuredDataStatus === "FAIL").length;
+    const pendingSeo = dynamicRows.filter(row => row.seoStatus === "PENDING").length;
+    const publishedMode = String(process.env.PUBLIC_WEB_ROBOTS_MODE ?? "").trim().toLowerCase() === "published";
+    const readiness = !publishedMode || !policy.allowOaiSearchBot
+      ? "BLOCKED"
+      : failedSeo || failedSchema
+        ? "LIMITED"
+        : "ELIGIBLE";
+    res.json({
+      generatedAt: new Date().toISOString(),
+      readiness,
+      managed: {
+        total: managedPages.length,
+        published: managedPages.filter(page => page.status === "published").length,
+        indexable: managedPages.filter(page => page.status === "published" && page.robotsIndex).length,
+        missingTitle: managedPages.filter(page => !String(page.metaTitle ?? "").trim()).length,
+        missingDescription: managedPages.filter(page => !String(page.metaDescription ?? "").trim()).length,
+      },
+      dynamic: {
+        published: dynamicRows.length,
+        indexable: dynamicRows.filter(row => row.indexState === "INDEX").length,
+        seoPass: dynamicRows.filter(row => row.seoStatus === "PASS").length,
+        seoPending: pendingSeo,
+        seoFail: failedSeo,
+        schemaPass: dynamicRows.filter(row => row.structuredDataStatus === "PASS").length,
+        schemaFail: failedSchema,
+        duplicateTitles: duplicateDynamicTitles,
+        duplicateDescriptions: duplicateDynamicDescriptions,
+      },
+      discovery: {
+        publishedMode,
+        llmsTxtAvailable: publishedMode,
+        oaiSearchBot: policy.allowOaiSearchBot ? "ALLOW" : "DISALLOW",
+        gptBot: policy.allowGptBot ? "ALLOW" : "DISALLOW",
+        googleExtended: policy.allowGoogleExtended ? "ALLOW" : "DISALLOW",
+        indexNow: policy.indexNowEnabled ? "CONFIGURED_NOT_ACTIVE" : "OFF",
+        maxSnippet: policy.maxSnippet,
+        maxImagePreview: policy.maxImagePreview,
+        xDefaultLocale: policy.xDefaultLocale,
+      },
+    });
+  } catch (error) {
+    console.error("[website-seo-health] read failed", error instanceof Error ? error.message : "unknown_error");
+    res.status(500).json({ error: "SEO_HEALTH_UNAVAILABLE" });
   }
 });
 
@@ -1744,6 +1878,17 @@ router.put("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Res
     const updates: Record<string, unknown> = {};
     for (const key of allowedFields) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+    const [globalSettings] = await db.select({ canonicalBaseUrl: settingsTable.canonicalBaseUrl }).from(settingsTable).limit(1);
+    const validation = validateWebsiteSeoOverride({
+      metaTitle: updates.metaTitle,
+      metaDescription: updates.metaDescription,
+      canonicalUrl: updates.canonicalUrl,
+      canonicalBaseUrl: globalSettings?.canonicalBaseUrl,
+    });
+    if (validation.errors.length) {
+      res.status(400).json({ error: "SEO_VALIDATION_FAILED", issues: validation.errors });
+      return;
     }
     updates.status = "draft";
     updates.publishedAt = null;
