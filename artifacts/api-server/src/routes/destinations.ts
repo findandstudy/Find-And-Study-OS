@@ -72,7 +72,10 @@ router.get("/public/destinations", async (req: Request, res: Response): Promise<
   const countryIdByDestinationId = new Map(directory.entries.flatMap((entry) => (
     entry.destination ? [[entry.destination.id, entry.country.id] as const] : []
   )));
+  const listedDestinationIds = new Set(countryIdByDestinationId.keys());
+  const emittedDestinationIds = new Set<number>();
   const enriched = destinations.flatMap(d => {
+    if (!listedDestinationIds.has(d.id)) return [];
     const key = (d.country ?? "").trim().toLowerCase();
     const live = countMap.get(key);
     const localized = resolveLocalizedDestinationFields({
@@ -97,6 +100,7 @@ router.get("/public/destinations", async (req: Request, res: Response): Promise<
       },
     });
     if (!localized.available) return [];
+    emittedDestinationIds.add(d.id);
     const canonicalPath = localizedDelivery.snapshots.get(d.id)?.canonicalPath
       || buildPublicWebCanonicalPath({
         entityType: "DESTINATION",
@@ -126,7 +130,9 @@ router.get("/public/destinations", async (req: Request, res: Response): Promise<
   });
 
   res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=3600");
-  const fallbackCountries = directory.entries.filter(entry => !entry.destination).map(entry => ({
+  const fallbackCountries = directory.entries.filter(entry => (
+    !entry.destination || !emittedDestinationIds.has(entry.destination.id)
+  )).map(entry => ({
     id: null, catalogCountryId: entry.country.id, countryCode: entry.country.code, source: "catalog", name: entry.country.name,
     country: entry.country.name, slug: entry.canonicalPath.split("/").at(-1), canonicalPath: entry.canonicalPath,
     shortDescription: null, description: null, imageUrl: null, isFeatured: false,
@@ -165,7 +171,11 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     const editorialPublished = fallback
       ? await hasPublishedDetailContent("destination", fallback.destination.catalogCountryId, locale)
       : false;
-    if (fallback && catalogCountryRouteAccessible({ catalogEligible: fallback.meta.catalogEligible, editorialPublished })) {
+    if (fallback && catalogCountryRouteAccessible({
+      catalogEligible: fallback.meta.catalogEligible,
+      editorialPublished,
+      directoryListed: fallback.meta.directoryListed,
+    })) {
       const editorial = await readPublishedDetailContent("destination", fallback.destination.catalogCountryId, locale);
       res.setHeader("Cache-Control", "public, max-age=60");
       res.setHeader("X-Robots-Tag", "noindex, follow");

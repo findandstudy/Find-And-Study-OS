@@ -11,7 +11,7 @@ import { ManagedPublicPage } from "./ManagedPublicPage";
 import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
 
 type Destination = {
-  id: number;
+  id: number | null;
   name: string;
   slug: string;
   country: string;
@@ -84,7 +84,7 @@ function DestinationGroup({ title, destinations, featured, t, localePath }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   localePath: (path: string) => string;
 }) {
-  return <div>{title ? <h2 className="mb-8 font-display text-2xl font-bold">{title}</h2> : null}<div className={`grid gap-8 ${featured ? "md:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3"}`}>{destinations.map((destination, index) => <DestinationCard key={destination.id} destination={destination} index={index} featured={featured} t={t} localePath={localePath} />)}</div></div>;
+  return <div>{title ? <h2 className="mb-8 font-display text-2xl font-bold">{title}</h2> : null}<div className={`grid gap-8 ${featured ? "md:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3"}`}>{destinations.map((destination, index) => <DestinationCard key={destination.id ?? destination.canonicalPath} destination={destination} index={index} featured={featured} t={t} localePath={localePath} />)}</div></div>;
 }
 
 function DestinationCard({ destination, index, featured, t, localePath }: {

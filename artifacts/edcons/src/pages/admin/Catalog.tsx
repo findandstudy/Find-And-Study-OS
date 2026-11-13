@@ -4576,6 +4576,7 @@ function PublicCatalogSettingsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [universityTypes, setUniversityTypes] = useState<string[]>([]);
+  const [allowedCountries, setAllowedCountries] = useState<string[]>([]);
   const [countryRules, setCountryRules] = useState<Record<string, string[]>>({});
   const [countrySearch, setCountrySearch] = useState("");
 
@@ -4587,6 +4588,7 @@ function PublicCatalogSettingsTab() {
   useEffect(() => {
     if (!settingsQuery.data) return;
     setUniversityTypes(settingsQuery.data.allowedUniversityTypes || []);
+    setAllowedCountries(settingsQuery.data.allowedCountries || []);
     const nextRules = { ...(settingsQuery.data.countryRules || {}) };
     // Preserve legacy country allow-lists when an old policy is first opened
     // in the new matrix UI: excluded countries become explicit hidden rules.
@@ -4607,7 +4609,7 @@ function PublicCatalogSettingsTab() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        allowedCountries: [],
+        allowedCountries,
         allowedUniversityTypes: universityTypes,
         countryRules,
       }),

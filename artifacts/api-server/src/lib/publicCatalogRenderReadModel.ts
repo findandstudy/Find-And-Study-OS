@@ -1032,7 +1032,11 @@ async function readDestinationDetail(
     const editorialPublished = fallback
       ? await hasPublishedDetailContent("destination", fallback.destination.catalogCountryId, route.locale)
       : false;
-    if (fallback && catalogCountryRouteAccessible({ catalogEligible: fallback.meta.catalogEligible, editorialPublished })) return {
+    if (fallback && catalogCountryRouteAccessible({
+      catalogEligible: fallback.meta.catalogEligible,
+      editorialPublished,
+      directoryListed: fallback.meta.directoryListed,
+    })) return {
       kind: "destination_detail", locale: route.locale,
       canonicalPath: fallback.meta.canonicalPath, title: fallback.destination.name,
       description: `Study opportunities in ${fallback.destination.name}`,

@@ -29,6 +29,7 @@ mock.method(db, "selectDistinct", () => ({ from: () => {
   return chain(() => index % 2 === 0 ? [{ value: "Turkey" }] : [{ value: "Private" }]);
 } }));
 mock.method(db, "select", (projection?: Record<string, unknown>) => ({ from: (table: unknown) => chain(() => {
+  if (table === schema.countriesTable) return [{ value: "Turkey" }];
   if (table === schema.catalogOptionsTable) return [{ value: "Private", metadata: { aliases: ["Foundation"] } }];
   if (table !== schema.settingsTable || !setting) return [];
   if (projection && "allowedCountries" in projection) {

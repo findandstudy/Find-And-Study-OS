@@ -10,8 +10,12 @@ import { readPublishedDetailContentEntityIds } from "./websiteDetailContent";
 type Country = { id: number; name: string; code: string; isActive: boolean };
 type Destination = { id: number; country: string; slug: string; isActive: boolean };
 
-export function catalogCountryRouteAccessible(input: { catalogEligible: boolean; editorialPublished: boolean }): boolean {
-  return input.catalogEligible || input.editorialPublished;
+export function catalogCountryRouteAccessible(input: {
+  catalogEligible: boolean;
+  editorialPublished: boolean;
+  directoryListed?: boolean;
+}): boolean {
+  return input.catalogEligible || input.editorialPublished || input.directoryListed === true;
 }
 
 /** Match only a unique existing identity; never guess among aliases or duplicate slugs. */
@@ -34,7 +38,8 @@ export function catalogCountryRoute(country: Country, countries: Country[], dest
 export async function readPublicCatalogCountryDirectory(localeInput: unknown) {
   const locale = normalizeProgramLocale(localeInput);
   const conditions: any[] = [];
-  addPublicCatalogConditions(conditions, await getPublicCatalogPolicy());
+  const policy = await getPublicCatalogPolicy();
+  addPublicCatalogConditions(conditions, policy);
   const [countries, destinations, counts] = await Promise.all([
     db.select().from(countriesTable).orderBy(asc(countriesTable.name)),
     db.select().from(destinationsTable),
@@ -49,14 +54,19 @@ export async function readPublicCatalogCountryDirectory(localeInput: unknown) {
     countries.map((country) => country.id),
     locale,
   );
+  const explicitlyListedCountryIds = new Set(policy.allowedCountries.flatMap((name) => {
+    const country = matchCatalogCountry(name, countries);
+    return country ? [country.id] : [];
+  }));
   const entries = countries.flatMap(country => {
     const canonicalPath = catalogCountryRoute(country, countries, destinations, locale);
     const sourceCounts = counts.filter(row => matchCatalogCountry(row.country, countries)?.id === country.id);
     const catalogEligible = sourceCounts.length > 0;
     const editorialPublished = publishedCountryIds.has(country.id);
-    if (!canonicalPath || (!catalogEligible && !editorialPublished)) return [];
+    const directoryListed = explicitlyListedCountryIds.has(country.id);
+    if (!canonicalPath || (!catalogEligible && !editorialPublished && !directoryListed)) return [];
     return [{ country, canonicalPath, destination: destinations.find(row => countryMatches(row.country, country)) ?? null,
-      catalogEligible, editorialPublished,
+      catalogEligible, editorialPublished, directoryListed,
       sourceCountryNames: sourceCounts.map(row => row.country),
       universityCount: sourceCounts.reduce((sum, row) => sum + Number(row.universityCount), 0),
       programCount: sourceCounts.reduce((sum, row) => sum + Number(row.programCount), 0) }];
@@ -103,6 +113,7 @@ export async function readCatalogCountryFallback(localeInput: unknown, slug: str
     destination: null,
     catalogEligible: false,
     editorialPublished: false,
+    directoryListed: false,
     sourceCountryNames: countryAliases(routeOnlyCountry),
     universityCount: 0,
     programCount: 0,
@@ -147,6 +158,7 @@ export async function readCatalogCountryFallback(localeInput: unknown, slug: str
     programs: [], cities: cityLinks,
     stats: { universityCount: entry.universityCount, programCount: entry.programCount },
     meta: { locale: directory.locale, indexable: false, canonicalPath: entry.canonicalPath, alternatePaths: {},
-      contentPolicy: "CATALOG_SOURCE_FALLBACK", catalogEligible: Boolean(entry.catalogEligible) },
+      contentPolicy: "CATALOG_SOURCE_FALLBACK", catalogEligible: Boolean(entry.catalogEligible),
+      directoryListed: Boolean(entry.directoryListed) },
   };
 }

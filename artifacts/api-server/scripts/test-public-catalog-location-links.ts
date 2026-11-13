@@ -23,6 +23,7 @@ test("authored country pages can open independently while empty catalogue record
   assert.equal(catalogCountryRouteAccessible({ catalogEligible: true, editorialPublished: false }), true);
   assert.equal(catalogCountryRouteAccessible({ catalogEligible: false, editorialPublished: true }), true);
   assert.equal(catalogCountryRouteAccessible({ catalogEligible: false, editorialPublished: false }), false);
+  assert.equal(catalogCountryRouteAccessible({ catalogEligible: false, editorialPublished: false, directoryListed: true }), true);
 });
 test("public university type policy maps regional foundation/state labels without guessing unrelated values", () => {
   assert.deepEqual(publicUniversityTypeAliases(["Private"]), ["Private", "Foundation", "Foundation University", "Vakıf", "Vakıf Üniversitesi"]);

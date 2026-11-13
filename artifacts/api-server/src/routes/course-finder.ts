@@ -6,7 +6,7 @@ import { parsePublicWebInternalLinkMode } from "../lib/publicCatalogRouteContrac
 import { readPublicCatalogPrices } from "../lib/publicCatalogPriceReadModel";
 import { projectPublicTuition } from "../lib/publicCatalogTuition";
 import { getPublicCatalogCacheGeneration, invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
-import { db, programsTable, programTranslationsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable, documentsTable, auditLogsTable, catalogOptionsTable } from "@workspace/db";
+import { db, programsTable, programTranslationsTable, universitiesTable, countriesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable, documentsTable, auditLogsTable, catalogOptionsTable } from "@workspace/db";
 import { eq, ilike, sql, and, inArray, isNull, desc, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
@@ -633,12 +633,8 @@ router.get(
   async (_req, res): Promise<void> => {
     const policy = await getPublicCatalogPolicy();
     const [countries, universityTypes] = await Promise.all([
-      db
-        .selectDistinct({ value: universitiesTable.country })
-        .from(universitiesTable)
-        .innerJoin(programsTable, eq(programsTable.universityId, universitiesTable.id))
-        .where(and(eq(programsTable.isActive, true), sql`${universitiesTable.country} IS NOT NULL`))
-        .orderBy(universitiesTable.country),
+      db.select({ value: countriesTable.name }).from(countriesTable)
+        .where(eq(countriesTable.isActive, true)).orderBy(countriesTable.name),
       db
         .select({ value: catalogOptionsTable.value })
         .from(catalogOptionsTable)
@@ -670,8 +666,8 @@ router.patch(
     }
 
     const [countryRows, typeRows] = await Promise.all([
-      db.selectDistinct({ value: universitiesTable.country }).from(universitiesTable).innerJoin(programsTable, eq(programsTable.universityId, universitiesTable.id))
-        .where(eq(programsTable.isActive, true)),
+      db.select({ value: countriesTable.name }).from(countriesTable)
+        .where(eq(countriesTable.isActive, true)),
       db.select({ value: catalogOptionsTable.value }).from(catalogOptionsTable)
         .where(and(
           eq(catalogOptionsTable.category, "university_type"),
@@ -701,9 +697,9 @@ router.patch(
 
     const [existing] = await db.select({ id: settingsTable.id, updatedAt: settingsTable.updatedAt }).from(settingsTable).limit(1);
     const update = {
-      // New saves are represented entirely by a default rule plus per-country
-      // overrides. Clearing the legacy allow-list avoids two competing sources.
-      publicCatalogAllowedCountries: Object.keys(countryRules).length > 0 ? [] : allowedCountries,
+      // The allow-list is the public country-directory cohort. Per-country
+      // rules independently control which university types appear inside it.
+      publicCatalogAllowedCountries: allowedCountries,
       publicCatalogAllowedUniversityTypes: allowedUniversityTypes,
       publicCatalogCountryRules: countryRules,
       updatedAt: new Date(),
