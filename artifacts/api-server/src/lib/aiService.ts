@@ -523,7 +523,11 @@ TEMPLATE_CONTENT_POLICY=${JSON.stringify(params.contentPolicy ?? null)}${this.co
       const generated: AiGeneratedDetailSection = { title, body };
       if (contentShape === "cards" || contentShape === "steps") {
         const items = record[contentShape];
-        if (!Array.isArray(items) || items.length < (contract.minItems ?? 2) || items.length > (contract.maxItems ?? 4)) throw new Error(`AI detail generation returned an invalid ${key} item count`);
+        const minimumItems = Math.min(contract.minItems ?? 2, 2);
+        if (!Array.isArray(items) || items.length < minimumItems || items.length > (contract.maxItems ?? 4)) {
+          const itemCount = Array.isArray(items) ? items.length : "not-an-array";
+          throw new Error(`AI detail generation returned an invalid ${key} item count (${itemCount}; expected ${minimumItems}-${contract.maxItems ?? 4})`);
+        }
         const normalized = items.map(item => {
           if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).sort().join() !== "body,title") throw new Error(`AI detail generation returned an invalid ${key} item`);
           const itemRecord = item as Record<string, unknown>;
@@ -539,7 +543,11 @@ TEMPLATE_CONTENT_POLICY=${JSON.stringify(params.contentPolicy ?? null)}${this.co
         generated[contentShape] = normalized;
       } else if (contentShape === "questions") {
         const items = record.questions;
-        if (!Array.isArray(items) || items.length < (contract.minItems ?? 2) || items.length > (contract.maxItems ?? 4)) throw new Error(`AI detail generation returned an invalid ${key} question count`);
+        const minimumItems = Math.min(contract.minItems ?? 2, 2);
+        if (!Array.isArray(items) || items.length < minimumItems || items.length > (contract.maxItems ?? 4)) {
+          const itemCount = Array.isArray(items) ? items.length : "not-an-array";
+          throw new Error(`AI detail generation returned an invalid ${key} question count (${itemCount}; expected ${minimumItems}-${contract.maxItems ?? 4})`);
+        }
         const questions = items.map(item => {
           if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).sort().join() !== "answer,question") throw new Error(`AI detail generation returned an invalid ${key} question`);
           const itemRecord = item as Record<string, unknown>;
