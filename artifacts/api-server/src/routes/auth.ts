@@ -117,6 +117,28 @@ const loginRateLimiter = new RateLimiterPostgres({
   duration: 900,
 });
 
+async function isLoginRateLimited(ipKey: string, emailKey: string): Promise<boolean> {
+  const [ipState, emailState] = await Promise.all([
+    loginRateLimiter.get(ipKey),
+    loginRateLimiter.get(emailKey),
+  ]);
+  return [ipState, emailState].some(
+    (state) => state !== null && state.consumedPoints >= 5,
+  );
+}
+
+async function recordFailedLogin(ipKey: string, emailKey: string): Promise<void> {
+  // The limiter rejects the promise when the newly recorded failure crosses
+  // the threshold. The current request still receives its normal generic
+  // authentication failure; the next request is rejected before password
+  // verification. allSettled also ensures one bucket is not skipped if the
+  // other reaches its limit first.
+  await Promise.allSettled([
+    loginRateLimiter.consume(ipKey),
+    loginRateLimiter.consume(emailKey),
+  ]);
+}
+
 function setSessionCookie(req: Request, res: Response, sid: string) {
   res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
 }
@@ -218,9 +240,14 @@ router.post("/auth/login", validate({ body: loginBodySchema }), async (req: Requ
     const emailKey = `email:${normalizedEmail}`;
 
     try {
-      await loginRateLimiter.consume(ipKey);
-      await loginRateLimiter.consume(emailKey);
+      if (await isLoginRateLimited(ipKey, emailKey)) {
+        res.status(429).json({ error: "Too many login attempts. Please try again in a few minutes." });
+        return;
+      }
     } catch {
+      // Authentication stays fail-closed when the shared limiter store is
+      // unavailable; otherwise a database incident would remove brute-force
+      // protection entirely.
       res.status(429).json({ error: "Too many login attempts. Please try again in a few minutes." });
       return;
     }
@@ -228,6 +255,7 @@ router.post("/auth/login", validate({ body: loginBodySchema }), async (req: Requ
     const maskedEmail = normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2");
     const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
     if (!user || !user.passwordHash) {
+      await recordFailedLogin(ipKey, emailKey);
       await logAudit(null, "auth.login.failure", "user", undefined, { email: maskedEmail, reason: "no_user_or_no_password" }, ip);
       res.status(401).json({ error: "Invalid email or password" });
       return;
@@ -235,6 +263,7 @@ router.post("/auth/login", validate({ body: loginBodySchema }), async (req: Requ
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
+      await recordFailedLogin(ipKey, emailKey);
       await logAudit(user.id, "auth.login.failure", "user", user.id, { email: maskedEmail, reason: "bad_password" }, ip);
       res.status(401).json({ error: "Invalid email or password" });
       return;
@@ -243,6 +272,7 @@ router.post("/auth/login", validate({ body: loginBodySchema }), async (req: Requ
     if (!user.isActive) {
       const isPublicApplyPendingVerification = user.createdFromSource === "public_apply" && !user.emailVerified && user.passwordHash;
       if (!isPublicApplyPendingVerification) {
+        await recordFailedLogin(ipKey, emailKey);
         await logAudit(user.id, "auth.login.failure", "user", user.id, { email: maskedEmail, reason: "deactivated" }, ip);
         res.status(403).json({ error: "Your account has been deactivated. Please contact an administrator." });
         return;
