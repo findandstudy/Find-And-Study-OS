@@ -267,6 +267,13 @@ export function buildDetailGenerationPlan(input: {
       : pool.length
         ? [pool[index % pool.length], pool[(index + Math.max(1, Math.floor(pool.length / 2))) % pool.length]].filter((value, entityIndex, all) => all.indexOf(value) === entityIndex)
         : [];
+    const allocatedSourceTopicTitles = sourceTopicTitlesForSection(input.facts, section.key);
+    const requestedContentShape = policy.contentShape ?? "prose";
+    const contentShape = requestedContentShape !== "prose"
+      && readiness === "limited"
+      && allocatedSourceTopicTitles.length < 2
+      ? "prose"
+      : requestedContentShape;
     planned.push({
       ...section,
       objective: policy.objective,
@@ -276,10 +283,10 @@ export function buildDetailGenerationPlan(input: {
       readiness,
       evidenceKeys,
       allocatedEntities,
-      allocatedSourceTopicTitles: sourceTopicTitlesForSection(input.facts, section.key),
-      contentShape: policy.contentShape ?? "prose",
-      minItems: policy.contentShape ? policy.minItems ?? 2 : 0,
-      maxItems: policy.contentShape ? policy.maxItems ?? 4 : 0,
+      allocatedSourceTopicTitles,
+      contentShape,
+      minItems: contentShape !== "prose" ? policy.minItems ?? 2 : 0,
+      maxItems: contentShape !== "prose" ? policy.maxItems ?? 4 : 0,
     });
   });
   return {
