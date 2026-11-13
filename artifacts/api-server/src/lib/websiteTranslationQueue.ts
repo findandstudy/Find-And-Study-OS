@@ -55,8 +55,10 @@ export async function enqueueWebsiteTranslations(input: { kind: QueueKind; entit
     const publicKind = input.kind === "destination" ? "country" : input.kind;
     if (!settings.enabled || !settings.allowedKinds.includes(publicKind) || input.locales.some(locale => !settings.allowedLocales.includes(locale) || locale === "en")) throw new Error("POLICY_DENIED");
     if (input.entityIds.length * input.locales.length > 500) throw new Error("BATCH_TOO_LARGE");
+    const now = new Date();
+    const dayStartUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const [recent, [pending]] = await Promise.all([
-      tx.select({ changes: auditLogsTable.changes }).from(auditLogsTable).where(and(eq(auditLogsTable.action, "website_ai_content_execute"), gte(auditLogsTable.createdAt, new Date(Date.now() - 86_400_000)))),
+      tx.select({ changes: auditLogsTable.changes }).from(auditLogsTable).where(and(eq(auditLogsTable.action, "website_ai_content_execute"), gte(auditLogsTable.createdAt, dayStartUtc))),
       tx.select({ count: sql<number>`count(*)::int` }).from(websiteTranslationJobsTable).where(inArray(websiteTranslationJobsTable.status, ["queued", "processing", "retrying"])),
     ]);
     let requests = 0, estimatedTokens = 0;

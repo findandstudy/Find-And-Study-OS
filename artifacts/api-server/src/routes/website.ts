@@ -97,7 +97,14 @@ async function loadWebsiteAiSettings() {
 }
 
 async function readWebsiteAiUsage(days = 30) {
-  const since = new Date(Date.now() - Math.max(1, Math.min(days, 90)) * 86_400_000);
+  const boundedDays = Math.max(1, Math.min(days, 90));
+  const now = new Date();
+  // A daily budget is a calendar-day allowance, not a rolling 24-hour window.
+  // Using UTC keeps API and background-worker enforcement deterministic across
+  // hosts and lets the allowance reset once at the documented day boundary.
+  const since = boundedDays === 1
+    ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    : new Date(now.getTime() - boundedDays * 86_400_000);
   const rows = await db.select({ changes: auditLogsTable.changes, createdAt: auditLogsTable.createdAt })
     .from(auditLogsTable).where(and(eq(auditLogsTable.action, "website_ai_content_execute"), gte(auditLogsTable.createdAt, since)));
   let requests = 0, estimatedTokens = 0, succeeded = 0, failed = 0;
