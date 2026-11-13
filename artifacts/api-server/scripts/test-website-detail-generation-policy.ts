@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildDetailGenerationPlan, evaluateDetailContentQuality } from "../src/lib/websiteDetailGenerationPolicy";
-import { buildAutomaticEnglishDetailSeo } from "../src/lib/websiteDetailSeo";
+import { buildAutomaticEnglishDetailSeo, buildAutomaticEnglishDetailSeoFromSections } from "../src/lib/websiteDetailSeo";
 import type { DetailContent } from "../src/lib/websiteDetailContentContract";
 
 const section = (key: string) => ({ key, title: key, templateBody: "", instruction: `Write the ${key} section for a student.` });
@@ -52,6 +52,49 @@ test("country SEO leads with destination decisions instead of catalogue promotio
     `${seo.title} ${seo.description}`,
     /compare universities|universities & admissions/i,
   );
+});
+
+test("generated section evidence replaces the generic country meta description", () => {
+  const seo = buildAutomaticEnglishDetailSeoFromSections("destination", {
+    name: "Latvia",
+    description: null,
+    universityName: null,
+    city: null,
+    country: "Latvia",
+  }, [{
+    key: "overview",
+    body: "Latvia combines compact student cities, a northern European setting and comparatively manageable daily travel, so applicants can compare location, seasonal living and budget trade-offs before choosing a study route.",
+  }]);
+  assert.match(seo.description, /^Latvia combines compact student cities/);
+  assert.doesNotMatch(seo.description, /^Explore cities, daily life, climate/);
+  assert.ok(seo.description.length <= 160);
+});
+
+test("quality gate blocks a generic automatic meta description when page-specific copy exists", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "destination",
+    entityName: "Latvia",
+    facts: { destination: "Latvia", description: "Verified destination context.", officialSources: [{ field: "description" }] },
+    sections: [section("overview")],
+  });
+  const content: DetailContent = {
+    version: 1,
+    kind: "destination",
+    entityId: 91,
+    locale: "en",
+    seoMode: "auto",
+    seo: buildAutomaticEnglishDetailSeo("destination", { name: "Latvia", description: null, universityName: null, city: null, country: "Latvia" }),
+    sections: [{
+      key: "overview",
+      title: "Build a realistic Latvia shortlist",
+      body: "Latvia combines compact student cities, a northern European setting and comparatively manageable daily travel, so applicants can compare location, seasonal living and budget trade-offs before choosing a study route.",
+      sources: [{ label: "Official", url: "https://example.test" }],
+      reviewedOn: "2026-01-01",
+    }],
+  };
+  const quality = evaluateDetailContentQuality({ content, plan });
+  assert.equal(quality.status, "blocked");
+  assert.ok(quality.issues.some(issue => issue.code === "SEO_GENERIC_DESCRIPTION"));
 });
 
 test("planner keeps section identities separate and skips unsupported optional topics", () => {

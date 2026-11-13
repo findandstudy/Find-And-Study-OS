@@ -591,6 +591,20 @@ export function evaluateDetailContentQuality(input: {
   const seo = input.content.seo;
   if (!seo || seo.title.length > 60 || seo.description.length > 160) issues.push({ code: "SEO_LENGTH_OR_MISSING", severity: "warning", sections: [], message: "Localized SEO title or description is missing or outside the preferred search-result length." });
   if (seo && (LITERAL_ELLIPSIS.test(seo.title) || LITERAL_ELLIPSIS.test(seo.description))) issues.push({ code: "SEO_LITERAL_ELLIPSIS", severity: "blocker", sections: [], message: "SEO copy contains a literal ellipsis caused by mechanical truncation." });
+  if (
+    input.content.locale === "en"
+    && input.content.seoMode === "auto"
+    && seo
+    && /^(?:Explore cities, daily life, climate, housing, transport and study planning in|Explore universities, programs, campus areas, transport, housing and practical student life in|Compare .+?: programs, admissions, fees, scholarships, campus services and application planning\.)/i.test(seo.description)
+    && sections.some(section => ["hero", "overview", "facts", "highlights"].includes(section.key) && sectionCopy(section).length >= 90)
+  ) {
+    issues.push({
+      code: "SEO_GENERIC_DESCRIPTION",
+      severity: "blocker",
+      sections: [],
+      message: "Automatic SEO still uses the generic fallback even though entity-specific editorial copy is available.",
+    });
+  }
   const sourceReady = input.plan.sections.filter(section => section.readiness !== "insufficient").length;
   const sourceTotal = input.plan.sections.length + input.plan.skippedSections.length;
   const sourceCoverage = sourceTotal ? Math.round(sourceReady / sourceTotal * 100) : 0;

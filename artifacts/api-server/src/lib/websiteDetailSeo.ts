@@ -57,3 +57,17 @@ export function buildAutomaticEnglishDetailSeo(kind: DetailContentKind, facts: A
   const description = fitMetaDescription(facts.description && facts.description.length >= 90 ? facts.description : fallback, 160);
   return { title, description, ogTitle: title, ogDescription: description, twitterTitle: title, twitterDescription: description };
 }
+
+export function buildAutomaticEnglishDetailSeoFromSections(
+  kind: DetailContentKind,
+  facts: AutomaticDetailSeoFacts,
+  sections: Array<{ key: string; body?: string }>,
+): DetailSeo {
+  const preferredCopy = ["overview", "hero", "facts", "highlights"]
+    .map((key) => sections.find((section) => section.key === key)?.body)
+    .find((body): body is string => !!body && cleanSentence(body).length >= 90);
+  return buildAutomaticEnglishDetailSeo(kind, {
+    ...facts,
+    description: preferredCopy ?? facts.description,
+  });
+}

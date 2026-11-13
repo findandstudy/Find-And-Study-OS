@@ -199,7 +199,7 @@ test("hero uses only reviewed CMS media and does not duplicate it in editorial c
   assert.match(media, /src="\/images\/reviewed-cover\.jpg"/);
   assert.match(media, /loading="eager"/);
   assert.match(media, /fetchPriority="high"/);
-  assert.match(media, /alt=""/);
+  assert.match(media, /alt="Reviewed campus view"/);
   const addon = renderToStaticMarkup(React.createElement(React.Fragment, null, detailContentAddon(heroContent, "hero", "en", "/en/contact")));
   assert.equal(addon, "");
   assert.equal(renderToStaticMarkup(React.createElement(DetailHeroMedia, { content: fixture })), "");

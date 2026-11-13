@@ -82,7 +82,8 @@ function Gallery({ images, title, locale }: { images: NonNullable<DetailContentS
 
 /** Uses only the first reviewed CMS image as the prototype-style cover. */
 export function DetailHeroMedia({ content }: { content: DetailContent | null }) {
-  const heroImage = content?.sections.find(section => section.key === "hero")?.images?.[0];
+  const heroSection = content?.sections.find(section => section.key === "hero");
+  const heroImage = heroSection?.images?.[0];
   const cityGalleryFallback = content?.kind === "city"
     ? content.sections.find(section => section.key === "gallery")?.images?.[0]
     : undefined;
@@ -91,8 +92,9 @@ export function DetailHeroMedia({ content }: { content: DetailContent | null }) 
   const [loaded, setLoaded] = useState(false);
   useEffect(() => setLoaded(false), [image?.src]);
   if (!image || failed) return null;
-  return <div className="detail-hero-media" aria-hidden="true">
-    <img src={image.src} alt="" className={`detail-progressive-image ${loaded ? "is-loaded" : ""}`} loading="eager" decoding="async" fetchPriority="high" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
+  const alt = image.alt?.trim() || image.caption?.trim() || heroSection?.title?.trim() || content?.kind || "Detail page cover";
+  return <div className="detail-hero-media">
+    <img src={image.src} alt={alt} className={`detail-progressive-image ${loaded ? "is-loaded" : ""}`} loading="eager" decoding="async" fetchPriority="high" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
   </div>;
 }
 

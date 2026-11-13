@@ -26,6 +26,8 @@ export function CountryFlag({ code, size = "md", className = "", rounded = false
       src={`${FLAG_CDN}/${s.w}x${s.h}/${lc}.png`}
       srcSet={`${FLAG_CDN}/${s.w * 2}x${s.h * 2}/${lc}.png 2x`}
       alt={alt ?? code.toUpperCase()}
+      aria-hidden={alt === "" ? "true" : undefined}
+      role={alt === "" ? "presentation" : undefined}
       className={`inline-block ${rounded ? "rounded-md" : "rounded-[2px]"} object-cover shadow-sm ${s.cls} ${className}`}
       loading="lazy"
     />

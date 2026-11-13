@@ -1726,7 +1726,7 @@ export function renderPublicCatalogHtml(input: {
     shell = shell.replace("</main>", `${ordered}</main>`);
     for (const key of layout.hidden) shell = shell.replace(new RegExp(`<a href="#${key}"[^>]*>[\\s\\S]*?<\\/a>`, "g"), "");
   }
-  const alternatePaths = (
+  const configuredAlternatePaths = (
     model.kind === "program_detail"
     || model.kind === "university_detail"
     || model.kind === "destination_detail"
@@ -1735,6 +1735,9 @@ export function renderPublicCatalogHtml(input: {
     || model.kind === "page_detail"
   )
     ? model.alternatePaths
+    : {};
+  const alternatePaths = model.indexable
+    ? { ...configuredAlternatePaths, [model.locale]: configuredAlternatePaths[model.locale] ?? model.canonicalPath }
     : {};
   const hreflangLinks = PROGRAM_SUPPORTED_LOCALES.flatMap((locale) => {
     const path = alternatePaths[locale];
@@ -1752,7 +1755,7 @@ export function renderPublicCatalogHtml(input: {
     .slice(0, 16)
     .map((href) => `  <link rel="modulepreload" crossorigin href="${escapeHtml(href)}" />`);
   const appearanceStyle = appearanceRules.length ? `  <style nonce="${escapeHtml(input.nonce)}" data-detail-appearance>${appearanceRules.join("")}</style>\n` : "";
-  const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${preloadLinks.join("\n")}${preloadLinks.length ? "\n" : ""}${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}${appearanceStyle}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(model, siteUrl))}</script>\n`;
+  const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${preloadLinks.join("\n")}${preloadLinks.length ? "\n" : ""}${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}${appearanceStyle}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json" data-public-json-ld="ssr">${safeJson(structuredData(model, siteUrl))}</script>\n`;
   return html
     .replace("</head>", `${extraHead}${model.detailLayout ? `<script id="public-detail-layout" nonce="${escapeHtml(input.nonce)}" type="application/json">${safeJson(model.detailLayout)}</script>` : ""}</head>`)
     .replace(/<div\s+id=["']root["']\s*><\/div>/i, `<div id="root" data-public-render-shell-root="true">${shell}${renderConsentShell(model)}</div>`);

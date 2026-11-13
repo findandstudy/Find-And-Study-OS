@@ -89,14 +89,17 @@ export function useSeo({ title, description, canonical, noindex = false, nofollo
 
     removeHreflangLinks();
 
-    if (lang) {
+    if (lang && !noindex) {
       let origin = window.location.origin;
       try { origin = new URL(canonicalHref).origin; } catch { /* keep the current origin */ }
       const basePath = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
       const currentPath = stripLanguagePrefix(window.location.pathname.replace(basePath, ""));
 
+      const effectiveAlternates = alternates
+        ? { ...alternates, [lang]: alternates[lang] || canonicalHref }
+        : undefined;
       for (const code of SUPPORTED_LANGUAGES) {
-        const explicitPath = alternates?.[code];
+        const explicitPath = effectiveAlternates?.[code];
         if (alternates && !explicitPath) continue;
         const localizedPath = explicitPath || buildLocalizedPath(currentPath, code);
         const href = /^https?:\/\//.test(localizedPath) ? localizedPath : `${origin}${basePath}${localizedPath}`;
@@ -107,7 +110,7 @@ export function useSeo({ title, description, canonical, noindex = false, nofollo
         document.head.appendChild(linkEl);
       }
 
-      const defaultPath = alternates ? alternates.en : buildLocalizedPath(currentPath, "en");
+      const defaultPath = effectiveAlternates ? effectiveAlternates.en : buildLocalizedPath(currentPath, "en");
       if (defaultPath) {
         const defaultLink = document.createElement("link");
         defaultLink.rel = "alternate";

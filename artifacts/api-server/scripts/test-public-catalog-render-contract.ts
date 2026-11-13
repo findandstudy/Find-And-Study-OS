@@ -202,7 +202,7 @@ test("country directory SSR renders safe canonical links and CollectionPage data
   assert.match(html, /"@type":"CollectionPage"/);
 });
 
-test("country detail SSR keeps localized SEO metadata and alternates available for QA", () => {
+test("country detail SSR keeps localized SEO metadata but suppresses hreflang while noindex", () => {
   const model: PublicCatalogRenderModel = {
     kind: "destination_detail",
     locale: "tr",
@@ -238,10 +238,31 @@ test("country detail SSR keeps localized SEO metadata and alternates available f
   const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
   assert.match(html, /property="og:locale" content="tr_TR"/);
   assert.match(html, /property="og:image" content="https:\/\/cdn\.example\.test\/turkey\.jpg"/);
-  assert.match(html, /hreflang="tr" href="https:\/\/example\.test\/tr\/countries\/turkey"/);
-  assert.match(html, /hreflang="x-default" href="https:\/\/example\.test\/en\/countries\/turkey"/);
+  assert.doesNotMatch(html, /hreflang=/);
   assert.match(html, /"inLanguage":"tr"/);
   assert.match(html, /"@type":"BreadcrumbList"/);
+  assert.match(html, /data-public-json-ld="ssr"/);
+});
+
+test("indexable detail SSR always emits self hreflang and x-default even when alternates are incomplete", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "destination_detail",
+    locale: "en",
+    canonicalPath: "/en/countries/example-country",
+    title: "Study in Example Country",
+    description: "A source-backed guide to studying and living in Example Country.",
+    indexable: true,
+    alternatePaths: {},
+    destination: {
+      id: 91, name: "Example Country", country: "Example Country", livingCost: null,
+      climate: null, language: "English", currency: "EUR", visaInfo: null,
+      workPermit: null, popularCities: [], universityCount: 0, programCount: 0,
+      universities: [],
+    },
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.match(html, /hreflang="en" href="https:\/\/example\.test\/en\/countries\/example-country"/);
+  assert.match(html, /hreflang="x-default" href="https:\/\/example\.test\/en\/countries\/example-country"/);
 });
 
 test("rendered shell escapes catalogue content, emits canonical metadata, and nonces every script", () => {
@@ -435,6 +456,9 @@ test("destination detail emits a semantic destination shell without inventing tr
   });
   assert.match(html, /data-public-render-shell="destination-detail"/);
   assert.match(html, /"@type":"TouristDestination"/);
+  assert.equal(html.match(/"@type":"TouristDestination"/g)?.length, 1);
+  assert.equal(html.match(/"@type":"WebPage"/g)?.length, 1);
+  assert.equal(html.match(/data-public-json-ld="ssr"/g)?.length, 1);
   assert.match(html, /href="\/en\/universities\/example-university-7"/);
   assert.match(html, /hreflang="x-default"/);
   assert.doesNotMatch(html, /service fee|commission|contact person/i);

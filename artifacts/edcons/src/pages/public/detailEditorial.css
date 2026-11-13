@@ -738,8 +738,11 @@
 .detail-facts dd { font-size: 15px; font-weight: 650; line-height: 1.5; margin: 0; overflow-wrap: anywhere; white-space: pre-line; }
 .detail-facts dd a:hover { color: var(--detail-accent); text-decoration: underline; }
 .detail-nav { position: sticky; top: 80px; z-index: 40; background: rgba(255,253,249,.97); backdrop-filter: blur(12px); border-bottom: 1px solid var(--detail-line); }
-.detail-nav > .detail-wrap { display: flex; gap: 30px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; scroll-snap-type: x proximity; }
-.detail-nav > .detail-wrap::-webkit-scrollbar { display: none; }
+.detail-nav > .detail-wrap { display: flex; gap: 30px; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--detail-accent) 62%, transparent) color-mix(in srgb, var(--detail-line) 72%, transparent); scrollbar-gutter: stable; scroll-snap-type: x proximity; overscroll-behavior-inline: contain; }
+.detail-nav > .detail-wrap::-webkit-scrollbar { display: block; height: 6px; }
+.detail-nav > .detail-wrap::-webkit-scrollbar-track { background: color-mix(in srgb, var(--detail-line) 72%, transparent); }
+.detail-nav > .detail-wrap::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--detail-accent) 62%, transparent); border-radius: 999px; }
+.detail-nav > .detail-wrap:focus-within { scrollbar-color: var(--detail-accent) color-mix(in srgb, var(--detail-line) 72%, transparent); }
 .detail-nav a { display: flex; align-items: center; min-height: 52px; font-size: 13px; font-weight: 800; color: var(--detail-muted); white-space: nowrap; border-bottom: 2px solid transparent; scroll-snap-align: start; }
 .detail-nav a:hover, .detail-nav a:focus-visible, .detail-nav a[aria-current="location"] { color: var(--detail-accent); border-bottom-color: var(--detail-accent); }
 

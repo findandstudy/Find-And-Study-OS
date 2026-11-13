@@ -11,7 +11,7 @@ import {
   type DetailContentKind,
   type DetailContentSection,
 } from "./websiteDetailContentContract";
-import { buildAutomaticEnglishDetailSeo } from "./websiteDetailSeo";
+import { buildAutomaticEnglishDetailSeo, buildAutomaticEnglishDetailSeoFromSections } from "./websiteDetailSeo";
 export { buildAutomaticEnglishDetailSeo } from "./websiteDetailSeo";
 import {
   readDetailContentDraft,
@@ -332,7 +332,8 @@ async function addGeneratedImages(params: {
 
 async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, payload: unknown, layout: Awaited<ReturnType<typeof readPublishedDetailLayout>>, existing: DetailContent, ai: AiContentService) {
   const base = buildEnglishSource(kind, entityId, payload, layout);
-  const entityName = entityFacts(kind, payload, entityId).name;
+  const resolvedEntityFacts = entityFacts(kind, payload, entityId);
+  const entityName = resolvedEntityFacts.name;
   const existingByKey = new Map(existing.sections.map(section => [section.key, section] as const));
   const shared = new Map(detailTemplateSectionsForLocale(layout, "en").map(section => [section.key, section]));
   const requested = layout.sections.flatMap(layoutKey => {
@@ -402,11 +403,16 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
         return [preserveDetailSectionDesign(section, existingByKey.get(section.key))];
       }),
     };
+  const contentWithSeo = {
+    ...content,
+    seoMode: "auto" as const,
+    seo: buildAutomaticEnglishDetailSeoFromSections(kind, resolvedEntityFacts, content.sections),
+  };
   const visual = await addGeneratedImages({
     kind,
     entityId,
     entityName,
-    content,
+    content: contentWithSeo,
     existing,
     ai,
   });

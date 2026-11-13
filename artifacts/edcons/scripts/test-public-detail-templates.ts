@@ -41,6 +41,8 @@ const publicAsyncFeedback = readFileSync(new URL("../src/components/public/Publi
 const cookieBanner = readFileSync(new URL("../src/components/CookieBanner.tsx", import.meta.url), "utf8");
 const bootstrap = readFileSync(new URL("../public/bootstrap.js", import.meta.url), "utf8");
 const indexCss = readFileSync(new URL("../src/index.css", import.meta.url), "utf8");
+const jsonLdHook = readFileSync(new URL("../src/hooks/use-json-ld.ts", import.meta.url), "utf8");
+const seoHook = readFileSync(new URL("../src/hooks/use-seo.ts", import.meta.url), "utf8");
 
 test("detail sections collapse safely across tablet and mobile layouts", () => {
   assert.match(css, /@media \(max-width: 1050px\)[\s\S]*\.detail-editorial-gallery \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
@@ -329,6 +331,19 @@ test("public language menu stays above the sticky detail section navigation", ()
   assert.match(publicLayout, /<header className="sticky top-0 z-\[100\]/);
   assert.match(publicLayout, /min-w-\[200px\] z-\[110\]/);
   assert.match(css, /\.detail-nav\s*\{[^}]*top:\s*80px;[^}]*z-index:\s*40;/);
+});
+
+test("long detail navigation exposes a visible horizontal scroll affordance", () => {
+  assert.match(css, /\.detail-nav > \.detail-wrap \{[^}]*scrollbar-width:\s*thin;[^}]*scrollbar-gutter:\s*stable;/);
+  assert.match(css, /\.detail-nav > \.detail-wrap::\-webkit-scrollbar \{[^}]*display:\s*block;[^}]*height:\s*6px;/);
+});
+
+test("hydration keeps one authoritative JSON-LD graph and indexable pages keep self hreflang", () => {
+  assert.match(jsonLdHook, /data-public-json-ld="ssr"/);
+  assert.match(jsonLdHook, /data-public-json-ld="client"/);
+  assert.match(jsonLdHook, /serverSchema\?\.textContent\?\.includes\(canonicalHref\)/);
+  assert.match(seoHook, /\[lang\]:\s*alternates\[lang\]\s*\|\|\s*canonicalHref/);
+  assert.match(seoHook, /if \(lang && !noindex\)/);
 });
 
 test("all four detail heroes put the breadcrumb before their real title", () => {

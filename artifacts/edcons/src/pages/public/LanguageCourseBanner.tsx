@@ -63,7 +63,7 @@ export function LanguageCourseBanner({ className = "", ...sectionProps }: HTMLAt
       <div className="detail-language-banner">
         <div className="detail-language-copy">
           <div className="detail-language-brand" aria-hidden="true">
-            <img src={`${BASE_URL}/images/language-courses/free-language-course.png`} alt="" width="180" height="72" loading="lazy" decoding="async" />
+            <img src={`${BASE_URL}/images/language-courses/free-language-course.png`} alt="" aria-hidden="true" role="presentation" width="180" height="72" loading="lazy" decoding="async" />
           </div>
           <p className="detail-eyebrow detail-icon-line"><Sparkles size={16} aria-hidden="true" />{copy.eyebrow}</p>
           <h2 id="language-courses-title">{copy.title}</h2>
