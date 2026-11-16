@@ -6,9 +6,9 @@ import {
   getPublicCatalogPolicy,
 } from "../lib/publicCatalogQueryPolicy";
 import { courseFinderUniversityLogoUrl } from "../lib/courseFinderVisibility";
-import { normalizeProgramLocale } from "../lib/programTranslationContract";
+import { normalizeProgramLocale, PROGRAM_SUPPORTED_LOCALES, type ProgramSupportedLocale } from "../lib/programTranslationContract";
 import { catalogCountryRouteAccessible, readPublicCatalogCountryDirectory, readCatalogCountryFallback, matchCatalogCountry } from "../lib/publicCatalogLocationLinks";
-import { hasPublishedDetailContent, readPublishedDetailContent, readPublishedDetailHeroImageUrls } from "../lib/websiteDetailContent";
+import { hasPublishedDetailContent, readPublishedDetailContent, readPublishedDetailContentLocales, readPublishedDetailHeroImageUrls } from "../lib/websiteDetailContent";
 import { countryAliases } from "../lib/websiteCatalogFilters";
 import {
   parsePublicWebInternalLinkMode,
@@ -176,11 +176,22 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       editorialPublished,
       directoryListed: fallback.meta.directoryListed,
     })) {
-      const editorial = await readPublishedDetailContent("destination", fallback.destination.catalogCountryId, locale);
+      const [editorial, publishedLocales] = await Promise.all([
+        readPublishedDetailContent("destination", fallback.destination.catalogCountryId, locale),
+        readPublishedDetailContentLocales(
+          "destination",
+          fallback.destination.catalogCountryId,
+          PROGRAM_SUPPORTED_LOCALES,
+        ),
+      ]);
+      const alternatePaths = Object.fromEntries([...publishedLocales].map(contentLocale => [
+        contentLocale,
+        `/${contentLocale}/countries/${fallback.destination.slug}`,
+      ])) as Partial<Record<ProgramSupportedLocale, string>>;
       res.setHeader("Cache-Control", "public, max-age=60");
       res.setHeader("X-Robots-Tag", "noindex, follow");
       res.setHeader("Content-Location", fallback.meta.canonicalPath);
-      res.json({ ...fallback, editorial });
+      res.json({ ...fallback, meta: { ...fallback.meta, alternatePaths }, editorial });
       return;
     }
     res.status(404).json({ error: "Destination not found" });
