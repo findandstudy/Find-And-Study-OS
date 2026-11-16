@@ -220,7 +220,11 @@ export default function CountryDetail({ slug }: { slug: string }) {
   const programsPath = localePath(`/programs?country=${encodeURIComponent(dest.filterCountry || dest.country)}`);
   const heroSection = detailHeroSection(editorial);
   const hero = heroSection?.hero;
-  const heroTitle = heroSection?.title || t("countryDetail.studyIn", { name: localizedDestinationName });
+  // Keep the first-paint SSR heading and the hydrated heading identical. A
+  // generated editorial hero supplies the intent-led title; an unpublished or
+  // source-thin page falls back to the canonical localized country name rather
+  // than briefly showing the SEO title before hydration.
+  const heroTitle = heroSection?.title || localizedDestinationName;
   const heroBody = heroSection?.body || dest.shortDescription || t("countryDetail.exploreOpportunities");
   const primaryCtaHref = hero?.primaryCtaHref || programsPath;
   const primaryCtaLabel = hero?.primaryCtaLabel || t("countryDetail.browsePrograms");

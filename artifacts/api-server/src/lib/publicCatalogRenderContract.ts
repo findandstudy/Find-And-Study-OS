@@ -963,6 +963,7 @@ function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind
   const destination = model.destination;
   const copy = RENDER_COPY[model.locale];
   const countryName = ssrCountryName(destination.name, destination.countryCode, model.locale);
+  const heroTitle = detailContentForModel(model)?.sections.find(section => section.key === "hero")?.title?.trim() || countryName;
   const universities = destination.universities.map((university) => `
       <article class="rounded-2xl border border-border bg-card p-5">
         <h2 class="text-lg font-bold"><a href="${escapeHtml(university.canonicalPath)}">${escapeHtml(ssrInstitutionName(university.name, destination.country, model.locale))}</a></h2>
@@ -976,7 +977,7 @@ function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(countryName)}</span></nav>
     <article class="mt-8">
       <p class="text-sm text-primary">${escapeHtml(countryName)}</p>
-      <h1 class="mt-3 text-4xl font-bold">${escapeHtml(model.title)}</h1>
+      <h1 class="mt-3 text-4xl font-bold">${escapeHtml(heroTitle)}</h1>
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
       <section data-detail-section="facts" id="facts"><dl class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml(countryName)}</dd></div>
@@ -1398,6 +1399,79 @@ function renderNotFound(model: Extract<PublicCatalogRenderModel, { kind: "not_fo
   return `<main data-public-render-shell="not-found" class="mx-auto max-w-3xl px-4 py-32 text-center"><h1 class="text-3xl font-bold">${escapeHtml(model.title)}</h1><p class="mt-3 text-muted-foreground">${escapeHtml(model.description)}</p></main>`;
 }
 
+function detailFaqNode(model: PublicCatalogRenderModel, pageUrl: string): Record<string, unknown> | null {
+  if (!model.indexable) return null;
+  const hidden = new Set(model.detailLayout?.hidden ?? []);
+  const questions = detailContentForModel(model)?.sections
+    .filter(section => !hidden.has(section.key) && !hidden.has(`editorial-${section.key}`))
+    .flatMap(section => section.questions ?? [])
+    .filter(item => item.question.trim() && item.answer.trim())
+    .slice(0, 12) ?? [];
+  return questions.length ? {
+    "@type": "FAQPage",
+    "@id": `${pageUrl}#faq`,
+    mainEntity: questions.map(item => ({
+      "@type": "Question",
+      name: item.question.trim(),
+      acceptedAnswer: { "@type": "Answer", text: item.answer.trim() },
+    })),
+  } : null;
+}
+
+function detailBreadcrumbNode(model: Extract<PublicCatalogRenderModel, { kind: "program_detail" | "university_detail" | "destination_detail" | "city_detail" }>, siteUrl: string, entityName: string) {
+  const pageUrl = `${siteUrl}${model.canonicalPath}`;
+  const collection = model.kind === "program_detail"
+    ? { name: RENDER_COPY[model.locale].programs, path: `/${model.locale}/programs` }
+    : { name: RENDER_COPY[model.locale].countries, path: `/${model.locale}/countries` };
+  return {
+    "@type": "BreadcrumbList",
+    "@id": `${pageUrl}#breadcrumb`,
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: collection.name, item: `${siteUrl}${collection.path}` },
+      { "@type": "ListItem", position: 2, name: entityName, item: pageUrl },
+    ],
+  };
+}
+
+function detailWebPageNode(input: {
+  model: Extract<PublicCatalogRenderModel, { kind: "program_detail" | "university_detail" | "destination_detail" | "city_detail" }>;
+  siteUrl: string;
+  entityId: string;
+  entityName: string;
+  heroImage?: string | null;
+  faqId?: string | null;
+}) {
+  const pageUrl = `${input.siteUrl}${input.model.canonicalPath}`;
+  return {
+    "@type": "WebPage",
+    "@id": `${pageUrl}#webpage`,
+    name: input.model.title,
+    description: input.model.description,
+    url: pageUrl,
+    inLanguage: input.model.locale,
+    mainEntity: { "@id": input.entityId },
+    breadcrumb: { "@id": `${pageUrl}#breadcrumb` },
+    isPartOf: { "@id": `${input.siteUrl}/#website` },
+    ...(input.heroImage ? { primaryImageOfPage: { "@type": "ImageObject", url: input.heroImage } } : {}),
+    ...(input.faqId ? { hasPart: { "@id": input.faqId } } : {}),
+  };
+}
+
+function detailSiteNodes(siteUrl: string) {
+  return [{
+    "@type": "EducationalOrganization",
+    "@id": `${siteUrl}/#organization`,
+    name: "Find And Study",
+    url: siteUrl,
+  }, {
+    "@type": "WebSite",
+    "@id": `${siteUrl}/#website`,
+    name: "Find And Study",
+    url: siteUrl,
+    publisher: { "@id": `${siteUrl}/#organization` },
+  }];
+}
+
 function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unknown {
   if (model.kind === "program_detail") {
     const program = model.program;
@@ -1406,19 +1480,37 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
     const tuition = projectPublicTuition(program, prices.length ? prices : verifiedTuition ? [{ ...verifiedTuition, componentType: "TUITION" }] : []);
     const price = tuition?.verified && !tuition.isFrom ? tuition.amount : null;
     const currency = tuition?.currency ?? null;
-    return {
-      "@context": "https://schema.org",
+    const pageUrl = `${siteUrl}${model.canonicalPath}`;
+    const entityId = `${pageUrl}#course`;
+    const entityName = ssrProgramName(program.name, model.locale);
+    const providerName = ssrInstitutionName(program.universityName, program.country, model.locale);
+    const heroImage = absolutePublicImage(detailContentForModel(model)?.sections.find(section => section.key === "hero")?.images?.[0]?.src, siteUrl);
+    const faq = detailFaqNode(model, pageUrl);
+    const course = {
       "@type": "Course",
-      name: ssrProgramName(program.name, model.locale),
+      "@id": entityId,
+      name: entityName,
       description: model.description,
-      url: `${siteUrl}${model.canonicalPath}`,
+      url: pageUrl,
       provider: {
         "@type": "CollegeOrUniversity",
-        name: ssrInstitutionName(program.universityName, program.country, model.locale),
+        "@id": `${siteUrl}${program.universityPath}#institution`,
+        name: providerName,
         url: `${siteUrl}${program.universityPath}`,
       },
+      ...(program.degree ? { educationalLevel: ssrDegreeName(program.degree, model.locale) } : {}),
+      ...(program.field ? { about: program.field } : {}),
       ...(program.language ? { inLanguage: program.language } : {}),
       ...(program.duration ? { timeRequired: program.duration } : {}),
+      ...(model.intakes?.length ? {
+        hasCourseInstance: model.intakes.slice(0, 12).map(intake => ({
+          "@type": "CourseInstance",
+          courseMode: intake.deliveryMode,
+          ...(intake.startsOn ? { startDate: intake.startsOn } : {}),
+          ...(intake.applicationDeadlineAt ? { applicationDeadline: intake.applicationDeadlineAt } : {}),
+          ...(intake.campusName ? { location: intake.campusName } : {}),
+        })),
+      } : {}),
       ...(price !== null && currency && program.universityIsActive !== false ? {
         offers: {
           "@type": "Offer",
@@ -1426,6 +1518,16 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
           priceCurrency: currency,
         },
       } : {}),
+    };
+    return {
+      "@context": "https://schema.org",
+      "@graph": [
+        ...detailSiteNodes(siteUrl),
+        course,
+        detailWebPageNode({ model, siteUrl, entityId, entityName, heroImage, faqId: faq ? `${pageUrl}#faq` : null }),
+        detailBreadcrumbNode(model, siteUrl, entityName),
+        ...(faq ? [faq] : []),
+      ],
     };
   }
   if (model.kind === "program_list") {
@@ -1468,39 +1570,52 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
   }
   if (model.kind === "university_detail") {
     const university = model.university;
+    const pageUrl = `${siteUrl}${model.canonicalPath}`;
+    const entityId = `${pageUrl}#institution`;
+    const entityName = ssrInstitutionName(university.name, university.country, model.locale);
+    const heroImage = absolutePublicImage(detailContentForModel(model)?.sections.find(section => section.key === "hero")?.images?.[0]?.src, siteUrl);
+    const faq = detailFaqNode(model, pageUrl);
     return {
       "@context": "https://schema.org",
-      "@type": "CollegeOrUniversity",
-      name: ssrInstitutionName(university.name, university.country, model.locale),
-      description: model.description,
-      url: `${siteUrl}${model.canonicalPath}`,
-      address: {
-        "@type": "PostalAddress",
-        ...(university.city ? { addressLocality: ssrCityName(university.city, university.country, model.locale) } : {}),
-        addressCountry: ssrCountryName(university.country, null, model.locale),
-      },
-      hasOfferCatalog: {
-        "@type": "OfferCatalog",
-        numberOfItems: university.programCount,
-        itemListElement: university.programs.map((program, index) => ({
-          "@type": "ListItem",
-          position: index + 1,
-          url: `${siteUrl}${program.canonicalPath}`,
-          name: ssrProgramName(program.name, model.locale),
-        })),
-      },
+      "@graph": [...detailSiteNodes(siteUrl), {
+        "@type": "CollegeOrUniversity",
+        "@id": entityId,
+        name: entityName,
+        description: model.description,
+        url: pageUrl,
+        ...(heroImage ? { image: heroImage } : {}),
+        address: {
+          "@type": "PostalAddress",
+          ...(university.city ? { addressLocality: ssrCityName(university.city, university.country, model.locale) } : {}),
+          addressCountry: ssrCountryName(university.country, null, model.locale),
+        },
+        hasOfferCatalog: {
+          "@type": "OfferCatalog",
+          numberOfItems: university.programCount,
+          itemListElement: university.programs.map((program, index) => ({
+            "@type": "ListItem",
+            position: index + 1,
+            url: `${siteUrl}${program.canonicalPath}`,
+            name: ssrProgramName(program.name, model.locale),
+          })),
+        },
+      }, detailWebPageNode({ model, siteUrl, entityId, entityName, heroImage, faqId: faq ? `${pageUrl}#faq` : null }), detailBreadcrumbNode(model, siteUrl, entityName), ...(faq ? [faq] : [])],
     };
   }
   if (model.kind === "destination_detail") {
     const destination = model.destination;
     const destinationName = ssrCountryName(destination.name, destination.countryCode, model.locale);
     const heroImage = absolutePublicImage(detailContentForModel(model)?.sections.find(section => section.key === "hero")?.images?.[0]?.src, siteUrl);
+    const pageUrl = `${siteUrl}${model.canonicalPath}`;
+    const entityId = `${pageUrl}#destination`;
+    const faq = detailFaqNode(model, pageUrl);
     return {
       "@context": "https://schema.org",
       "@graph": [
+        ...detailSiteNodes(siteUrl),
         {
           "@type": "TouristDestination",
-          "@id": `${siteUrl}${model.canonicalPath}#destination`,
+          "@id": entityId,
           name: destinationName,
           description: model.description,
           url: `${siteUrl}${model.canonicalPath}`,
@@ -1513,6 +1628,7 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
         },
         {
           "@type": "ItemList",
+          "@id": `${pageUrl}#institutions`,
           numberOfItems: destination.universityCount,
           itemListElement: destination.universities.map((university, index) => ({
             "@type": "ListItem",
@@ -1521,22 +1637,9 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
             name: ssrInstitutionName(university.name, destination.country, model.locale),
           })),
         },
-        {
-          "@type": "WebPage",
-          "@id": `${siteUrl}${model.canonicalPath}#webpage`,
-          name: model.title,
-          description: model.description,
-          url: `${siteUrl}${model.canonicalPath}`,
-          inLanguage: model.locale,
-          ...(heroImage ? { primaryImageOfPage: { "@type": "ImageObject", url: heroImage } } : {}),
-          breadcrumb: {
-            "@type": "BreadcrumbList",
-            itemListElement: [
-              { "@type": "ListItem", position: 1, name: RENDER_COPY[model.locale].countries, item: `${siteUrl}/${model.locale}/countries` },
-              { "@type": "ListItem", position: 2, name: destinationName, item: `${siteUrl}${model.canonicalPath}` },
-            ],
-          },
-        },
+        detailWebPageNode({ model, siteUrl, entityId, entityName: destinationName, heroImage, faqId: faq ? `${pageUrl}#faq` : null }),
+        detailBreadcrumbNode(model, siteUrl, destinationName),
+        ...(faq ? [faq] : []),
       ],
     };
   }
@@ -1544,22 +1647,30 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
     const city = model.city;
     const cityName = ssrCityName(city.name, city.country, model.locale);
     const countryName = ssrCountryName(city.country, null, model.locale);
+    const pageUrl = `${siteUrl}${model.canonicalPath}`;
+    const entityId = `${pageUrl}#city`;
+    const heroImage = absolutePublicImage(detailContentForModel(model)?.sections.find(section => section.key === "hero")?.images?.[0]?.src, siteUrl);
+    const faq = detailFaqNode(model, pageUrl);
     return {
       "@context": "https://schema.org",
       "@graph": [
+        ...detailSiteNodes(siteUrl),
         {
           "@type": "City",
-          "@id": `${siteUrl}${model.canonicalPath}#city`,
+          "@id": entityId,
           name: cityName,
           description: model.description,
           url: `${siteUrl}${model.canonicalPath}`,
+          ...(heroImage ? { image: heroImage } : {}),
           containedInPlace: {
             "@type": "Country",
+            ...(city.countryPath ? { "@id": `${siteUrl}${city.countryPath}#destination`, url: `${siteUrl}${city.countryPath}` } : {}),
             name: countryName,
           },
         },
         {
           "@type": "ItemList",
+          "@id": `${pageUrl}#institutions`,
           numberOfItems: city.universityCount,
           itemListElement: city.universities.map((university, index) => ({
             "@type": "ListItem",
@@ -1568,6 +1679,9 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
             name: ssrInstitutionName(university.name, city.country, model.locale),
           })),
         },
+        detailWebPageNode({ model, siteUrl, entityId, entityName: cityName, heroImage, faqId: faq ? `${pageUrl}#faq` : null }),
+        detailBreadcrumbNode(model, siteUrl, cityName),
+        ...(faq ? [faq] : []),
       ],
     };
   }
@@ -1671,8 +1785,12 @@ export function renderPublicCatalogHtml(input: {
   html = replaceMeta(html, "name", "twitter:description", detailSeo?.twitterDescription || (typeof managedSeo?.twitterDescription === "string" ? managedSeo.twitterDescription : model.description));
   const detailHeroImage = absolutePublicImage(detailContentForModel(model)?.sections.find(section => section.key === "hero")?.images?.[0]?.src, siteUrl);
   if (detailHeroImage) {
+    const heroMedia = detailContentForModel(model)?.sections.find(section => section.key === "hero")?.images?.[0];
+    const imageAlt = heroMedia?.alt?.trim() || `${model.title} — Find And Study`;
     html = replaceMeta(html, "property", "og:image", detailHeroImage);
+    html = replaceMeta(html, "property", "og:image:alt", imageAlt);
     html = replaceMeta(html, "name", "twitter:image", detailHeroImage);
+    html = replaceMeta(html, "name", "twitter:image:alt", imageAlt);
   }
 
   let shell = model.kind === "country_list"

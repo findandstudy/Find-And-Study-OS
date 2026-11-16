@@ -537,3 +537,39 @@ test("quality gate blocks source-backed box sections that contain prose but no s
   assert.equal(quality.status, "blocked");
   assert.ok(quality.issues.some(issue => issue.code === "MISSING_SOURCE_STRUCTURED_CONTENT"));
 });
+
+test("country quality gate requires routed source topics to reach distinct public boxes", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "destination",
+    entityName: "Example Country",
+    facts: {
+      destination: "Example Country",
+      description: "Verified destination context for prospective international students.",
+      officialSources: [{ field: "highlights" }, { field: "description" }],
+      sourceTopics: [
+        { topicTitle: "Country highlights — student cities", verifiedContent: "Verified city-setting evidence." },
+        { topicTitle: "Country highlights — daily life", verifiedContent: "Verified daily-life evidence." },
+        { topicTitle: "Country highlights — practical planning", verifiedContent: "Verified planning evidence." },
+      ],
+    },
+    sections: [section("highlights")],
+  });
+  assert.equal(plan.sections[0]?.contentShape, "cards");
+  assert.equal(plan.sections[0]?.allocatedSourceTopicTitles.length, 3);
+  const content: DetailContent = {
+    version: 1, kind: "destination", entityId: 12, locale: "en", seoMode: "auto",
+    seo: { title: "Study in Example Country | Find & Study", description: "Compare cities, daily life and practical planning in Example Country before choosing a verified study route." },
+    sections: [{
+      key: "highlights", title: "Compare the destination on practical evidence",
+      body: "Example Country gives students several distinct location and daily-life considerations to compare before they choose a study route.",
+      cards: [
+        { title: "Compare city settings", body: "Use the verified city-setting evidence to decide which environment fits your routine." },
+        { title: "Plan daily life", body: "Use the verified daily-life evidence to build a realistic plan before arrival." },
+      ],
+      sources: [], reviewedOn: null,
+    }],
+  };
+  const quality = evaluateDetailContentQuality({ content, plan });
+  assert.equal(quality.status, "blocked");
+  assert.ok(quality.issues.some(issue => issue.code === "SOURCE_TOPIC_STRUCTURE_GAP"));
+});

@@ -451,6 +451,7 @@ ACCURACY AND SAFETY:
 - Write for prospective international students in clear, natural British English.
 - Use a confident, premium education-advisory voice: specific and useful, never promotional hype, bureaucratic prose or a neutral inventory dump.
 - Follow PAGE_PLAN. Give every section its assigned objective and search intent, and do not move the same advice or evidence into another section.
+- Make the first sentence of every section body a direct, self-contained answer to that section's SEARCH_INTENT. It must remain useful when quoted alone by a search or answer engine. Do not begin with a generic invitation, scene-setting filler or a paraphrase of the heading.
 - ALLOCATED_ENTITIES are diversity guidance, not new evidence. Mention an allocated entity only when it also appears in VERIFIED_FACTS and is relevant to the section.
 - On destination and city pages, do not let one institution or programme become the recurring example. Use the named cities, institutions, programmes, fields and languages in VERIFIED_FACTS where relevant instead of repeating inventory totals.
 - On destination pages, never narrate university or programme totals in any editorial section; live catalogue components own those changing counters. On other page types, a catalogue total may appear in at most one section across the entire response.
@@ -459,6 +460,7 @@ ACCURACY AND SAFETY:
 - Use "check", "confirm", "compare", "ask the institution" or similar verification advice only when a time-sensitive fact genuinely requires it. Do not end several sections with the same disclaimer.
 - Write search-useful, entity-specific copy: name the page entity naturally, answer the section's likely search intent and vary the vocabulary. Do not keyword-stuff or repeat the entity name mechanically.
 - For generated editorial sections, write an intent-led heading that communicates a useful idea. Do not use a one-word generic heading such as "Overview", "Highlights", "Education", "Gallery" or "Student life" unless the SECTION_INSTRUCTION explicitly requires that exact label.
+- On destination pages, structured cards, steps and questions must cover separate allocated source-topic rows. Do not collapse several routed source facts into the introductory body while returning generic items.
 - The hero body must be a concise, source-bound value proposition: establish the entity, its verified academic or location relevance and the most useful decision angle. Do not begin it with "Explore", a catalogue count or a generic invitation.
 - Explain why a verified fact matters to a student's shortlist. A paragraph that merely repeats counts, labels or available fields is not acceptable.
 - Where the plan includes several verified cities, institutions or programmes, distribute concrete examples across the page. Never use the same example as the default in multiple sections.

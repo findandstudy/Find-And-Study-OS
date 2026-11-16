@@ -374,6 +374,10 @@ test("program SSR uses verified price components and structured active intakes",
   assert.match(html, /Fall · 2026/);
   assert.match(html, /"price":12345/);
   assert.match(html, /"priceCurrency":"USD"/);
+  assert.match(html, /"@type":"WebPage"/);
+  assert.match(html, /"@type":"BreadcrumbList"/);
+  assert.match(html, /"educationalLevel":"MSc"/);
+  assert.match(html, /"@type":"CourseInstance"/);
   assert.doesNotMatch(html, /INVALID/);
   assert.doesNotMatch(html, /<div id="fees"><dt>Tuition<\/dt><dd>1/);
 });
@@ -411,6 +415,8 @@ test("university detail emits a semantic institution shell and structured data",
   });
   assert.match(html, /data-public-render-shell="university-detail"/);
   assert.match(html, /"@type":"CollegeOrUniversity"/);
+  assert.match(html, /"@type":"WebPage"/);
+  assert.match(html, /"@type":"BreadcrumbList"/);
   assert.match(html, /href="#overview"/);
   assert.match(html, /<section\b[^>]*\bid="programs"/);
   assert.match(html, /href="\/en\/programs\/computer-science-42"/);
@@ -426,8 +432,16 @@ test("destination detail emits a semantic destination shell without inventing tr
     description: "Verified destination guidance.",
     indexable: true,
     alternatePaths: { en: "/en/destinations/turkey" },
+    editorial: {
+      version: 1, kind: "destination", entityId: 3, locale: "en",
+      sections: [
+        { key: "hero", title: "Build a realistic study plan in Turkey", body: "Use verified destination evidence to compare cities, daily life and practical preparation.", images: [{ src: "https://cdn.example.test/turkey.jpg", alt: "Istanbul skyline in Turkey" }], sources: [{ label: "Official guide", url: "https://example.test/turkey" }], reviewedOn: "2026-01-01" },
+        { key: "faq", title: "Planning questions", questions: [{ question: "What should students compare first?", answer: "Compare the study city, daily budget and verified admission route before choosing a programme." }], sources: [{ label: "Official guide", url: "https://example.test/turkey" }], reviewedOn: "2026-01-01" },
+      ],
+    },
     destination: {
       id: 3,
+      catalogCountryId: 3,
       name: "Turkey",
       country: "Turkey",
       livingCost: "Verified range",
@@ -459,6 +473,11 @@ test("destination detail emits a semantic destination shell without inventing tr
   assert.equal(html.match(/"@type":"TouristDestination"/g)?.length, 1);
   assert.equal(html.match(/"@type":"WebPage"/g)?.length, 1);
   assert.equal(html.match(/data-public-json-ld="ssr"/g)?.length, 1);
+  assert.match(html, /<h1[^>]*>Build a realistic study plan in Turkey<\/h1>/);
+  assert.match(html, /"@type":"BreadcrumbList"/);
+  assert.match(html, /"@type":"FAQPage"/);
+  assert.match(html, /<meta property="og:image:alt" content="Istanbul skyline in Turkey"/);
+  assert.match(html, /<meta name="twitter:image:alt" content="Istanbul skyline in Turkey"/);
   assert.match(html, /href="\/en\/universities\/example-university-7"/);
   assert.match(html, /hreflang="x-default"/);
   assert.doesNotMatch(html, /service fee|commission|contact person/i);
@@ -527,6 +546,8 @@ test("city detail emits governed city structured data and bounded related links"
   assert.match(html, /data-public-render-shell="city-detail"/);
   assert.match(html, /"@type":"City"/);
   assert.match(html, /"@type":"Country"/);
+  assert.match(html, /"@type":"WebPage"/);
+  assert.match(html, /"@type":"BreadcrumbList"/);
   assert.match(html, /href="\/en\/universities\/example-university-7"/);
   assert.match(html, /href="\/en\/programs\/computer-science-42"/);
   assert.match(html, /hreflang="x-default"/);

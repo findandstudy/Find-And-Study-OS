@@ -298,6 +298,7 @@ export function buildDetailGenerationPlan(input: {
     catalogEntities: catalogNamedEntities(input.facts),
     pageRules: [
       "Give each section one distinct job and do not repeat advice or evidence already assigned elsewhere.",
+      "Open every section body with a self-contained answer to that section's search intent. The first sentence must be useful when quoted on its own by a search or answer engine; do not begin with a generic invitation, throat-clearing or a restatement of the heading.",
       "Use deterministic catalogue facts as facts; use AI only to explain their significance.",
       "University and programme names, levels, languages, durations, fees and availability may come only from the system catalogue fields in VERIFIED_FACTS.",
       "External-source metadata may support general context, official guidance, climate, transport, housing or institutional background, but it must never introduce a university, programme or academic offering absent from the system catalogue inventory.",
@@ -310,6 +311,8 @@ export function buildDetailGenerationPlan(input: {
       "Preserve useful editorial depth. Do not replace specific context, comparisons or trade-offs with shallow totals or generic summaries.",
       ...(input.kind === "destination" ? [
         "Keep the country guide country-first: about 65% destination, city, daily-life, cost and practical context; about 20% education, admissions, funding and visa planning; at most 15% institution or programme examples.",
+        "Treat every allocated country source-topic row as evidence that must reach the public section assigned by the planner. When a section uses cards, steps or questions, cover separate source-topic rows with separate items instead of hiding all source evidence in the introductory paragraph.",
+        "Answer country-level intent before mentioning higher education. Daily life, cities, costs, climate, transport, housing and practical planning must remain independently useful rather than acting as an introduction to a university catalogue.",
         "Never name a university or programme in the hero. Across all editorial sections, use at most two distinct verified catalogue examples, only where they clarify a decision rather than advertise the catalogue.",
         "Do not turn highlights, cautions, education or FAQ copy into a list of institutions or programmes. Explain the national system, student choices and trade-offs first.",
         "Country-page editorial copy must not narrate university or programme totals. Live catalogue components own all changing counters.",
@@ -445,6 +448,25 @@ export function evaluateDetailContentQuality(input: {
     sections: missingStructuredContent,
     message: "A source-backed section is missing the cards, steps or questions required by its template contract.",
   });
+  if (input.plan.kind === "destination") {
+    const underfilledSourceStructures = sections.filter(section => {
+      const planned = planByKey.get(section.key);
+      const shape = planned?.contentShape ?? "prose";
+      if (shape === "prose" || (planned?.allocatedSourceTopicTitles?.length ?? 0) < 2) return false;
+      const itemCount = section[shape]?.length ?? 0;
+      const requiredCount = Math.min(
+        planned?.maxItems ?? 4,
+        Math.max(planned?.minItems ?? 2, planned?.allocatedSourceTopicTitles?.length ?? 0),
+      );
+      return itemCount < requiredCount;
+    }).map(section => section.key);
+    if (underfilledSourceStructures.length) issues.push({
+      code: "SOURCE_TOPIC_STRUCTURE_GAP",
+      severity: "blocker",
+      sections: underfilledSourceStructures,
+      message: "Country source rows were routed to a structured section but too few distinct cards, steps or answers reached the public page.",
+    });
+  }
   const duplicatePairs: Array<[string, string]> = [];
   for (let left = 0; left < sections.length; left += 1) for (let right = left + 1; right < sections.length; right += 1) {
     if (similarity(sections[left]!.body!, sections[right]!.body!) >= 0.72) duplicatePairs.push([sections[left]!.key, sections[right]!.key]);

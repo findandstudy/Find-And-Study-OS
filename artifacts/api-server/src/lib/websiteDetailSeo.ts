@@ -22,7 +22,7 @@ const chooseSeoTitle = (variants: string[], brand = "Find & Study") => {
   return normalized.at(-1) ?? brand;
 };
 
-const fitMetaDescription = (value: string, max = 160) => {
+const fitMetaDescription = (value: string, max = 155) => {
   const normalized = cleanSentence(value);
   if (normalized.length <= max) return normalized;
   const chunk = normalized.slice(0, max + 1);
@@ -54,7 +54,7 @@ export function buildAutomaticEnglishDetailSeo(kind: DetailContentKind, facts: A
       : kind === "city"
         ? `Explore universities, programs, campus areas, transport, housing and practical student life in ${facts.name}${facts.country ? `, ${facts.country}` : ""}.`
         : `Explore cities, daily life, climate, housing, transport and study planning in ${facts.name}, with practical guidance on admissions, funding and visas.`;
-  const description = fitMetaDescription(facts.description && facts.description.length >= 90 ? facts.description : fallback, 160);
+  const description = fitMetaDescription(facts.description && facts.description.length >= 90 ? facts.description : fallback, 155);
   return { title, description, ogTitle: title, ogDescription: description, twitterTitle: title, twitterDescription: description };
 }
 
