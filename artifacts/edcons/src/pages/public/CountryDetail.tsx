@@ -11,7 +11,7 @@ import { catalogueCount, detailCopy, localizedCountryName, localizedUniversityTy
 
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/i18n";
-import { detailContentPresentationOverrides, detailDisplayTerm, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
+import { detailContentPresentationOverrides, detailDisplayTerm, resolveDetailTemplateContent, type DetailContent } from "@/lib/website/detailContentContract";
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { Globe2, ArrowLeft, ArrowUpRight, Building2, MapPin } from "lucide-react";
 import { DeferredBelowFold } from "./DeferredBelowFold";
@@ -103,6 +103,29 @@ function absoluteSeoImage(url: string | null): string | undefined {
   return `${SITE_URL}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
+function detailSchemaEvidence(content: DetailContent | null | undefined) {
+  const sources = new Map<string, { "@type": "CreativeWork"; name: string; url: string }>();
+  const reviewedDates: string[] = [];
+  for (const section of content?.sections ?? []) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(section.reviewedOn || "")) reviewedDates.push(section.reviewedOn);
+    for (const source of section.sources ?? []) {
+      const url = source.url.trim();
+      if (!sources.has(url)) sources.set(url, { "@type": "CreativeWork", name: source.label.trim(), url });
+    }
+  }
+  return {
+    reviewedOn: reviewedDates.sort().at(-1) ?? null,
+    sources: [...sources.values()].slice(0, 24),
+  };
+}
+
+function detailSchemaQuestions(content: DetailContent | null | undefined) {
+  return (content?.sections ?? [])
+    .flatMap(section => section.questions ?? [])
+    .filter(item => item.question.trim() && item.answer.trim())
+    .slice(0, 12);
+}
+
 export default function CountryDetail({ slug }: { slug: string }) {
   const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
@@ -123,6 +146,9 @@ export default function CountryDetail({ slug }: { slug: string }) {
   const heroImage = absoluteSeoImage(fixStorageUrl(
     detailHeroSection(editorial)?.images?.[0]?.src || data?.destination.heroImageUrl,
   ));
+  const pageUrl = data ? `${SITE_URL}${data.meta.canonicalPath}` : "";
+  const schemaEvidence = detailSchemaEvidence(editorial);
+  const schemaQuestions = detailSchemaQuestions(editorial);
 
   useSeo({
     title: editorial?.seo?.title || (data ? t("countryDetail.studyIn", { name: localizedDestinationName }) : t("countryDetail.studyDestination")),
@@ -140,38 +166,77 @@ export default function CountryDetail({ slug }: { slug: string }) {
   });
   useJsonLd(
     data
-      ? [
+      ? {
+          "@context": "https://schema.org",
+          "@graph": [
           {
-            "@context": "https://schema.org",
+            "@type": "EducationalOrganization",
+            "@id": `${SITE_URL}/#organization`,
+            name: SITE_NAME,
+            url: SITE_URL,
+          },
+          {
+            "@type": "WebSite",
+            "@id": `${SITE_URL}/#website`,
+            name: SITE_NAME,
+            url: SITE_URL,
+            publisher: { "@id": `${SITE_URL}/#organization` },
+          },
+          {
             "@type": "TouristDestination",
-            "@id": `${SITE_URL}${data.meta.canonicalPath}#destination`,
+            "@id": `${pageUrl}#destination`,
             name: localizedDestinationName,
             description: editorial?.seo?.description || data.destination.shortDescription || undefined,
-            url: `${SITE_URL}${data.meta.canonicalPath}`,
+            url: pageUrl,
             inLanguage: lang,
             ...(heroImage ? { image: heroImage } : {}),
             touristType: { "@type": "Audience", audienceType: "International Students" },
           },
           {
-            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "@id": `${pageUrl}#institutions`,
+            numberOfItems: data.stats.universityCount,
+            itemListElement: data.universities.map((university, index) => ({
+              "@type": "ListItem",
+              position: index + 1,
+              url: `${SITE_URL}${university.canonicalPath}`,
+              name: university.name,
+            })),
+          },
+          {
             "@type": "WebPage",
-            "@id": `${SITE_URL}${data.meta.canonicalPath}#webpage`,
+            "@id": `${pageUrl}#webpage`,
             name: editorial?.seo?.title || `${localizedDestinationName} — ${SITE_NAME}`,
-            url: `${SITE_URL}${data.meta.canonicalPath}`,
+            url: pageUrl,
             description: editorial?.seo?.description || data.destination.shortDescription || undefined,
             inLanguage: lang,
+            mainEntity: { "@id": `${pageUrl}#destination` },
             ...(heroImage ? { primaryImageOfPage: { "@type": "ImageObject", url: heroImage } } : {}),
             isPartOf: { "@id": `${SITE_URL}/#website` },
-            breadcrumb: {
-              "@type": "BreadcrumbList",
-              itemListElement: [
-                { "@type": "ListItem", position: 1, name: t("nav.home"), item: `${SITE_URL}${localePath("/")}` },
-                { "@type": "ListItem", position: 2, name: t("nav.countries"), item: `${SITE_URL}${localePath("/countries")}` },
-                { "@type": "ListItem", position: 3, name: localizedDestinationName, item: `${SITE_URL}${data.meta.canonicalPath}` },
-              ],
-            },
+            breadcrumb: { "@id": `${pageUrl}#breadcrumb` },
+            ...(schemaEvidence.reviewedOn ? { dateModified: schemaEvidence.reviewedOn, lastReviewed: schemaEvidence.reviewedOn } : {}),
+            ...(schemaEvidence.sources.length ? { isBasedOn: schemaEvidence.sources, citation: schemaEvidence.sources } : {}),
+            ...(schemaQuestions.length ? { hasPart: { "@id": `${pageUrl}#faq` } } : {}),
           },
-        ]
+          {
+            "@type": "BreadcrumbList",
+            "@id": `${pageUrl}#breadcrumb`,
+            itemListElement: [
+              { "@type": "ListItem", position: 1, name: t("nav.home"), item: `${SITE_URL}${localePath("/")}` },
+              { "@type": "ListItem", position: 2, name: t("nav.countries"), item: `${SITE_URL}${localePath("/countries")}` },
+              { "@type": "ListItem", position: 3, name: localizedDestinationName, item: pageUrl },
+            ],
+          },
+          ...(schemaQuestions.length ? [{
+            "@type": "FAQPage",
+            "@id": `${pageUrl}#faq`,
+            mainEntity: schemaQuestions.map(item => ({
+              "@type": "Question",
+              name: item.question.trim(),
+              acceptedAnswer: { "@type": "Answer", text: item.answer.trim() },
+            })),
+          }] : []),
+        ]}
       : []
   );
 
@@ -205,7 +270,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
     [city.name.toLocaleLowerCase("en-US"), city] as const,
     [city.sourceName.toLocaleLowerCase("en-US"), city] as const,
   ]));
-  const destinationDisplayName = detailDisplayTerm(editorial, dest.name, localizedDestinationName);
+  const destinationDisplayName = localizedDestinationName;
   const cities = [...data.cities.map(city => ({ name: detailDisplayTerm(editorial, city.sourceName || city.name, city.name), canonicalPath: city.canonicalPath, universityCount: city.universityCount })), ...cityNames
     .filter(name => !cityLinks.has(name.toLocaleLowerCase("en-US")))
     .map(name => ({ name: detailDisplayTerm(editorial, name), canonicalPath: null, universityCount: null }))];

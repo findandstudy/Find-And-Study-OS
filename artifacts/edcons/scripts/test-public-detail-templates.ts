@@ -252,6 +252,7 @@ test("editorial layouts upgrade saved v1 layouts and keep frontend/backend parse
 });
 
 test("editorial presentation keeps honest counts, localized copy and safe navigation", () => {
+  assert.equal(localizedCountryName("Turkey", "TR", "en"), "Turkey");
   assert.equal(localizedCountryName("Turkey", "TR", "tr"), "Türkiye");
   assert.equal(localizedLanguageNames(["English", "Turkish"], "tr"), "İngilizce · Türkçe");
   assert.equal(localizedLanguageNames(["Unknown teaching language"], "tr"), "Unknown teaching language");
@@ -338,12 +339,18 @@ test("long detail navigation exposes a visible horizontal scroll affordance", ()
   assert.match(css, /\.detail-nav > \.detail-wrap::\-webkit-scrollbar \{[^}]*display:\s*block;[^}]*height:\s*6px;/);
 });
 
-test("hydration keeps one authoritative JSON-LD graph and indexable pages keep self hreflang", () => {
+test("hydration keeps one authoritative JSON-LD graph and noindex pages keep language identity", () => {
   assert.match(jsonLdHook, /data-public-json-ld="ssr"/);
   assert.match(jsonLdHook, /data-public-json-ld="client"/);
   assert.match(jsonLdHook, /serverSchema\?\.textContent\?\.includes\(canonicalHref\)/);
   assert.match(seoHook, /\[lang\]:\s*alternates\[lang\]\s*\|\|\s*canonicalHref/);
-  assert.match(seoHook, /if \(lang && !noindex\)/);
+  assert.match(seoHook, /if \(lang\)/);
+  assert.doesNotMatch(seoHook, /if \(lang && !noindex\)/);
+  for (const node of ["EducationalOrganization", "WebSite", "TouristDestination", "ItemList", "WebPage", "BreadcrumbList", "FAQPage"]) {
+    assert.match(country, new RegExp(`"@type": "${node}"`));
+  }
+  assert.match(country, /dateModified: schemaEvidence\.reviewedOn/);
+  assert.match(country, /isBasedOn: schemaEvidence\.sources/);
 });
 
 test("all four detail heroes put the breadcrumb before their real title", () => {

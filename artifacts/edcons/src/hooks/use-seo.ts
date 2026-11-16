@@ -89,7 +89,11 @@ export function useSeo({ title, description, canonical, noindex = false, nofollo
 
     removeHreflangLinks();
 
-    if (lang && !noindex) {
+    // Language discovery is an identity/canonical relationship, not an
+    // indexing permission. Keep reciprocal alternates available on staging
+    // and on temporarily noindex pages so hydration cannot erase the
+    // authoritative SSR hreflang graph.
+    if (lang) {
       let origin = window.location.origin;
       try { origin = new URL(canonicalHref).origin; } catch { /* keep the current origin */ }
       const basePath = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -110,7 +114,9 @@ export function useSeo({ title, description, canonical, noindex = false, nofollo
         document.head.appendChild(linkEl);
       }
 
-      const defaultPath = effectiveAlternates ? effectiveAlternates.en : buildLocalizedPath(currentPath, "en");
+      const defaultPath = effectiveAlternates
+        ? effectiveAlternates.en || effectiveAlternates[lang]
+        : buildLocalizedPath(currentPath, "en");
       if (defaultPath) {
         const defaultLink = document.createElement("link");
         defaultLink.rel = "alternate";

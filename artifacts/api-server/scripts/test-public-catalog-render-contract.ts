@@ -31,7 +31,7 @@ test("reviewed editorial SSR is bound, escaped, layout-controlled and cannot cha
   assert.match(html, /id="editorial-faq"/); assert.match(html, /Questions &amp; answers/);
   assert.match(html, /Contact admissions &amp; discuss/); assert.match(html, /content="noindex, follow"/);
   for (const text of ["Sourced editorial body", "Support card", "Contact support", "Prepare", "Review your documents", "Campus photo", "Approved image", "Sourced item"]) assert.ok(html.includes(text), text);
-  assert.doesNotMatch(html, /"@type":"FAQPage"/);
+  assert.match(html, /"@type":"FAQPage"/);
   model.detailLayout!.hidden = ["editorial-faq"];
   assert.doesNotMatch(render(), /id="editorial-faq"|href="#editorial-faq"|When can I ask/);
   model.detailLayout = undefined;
@@ -202,7 +202,7 @@ test("country directory SSR renders safe canonical links and CollectionPage data
   assert.match(html, /"@type":"CollectionPage"/);
 });
 
-test("country detail SSR keeps localized SEO metadata but suppresses hreflang while noindex", () => {
+test("country detail SSR keeps localized SEO, provenance and hreflang while noindex", () => {
   const model: PublicCatalogRenderModel = {
     kind: "destination_detail",
     locale: "tr",
@@ -216,7 +216,10 @@ test("country detail SSR keeps localized SEO metadata but suppresses hreflang wh
       kind: "destination",
       entityId: 1,
       locale: "tr",
-      sections: [{ key: "hero", title: "Türkiye'de Eğitim", body: "Doğrulanmış eğitim seçeneklerini karşılaştırın.", images: [{ src: "https://cdn.example.test/turkey.jpg", alt: "Türkiye" }], sources: [{ label: "Resmî kaynak", url: "https://example.test/source" }], reviewedOn: "2026-11-09" }],
+      sections: [
+        { key: "hero", title: "Türkiye'de Eğitim", body: "Doğrulanmış eğitim seçeneklerini karşılaştırın.", images: [{ src: "https://cdn.example.test/turkey.jpg", alt: "Türkiye" }], sources: [{ label: "Resmî kaynak", url: "https://example.test/source" }], reviewedOn: "2026-11-09" },
+        { key: "faq", title: "Sık sorulan sorular", questions: [{ question: "Başvuru planı nasıl yapılır?", answer: "Güncel kabul koşullarını ve resmî kaynakları karşılaştırın." }], sources: [{ label: "Resmî kaynak", url: "https://example.test/source" }], reviewedOn: "2026-11-09" },
+      ],
     },
     destination: {
       id: 1,
@@ -238,9 +241,16 @@ test("country detail SSR keeps localized SEO metadata but suppresses hreflang wh
   const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
   assert.match(html, /property="og:locale" content="tr_TR"/);
   assert.match(html, /property="og:image" content="https:\/\/cdn\.example\.test\/turkey\.jpg"/);
-  assert.doesNotMatch(html, /hreflang=/);
+  assert.match(html, /hreflang="en" href="https:\/\/example\.test\/en\/countries\/turkey"/);
+  assert.match(html, /hreflang="tr" href="https:\/\/example\.test\/tr\/countries\/turkey"/);
+  assert.match(html, /hreflang="x-default" href="https:\/\/example\.test\/en\/countries\/turkey"/);
   assert.match(html, /"inLanguage":"tr"/);
   assert.match(html, /"@type":"BreadcrumbList"/);
+  assert.match(html, /"dateModified":"2026-11-09"/);
+  assert.match(html, /"lastReviewed":"2026-11-09"/);
+  assert.match(html, /"isBasedOn":\[\{"@type":"CreativeWork","name":"Resmî kaynak","url":"https:\/\/example\.test\/source"\}\]/);
+  assert.match(html, /"@type":"FAQPage"/);
+  assert.match(html, /"name":"Başvuru planı nasıl yapılır\?"/);
   assert.match(html, /data-public-json-ld="ssr"/);
 });
 

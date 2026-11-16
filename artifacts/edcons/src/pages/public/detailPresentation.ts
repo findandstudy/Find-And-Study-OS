@@ -69,6 +69,10 @@ export function localDetailPath(value: string | null | undefined): string | null
 }
 
 export function localizedCountryName(name: string, countryCode: string | null | undefined, locale: string): string {
+  // English catalogue/localized snapshots already own the reviewed public
+  // name. Preserve it instead of allowing CLDR changes (for example
+  // Turkey -> Türkiye) to create mixed-language breadcrumbs and card labels.
+  if (locale.toLocaleLowerCase("en-US").startsWith("en") && name.trim()) return name.trim();
   const fallbackCodes: Record<string, string> = {
     turkey: "TR", "türkiye": "TR", "united kingdom": "GB", uk: "GB", canada: "CA", latvia: "LV",
     "united states": "US", usa: "US", "united arab emirates": "AE", uae: "AE",

@@ -579,6 +579,7 @@ const SSR_UNIVERSITY_TYPE_LABELS: Record<string, Partial<Record<ProgramSupported
   foundation: { en: "Foundation", tr: "Vakıf" },
 };
 function ssrCountryName(name: string, countryCode: string | null | undefined, locale: ProgramSupportedLocale): string {
+  if (locale === "en" && name.trim()) return name.trim();
   const fallbackCodes: Record<string, string> = { turkey: "TR", "türkiye": "TR", "united kingdom": "GB", uk: "GB", canada: "CA", latvia: "LV", "united states": "US", usa: "US", "united arab emirates": "AE", uae: "AE" };
   const code = countryCode?.trim().toUpperCase() || fallbackCodes[name.trim().toLocaleLowerCase("en-US")];
   if (!code || !/^[A-Z]{2}$/.test(code)) return name;
@@ -1400,7 +1401,6 @@ function renderNotFound(model: Extract<PublicCatalogRenderModel, { kind: "not_fo
 }
 
 function detailFaqNode(model: PublicCatalogRenderModel, pageUrl: string): Record<string, unknown> | null {
-  if (!model.indexable) return null;
   const hidden = new Set(model.detailLayout?.hidden ?? []);
   const questions = detailContentForModel(model)?.sections
     .filter(section => !hidden.has(section.key) && !hidden.has(`editorial-${section.key}`))
@@ -1442,6 +1442,7 @@ function detailWebPageNode(input: {
   faqId?: string | null;
 }) {
   const pageUrl = `${input.siteUrl}${input.model.canonicalPath}`;
+  const provenance = detailMachineProvenance(input.model);
   return {
     "@type": "WebPage",
     "@id": `${pageUrl}#webpage`,
@@ -1452,6 +1453,14 @@ function detailWebPageNode(input: {
     mainEntity: { "@id": input.entityId },
     breadcrumb: { "@id": `${pageUrl}#breadcrumb` },
     isPartOf: { "@id": `${input.siteUrl}/#website` },
+    ...(provenance.reviewedOn ? {
+      dateModified: provenance.reviewedOn,
+      lastReviewed: provenance.reviewedOn,
+    } : {}),
+    ...(provenance.sources.length ? {
+      isBasedOn: provenance.sources,
+      citation: provenance.sources,
+    } : {}),
     ...(input.heroImage ? { primaryImageOfPage: { "@type": "ImageObject", url: input.heroImage } } : {}),
     ...(input.faqId ? { hasPart: { "@id": input.faqId } } : {}),
   };
@@ -1470,6 +1479,30 @@ function detailSiteNodes(siteUrl: string) {
     url: siteUrl,
     publisher: { "@id": `${siteUrl}/#organization` },
   }];
+}
+
+function detailMachineProvenance(model: PublicCatalogRenderModel): {
+  reviewedOn: string | null;
+  sources: Array<{ "@type": "CreativeWork"; name: string; url: string }>;
+} {
+  const sections = detailContentForModel(model)?.sections ?? [];
+  const reviewedOn = sections
+    .map(section => section.reviewedOn?.trim())
+    .filter((value): value is string => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value)))
+    .sort()
+    .at(-1) ?? null;
+  const uniqueSources = new Map<string, { "@type": "CreativeWork"; name: string; url: string }>();
+  for (const section of sections) {
+    for (const source of section.sources ?? []) {
+      const url = source.url.trim();
+      if (!uniqueSources.has(url)) uniqueSources.set(url, {
+        "@type": "CreativeWork",
+        name: source.label.trim(),
+        url,
+      });
+    }
+  }
+  return { reviewedOn, sources: [...uniqueSources.values()].slice(0, 24) };
 }
 
 function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unknown {
@@ -1854,9 +1887,10 @@ export function renderPublicCatalogHtml(input: {
   )
     ? model.alternatePaths
     : {};
-  const alternatePaths = model.indexable
-    ? { ...configuredAlternatePaths, [model.locale]: configuredAlternatePaths[model.locale] ?? model.canonicalPath }
-    : {};
+  const alternatePaths = {
+    ...configuredAlternatePaths,
+    [model.locale]: configuredAlternatePaths[model.locale] ?? model.canonicalPath,
+  };
   const hreflangLinks = PROGRAM_SUPPORTED_LOCALES.flatMap((locale) => {
     const path = alternatePaths[locale];
     return path
@@ -1864,7 +1898,7 @@ export function renderPublicCatalogHtml(input: {
       : [];
   });
   const xDefaultLocale = (input.seoTechnicalPolicy?.xDefaultLocale ?? "en") as ProgramSupportedLocale;
-  const xDefaultPath = alternatePaths[xDefaultLocale] ?? alternatePaths.en;
+  const xDefaultPath = alternatePaths[xDefaultLocale] ?? alternatePaths.en ?? alternatePaths[model.locale];
   if (xDefaultPath) {
     hreflangLinks.push(`  <link rel="alternate" hreflang="x-default" href="${escapeHtml(`${siteUrl}${xDefaultPath}`)}" />`);
   }
