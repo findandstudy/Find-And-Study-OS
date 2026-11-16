@@ -6,7 +6,7 @@ import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { Link } from "wouter";
 import { DetailBreadcrumbs, DetailCard, DetailHeading, DetailImage } from "./DetailEditorial";
-import { boundDetailContent, detailContentAddon, detailContentIntro, detailContentNavigation, detailContentSections, detailContentTitle, DetailHeroMedia, detailHeroSection, detailHeroStyle } from "./DetailContentSections";
+import { boundDetailContent, detailContentAddon, detailContentIntro, detailContentNavigation, detailContentSections, detailContentTitle, detailSectionKicker, DetailHeroMedia, detailHeroSection, detailHeroStyle } from "./DetailContentSections";
 import { catalogueCount, detailCopy, localizedCountryName, localizedUniversityType } from "./detailPresentation";
 
 import { Button } from "@/components/ui/button";
@@ -319,15 +319,24 @@ export default function CountryDetail({ slug }: { slug: string }) {
           </div>
         </div>
       </section>
-      <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", dest.name)}><div className="detail-wrap">
-        {(hasOverview || hasEditorialOverview) && <a href="#overview">{copy.overview}</a>}
-        <a href="#language-courses">{languageCourseNavigationLabel(lang)}</a>
-        {facts.length > 0 && <a href="#facts">{t("countryDetail.quickFacts")}</a>}
-        {cities.length > 0 && <a href="#cities">{t("countryDetail.popularCities")}</a>}
-        {stats.programCount > 0 && <a href="#programs">{t("countryDetail.programs")}</a>}
-        {universities.length > 0 && <a href="#universities">{t("countryDetail.universities")}</a>}
-        {detailContentNavigation(editorial ? { ...editorial, sections: editorial.sections.filter(section => section.key !== "gallery"), templateSections: editorial.templateSections?.filter(section => section.key !== "gallery") } : null)}
-        <a href="#cta">{copy.next}</a>
+      <nav data-detail-section="navigation" className="detail-nav is-curated" aria-label={detailContentTitle(editorial, "navigation", dest.name)}><div className="detail-wrap">
+        <div className="detail-nav-primary">
+          {(hasOverview || hasEditorialOverview) && <a href="#overview">{copy.overview}</a>}
+          <a href="#language-courses">{languageCourseNavigationLabel(lang)}</a>
+          {cities.length > 0 && <a href="#cities">{t("countryDetail.popularCities")}</a>}
+          {stats.programCount > 0 && <a href="#programs">{t("countryDetail.programs")}</a>}
+          {universities.length > 0 && <a href="#universities">{t("countryDetail.universities")}</a>}
+          <a href="#cta">{copy.next}</a>
+        </div>
+        <details className="detail-nav-more">
+          <summary>{detailSectionKicker("navigation", lang)}</summary>
+          <div className="detail-nav-more-panel" onClick={(event) => {
+            if ((event.target as Element).closest("a")) (event.currentTarget.parentElement as HTMLDetailsElement).open = false;
+          }}>
+            {facts.length > 0 && <a href="#facts">{t("countryDetail.quickFacts")}</a>}
+            {detailContentNavigation(editorial ? { ...editorial, sections: editorial.sections.filter(section => section.key !== "gallery"), templateSections: editorial.templateSections?.filter(section => section.key !== "gallery") } : null)}
+          </div>
+        </details>
       </div></nav>
       {(hasOverview || hasEditorialOverview) && <section data-detail-section="overview" id="overview" className="detail-section">
         {hasEditorialOverview ? detailContentAddon(editorial, "overview", lang, localePath("/contact")) : <div className="detail-wrap">

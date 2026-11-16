@@ -251,8 +251,12 @@ export function detailContentSections(content: DetailContent | null, locale: str
   </section>);
 }
 
-export function detailContentNavigation(content: DetailContent | null): ReactNode[] {
-  return publicDetailSections(content).filter(section => hasPublicSectionContent(section) && !["hero", "overview", "requirements"].includes(section.key) && !DETAIL_GENERATED_CONTENT_KEYS.includes(section.key as (typeof DETAIL_GENERATED_CONTENT_KEYS)[number]))
+export function detailContentNavigation(content: DetailContent | null, options: { include?: readonly string[]; exclude?: readonly string[] } = {}): ReactNode[] {
+  return publicDetailSections(content).filter(section => hasPublicSectionContent(section)
+    && !["hero", "overview", "requirements"].includes(section.key)
+    && !DETAIL_GENERATED_CONTENT_KEYS.includes(section.key as (typeof DETAIL_GENERATED_CONTENT_KEYS)[number])
+    && (!options.include || options.include.includes(section.key))
+    && !options.exclude?.includes(section.key))
     .map(section => <a key={section.key} href={`#editorial-${section.key}`}>{section.title}</a>) ?? [];
 }
 

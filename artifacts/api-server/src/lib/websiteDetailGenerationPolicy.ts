@@ -235,6 +235,24 @@ function policyFor(key: string): SectionPolicy {
   };
 }
 
+function policyForPage(kind: DetailContentKind, key: string): SectionPolicy {
+  const policy = policyFor(key);
+  if (kind !== "destination") return policy;
+  if (key === "hero") return {
+    ...policy,
+    objective: "Introduce the country with one concise, country-first decision angle grounded in verified destination evidence; never summarise the catalogue.",
+    intent: "Why should an international student consider this country as a study destination?",
+    minCharacters: 120,
+    maxCharacters: 300,
+  };
+  if (key === "gallery") return {
+    ...policy,
+    objective: "Explain only the visible country setting: geography, city character, culture, transport context or student-life cues. Never describe Find & Study staff, ambassadors, fairs, events, services, campaigns or social content.",
+    intent: "What do these country images reveal about location and everyday student life?",
+  };
+  return policy;
+}
+
 export function buildDetailGenerationPlan(input: {
   kind: DetailContentKind;
   entityName: string;
@@ -248,7 +266,7 @@ export function buildDetailGenerationPlan(input: {
   const planned: DetailGenerationSectionPlan[] = [];
   const skippedSections: DetailGenerationPlan["skippedSections"] = [];
   input.sections.forEach((section, index) => {
-    const policy = policyFor(section.key);
+    const policy = policyForPage(input.kind, section.key);
     const matched = policy.evidence.map(group => evidenceForGroup(input.facts, fields, group, section.key)).filter(group => group.length);
     const evidenceKeys = [...new Set(matched.flat())];
     const readiness: DetailSourceReadiness = matched.length >= Math.min(2, policy.evidence.length)
@@ -316,6 +334,10 @@ export function buildDetailGenerationPlan(input: {
         "Never name a university or programme in the hero. Across all editorial sections, use at most two distinct verified catalogue examples, only where they clarify a decision rather than advertise the catalogue.",
         "Do not turn highlights, cautions, education or FAQ copy into a list of institutions or programmes. Explain the national system, student choices and trade-offs first.",
         "Country-page editorial copy must not narrate university or programme totals. Live catalogue components own all changing counters.",
+        "Keep the hero to 24–38 words and no more than two sentences. Lead with one clear country-level decision angle; move supporting detail into later sections.",
+        "The gallery section may discuss only visible country, city, cultural, geographic or student-life cues. It must never discuss Find & Study staff, ambassadors, fairs, events, services, campaigns, marketing activity or social content, even when a linked source does.",
+        "Maintain whole-page topic balance even when the linked source devotes many rows to one subject. Language preparation belongs primarily in education, admission or requirements; no more than three sections may make it a central theme, and no section may repeat the same language-preparation advice.",
+        "A source row that is operational, agency-facing, promotional or outside a prospective student's country decision must be omitted rather than forced into public copy. Source evidence constrains facts; it does not override the country-page purpose.",
         "Name a city, university or programme only when that exact entity is present in VERIFIED_FACTS; never broaden the page with remembered examples.",
         "Name an official authority or source only when it is present in officialSources. Otherwise explain the decision without inventing attribution.",
         "Cover academic choice, admissions planning, scholarships or funding, visa planning, daily life and destination trade-offs only where the allocated evidence supports them; skip unsupported claims rather than adding filler.",
@@ -408,6 +430,8 @@ const TECHNICAL_OR_DRAFT_COPY = /\b(?:review and customi[sz]e|before publishing|
 const LITERAL_ELLIPSIS = /(?:…|\.\.\.)/u;
 const HEADING_OPENING = /^(?:the\s+|a\s+|an\s+)?([\p{L}\p{M}]+)/iu;
 const DESTINATION_LIVE_COUNTER = /\b\d[\d.,\s]*\s+(?:universit(?:y|ies)|programme?s?|üniversite(?:ler)?|program(?:lar)?)\b/iu;
+const DESTINATION_GALLERY_OFF_SCOPE = /\b(?:find\s*(?:&|and)\s*study|campus ambassador|student ambassador|staff role|our staff|our team|education fair|student fair|organis(?:e|ing|ed)|organiz(?:e|ing|ed)|social (?:media|content)|marketing campaign|promotional campaign)\b/iu;
+const DESTINATION_LANGUAGE_THEME = /\b(?:language preparation|preparatory language|language preparatory|language evidence|language exemption|english preparation|turkish preparation|foundation language|language course)\b/iu;
 
 const protectedEnglishTurkeyNames = [
   "Study in Türkiye",
@@ -430,7 +454,7 @@ export function normalizeGeneratedPublicEditorialContent(content: DetailContent)
       .replace(/\bFind (?:&|and) Study OS\b/giu, "study platform")
       .replace(/\badmin panel\b/giu, "website")
       .replace(/\bCMS\b/gu, "website");
-    if (content.kind !== "destination" || content.locale !== "en") return value;
+    if (content.kind !== "destination" || !content.locale.toLocaleLowerCase("en-US").startsWith("en")) return value;
     const protectedValues: string[] = [];
     for (const officialName of protectedEnglishTurkeyNames) {
       value = value.replace(new RegExp(officialName, "giu"), (match) => {
@@ -442,19 +466,39 @@ export function normalizeGeneratedPublicEditorialContent(content: DetailContent)
     value = value.replace(/\bTürkiye\b/gu, "Turkey");
     return value.replace(/\uE000(\d+)\uE001/gu, (_match, index: string) => protectedValues[Number(index)] ?? "");
   };
-  const sections = content.sections.map((section) => ({
-    ...section,
-    title: rewrite(section.title),
-    ...(section.body !== undefined ? { body: rewrite(section.body) } : {}),
-    ...(section.hero ? {
-      hero: Object.fromEntries(Object.entries(section.hero).map(([key, value]) => [key, typeof value === "string" ? rewrite(value) : value])) as typeof section.hero,
-    } : {}),
-    ...(section.cards ? { cards: section.cards.map((item) => ({ ...item, title: rewrite(item.title), body: rewrite(item.body) })) } : {}),
-    ...(section.steps ? { steps: section.steps.map((item) => ({ ...item, title: rewrite(item.title), body: rewrite(item.body) })) } : {}),
-    ...(section.questions ? { questions: section.questions.map((item) => ({ question: rewrite(item.question), answer: rewrite(item.answer) })) } : {}),
-    ...(section.table ? { table: { columns: section.table.columns.map(rewrite), rows: section.table.rows.map((row) => row.map(rewrite)) } } : {}),
-    ...(section.images ? { images: section.images.map((image) => ({ ...image, alt: rewrite(image.alt), ...(image.caption !== undefined ? { caption: rewrite(image.caption) } : {}) })) } : {}),
-  }));
+  const removeOffScopeGallerySentences = (input: string) => {
+    const sentences = input.match(/[^.!?]+[.!?]+|[^.!?]+$/gu) ?? [input];
+    const filtered = sentences.filter(sentence => !DESTINATION_GALLERY_OFF_SCOPE.test(sentence)).join(" ").replace(/\s+/gu, " ").trim();
+    return filtered || "Use the available images to compare the country's urban character, surroundings and practical setting for everyday student life.";
+  };
+  const sections = content.sections.map((section) => {
+    const isDestinationGallery = content.kind === "destination" && section.key === "gallery";
+    const rewrittenBody = section.body !== undefined ? rewrite(section.body) : undefined;
+    const publicBody = isDestinationGallery && rewrittenBody
+      ? removeOffScopeGallerySentences(rewrittenBody)
+      : rewrittenBody;
+    return {
+      ...section,
+      title: rewrite(section.title),
+      ...(publicBody !== undefined ? { body: publicBody } : {}),
+      ...(section.hero ? {
+        hero: Object.fromEntries(Object.entries(section.hero).map(([key, value]) => [key, typeof value === "string" ? rewrite(value) : value])) as typeof section.hero,
+      } : {}),
+      ...(section.cards ? { cards: section.cards.map((item) => ({
+        ...item,
+        title: isDestinationGallery && DESTINATION_GALLERY_OFF_SCOPE.test(rewrite(item.title)) ? "Country setting" : rewrite(item.title),
+        body: isDestinationGallery ? removeOffScopeGallerySentences(rewrite(item.body)) : rewrite(item.body),
+      })) } : {}),
+      ...(section.steps ? { steps: section.steps.map((item) => ({ ...item, title: rewrite(item.title), body: rewrite(item.body) })) } : {}),
+      ...(section.questions ? { questions: section.questions.map((item) => ({ question: rewrite(item.question), answer: rewrite(item.answer) })) } : {}),
+      ...(section.table ? { table: { columns: section.table.columns.map(rewrite), rows: section.table.rows.map((row) => row.map(rewrite)) } } : {}),
+      ...(section.images ? { images: section.images.map((image) => ({
+        ...image,
+        alt: rewrite(image.alt),
+        ...(image.caption !== undefined ? { caption: isDestinationGallery ? removeOffScopeGallerySentences(rewrite(image.caption)) : rewrite(image.caption) } : {}),
+      })) } : {}),
+    };
+  });
   const seo = content.seo
     ? Object.fromEntries(Object.entries(content.seo).map(([key, value]) => [key, rewrite(value)])) as typeof content.seo
     : undefined;
@@ -591,6 +635,14 @@ export function evaluateDetailContentQuality(input: {
     message: "Country hero copy narrates a changing catalogue counter that belongs to the live catalogue UI.",
   });
   if (input.plan.kind === "destination" && hero) {
+    const heroWords = (hero.body ?? "").trim().split(/\s+/u).filter(Boolean).length;
+    const heroSentences = ((hero.body ?? "").match(/[.!?]+(?:\s|$)/gu) ?? []).length;
+    if (heroWords > 38 || heroSentences > 2) issues.push({
+      code: "DESTINATION_HERO_TOO_LONG",
+      severity: "blocker",
+      sections: ["hero"],
+      message: "Country hero copy is too long for a stable desktop and mobile introduction; keep it to 24–38 words and at most two sentences.",
+    });
     const heroEntities = destinationCatalogMentions(`${hero.title}\n${hero.body ?? ""}`, input.plan);
     if (heroEntities.length) issues.push({
       code: "DESTINATION_HERO_CATALOG_ENTITY",
@@ -600,6 +652,20 @@ export function evaluateDetailContentQuality(input: {
     });
   }
   if (input.plan.kind === "destination") {
+    const gallery = sections.find(section => section.key === "gallery");
+    if (gallery && DESTINATION_GALLERY_OFF_SCOPE.test(sectionCopy(gallery))) issues.push({
+      code: "DESTINATION_GALLERY_OFF_SCOPE",
+      severity: "blocker",
+      sections: ["gallery"],
+      message: "Country gallery copy contains agency operations, marketing activity or staff roles instead of country and student-life visual guidance.",
+    });
+    const languageLedSections = sections.filter(section => DESTINATION_LANGUAGE_THEME.test(sectionCopy(section)));
+    if (languageLedSections.length > 3) issues.push({
+      code: "DESTINATION_TOPIC_DOMINANCE",
+      severity: languageLedSections.length > 4 ? "blocker" : "warning",
+      sections: languageLedSections.map(section => section.key),
+      message: "Language preparation dominates too many country sections; country context, daily life, costs, admissions, funding and visa planning need distinct coverage.",
+    });
     const namedExamples = destinationCatalogMentions(combined, input.plan);
     if (namedExamples.length > 2) issues.push({
       code: "DESTINATION_CATALOG_DOMINANCE",

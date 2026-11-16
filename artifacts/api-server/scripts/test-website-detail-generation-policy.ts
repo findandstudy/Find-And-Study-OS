@@ -190,6 +190,97 @@ test("public copy normalization removes product wording and keeps official Türk
   assert.doesNotMatch(JSON.stringify(normalized.sections), /Course Finder|Find And Study OS/);
 });
 
+test("country normalization fixes English locale variants and removes agency operations from gallery copy", () => {
+  const content: DetailContent = {
+    version: 1,
+    kind: "destination",
+    entityId: 1,
+    locale: "EN-GB",
+    seoMode: "auto",
+    seo: { title: "Study in Türkiye", description: "Compare student life in Türkiye." },
+    sections: [{
+      key: "gallery",
+      title: "See Türkiye in context",
+      body: "Türkiye combines coastal and metropolitan settings. Find & Study campus ambassadors organise education fairs and create social content.",
+      cards: [{ title: "Our staff role", body: "Our team organises events. Türkiye has contrasting urban settings." }],
+      images: [{ src: "https://example.test/turkey.jpg", alt: "Türkiye city setting", caption: "Student ambassadors create social content in Türkiye." }],
+      sources: [],
+      reviewedOn: null,
+    }],
+  };
+  const normalized = normalizeGeneratedPublicEditorialContent(content);
+  assert.equal(normalized.sections[0]?.title, "See Turkey in context");
+  assert.equal(normalized.sections[0]?.body, "Turkey combines coastal and metropolitan settings.");
+  assert.equal(normalized.sections[0]?.cards?.[0]?.title, "Country setting");
+  assert.doesNotMatch(JSON.stringify(normalized.sections[0]), /ambassador|our team|education fairs|social content|Türkiye/iu);
+});
+
+test("country plan makes hero, gallery and page-topic balance durable generation contracts", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "destination",
+    entityName: "Example Country",
+    facts: {
+      destination: "Example Country",
+      description: "Verified country context for international students.",
+      gallery: ["https://example.test/country.jpg"],
+      officialSources: [{ field: "description" }, { field: "gallery" }],
+    },
+    sections: [section("hero"), section("gallery")],
+  });
+  const hero = plan.sections.find(item => item.key === "hero");
+  const gallery = plan.sections.find(item => item.key === "gallery");
+  assert.equal(hero?.maxCharacters, 300);
+  assert.match(hero?.objective ?? "", /country-first/i);
+  assert.match(gallery?.objective ?? "", /never describe Find & Study staff/i);
+  assert.match(plan.pageRules.join(" "), /24–38 words/i);
+  assert.match(plan.pageRules.join(" "), /no more than three sections/i);
+  assert.match(plan.pageRules.join(" "), /operational, agency-facing/i);
+});
+
+test("country quality gate blocks long heroes, off-scope galleries and language-topic dominance", () => {
+  const keys = ["hero", "gallery", "education", "admission", "requirements", "living"];
+  const plan = buildDetailGenerationPlan({
+    kind: "destination",
+    entityName: "Example Country",
+    facts: {
+      destination: "Example Country",
+      description: "Verified country context.",
+      gallery: ["https://example.test/country.jpg"],
+      requirements: "Verified language evidence and admission guidance.",
+      housingSummary: "Verified student-life context.",
+      officialSources: keys.map(field => ({ field })),
+    },
+    sections: keys.map(section),
+  });
+  const longHero = Array.from({ length: 42 }, (_, index) => `word${index + 1}`).join(" ") + ".";
+  const content: DetailContent = {
+    version: 1,
+    kind: "destination",
+    entityId: 1,
+    locale: "en",
+    seoMode: "auto",
+    seo: { title: "Study in Example Country", description: "Compare student life in Example Country." },
+    sections: plan.sections.map(item => ({
+      key: item.key,
+      title: `Plan ${item.key}`,
+      body: item.key === "hero"
+        ? longHero
+        : item.key === "gallery"
+          ? "Campus ambassadors organise education fairs and social content for the agency."
+          : `Language preparation and language evidence shape this ${item.key} decision for students planning their route.`,
+      ...(item.contentShape === "cards" ? { cards: [{ title: "Verified point", body: "Language preparation affects this verified planning decision." }, { title: "Second point", body: "Language evidence affects the next planning step." }] } : {}),
+      ...(item.contentShape === "steps" ? { steps: [{ title: "First", body: "Language preparation affects this verified step." }, { title: "Second", body: "Language evidence affects the next verified step." }, { title: "Third", body: "The route follows published guidance." }] } : {}),
+      sources: [],
+      reviewedOn: null,
+    })),
+  };
+  const quality = evaluateDetailContentQuality({ content, plan });
+  assert.equal(quality.status, "blocked");
+  assert.ok(quality.issues.some(issue => issue.code === "DESTINATION_HERO_TOO_LONG"));
+  assert.ok(quality.issues.some(issue => issue.code === "DESTINATION_GALLERY_OFF_SCOPE"));
+  assert.ok(quality.issues.some(issue => issue.code === "DESTINATION_TOPIC_DOMINANCE"));
+});
+
 test("planner routes source-sheet topics to matching structured sections", () => {
   const plan = buildDetailGenerationPlan({
     kind: "destination",
