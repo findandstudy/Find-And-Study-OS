@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildDetailGenerationPlan, evaluateDetailContentQuality } from "../src/lib/websiteDetailGenerationPolicy";
+import { buildDetailGenerationPlan, evaluateDetailContentQuality, normalizeGeneratedPublicEditorialContent } from "../src/lib/websiteDetailGenerationPolicy";
 import { buildAutomaticEnglishDetailSeo, buildAutomaticEnglishDetailSeoFromSections } from "../src/lib/websiteDetailSeo";
 import type { DetailContent } from "../src/lib/websiteDetailContentContract";
 
@@ -141,6 +141,41 @@ test("country planner caps named catalogue examples and keeps them out of the he
   assert.match(plan.pageRules.join(" "), /only from the system catalogue/i);
   assert.match(plan.pageRules.join(" "), /must not narrate university or programme totals/i);
   assert.match(plan.pageRules.join(" "), /about 65% destination/i);
+  assert.match(plan.pageRules.join(" "), /Course Finder/);
+});
+
+test("public copy normalization removes product wording and keeps official Türkiye names", () => {
+  const content: DetailContent = {
+    version: 1,
+    kind: "destination",
+    entityId: 1,
+    locale: "en",
+    seoMode: "auto",
+    seo: {
+      title: "Study in Türkiye | Find & Study",
+      description: "Course Finder helps students compare Türkiye.",
+      ogTitle: "Study in Türkiye",
+      ogDescription: "Türkiye Scholarships and the Republic of Türkiye remain official names.",
+      twitterTitle: "Study in Türkiye",
+      twitterDescription: "Find And Study OS supports Türkiye planning.",
+    },
+    sections: [{
+      key: "gallery",
+      title: "Compare Türkiye",
+      body: "Course Finder supports a public comparison of Türkiye.",
+      images: [{ src: "https://example.test/turkey.jpg", alt: "Türkiye skyline", caption: "Türkiye combines contrasting student settings." }],
+      sources: [{ label: "Study in Türkiye · Council of Higher Education", url: "https://example.test" }],
+      reviewedOn: "2026-01-01",
+    }],
+  };
+  const normalized = normalizeGeneratedPublicEditorialContent(content);
+  assert.equal(normalized.sections[0]?.title, "Compare Turkey");
+  assert.equal(normalized.sections[0]?.body, "The study search supports a public comparison of Turkey.");
+  assert.equal(normalized.sections[0]?.images?.[0]?.caption, "Turkey combines contrasting student settings.");
+  assert.equal(normalized.sections[0]?.sources[0]?.label, "Study in Türkiye · Council of Higher Education");
+  assert.match(normalized.seo?.title ?? "", /Study in Türkiye/);
+  assert.match(normalized.seo?.ogDescription ?? "", /Türkiye Scholarships.*Republic of Türkiye/);
+  assert.doesNotMatch(JSON.stringify(normalized.sections), /Course Finder|Find And Study OS/);
 });
 
 test("planner routes source-sheet topics to matching structured sections", () => {
@@ -337,6 +372,33 @@ test("quality gate blocks internal wording and highly repeated section copy", ()
   assert.equal(quality.status, "blocked");
   assert.ok(quality.issues.some(issue => issue.code === "INTERNAL_WORDING"));
   assert.ok(quality.issues.some(issue => issue.code === "REPEATED_SECTION_COPY"));
+});
+
+test("quality gate blocks internal product labels in public editorial copy", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "destination",
+    entityName: "Example Country",
+    facts: { destination: "Example Country", description: "Verified destination context", officialSources: [{ field: "description" }] },
+    sections: [section("overview")],
+  });
+  const content: DetailContent = {
+    version: 1,
+    kind: "destination",
+    entityId: 1,
+    locale: "en",
+    seoMode: "auto",
+    seo: { title: "Study in Example Country", description: "A useful destination guide." },
+    sections: [{
+      key: "overview",
+      title: "Build a practical comparison",
+      body: "Course Finder and the admin panel should never appear in student-facing destination guidance, even when the remaining planning advice is otherwise useful and detailed.",
+      sources: [{ label: "Official", url: "https://example.test" }],
+      reviewedOn: "2026-01-01",
+    }],
+  };
+  const quality = evaluateDetailContentQuality({ content, plan });
+  assert.equal(quality.status, "blocked");
+  assert.ok(quality.issues.some(issue => issue.code === "INTERNAL_WORDING"));
 });
 
 test("localized quality gate catches untranslated interface and weather phrases", () => {

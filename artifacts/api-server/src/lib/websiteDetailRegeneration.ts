@@ -26,6 +26,7 @@ import { hydrateDetailSourceDocuments } from "./websiteDetailSourceDocuments";
 import {
   buildDetailGenerationPlan,
   evaluateDetailContentQuality,
+  normalizeGeneratedPublicEditorialContent,
   type DetailContentQualityReport,
   type DetailGenerationPlan,
 } from "./websiteDetailGenerationPolicy";
@@ -403,10 +404,11 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
         return [preserveDetailSectionDesign(section, existingByKey.get(section.key))];
       }),
     };
+  const normalizedContent = normalizeGeneratedPublicEditorialContent(content);
   const contentWithSeo = {
-    ...content,
+    ...normalizedContent,
     seoMode: "auto" as const,
-    seo: buildAutomaticEnglishDetailSeoFromSections(kind, resolvedEntityFacts, content.sections),
+    seo: buildAutomaticEnglishDetailSeoFromSections(kind, resolvedEntityFacts, normalizedContent.sections),
   };
   const visual = await addGeneratedImages({
     kind,
