@@ -271,6 +271,42 @@ export async function hasPublishedDetailContent(kind: DetailContentKind, entityI
   return Boolean(await readPublishedDetailContentRecord(kind, entityId, locale));
 }
 
+/**
+ * Resolve every exact-locale authored publication for one detail entity in a
+ * single bounded query. This is used for hreflang discovery: shared template
+ * copy or an English fallback must never advertise a language URL that has no
+ * published page-owned content of its own.
+ */
+export async function readPublishedDetailContentLocales(
+  kind: DetailContentKind,
+  entityId: number,
+  locales: readonly string[],
+): Promise<Set<string>> {
+  const candidates = [...new Set(locales.map(locale => locale.trim()).filter(Boolean))].slice(0, 32);
+  if (!Number.isSafeInteger(entityId) || entityId < 1 || candidates.length === 0) return new Set();
+  const localeBySlug = new Map(candidates.map(locale => [detailContentSlug(kind, entityId, locale), locale]));
+  const rows = await db.select({ slug: pages.slug, snapshot: versions.blocksSnapshot }).from(pages)
+    .innerJoin(versions, eq(versions.pageId, pages.id))
+    .where(and(
+      inArray(pages.slug, [...localeBySlug.keys()]),
+      eq(pages.template, `detail-content:${kind}`),
+      isNotNull(versions.publishedAt),
+      lte(versions.publishedAt, new Date()),
+    ))
+    .orderBy(desc(versions.versionNumber));
+  const published = new Set<string>();
+  for (const row of rows) {
+    const locale = localeBySlug.get(row.slug);
+    if (!locale || published.has(locale)) continue;
+    const snapshot = row.snapshot;
+    const content = Array.isArray(snapshot) && snapshot.length === 1 && snapshot[0]?.blockType === "detail_content"
+      ? parseDetailContent(snapshot[0].content)
+      : null;
+    if (content?.kind === kind && content.entityId === entityId && content.locale === locale) published.add(locale);
+  }
+  return published;
+}
+
 export async function readPublishedDetailContent(kind: DetailContentKind, entityId: number, locale: string): Promise<DetailContent | null> {
   const [localized, english] = await Promise.all([
     readPublishedDetailContentRecord(kind, entityId, locale),

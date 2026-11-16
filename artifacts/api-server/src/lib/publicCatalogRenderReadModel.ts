@@ -41,7 +41,7 @@ import { invalidatePublishedDetailLayout, readPublishedDetailLayout } from "./we
 import { DETAIL_LAYOUT_KINDS, type DetailLayoutKind } from "./websiteDetailLayoutContract";
 import { websiteCatalogTaxonomy, countryMatches, countryAliases, catalogName } from "./websiteCatalogFilters";
 import { catalogCountryRouteAccessible, readCatalogCountryFallback, matchCatalogCountry, readPublicCatalogCountryDirectory, resolvePublicCatalogLocationLinks } from "./publicCatalogLocationLinks";
-import { hasPublishedDetailContent, readPublishedDetailContent } from "./websiteDetailContent";
+import { hasPublishedDetailContent, readPublishedDetailContent, readPublishedDetailContentLocales } from "./websiteDetailContent";
 import { buildWebsiteSeoDraft } from "./websiteSeoDraft";
 import { buildAutomaticEnglishDetailSeo } from "./websiteDetailSeo";
 import { readPublicCatalogPrices } from "./publicCatalogPriceReadModel";
@@ -1036,15 +1036,26 @@ async function readDestinationDetail(
       catalogEligible: fallback.meta.catalogEligible,
       editorialPublished,
       directoryListed: fallback.meta.directoryListed,
-    })) return {
-      kind: "destination_detail", locale: route.locale,
-      canonicalPath: fallback.meta.canonicalPath, title: fallback.destination.name,
-      description: `Study opportunities in ${fallback.destination.name}`,
-      indexable: false, alternatePaths: {},
-      destination: { ...fallback.destination, ...fallback.stats,
-        popularCities: fallback.cities.map(city => city.name), cityLinks: fallback.cities,
-        universities: fallback.universities },
-    };
+    })) {
+      const publishedLocales = await readPublishedDetailContentLocales(
+        "destination",
+        fallback.destination.catalogCountryId,
+        PROGRAM_SUPPORTED_LOCALES,
+      );
+      const alternatePaths = Object.fromEntries([...publishedLocales].map(locale => [
+        locale,
+        `/${locale}/countries/${fallback.destination.slug}`,
+      ])) as Partial<Record<ProgramSupportedLocale, string>>;
+      return {
+        kind: "destination_detail", locale: route.locale,
+        canonicalPath: fallback.meta.canonicalPath, title: fallback.destination.name,
+        description: `Study opportunities in ${fallback.destination.name}`,
+        indexable: false, alternatePaths,
+        destination: { ...fallback.destination, ...fallback.stats,
+          popularCities: fallback.cities.map(city => city.name), cityLinks: fallback.cities,
+          universities: fallback.universities },
+      };
+    }
     return {
       kind: "not_found",
       locale: route.locale,
