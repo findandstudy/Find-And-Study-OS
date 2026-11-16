@@ -19,6 +19,18 @@ test("automatic SEO keeps complete titles and descriptions without literal ellip
   assert.doesNotMatch(`${seo.title}\n${seo.description}`, /…|\.\.\./u);
 });
 
+test("automatic SEO never ends a clipped description with a dangling connector", () => {
+  const seo = buildAutomaticEnglishDetailSeo("destination", {
+    name: "Turkey",
+    description: "Student life in Turkey varies considerably by city, so location deserves an early place in your decision. Transport networks, neighbourhood character and total living costs shape the comparison.",
+    universityName: null,
+    city: null,
+    country: "Turkey",
+  });
+  assert.doesNotMatch(seo.description, /\b(?:and|or|but|with|for|to|of|in|on|at|by|from|as)\.$/iu);
+  assert.ok(seo.description.length <= 155);
+});
+
 test("automatic programme SEO remains concise and decision-oriented", () => {
   const seo = buildAutomaticEnglishDetailSeo("program", {
     name: "Associate of Anesthesia (Turkish)",

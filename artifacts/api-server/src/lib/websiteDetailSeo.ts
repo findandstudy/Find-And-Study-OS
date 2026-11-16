@@ -33,7 +33,12 @@ const fitMetaDescription = (value: string, max = 155) => {
     : wordBoundary >= Math.min(105, max * 0.68)
       ? wordBoundary
       : max;
-  const fitted = chunk.slice(0, boundary).replace(/[\s,;:.-]+$/u, "");
+  let fitted = chunk.slice(0, boundary).replace(/[\s,;:.-]+$/u, "");
+  // A length-safe cut must not leave a conjunction, article or preposition as
+  // the final visible word (for example "transport, neighbourhood character
+  // and."). Backtrack until the snippet has a meaningful lexical ending.
+  const danglingEnding = /\s+(?:and|or|but|the|a|an|with|for|to|of|in|on|at|by|from|as)$/iu;
+  while (danglingEnding.test(fitted)) fitted = fitted.replace(danglingEnding, "").replace(/[\s,;:.-]+$/u, "");
   return /[.!?]$/u.test(fitted) ? fitted : `${fitted}.`;
 };
 
