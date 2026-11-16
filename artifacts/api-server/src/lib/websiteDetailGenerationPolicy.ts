@@ -237,19 +237,56 @@ function policyFor(key: string): SectionPolicy {
 
 function policyForPage(kind: DetailContentKind, key: string): SectionPolicy {
   const policy = policyFor(key);
-  if (kind !== "destination") return policy;
-  if (key === "hero") return {
-    ...policy,
-    objective: "Introduce the country with one concise, country-first decision angle grounded in verified destination evidence; never summarise the catalogue.",
-    intent: "Why should an international student consider this country as a study destination?",
-    minCharacters: 120,
-    maxCharacters: 300,
-  };
-  if (key === "gallery") return {
-    ...policy,
-    objective: "Explain only the visible country setting: geography, city character, culture, transport context or student-life cues. Never describe Find & Study staff, ambassadors, fairs, events, services, campaigns or social content.",
-    intent: "What do these country images reveal about location and everyday student life?",
-  };
+  if (key === "hero") {
+    const heroPolicies: Record<DetailContentKind, Pick<SectionPolicy, "objective" | "intent" | "minCharacters" | "maxCharacters">> = {
+      destination: {
+        objective: "Introduce the country with one concise, country-first decision angle grounded in verified destination evidence; never summarise the catalogue.",
+        intent: "Why should an international student consider this country as a study destination?",
+        minCharacters: 120,
+        maxCharacters: 300,
+      },
+      city: {
+        objective: "Introduce the city with one concise decision angle about study setting, campus access and everyday student life; never summarise the local catalogue.",
+        intent: "What kind of study setting and daily routine can I expect in this city?",
+        minCharacters: 120,
+        maxCharacters: 320,
+      },
+      university: {
+        objective: "Introduce the institution with one concise, evidence-bound academic value proposition; never turn the hero into a programme list or live counter.",
+        intent: "What verified institutional fit should make me continue evaluating this university?",
+        minCharacters: 120,
+        maxCharacters: 340,
+      },
+      program: {
+        objective: "Introduce the exact programme with one concise academic-fit proposition grounded in verified delivery, field or level evidence; never lead with price or promotional claims.",
+        intent: "What will I study, at what level, and why might this programme fit my goals?",
+        minCharacters: 110,
+        maxCharacters: 300,
+      },
+    };
+    return { ...policy, ...heroPolicies[kind] };
+  }
+  if (key === "gallery") {
+    const galleryPolicies: Record<DetailContentKind, Pick<SectionPolicy, "objective" | "intent">> = {
+      destination: {
+        objective: "Explain only the visible country setting: geography, city character, culture, transport context or student-life cues. Never describe Find & Study staff, ambassadors, fairs, events, services, campaigns or social content.",
+        intent: "What do these country images reveal about location and everyday student life?",
+      },
+      city: {
+        objective: "Explain only visible city, neighbourhood, transport, campus-area or daily-life cues. Do not convert the gallery into a university directory, event recap or marketing story.",
+        intent: "What do these images reveal about moving through and living in the city as a student?",
+      },
+      university: {
+        objective: "Explain only visible campus, teaching-space, facility, access or surrounding-area cues. Do not invent facilities, awards, student testimonials or promotional activity.",
+        intent: "What can the available imagery help me assess about the campus and learning environment?",
+      },
+      program: {
+        objective: "Explain only visible learning-environment, facility, campus or study-context cues relevant to this programme. Do not use generic lifestyle promotion or promise outcomes.",
+        intent: "What can the available imagery help me assess about the programme's learning setting?",
+      },
+    };
+    return { ...policy, ...galleryPolicies[kind] };
+  }
   return policy;
 }
 
@@ -261,11 +298,17 @@ export function buildDetailGenerationPlan(input: {
 }): DetailGenerationPlan {
   const fields = sourceFields(input.facts);
   const pool = entityPool(input.facts);
-  const destinationEntitySections = new Set(["highlights", "education"]);
-  let destinationEntityCursor = 0;
+  const entityAllocation: Record<DetailContentKind, { sections: Set<string>; limit: number }> = {
+    destination: { sections: new Set(["highlights", "education"]), limit: 2 },
+    city: { sections: new Set(["highlights", "education", "faq"]), limit: 3 },
+    university: { sections: new Set(["highlights", "education", "curriculum"]), limit: 3 },
+    program: { sections: new Set(["curriculum", "related", "faq"]), limit: 2 },
+  };
+  const allocation = entityAllocation[input.kind];
+  let entityCursor = 0;
   const planned: DetailGenerationSectionPlan[] = [];
   const skippedSections: DetailGenerationPlan["skippedSections"] = [];
-  input.sections.forEach((section, index) => {
+  input.sections.forEach((section) => {
     const policy = policyForPage(input.kind, section.key);
     const matched = policy.evidence.map(group => evidenceForGroup(input.facts, fields, group, section.key)).filter(group => group.length);
     const evidenceKeys = [...new Set(matched.flat())];
@@ -278,13 +321,11 @@ export function buildDetailGenerationPlan(input: {
       skippedSections.push({ key: section.key, reason: "INSUFFICIENT_EVIDENCE" });
       return;
     }
-    const allocatedEntities = input.kind === "destination"
-      ? destinationEntitySections.has(section.key) && destinationEntityCursor < 2 && pool[destinationEntityCursor]
-        ? [pool[destinationEntityCursor++]!]
-        : []
-      : pool.length
-        ? [pool[index % pool.length], pool[(index + Math.max(1, Math.floor(pool.length / 2))) % pool.length]].filter((value, entityIndex, all) => all.indexOf(value) === entityIndex)
-        : [];
+    const allocatedEntities = allocation.sections.has(section.key)
+      && entityCursor < allocation.limit
+      && pool[entityCursor]
+      ? [pool[entityCursor++]!]
+      : [];
     const allocatedSourceTopicTitles = sourceTopicTitlesForSection(input.facts, section.key);
     const requestedContentShape = policy.contentShape ?? "prose";
     const contentShape = requestedContentShape !== "prose"
@@ -342,8 +383,35 @@ export function buildDetailGenerationPlan(input: {
         "Name an official authority or source only when it is present in officialSources. Otherwise explain the decision without inventing attribution.",
         "Cover academic choice, admissions planning, scholarships or funding, visa planning, daily life and destination trade-offs only where the allocated evidence supports them; skip unsupported claims rather than adding filler.",
       ] : []),
+      ...(input.kind === "city" ? [
+        "Keep the city guide city-first: balance campus geography and academic access with transport, housing, climate, neighbourhood choice, cost and daily student life. Named institutions or programmes are supporting examples, never the page's main story.",
+        "Treat every allocated city source-topic row as evidence that must reach its assigned public section. Structured sections must express distinct source rows as distinct cards, steps or answers.",
+        "Never name a university or programme in the city hero. Across editorial sections, use no more than three distinct verified catalogue examples and do not repeat one institution as the default example.",
+        "City editorial copy must not narrate changing university or programme totals. Live catalogue components own all counters, availability and result lists.",
+        "Keep the city hero to 24–42 words and no more than two sentences. Lead with study setting and everyday student experience, not a catalogue summary.",
+        "The city gallery may discuss only visible urban, neighbourhood, transport, campus-area or daily-life cues. It must never describe agency staff, fairs, campaigns, ambassadors or social content.",
+        "Do not let one topic such as transport, weather, housing or language preparation dominate unrelated sections. Give each planning question one clear home.",
+        "Use institution or programme examples only when their exact names are present in VERIFIED_FACTS; never add remembered local examples.",
+      ] : []),
+      ...(input.kind === "university" ? [
+        "Keep the institution guide institution-first: balance academic offer and delivery with admissions, fees, campus setting, student support and documented recognition. A programme list is not an institutional evaluation.",
+        "Treat every allocated institution source-topic row as evidence that must reach its assigned public section. Structured sections must express distinct source rows as distinct cards, steps or answers.",
+        "Do not narrate changing programme totals, fee totals or intake totals in editorial copy. Live catalogue components own counters, prices, dates and availability.",
+        "Keep the university hero to 24–44 words and no more than two sentences. Lead with one verified institutional-fit proposition, not rankings, superlatives or a programme inventory.",
+        "Across editorial sections, use no more than four distinct verified programme examples and do not repeat one programme across multiple sections.",
+        "The university gallery may discuss only visible campus, facility, teaching-space, access or surrounding-area cues. Never invent facilities, awards, testimonials, events or promotional claims.",
+        "State accreditation, recognition, ranking, employability or partnership claims only when exact supporting evidence is allocated to that section. Never infer prestige from the institution name.",
+        "Do not let one faculty, programme family or marketing theme dominate the whole institution page; preserve distinct academic, admissions and student-experience decisions.",
+      ] : []),
       ...(input.kind === "program" ? [
         "Make the programme page answer academic fit, verified delivery/language, entry preparation, fees or intakes when available, and one evidence-bound next step; do not reduce it to a fee card and requirement list.",
+        "Treat every allocated programme source-topic row as evidence that must reach its assigned public section. Structured sections must express distinct source rows as distinct cards, steps or answers.",
+        "Keep the programme guide programme-first: curriculum or field, level, delivery, entry preparation, verified fees/intakes and learning outcomes matter more than generic university promotion.",
+        "Do not narrate changing prices, discounts, intake counts, seat availability or application totals in editorial copy. Live catalogue components own current commercial and availability facts.",
+        "Keep the programme hero to 22–38 words and no more than two sentences. Lead with academic fit and verified delivery context, not price, urgency or guaranteed outcomes.",
+        "The programme gallery may discuss only visible learning environments, relevant facilities, campus context or study-format cues. Do not substitute generic city lifestyle or university marketing.",
+        "Never promise admission, visa approval, employment, salary, professional licensing or career outcomes. Describe only documented preparation, skills or progression context.",
+        "Name related programmes only when present in VERIFIED_FACTS, use at most two as comparisons, and never let them displace the exact programme being evaluated.",
       ] : []),
       "End action sections with one clear, realistic next step that follows from the evidence on the page.",
       "Do not expose internal catalogue, source-record, prompt, AI or editorial-review language.",
@@ -429,9 +497,24 @@ const GENERIC_SECTION_TITLE = /^(?:overview|introduction|highlights|education|ga
 const TECHNICAL_OR_DRAFT_COPY = /\b(?:review and customi[sz]e|before publishing|supplied from|connected source|source records?)\b/iu;
 const LITERAL_ELLIPSIS = /(?:…|\.\.\.)/u;
 const HEADING_OPENING = /^(?:the\s+|a\s+|an\s+)?([\p{L}\p{M}]+)/iu;
-const DESTINATION_LIVE_COUNTER = /\b\d[\d.,\s]*\s+(?:universit(?:y|ies)|programme?s?|üniversite(?:ler)?|program(?:lar)?)\b/iu;
 const DESTINATION_GALLERY_OFF_SCOPE = /\b(?:find\s*(?:&|and)\s*study|campus ambassador|student ambassador|staff role|our staff|our team|education fair|student fair|organis(?:e|ing|ed)|organiz(?:e|ing|ed)|social (?:media|content)|marketing campaign|promotional campaign)\b/iu;
 const DESTINATION_LANGUAGE_THEME = /\b(?:language preparation|preparatory language|language preparatory|language evidence|language exemption|english preparation|turkish preparation|foundation language|language course)\b/iu;
+const DYNAMIC_CATALOG_COUNTER = /\b\d[\d.,\s]*\s+(?:universit(?:y|ies)|colleges?|institutions?|programme?s?|courses?|intakes?|seats?|applications?)\b/iu;
+const UNSUPPORTED_OUTCOME_PROMISE = /\b(?:guarantee(?:s|d)?\s+(?:admission|visa|job|employment|salary|career|licen[cs](?:e|ing))|(?:admission|visa|employment|career)\s+is\s+guaranteed|ensures?\s+(?:a\s+)?(?:job|employment|visa|admission))\b/iu;
+
+const HERO_LIMITS: Partial<Record<DetailContentKind, { minWords: number; maxWords: number; maxSentences: number }>> = {
+  destination: { minWords: 24, maxWords: 38, maxSentences: 2 },
+  city: { minWords: 24, maxWords: 42, maxSentences: 2 },
+  university: { minWords: 24, maxWords: 44, maxSentences: 2 },
+  program: { minWords: 22, maxWords: 38, maxSentences: 2 },
+};
+
+const WHOLE_PAGE_DEPTH: Partial<Record<DetailContentKind, { minSections: number; sectionFloor: number; totalFloor: number; blockerSections: number; blockerTotal: number; code: string; message: string }>> = {
+  destination: { minSections: 8, sectionFloor: 180, totalFloor: 2_400, blockerSections: 4, blockerTotal: 1_500, code: "THIN_DESTINATION_DECISION_SUPPORT", message: "The country page does not yet provide enough distinct, evidence-bound support for study choice, admissions, funding, visa planning and student life." },
+  city: { minSections: 7, sectionFloor: 170, totalFloor: 1_900, blockerSections: 3, blockerTotal: 1_150, code: "THIN_CITY_DECISION_SUPPORT", message: "The city page does not yet provide enough distinct support for study setting, campus access, transport, housing and daily student life." },
+  university: { minSections: 7, sectionFloor: 170, totalFloor: 1_900, blockerSections: 3, blockerTotal: 1_150, code: "THIN_UNIVERSITY_DECISION_SUPPORT", message: "The university page does not yet provide enough distinct support for academic fit, admissions, fees, campus, student support and recognition." },
+  program: { minSections: 1, sectionFloor: 160, totalFloor: 900, blockerSections: 2, blockerTotal: 560, code: "THIN_PROGRAM_DECISION_SUPPORT", message: "The programme page does not yet provide enough distinct decision support beyond its live facts, fees and requirements." },
+};
 
 const protectedEnglishTurkeyNames = [
   "Study in Türkiye",
@@ -545,25 +628,23 @@ export function evaluateDetailContentQuality(input: {
     sections: missingStructuredContent,
     message: "A source-backed section is missing the cards, steps or questions required by its template contract.",
   });
-  if (input.plan.kind === "destination") {
-    const underfilledSourceStructures = sections.filter(section => {
-      const planned = planByKey.get(section.key);
-      const shape = planned?.contentShape ?? "prose";
-      if (shape === "prose" || (planned?.allocatedSourceTopicTitles?.length ?? 0) < 2) return false;
-      const itemCount = section[shape]?.length ?? 0;
-      const requiredCount = Math.min(
-        planned?.maxItems ?? 4,
-        Math.max(planned?.minItems ?? 2, planned?.allocatedSourceTopicTitles?.length ?? 0),
-      );
-      return itemCount < requiredCount;
-    }).map(section => section.key);
-    if (underfilledSourceStructures.length) issues.push({
-      code: "SOURCE_TOPIC_STRUCTURE_GAP",
-      severity: "blocker",
-      sections: underfilledSourceStructures,
-      message: "Country source rows were routed to a structured section but too few distinct cards, steps or answers reached the public page.",
-    });
-  }
+  const underfilledSourceStructures = sections.filter(section => {
+    const planned = planByKey.get(section.key);
+    const shape = planned?.contentShape ?? "prose";
+    if (shape === "prose" || (planned?.allocatedSourceTopicTitles?.length ?? 0) < 2) return false;
+    const itemCount = section[shape]?.length ?? 0;
+    const requiredCount = Math.min(
+      planned?.maxItems ?? 4,
+      Math.max(planned?.minItems ?? 2, planned?.allocatedSourceTopicTitles?.length ?? 0),
+    );
+    return itemCount < requiredCount;
+  }).map(section => section.key);
+  if (underfilledSourceStructures.length) issues.push({
+    code: "SOURCE_TOPIC_STRUCTURE_GAP",
+    severity: "blocker",
+    sections: underfilledSourceStructures,
+    message: "Source rows were routed to a structured section but too few distinct cards, steps or answers reached the public page.",
+  });
   const duplicatePairs: Array<[string, string]> = [];
   for (let left = 0; left < sections.length; left += 1) for (let right = left + 1; right < sections.length; right += 1) {
     if (similarity(sections[left]!.body!, sections[right]!.body!) >= 0.72) duplicatePairs.push([sections[left]!.key, sections[right]!.key]);
@@ -607,42 +688,36 @@ export function evaluateDetailContentQuality(input: {
   const sectionCharacterCount = (section: DetailContent["sections"][number]) => sectionCopy(section).length - section.title.length;
   const thin = sections.filter(section => sectionCharacterCount(section) < (planByKey.get(section.key)?.minCharacters ?? 80)).map(section => section.key);
   if (thin.length) issues.push({ code: "THIN_SECTION_COPY", severity: "warning", sections: thin, message: "One or more generated sections are below their information-value target." });
-  if (input.plan.kind === "program") {
-    const substantive = sections.filter(section => sectionCharacterCount(section) >= 160);
+  const depth = WHOLE_PAGE_DEPTH[input.plan.kind];
+  if (depth && input.plan.sections.length >= depth.minSections) {
+    const substantive = sections.filter(section => sectionCharacterCount(section) >= depth.sectionFloor);
     const totalCharacters = substantive.reduce((sum, section) => sum + sectionCharacterCount(section), 0);
-    if (substantive.length < 4 || totalCharacters < 900) issues.push({
-      code: "THIN_PROGRAM_DECISION_SUPPORT",
-      severity: "warning",
+    if (substantive.length < depth.minSections - 2 || totalCharacters < depth.totalFloor) issues.push({
+      code: depth.code,
+      severity: substantive.length < depth.blockerSections || totalCharacters < depth.blockerTotal ? "blocker" : "warning",
       sections: sections.map(section => section.key),
-      message: "The programme page does not yet provide enough distinct decision support beyond its live facts, fees and requirements.",
-    });
-  }
-  if (input.plan.kind === "destination" && input.plan.sections.length >= 8) {
-    const substantive = sections.filter(section => sectionCharacterCount(section) >= 180);
-    const totalCharacters = substantive.reduce((sum, section) => sum + sectionCharacterCount(section), 0);
-    if (substantive.length < 6 || totalCharacters < 2_400) issues.push({
-      code: "THIN_DESTINATION_DECISION_SUPPORT",
-      severity: substantive.length < 4 || totalCharacters < 1_500 ? "blocker" : "warning",
-      sections: sections.map(section => section.key),
-      message: "The country page does not yet provide enough distinct, evidence-bound support for study choice, admissions, funding, visa planning and student life.",
+      message: depth.message,
     });
   }
   const hero = sections.find(section => section.key === "hero");
-  if (input.plan.kind === "destination" && hero && DESTINATION_LIVE_COUNTER.test(hero.body ?? "")) issues.push({
-    code: "DESTINATION_HERO_LIVE_COUNTER",
+  if (hero && DYNAMIC_CATALOG_COUNTER.test(hero.body ?? "")) issues.push({
+    code: input.plan.kind === "destination" ? "DESTINATION_HERO_LIVE_COUNTER" : "HERO_DYNAMIC_CATALOG_COUNTER",
     severity: "blocker",
     sections: ["hero"],
-    message: "Country hero copy narrates a changing catalogue counter that belongs to the live catalogue UI.",
+    message: "Hero copy narrates a changing catalogue counter that belongs to the live catalogue UI.",
   });
-  if (input.plan.kind === "destination" && hero) {
+  const heroLimits = HERO_LIMITS[input.plan.kind];
+  if (hero && heroLimits) {
     const heroWords = (hero.body ?? "").trim().split(/\s+/u).filter(Boolean).length;
     const heroSentences = ((hero.body ?? "").match(/[.!?]+(?:\s|$)/gu) ?? []).length;
-    if (heroWords > 38 || heroSentences > 2) issues.push({
-      code: "DESTINATION_HERO_TOO_LONG",
+    if (heroWords > heroLimits.maxWords || heroSentences > heroLimits.maxSentences) issues.push({
+      code: input.plan.kind === "destination" ? "DESTINATION_HERO_TOO_LONG" : "HERO_TOO_LONG",
       severity: "blocker",
       sections: ["hero"],
-      message: "Country hero copy is too long for a stable desktop and mobile introduction; keep it to 24–38 words and at most two sentences.",
+      message: `${input.plan.kind} hero copy is too long for a stable desktop and mobile introduction; keep it to ${heroLimits.minWords}–${heroLimits.maxWords} words and at most ${heroLimits.maxSentences} sentences.`,
     });
+  }
+  if (input.plan.kind === "destination" && hero) {
     const heroEntities = destinationCatalogMentions(`${hero.title}\n${hero.body ?? ""}`, input.plan);
     if (heroEntities.length) issues.push({
       code: "DESTINATION_HERO_CATALOG_ENTITY",
@@ -674,6 +749,40 @@ export function evaluateDetailContentQuality(input: {
       message: "Country editorial copy relies on too many named universities or programmes instead of country-level decision guidance.",
     });
   }
+  if (["city", "university", "program"].includes(input.plan.kind)) {
+    const gallery = sections.find(section => section.key === "gallery");
+    if (gallery && DESTINATION_GALLERY_OFF_SCOPE.test(sectionCopy(gallery))) issues.push({
+      code: "DETAIL_GALLERY_OFF_SCOPE",
+      severity: "blocker",
+      sections: ["gallery"],
+      message: "Gallery copy contains agency operations, events, staff roles or marketing activity instead of evidence visible in the page's learning or location imagery.",
+    });
+  }
+  if (input.plan.kind === "city") {
+    const namedExamples = destinationCatalogMentions(combined, input.plan);
+    if (namedExamples.length > 3) issues.push({
+      code: "CITY_CATALOG_DOMINANCE",
+      severity: "blocker",
+      sections: sections.filter(section => destinationCatalogMentions(sectionCopy(section), input.plan).length).map(section => section.key),
+      message: "City editorial copy relies on too many named institutions or programmes instead of the study setting and daily-life decisions.",
+    });
+  }
+  if (input.plan.kind === "university") {
+    const namedPrograms = input.plan.catalogEntities.programs.filter(value => normalizedEntity(combined).includes(normalizedEntity(value)));
+    if (namedPrograms.length > 4) issues.push({
+      code: "UNIVERSITY_PROGRAM_DOMINANCE",
+      severity: "blocker",
+      sections: sections.filter(section => namedPrograms.some(value => normalizedEntity(sectionCopy(section)).includes(normalizedEntity(value)))).map(section => section.key),
+      message: "University editorial copy relies on too many named programmes instead of evaluating the institution as a whole.",
+    });
+  }
+  const unsupportedPromises = sections.filter(section => UNSUPPORTED_OUTCOME_PROMISE.test(sectionCopy(section))).map(section => section.key);
+  if (unsupportedPromises.length) issues.push({
+    code: "UNSUPPORTED_OUTCOME_PROMISE",
+    severity: "blocker",
+    sections: unsupportedPromises,
+    message: "Public copy promises an admission, visa, employment, licensing or career outcome that cannot be guaranteed.",
+  });
   if (hero && ((hero.body?.length ?? 0) < 150 || /^explore\b/iu.test(hero.body ?? ""))) issues.push({ code: "WEAK_HERO_VALUE_PROPOSITION", severity: "warning", sections: ["hero"], message: "The hero does not yet communicate a strong, entity-specific reason to continue." });
   if (input.plan.kind === "city" && input.plan.sections.some(section => section.allocatedEntities.length)) {
     const allocated = [...new Set(input.plan.sections.flatMap(section => section.allocatedEntities))];
@@ -687,20 +796,19 @@ export function evaluateDetailContentQuality(input: {
       const previousLength = previousSection ? sectionCopy(previousSection).length - previousSection.title.length : 0;
       const currentLength = sectionCopy(section).length - section.title.length;
       const planSection = planByKey.get(section.key);
-      const sourceRoutedDestination = input.plan.kind === "destination"
-        && Boolean(planSection?.allocatedSourceTopicTitles?.length);
-      // Source-routed country regeneration often replaces repetitive legacy
+      const sourceRoutedStructure = Boolean(planSection?.allocatedSourceTopicTitles?.length);
+      // Source-routed regeneration often replaces repetitive legacy
       // prose with shorter cards or steps. Preserve a hard floor against real
       // information loss without requiring the new layout to retain 80% of
       // every legacy section's raw character count.
-      const minimumRatio = sourceRoutedDestination ? 0.65 : 0.8;
+      const minimumRatio = sourceRoutedStructure ? 0.65 : 0.8;
       return previousLength >= 220 && currentLength < previousLength * minimumRatio
-        ? [{ key: section.key, ratio: currentLength / previousLength, sourceRoutedDestination }]
+        ? [{ key: section.key, ratio: currentLength / previousLength, sourceRoutedStructure }]
         : [];
     });
     if (regressions.length) issues.push({
       code: "EXCESSIVE_CONTENT_LOSS",
-      severity: regressions.some(item => item.ratio < (item.sourceRoutedDestination ? 0.4 : 0.55)) ? "blocker" : "warning",
+      severity: regressions.some(item => item.ratio < (item.sourceRoutedStructure ? 0.4 : 0.55)) ? "blocker" : "warning",
       sections: regressions.map(item => item.key),
       message: `Regeneration removed too much useful editorial depth compared with the existing page (${regressions.map(item => `${item.key}:${Math.round(item.ratio * 100)}%`).join(", ")}).`,
     });

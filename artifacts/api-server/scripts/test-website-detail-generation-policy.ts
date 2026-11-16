@@ -738,3 +738,133 @@ test("country quality gate requires routed source topics to reach distinct publi
   assert.equal(quality.status, "blocked");
   assert.ok(quality.issues.some(issue => issue.code === "SOURCE_TOPIC_STRUCTURE_GAP"));
 });
+
+test("city, university and programme plans enforce type-specific editorial contracts", () => {
+  const cityPlan = buildDetailGenerationPlan({
+    kind: "city",
+    entityName: "Example City",
+    facts: {
+      city: "Example City",
+      country: "Example Country",
+      description: "Verified city context.",
+      teachingLanguages: ["English"],
+      universities: [{ name: "North University" }, { name: "South University" }],
+      programs: [{ name: "Engineering", university: "North University" }, { name: "Business", university: "South University" }],
+      officialSources: [{ field: "description" }, { field: "highlights" }, { field: "education" }],
+    },
+    sections: [section("hero"), section("gallery"), section("highlights"), section("education")],
+  });
+  assert.deepEqual(cityPlan.sections.find(item => item.key === "hero")?.allocatedEntities, []);
+  assert.deepEqual(cityPlan.sections.find(item => item.key === "gallery")?.allocatedEntities, []);
+  assert.ok(cityPlan.sections.flatMap(item => item.allocatedEntities).length <= 3);
+  assert.match(cityPlan.pageRules.join(" "), /city guide city-first/i);
+  assert.match(cityPlan.pageRules.join(" "), /24–42 words/i);
+
+  const universityPlan = buildDetailGenerationPlan({
+    kind: "university",
+    entityName: "Example University",
+    facts: {
+      university: "Example University",
+      description: "Verified institution context.",
+      programs: [{ name: "Engineering" }, { name: "Business" }, { name: "Medicine" }, { name: "Law" }],
+      officialSources: [{ field: "description" }, { field: "highlights" }, { field: "education" }, { field: "curriculum" }],
+    },
+    sections: [section("hero"), section("gallery"), section("highlights"), section("education"), section("curriculum")],
+  });
+  assert.deepEqual(universityPlan.sections.find(item => item.key === "hero")?.allocatedEntities, []);
+  assert.ok(universityPlan.sections.flatMap(item => item.allocatedEntities).length <= 3);
+  assert.match(universityPlan.pageRules.join(" "), /institution guide institution-first/i);
+  assert.match(universityPlan.pageRules.join(" "), /24–44 words/i);
+
+  const programPlan = buildDetailGenerationPlan({
+    kind: "program",
+    entityName: "Example Programme",
+    facts: {
+      program: "Example Programme",
+      university: "Example University",
+      degree: "Bachelor",
+      field: "Engineering",
+      description: "Verified programme context.",
+      requirements: "Verified entry evidence.",
+      officialSources: [{ field: "description" }, { field: "curriculum" }, { field: "requirements" }],
+    },
+    sections: [section("hero"), section("gallery"), section("curriculum"), section("requirements")],
+  });
+  assert.deepEqual(programPlan.sections.find(item => item.key === "hero")?.allocatedEntities, []);
+  assert.match(programPlan.pageRules.join(" "), /programme guide programme-first/i);
+  assert.match(programPlan.pageRules.join(" "), /22–38 words/i);
+  assert.match(programPlan.pageRules.join(" "), /Never promise admission, visa approval, employment/i);
+});
+
+test("source-topic box coverage is enforced for university templates too", () => {
+  const plan = buildDetailGenerationPlan({
+    kind: "university",
+    entityName: "Example University",
+    facts: {
+      university: "Example University",
+      description: "Verified institution context.",
+      officialSources: [{ field: "highlights" }],
+      sourceTopics: [
+        { topicTitle: "Highlights — teaching environment", verifiedContent: "Verified teaching evidence." },
+        { topicTitle: "Highlights — campus setting", verifiedContent: "Verified campus evidence." },
+        { topicTitle: "Highlights — student support", verifiedContent: "Verified support evidence." },
+      ],
+    },
+    sections: [section("highlights")],
+  });
+  const content: DetailContent = {
+    version: 1, kind: "university", entityId: 21, locale: "en", seoMode: "auto",
+    seo: { title: "Example University | Find & Study", description: "Evaluate the academic setting and student experience at Example University." },
+    sections: [{
+      key: "highlights", title: "Evaluate the institution on evidence",
+      body: "The available evidence gives students several distinct institutional considerations to compare before creating a shortlist.",
+      cards: [
+        { title: "Teaching environment", body: "Use the verified teaching evidence to assess academic fit." },
+        { title: "Campus setting", body: "Use the verified campus evidence to assess daily study context." },
+      ],
+      sources: [], reviewedOn: null,
+    }],
+  };
+  const quality = evaluateDetailContentQuality({ content, plan });
+  assert.equal(quality.status, "blocked");
+  assert.ok(quality.issues.some(issue => issue.code === "SOURCE_TOPIC_STRUCTURE_GAP"));
+});
+
+test("type-specific hero and outcome gates protect city, university and programme pages", () => {
+  const universityPlan = buildDetailGenerationPlan({
+    kind: "university",
+    entityName: "Example University",
+    facts: { university: "Example University", description: "Verified institution context.", officialSources: [{ field: "description" }] },
+    sections: [section("hero")],
+  });
+  const universityContent: DetailContent = {
+    version: 1, kind: "university", entityId: 22, locale: "en", seoMode: "auto",
+    seo: { title: "Example University | Find & Study", description: "Evaluate academic fit at Example University." },
+    sections: [{
+      key: "hero", title: "Example University",
+      body: "Example University lists 120 programmes across its current catalogue, with a deliberately overlong introduction that keeps adding generic claims about choice, opportunity, campus life, global ambition, personal growth, future success, international recognition, professional networks, social activities and many different pathways instead of presenting one concise, verified institutional-fit proposition for a prospective international student.",
+      sources: [], reviewedOn: null,
+    }],
+  };
+  const universityQuality = evaluateDetailContentQuality({ content: universityContent, plan: universityPlan });
+  assert.ok(universityQuality.issues.some(issue => issue.code === "HERO_DYNAMIC_CATALOG_COUNTER"));
+  assert.ok(universityQuality.issues.some(issue => issue.code === "HERO_TOO_LONG"));
+
+  const programPlan = buildDetailGenerationPlan({
+    kind: "program",
+    entityName: "Example Programme",
+    facts: { program: "Example Programme", university: "Example University", description: "Verified programme context.", officialSources: [{ field: "description" }] },
+    sections: [section("overview")],
+  });
+  const programContent: DetailContent = {
+    version: 1, kind: "program", entityId: 23, locale: "en", seoMode: "auto",
+    seo: { title: "Example Programme | Find & Study", description: "Evaluate the academic fit of Example Programme." },
+    sections: [{
+      key: "overview", title: "Evaluate the academic route",
+      body: "This programme guarantees employment after graduation, which is an unsupported outcome promise rather than evidence-bound academic guidance for a prospective student.",
+      sources: [], reviewedOn: null,
+    }],
+  };
+  const programQuality = evaluateDetailContentQuality({ content: programContent, plan: programPlan });
+  assert.ok(programQuality.issues.some(issue => issue.code === "UNSUPPORTED_OUTCOME_PROMISE"));
+});

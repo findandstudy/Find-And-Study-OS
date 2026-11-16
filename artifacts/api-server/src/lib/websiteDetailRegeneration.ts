@@ -419,7 +419,11 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
     ai,
   });
   return {
-    content: visual.content,
+    // Existing media is deliberately preserved by addGeneratedImages. Run the
+    // public-copy normalizer after that merge as well so an old alt/caption
+    // cannot bypass the same public wording contract applied to newly written
+    // sections. This is idempotent and applies to every detail kind.
+    content: normalizeGeneratedPublicEditorialContent(visual.content),
     plan,
     generatedSections: plan.sections.length,
     generatedImages: visual.generatedImages,
