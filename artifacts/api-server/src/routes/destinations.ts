@@ -414,7 +414,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       name: localized.name,
       sourceName: city.name,
       universityCount: universityCountByCity.get(sourceKey) ?? 0,
-      heroImageUrl: cityHeroImageUrls.get(city.id) ?? null,
+      cardHeroImageUrl: cityHeroImageUrls.get(city.id) ?? null,
       canonicalPath: delivery.snapshot?.canonicalPath || buildPublicWebCanonicalPath({ entityType: "CITY", entityId: city.id, locale, slug: city.name }),
     }];
   }).slice(0, 24);

@@ -77,7 +77,7 @@ type DestinationPayload = {
   destination: Destination;
   universities: UniversityBrief[];
   programs: ProgramBrief[];
-  cities: Array<{ id: number; name: string; sourceName: string; universityCount: number; heroImageUrl: string | null; canonicalPath: string }>;
+  cities: Array<{ id: number; name: string; sourceName: string; universityCount: number; cardHeroImageUrl: string | null; canonicalPath: string }>;
   stats: { universityCount: number; programCount: number };
   meta: {
     locale: Language;
@@ -271,7 +271,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
     [city.sourceName.toLocaleLowerCase("en-US"), city] as const,
   ]));
   const destinationDisplayName = localizedDestinationName;
-  const cities = [...data.cities.map(city => ({ name: detailDisplayTerm(editorial, city.sourceName || city.name, city.name), canonicalPath: city.canonicalPath, universityCount: city.universityCount, heroImageUrl: fixStorageUrl(city.heroImageUrl) })), ...cityNames
+  const cities = [...data.cities.map(city => ({ name: detailDisplayTerm(editorial, city.sourceName || city.name, city.name), canonicalPath: city.canonicalPath, universityCount: city.universityCount, heroImageUrl: fixStorageUrl(city.cardHeroImageUrl) })), ...cityNames
     .filter(name => !cityLinks.has(name.toLocaleLowerCase("en-US")))
     .map(name => ({ name: detailDisplayTerm(editorial, name), canonicalPath: null, universityCount: null, heroImageUrl: null }))];
   const facts = [
