@@ -288,7 +288,7 @@
 
 .detail-editorial-heading { display: block; margin-bottom: 24px; }
 .detail-editorial-heading > span { display: block; margin-bottom: 8px; color: var(--detail-accent); font-size: 10px; font-weight: 850; line-height: 1.5; letter-spacing: .13em; text-transform: uppercase; }
-.detail-editorial-heading h2 { max-width: 28ch; margin: 0; font-size: clamp(28px, 3vw, 42px); font-weight: 800; line-height: 1.08; letter-spacing: -.042em; }
+.detail-editorial-heading h2 { max-width: min(46ch, 100%); margin: 0; font-size: clamp(28px, 3vw, 42px); font-weight: 800; line-height: 1.08; letter-spacing: -.042em; }
 .detail-editorial-intro { margin-bottom: 26px !important; }
 .detail-editorial-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 14px; }
 .detail-editorial-cards article { position: relative; padding: 26px 28px; border: 1px solid var(--detail-line); background: var(--detail-white); }
@@ -565,7 +565,7 @@
 .detail-city .detail-editorial-heading h2 {
   grid-column: 2;
   grid-row: 2;
-  max-width: 34ch;
+  max-width: min(46ch, 100%);
   font-size: clamp(27px, 3.4vw, 42px);
 }
 .detail-destination .detail-editorial-intro,
@@ -764,7 +764,7 @@
 .detail-section-number { display: grid; place-items: center; height: 30px; width: 30px; background: var(--detail-sky); color: var(--detail-accent); font-size: 11px; font-weight: 900; flex-shrink: 0; margin-top: 2px; }
 .is-sky .detail-section-number { background: var(--detail-paper); }
 .detail-section-heading .detail-eyebrow { margin-bottom: 5px; font-size: 10px; }
-.detail-section-heading h2 { font-size: clamp(27px, 3vw, 40px); letter-spacing: -.04em; font-weight: 800; line-height: 1.08; margin: 0; max-width: 34ch; text-wrap: balance; }
+.detail-section-heading h2 { font-size: clamp(27px, 3vw, 40px); letter-spacing: -.04em; font-weight: 800; line-height: 1.08; margin: 0; max-width: min(46ch, 100%); text-wrap: balance; }
 .detail-program .detail-section-heading h2 { font-size: clamp(30px, 3.6vw, 50px); line-height: 1.06; letter-spacing: -.045em; }
 .detail-program .detail-section-heading { margin-bottom: 34px; }
 .detail-program .detail-section-number { width: 36px; height: 36px; border-radius: 10px; }
@@ -785,14 +785,14 @@
 .detail-program-fees .detail-fee-panel > .detail-price { font-size: clamp(34px, 4vw, 46px); }
 .detail-program-fees .detail-fee-panel .detail-keylines > div { padding-block: 16px; }
 .detail-program [data-detail-section="related"] { background: var(--detail-paper); }
-.detail-prose { font-size: 15px; line-height: 1.85; color: var(--detail-muted); max-width: 96ch; white-space: pre-line; overflow-wrap: anywhere; margin: 0; }
-.detail-editorial-content > .detail-editorial-intro { max-width: min(92ch, 100%); }
+.detail-prose { font-size: 15px; line-height: 1.85; color: var(--detail-muted); max-width: 112ch; white-space: pre-line; overflow-wrap: anywhere; margin: 0; }
+.detail-editorial-content > .detail-editorial-intro { max-width: min(112ch, 100%); }
 .detail-destination .detail-editorial-content > .detail-editorial-intro,
-.detail-city .detail-editorial-content > .detail-editorial-intro { max-width: min(92ch, calc(100% - 76px)); }
+.detail-city .detail-editorial-content > .detail-editorial-intro { max-width: min(112ch, calc(100% - 76px)); }
 .detail-university .detail-editorial-content > .detail-editorial-intro,
-.detail-program .detail-editorial-content > .detail-editorial-intro { max-width: min(92ch, 100%); }
+.detail-program .detail-editorial-content > .detail-editorial-intro { max-width: min(112ch, 100%); }
 .detail-snapshot { padding: 22px 26px; border: 1px solid var(--detail-line); border-inline-start: 4px solid var(--detail-accent); background: var(--detail-white); }
-.detail-overview-single .detail-snapshot { max-width: min(96ch, 100%); }
+.detail-overview-single .detail-snapshot { max-width: min(112ch, 100%); }
 .detail-program-story .detail-snapshot { max-width: none; }
 .detail-split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 38px; align-items: start; }
 .detail-university .detail-split { grid-template-columns: minmax(260px, .65fr) minmax(0, 1.35fr); }
