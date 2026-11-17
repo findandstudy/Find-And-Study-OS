@@ -537,7 +537,12 @@ export function normalizeGeneratedPublicEditorialContent(content: DetailContent)
       .replace(/\bCourse Finder\b/giu, "the study search")
       .replace(/\bFind (?:&|and) Study OS\b/giu, "study platform")
       .replace(/\badmin panel\b/giu, "website")
-      .replace(/\bCMS\b/gu, "website");
+      .replace(/\bCMS\b/gu, "website")
+      .replace(/\bsource records?\b/giu, "published information")
+      .replace(/\bconnected sources?\b/giu, "published information")
+      .replace(/\bcatalog(?:ue)?\b/giu, "study choices")
+      .replace(/\bprompts?\b/giu, "content guidance")
+      .replace(/\beditorial review\b/giu, "content review");
     if (content.kind !== "destination" || !content.locale.toLocaleLowerCase("en-US").startsWith("en")) return value;
     const protectedValues: string[] = [];
     for (const officialName of protectedEnglishTurkeyNames) {
@@ -704,9 +709,11 @@ export function evaluateDetailContentQuality(input: {
   const thin = sections.filter(section => sectionCharacterCount(section) < (planByKey.get(section.key)?.minCharacters ?? 80)).map(section => section.key);
   if (thin.length) issues.push({ code: "THIN_SECTION_COPY", severity: "warning", sections: thin, message: "One or more generated sections are below their information-value target." });
   const depth = WHOLE_PAGE_DEPTH[input.plan.kind];
+  let meetsAbsoluteDepth = true;
   if (depth && input.plan.sections.length >= depth.minSections) {
     const substantive = sections.filter(section => sectionCharacterCount(section) >= depth.sectionFloor);
     const totalCharacters = substantive.reduce((sum, section) => sum + sectionCharacterCount(section), 0);
+    meetsAbsoluteDepth = substantive.length >= depth.minSections - 2 && totalCharacters >= depth.totalFloor;
     if (substantive.length < depth.minSections - 2 || totalCharacters < depth.totalFloor) issues.push({
       code: depth.code,
       severity: substantive.length < depth.blockerSections || totalCharacters < depth.blockerTotal ? "blocker" : "warning",
@@ -823,7 +830,11 @@ export function evaluateDetailContentQuality(input: {
     });
     if (regressions.length) issues.push({
       code: "EXCESSIVE_CONTENT_LOSS",
-      severity: regressions.some(item => item.ratio < (item.sourceRoutedStructure ? 0.4 : 0.55)) ? "blocker" : "warning",
+      // A previously overlong page must not permanently prevent a concise,
+      // source-backed replacement. Keep the relative comparison visible, but
+      // only block when the regenerated page also misses the absolute depth
+      // contract for its detail-page type.
+      severity: !meetsAbsoluteDepth && regressions.some(item => item.ratio < (item.sourceRoutedStructure ? 0.4 : 0.55)) ? "blocker" : "warning",
       sections: regressions.map(item => item.key),
       message: `Regeneration removed too much useful editorial depth compared with the existing page (${regressions.map(item => `${item.key}:${Math.round(item.ratio * 100)}%`).join(", ")}).`,
     });

@@ -804,8 +804,8 @@ export default function CatalogPagesInventory() {
                 </p>
                 <p className="mt-1 text-xs opacity-80">
                   {tr
-                    ? "İçerik, SEO ve eksik görseller tek taslakta hazırlanır; mevcut görseller korunur ve otomatik yayın yapılmaz."
-                    : "Content, SEO and missing images are prepared in one review draft; existing images are preserved. Nothing was auto-published."}
+                    ? "İçerik, SEO ve görseller tek taslakta hazırlanır; elle yüklenen yerel görseller korunur, önceki otomatik görseller yenilenir ve otomatik yayın yapılmaz."
+                    : "Content, SEO and images are prepared in one review draft; manually uploaded local images are preserved, previous generated images are refreshed, and nothing is auto-published."}
                 </p>
                 {generationReport.results.some((item) => item.quality) && (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -1072,8 +1072,8 @@ export default function CatalogPagesInventory() {
                           if (
                             window.confirm(
                               tr
-                                ? `${selectedRows.length} sayfanın İngilizce içerik, SEO ve eksik görselleri yeniden oluşturulsun mu? Sonuçlar yalnız taslak olur; mevcut görseller korunur.`
-                                : `Regenerate English content, SEO and missing images for ${selectedRows.length} page(s)? Results remain drafts and existing images are preserved.`,
+                                ? `${selectedRows.length} sayfanın İngilizce içerik, SEO ve görselleri yeniden oluşturulsun mu? Sonuçlar yalnız taslak olur; elle yüklenen yerel görseller korunur, önceki otomatik görseller yenilenir.`
+                                : `Regenerate English content, SEO and images for ${selectedRows.length} page(s)? Results remain drafts; manually uploaded local images are preserved and previous generated images are refreshed.`,
                             )
                           )
                             reapply.mutate({
