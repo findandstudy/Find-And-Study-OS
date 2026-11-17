@@ -203,25 +203,29 @@ export function localizedDuration(value: string | null | undefined, locale: stri
 
 export const DETAIL_COPY = {
   ...DETAIL_PRESENTATION_LOCALES,
-  en: { from: "From", institutionLocation: "Institution location", campus: "Campus", legacyPrice: "Listed tuition · confirmation required", confirmPrice: "Confirm tuition with an adviser", durationAsListed: "Duration · as listed", courseInformation: "Catalogue information", catalogueNote: "Details supplied in the catalogue. Confirm the campus, study mode and duration for your selected intake.", overview: "At a glance", studyOptions: "Explore your study options", catalogue: "Study catalogue", destination: "Study destination", city: "Student city", institution: "University profile", program: "Program guide", country: "Country", mode: "Study mode", intakes: "Intakes listed", decision: "Decision time listed", scrollTable: "Scroll to see all program details", unavailable: "Details are not available yet.", next: "Your next step", priceBasis: "The displayed amount follows the published fee basis; confirm any conditions before applying.", durationNote: "Multiple durations are listed. Confirm the duration for your chosen study mode and intake.", universityCount: "Universities", programCount: "Programs" },
+  en: { from: "From", institutionLocation: "Institution location", campus: "Campus", legacyPrice: "Listed tuition", confirmPrice: "Tuition details unavailable", durationAsListed: "Duration · as listed", courseInformation: "Programme information", catalogueNote: "Programme details for the selected study option.", overview: "At a glance", studyOptions: "Explore your study options", catalogue: "Study options", destination: "Study destination", city: "Student city", institution: "University profile", program: "Program guide", country: "Country", mode: "Study mode", intakes: "Intakes listed", decision: "Decision time listed", scrollTable: "Scroll to see all program details", unavailable: "Details are not available yet.", next: "Your next step", priceBasis: "The displayed amount follows the published fee basis.", durationNote: "Multiple durations are available for different study options.", universityCount: "Universities", programCount: "Programs" },
   tr: { from: "Başlangıç", institutionLocation: "Kurumun konumu", campus: "Kampüs", legacyPrice: "Katalog ücreti · teyit gerekli", confirmPrice: "Öğrenim ücretini danışmana sorun", durationAsListed: "Süre · katalogdaki bilgi", courseInformation: "Katalog bilgileri", catalogueNote: "Katalogda verilen bilgilerdir. Seçtiğiniz dönem için kampüsü, eğitim şeklini ve süreyi teyit edin.", overview: "Bir bakışta", studyOptions: "Eğitim seçeneklerini keşfedin", catalogue: "Eğitim kataloğu", destination: "Eğitim destinasyonu", city: "Öğrenci şehri", institution: "Üniversite profili", program: "Program rehberi", country: "Ülke", mode: "Eğitim şekli", intakes: "Katalogdaki dönemler", decision: "Katalogdaki karar süresi", scrollTable: "Tüm program bilgileri için tabloyu kaydırın", unavailable: "Ayrıntılar henüz mevcut değil.", next: "Sonraki adımınız", priceBasis: "Gösterilen tutar yayımlanan ücret esasına göredir; başvurmadan önce koşulları teyit edin.", durationNote: "Birden fazla süre listeleniyor. Seçtiğiniz eğitim şekli ve dönem için süreyi teyit edin.", universityCount: "Üniversiteler", programCount: "Programlar" },
   ar: { from: "ابتداءً من", institutionLocation: "موقع المؤسسة", campus: "الحرم الجامعي", legacyPrice: "الرسوم المدرجة · يلزم التأكيد", confirmPrice: "تأكد من الرسوم مع المستشار", durationAsListed: "المدة · كما وردت", courseInformation: "معلومات الدليل", catalogueNote: "معلومات واردة في الدليل. تأكد من الحرم ونمط الدراسة والمدة للفصل الذي تختاره.", overview: "لمحة سريعة", studyOptions: "اكتشف خيارات الدراسة", catalogue: "دليل الدراسة", destination: "وجهة الدراسة", city: "مدينة طلابية", institution: "الجامعة", program: "دليل البرنامج", country: "البلد", mode: "نمط الدراسة", intakes: "الفصول المدرجة", decision: "مدة القرار المدرجة", scrollTable: "مرّر للاطلاع على جميع تفاصيل البرامج", unavailable: "التفاصيل غير متاحة بعد.", next: "خطوتك التالية", priceBasis: "يعتمد المبلغ المعروض على أساس الرسوم المنشور؛ تأكد من الشروط قبل التقديم.", durationNote: "توجد مدد متعددة. تأكد من مدة نمط الدراسة والفصل المختار.", universityCount: "الجامعات", programCount: "البرامج" },
 } as const;
 const PUBLIC_CATALOGUE_WORD = /catalog(?:ue)?|katalog|каталог|目录|कैटलॉग|کیٹلاگ|کاتالوگ|феҳрист|ফেহরিস্ত|ক্যাটালগ|catálogo|क्याटलग|danh mục|카탈로그/giu;
 const publicFacingCopy = (value: string) => value.replace(PUBLIC_CATALOGUE_WORD, "").replace(/\s+([,.;:!?])/g, "$1").replace(/[ \t]{2,}/g, " ").trim();
+const firstClause = (value: string) => value.split(/\s*[·;؛]\s*/u)[0]?.trim() || value.trim();
+const firstSentence = (value: string) => value.match(/^.*?[.!?。！？](?:\s|$)/u)?.[0]?.trim() || value.trim();
 export function detailCopy(locale: string) {
   const base = DETAIL_COPY[locale as keyof typeof DETAIL_COPY] || DETAIL_COPY.en;
   // “Catalogue” is an internal source concept, not visitor-facing copy. Use
   // the already-localised study/program labels and clean legacy saved phrases.
   return {
     ...base,
-    legacyPrice: publicFacingCopy(base.legacyPrice) || base.confirmPrice,
+    legacyPrice: firstClause(publicFacingCopy(base.legacyPrice)) || publicFacingCopy(base.unavailable),
+    confirmPrice: publicFacingCopy(base.unavailable),
     durationAsListed: publicFacingCopy(base.durationAsListed) || base.mode,
     courseInformation: base.program,
-    catalogueNote: publicFacingCopy(base.durationNote),
+    catalogueNote: publicFacingCopy(base.courseInformation) || publicFacingCopy(base.program),
     catalogue: base.studyOptions,
     intakes: publicFacingCopy(base.intakes),
     decision: publicFacingCopy(base.decision),
-    durationNote: publicFacingCopy(base.durationNote),
+    priceBasis: firstClause(publicFacingCopy(base.priceBasis)),
+    durationNote: firstSentence(publicFacingCopy(base.durationNote)),
   };
 }

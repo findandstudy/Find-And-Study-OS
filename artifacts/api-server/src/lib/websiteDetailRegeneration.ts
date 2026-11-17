@@ -270,6 +270,7 @@ async function addGeneratedImages(params: {
   entityName: string;
   content: DetailContent;
   existing: DetailContent;
+  visualContext: string;
   ai: AiContentService;
 }) {
   let generatedImages = 0;
@@ -280,7 +281,15 @@ async function addGeneratedImages(params: {
     const index = sections.findIndex(section => section.key === target.key);
     if (index < 0) continue;
     const section = sections[index];
-    const existingImages = existingByKey.get(target.key)?.images ?? [];
+    // Full regeneration replaces earlier generated/stock editorial media so a
+    // stale image cannot survive forever or leak from a country page into a
+    // city page. Explicit local/manual assets outside the generated detail-page
+    // namespace remain protected.
+    const existingImages = (existingByKey.get(target.key)?.images ?? []).filter(image => {
+      const src = image.src.trim();
+      return !src.startsWith("/api/storage/public-website-assets/detail-pages/")
+        && !/^https?:\/\//iu.test(src);
+    });
     const images = [...existingImages];
     for (let variation = images.length + 1; variation <= target.count; variation += 1) {
       try {
@@ -290,6 +299,7 @@ async function addGeneratedImages(params: {
           sectionKey: section.key,
           sectionTitle: section.title,
           sectionBody: section.body ?? section.title,
+          visualContext: params.visualContext,
           variation,
         });
         const contentSha256 = createHash("sha256").update(generated.buffer).digest("hex");
@@ -346,6 +356,11 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
     return [{ key, title: section.title, templateBody: shared.get(key)?.body ?? "", instruction: setting.instruction }];
   });
   const facts = verifiedGenerationFacts(kind, payload);
+  const visualContext = JSON.stringify(Object.fromEntries(Object.entries(facts).filter(([key]) => [
+    "destination", "country", "city", "university", "program", "description", "type", "address",
+    "degree", "field", "teachingLanguage", "duration", "climateSummary", "campusGeography",
+    "transportModes", "housingSummary",
+  ].includes(key)))).slice(0, 3_000);
   const plan = buildDetailGenerationPlan({
     kind,
     entityName: entityFacts(kind, payload, entityId).name,
@@ -416,13 +431,12 @@ async function buildAiEnglishSource(kind: DetailContentKind, entityId: number, p
     entityName,
     content: contentWithSeo,
     existing,
+    visualContext,
     ai,
   });
   return {
-    // Existing media is deliberately preserved by addGeneratedImages. Run the
-    // public-copy normalizer after that merge as well so an old alt/caption
-    // cannot bypass the same public wording contract applied to newly written
-    // sections. This is idempotent and applies to every detail kind.
+    // Run the public-copy normalizer after the media merge as well so legacy
+    // alt/caption wording cannot bypass the contract applied to new sections.
     content: normalizeGeneratedPublicEditorialContent(visual.content),
     plan,
     generatedSections: plan.sections.length,

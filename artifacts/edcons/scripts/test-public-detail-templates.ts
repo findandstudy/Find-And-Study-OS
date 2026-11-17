@@ -190,7 +190,8 @@ test("program detail labels legacy display fees but reserves offers for verified
   assert.equal(tuitionOffer({ ...verified, source: "legacy", verified: false }, true), undefined);
   assert.equal(tuitionOffer({ ...verified, currency: "XYZ" }, true), undefined);
   const html = renderToStaticMarkup(createElement(DetailPrice, { tuition: { amount: 500, currency: "GBP", verified: false, source: "legacy", frequency: null }, locale: "en", verifiedLabel: "Verified price" }));
-  assert.match(html, /confirmation required/);
+  assert.match(html, /Listed tuition/);
+  assert.doesNotMatch(html, /confirmation required|confirm|verify/i);
   assert.doesNotMatch(html, /Verified price|schema.org|Offer/);
   const from = renderToStaticMarkup(createElement(DetailPrice, { tuition: { amount: 500, currency: "GBP", verified: true, source: "verified", frequency: "YEAR", isFrom: true }, locale: "en", verifiedLabel: "Verified price" }));
   assert.match(from, /From/);
@@ -491,7 +492,7 @@ test("authoritative university tuition suppresses every legacy fee and raw intak
   }), createElement("strong", {}, "Authoritative tuition slot")]) {
     const html = renderProgramCard({ tuitionContent, omitLegacyTiming: true });
     assert.doesNotMatch(html, /50,000|40,000|30,000|20,000|10,000|LEGACY_INTAKE_MUST_NOT_LEAK|courseFinderPage\.(scholarship|depositStrip|languageFee)|% OFF/);
-    if (tuitionContent !== null) assert.match(html, /Confirm tuition with an adviser|Authoritative tuition slot/);
+    if (tuitionContent !== null) assert.match(html, /Details are not available yet|Authoritative tuition slot/);
   }
   for (const tuition of [undefined, null]) assert.equal(displayTuition({ ...cardFixture, tuition: tuition ?? null }, "en"), null);
 });
@@ -928,7 +929,7 @@ test("city cards and modal cannot revive legacy fees or importer timing when aut
   assert.match(cityProgramCards, /program=\{\{ \.\.\.selected, universityPath: selected\.universityPath \?\? "" \}\}/);
   for (const tuition of [undefined, null]) {
     const html = renderPublicElement(createElement(CityProgramCards, { programs: [{ ...cardFixture, tuition, applicationFee: 90000, advancedFee: 80000 }] }));
-    assert.match(html, /Confirm tuition with an adviser/);
+    assert.match(html, /Details are not available yet/);
     assert.doesNotMatch(html, /90,000|80,000|50,000|40,000|30,000|20,000|10,000|LEGACY_INTAKE_MUST_NOT_LEAK|courseFinderPage\.(scholarship|depositStrip|languageFee)|% OFF|catalogDetail\.verifiedPrice/);
   }
   const tuition = { amount: 725, currency: "GBP", verified: true, source: "verified" as const, frequency: "YEAR" };
@@ -937,7 +938,8 @@ test("city cards and modal cannot revive legacy fees or importer timing when aut
   assert.match(verified, /catalogDetail\.verifiedPrice/);
   assert.doesNotMatch(verified, /50,000|40,000|30,000|20,000|10,000|LEGACY_INTAKE_MUST_NOT_LEAK/);
   const legacy = renderPublicElement(createElement(CityProgramCards, { programs: [{ ...cardFixture, tuition: { ...tuition, verified: false, source: "legacy", frequency: null } }] }));
-  assert.match(legacy, /confirmation required/);
+  assert.match(legacy, /Listed tuition/);
+  assert.doesNotMatch(legacy, /confirmation required|confirm|verify/i);
   assert.doesNotMatch(legacy, /catalogDetail\.verifiedPrice/);
 });
 
@@ -945,7 +947,7 @@ test("cached minimal city rows render no invented institution link, photograph o
   const oldRow: CityProgramCardData = { id: 145792, name: "Source program", canonicalPath: "/en/programs/source-program-145792", universityName: "Source institution", degree: null, field: null };
   const html = renderPublicElement(createElement(CityProgramCards, { programs: [oldRow] }));
   assert.match(html, /Source program|Source institution/);
-  assert.match(html, /Confirm tuition with an adviser/);
+  assert.match(html, /Details are not available yet/);
   assert.doesNotMatch(html, /href="[^\"]*universities|href="[^\"]*\?programId=|<img|\bGBP\b|\bUSD\b|£|\$|courseFinderPage\.(degree|field|language|duration)|verifiedPrice/);
   assert.match(html, /<button[^>]*disabled=""/);
   assert.match(cityProgramCards, /universityPath: program\.universityPath \?\? ""/);
