@@ -357,7 +357,13 @@ export async function readPublishedDetailHeroImageUrls(
   entityIds: number[],
   locale: string,
 ): Promise<Map<number, string>> {
-  const ids = [...new Set(entityIds.filter((entityId) => Number.isInteger(entityId) && entityId > 0))];
+  // PostgreSQL drivers can surface integer identifiers as numeric strings in
+  // aggregate/bulk paths even though the public contract exposes numbers.
+  // Normalize at this boundary so valid published media is not silently
+  // discarded before the batched lookup runs.
+  const ids = [...new Set(entityIds
+    .map((entityId) => Number(entityId))
+    .filter((entityId) => Number.isSafeInteger(entityId) && entityId > 0))];
   if (!ids.length) return new Map();
 
   const locales = locale === "en" ? ["en"] : [locale, "en"];
