@@ -133,7 +133,10 @@ test("university template keeps overview, facts and governed programs connected"
 
 test("university template preserves hero contrast and a usable editorial measure", () => {
   assert.match(css, /\[data-detail-section="hero"\][\s\S]*\.detail-identity \.detail-eyebrow[\s\S]*color: var\(--detail-hero-text, #fff\)/);
-  assert.match(css, /\.detail-editorial-content > \.detail-editorial-intro \{ max-width: min\(74ch, 100%\); \}/);
+  assert.match(css, /\.detail-editorial-content > \.detail-editorial-intro \{ max-width: min\(92ch, 100%\); \}/);
+  assert.match(css, /\.detail-destination \.detail-editorial-content > \.detail-editorial-intro,[\s\S]*\.detail-city \.detail-editorial-content > \.detail-editorial-intro \{ max-width: min\(92ch, calc\(100% - 76px\)\); \}/);
+  assert.match(css, /\.detail-university \.detail-editorial-content > \.detail-editorial-intro,[\s\S]*\.detail-program \.detail-editorial-content > \.detail-editorial-intro \{ max-width: min\(92ch, 100%\); \}/);
+  assert.match(css, /\.detail-overview-single \.detail-snapshot \{ max-width: min\(96ch, 100%\); \}/);
   assert.match(css, /\.detail-university \.detail-split \{ grid-template-columns: minmax\(260px, \.65fr\) minmax\(0, 1\.35fr\); \}/);
   assert.match(css, /\.detail-split > \.detail-editorial-content \{ grid-column: 1 \/ -1; width: 100%; margin-inline: 0; \}/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-split \{ grid-template-columns: 1fr;/);
