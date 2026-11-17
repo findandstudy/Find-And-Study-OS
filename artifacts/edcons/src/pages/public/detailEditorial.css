@@ -571,7 +571,7 @@
 .detail-destination .detail-editorial-intro,
 .detail-city .detail-editorial-intro {
   margin-inline-start: 76px;
-  max-width: 70ch;
+  max-width: calc(100% - 76px);
   font-size: 18.5px;
   line-height: 1.65;
 }
