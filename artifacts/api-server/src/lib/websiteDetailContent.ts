@@ -387,13 +387,34 @@ export async function readPublishedDetailHeroImageUrls(
       : null;
     return content?.kind === kind && content.entityId === entityId && content.locale === contentLocale ? content : null;
   };
+  const readRawHeroSrc = (entityId: number, contentLocale: string): string | null => {
+    const snapshot = latestBySlug.get(detailContentSlug(kind, entityId, contentLocale));
+    if (!Array.isArray(snapshot) || snapshot.length !== 1) return null;
+    const block = snapshot[0];
+    if (!block || typeof block !== "object" || Array.isArray(block)) return null;
+    const content = (block as Record<string, unknown>).content;
+    if (!content || typeof content !== "object" || Array.isArray(content)) return null;
+    const sections = (content as Record<string, unknown>).sections;
+    if (!Array.isArray(sections)) return null;
+    const hero = sections.find((section) => section && typeof section === "object" && !Array.isArray(section) && (section as Record<string, unknown>).key === "hero");
+    if (!hero || typeof hero !== "object" || Array.isArray(hero)) return null;
+    const images = (hero as Record<string, unknown>).images;
+    if (!Array.isArray(images) || !images[0] || typeof images[0] !== "object" || Array.isArray(images[0])) return null;
+    const src = (images[0] as Record<string, unknown>).src;
+    return typeof src === "string" && src.trim() ? src.trim() : null;
+  };
 
   const result = new Map<number, string>();
   for (const entityId of ids) {
     const localized = read(entityId, locale);
     const english = locale === "en" ? null : read(entityId, "en");
     const content = localized ? inheritEnglishDetailStructure(localized, english) : null;
-    const src = content?.sections.find((section) => section.key === "hero")?.images?.[0]?.src?.trim();
+    // Read the reviewed media directly from the frozen publication snapshot as
+    // a fail-safe. This keeps directory/detail-card media available even when a
+    // newer contract field makes the full editorial parser conservatively
+    // reject an otherwise valid older snapshot.
+    const src = content?.sections.find((section) => section.key === "hero")?.images?.[0]?.src?.trim()
+      || readRawHeroSrc(entityId, locale);
     if (src) result.set(entityId, src);
   }
   return result;

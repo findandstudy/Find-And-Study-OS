@@ -71,6 +71,7 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.ok(renderReadModel.includes(localizedRequirements), "SSR requirements match the API translation projection");
   const priceReadModel = read("../src/lib/publicCatalogPriceReadModel.ts");
   const destinations = read("../src/routes/destinations.ts");
+  const detailContent = read("../src/lib/websiteDetailContent.ts");
   const publicWeb = read("../src/routes/public-web.ts");
   const websiteAdmin = read("../src/routes/website.ts");
   const catalogAdmin = read("../src/routes/catalog.ts");
@@ -140,6 +141,7 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(destinations, /PUBLIC_DESTINATION_TRANSLATION_NOT_PUBLISHED/);
   assert.match(destinations, /readPublishedDetailHeroImageUrls\("city", cityCandidates\.map\(\(city\) => city\.id\), locale\)/);
   assert.match(destinations, /heroImageUrl: cityHeroImageUrls\.get\(city\.id\) \?\? null/);
+  assert.match(detailContent, /readRawHeroSrc/);
   assert.match(destinations, /contentPolicy/);
   assert.doesNotMatch(destinations, /\.limit\(50\)/);
   assert.match(publicWeb, /websiteBlogPostsTable\.status, "published"/);
