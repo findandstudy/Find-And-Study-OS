@@ -597,11 +597,11 @@
 .detail-destination .detail-editorial-steps li { display: block; padding: 22px; border-inline-end: 1px solid var(--detail-line); background: var(--detail-white); }
 .detail-destination .detail-editorial-steps li > span { border: 0; padding: 0; place-items: start; background: transparent; }
 
-/* A country climate section contains a handful of planning notes, not the
-   city's twelve-month ribbon. Never squeeze those notes into month-width
-   tracks. */
+/* Editorial climate sections contain a handful of planning notes, not the
+   twelve-month ribbon used by the empty/monthly preview. Never squeeze those
+   notes into month-width tracks on any detail-page kind. */
 .detail-destination .detail-climate-shell { border-top: 0; padding-top: 0; }
-.detail-destination .detail-climate-ribbon {
+.detail-climate-ribbon.detail-climate-card-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: 1px;
   margin-top: 30px;
@@ -612,15 +612,15 @@
   box-shadow: var(--detail-shadow);
   scroll-snap-type: none;
 }
-.detail-destination .detail-climate-ribbon article {
+.detail-climate-ribbon.detail-climate-card-grid article {
   min-width: 0;
   min-height: 180px;
   padding: 26px 28px;
   border: 0;
   background: rgba(255,255,255,.72);
 }
-.detail-destination .detail-climate-ribbon span { margin-bottom: 18px; }
-.detail-destination .detail-climate-ribbon b {
+.detail-climate-ribbon.detail-climate-card-grid span { margin-bottom: 18px; }
+.detail-climate-ribbon.detail-climate-card-grid b {
   max-width: 34ch;
   font-family: Manrope, "Segoe UI", sans-serif;
   font-size: 18px;
@@ -674,7 +674,7 @@
   .detail-destination .detail-editorial-cards { grid-template-columns: 1fr; }
   .detail-destination .detail-editorial-faq { columns: 1; }
   .detail-destination .detail-editorial-steps { grid-template-columns: 1fr; }
-  .detail-destination .detail-climate-ribbon { grid-template-columns: 1fr; }
+  .detail-climate-ribbon.detail-climate-card-grid { grid-template-columns: 1fr; }
   .detail-city .detail-editorial-cards article,
   .detail-city .detail-grid > *,
   .detail-city .detail-facts > div { grid-column: 1 / -1; }

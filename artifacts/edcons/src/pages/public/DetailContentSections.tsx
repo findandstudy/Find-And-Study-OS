@@ -162,7 +162,7 @@ function detailContentSectionBody(section: DetailContentSection, locale: string,
 
   if (section.key === "climate") return <div className="detail-wrap detail-editorial-content detail-climate-shell">
     <div className="detail-climate-head">{heading}</div>
-    {!!section.cards?.length && <div className="detail-climate-ribbon">{section.cards.map((card, i) => <article key={i}><span>{card.title}</span><b>{card.body}</b></article>)}</div>}
+    {!!section.cards?.length && <div className="detail-climate-ribbon detail-climate-card-grid">{section.cards.map((card, i) => <article key={i}><span>{card.title}</span><b>{card.body}</b></article>)}</div>}
     {section.table && <div className="detail-editorial-table" role="region" aria-label={section.title} tabIndex={0}><table><caption className="sr-only">{section.title}</caption><thead><tr>{section.table.columns.map((column, i) => <th scope="col" key={i}>{column}</th>)}</tr></thead><tbody>{section.table.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => j === 0 ? <th scope="row" key={j}>{cell}</th> : <td key={j}>{cell}</td>)}</tr>)}</tbody></table></div>}
   </div>;
 

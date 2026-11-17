@@ -281,7 +281,8 @@ test("public detail presentation retains the approved HTML-reference visual lang
   assert.match(styles, /\.detail-editorial-section\.is-climate \.detail-editorial-cards/);
   assert.match(styles, /counter-reset: detail-chapter 0/);
   assert.match(styles, /\.detail-destination \.detail-editorial-cards \{\s*grid-template-columns: repeat\(auto-fit/);
-  assert.match(styles, /\.detail-destination \.detail-climate-ribbon \{\s*grid-template-columns: repeat\(auto-fit/);
+  assert.match(styles, /\.detail-climate-ribbon\.detail-climate-card-grid \{\s*grid-template-columns: repeat\(auto-fit/);
+  assert.match(contentSectionsSource, /className="detail-climate-ribbon detail-climate-card-grid"/);
   assert.match(styles, /\.detail-housing-strip article\.is-text-only/);
   assert.match(styles, /@media \(max-width: 760px\)/);
   assert.match(styles, /\[dir="rtl"\]/);
