@@ -389,6 +389,7 @@ export function buildDetailGenerationPlan(input: {
         "Never name a university or programme in the city hero. Across editorial sections, use no more than three distinct verified catalogue examples and do not repeat one institution as the default example.",
         "City editorial copy must not narrate changing university or programme totals. Live catalogue components own all counters, availability and result lists.",
         "Keep the city hero to 24–42 words and no more than two sentences. Lead with study setting and everyday student experience, not a catalogue summary.",
+        "For climate, transport, campus and housing sections, keep the first sentence to 6–12 words and under 96 characters because it feeds a compact hero box; move all supporting detail into later sentences.",
         "The city gallery may discuss only visible urban, neighbourhood, transport, campus-area or daily-life cues. It must never describe agency staff, fairs, campaigns, ambassadors or social content.",
         "Do not let one topic such as transport, weather, housing or language preparation dominate unrelated sections. Give each planning question one clear home.",
         "Use institution or programme examples only when their exact names are present in VERIFIED_FACTS; never add remembered local examples.",

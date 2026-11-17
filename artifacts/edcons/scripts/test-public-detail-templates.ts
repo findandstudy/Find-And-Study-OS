@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sanitizePublicHtmlContent, sanitizePublicRichText } from "../src/lib/publicHtmlSanitizer";
-import { catalogueCount, DETAIL_COPY, detailCopy, detailMoney, displayTuition, durationIsAmbiguous, localizedCityName, localizedCountryName, localizedDegreeName, localizedInstitutionName, localizedLanguageNames, localizedUniversityType, splitRequirements, localDetailPath, tuitionOffer } from "../src/pages/public/detailPresentation";
+import { catalogueCount, compactDetailBoxText, DETAIL_COPY, detailCopy, detailMoney, displayTuition, durationIsAmbiguous, localizedCityName, localizedCountryName, localizedDegreeName, localizedInstitutionName, localizedLanguageNames, localizedUniversityType, splitRequirements, localDetailPath, tuitionOffer } from "../src/pages/public/detailPresentation";
 import { SUPPORTED_LANGUAGES } from "../src/lib/i18n";
 import { defaultDetailLayout, parseDetailLayout } from "../src/lib/website/detailLayoutContract";
 import React, { createElement } from "react";
@@ -288,6 +288,13 @@ test("editorial presentation keeps honest counts, localized copy and safe naviga
   assert.match(css, /focus-visible/);
   assert.match(universityBrowser, /role="region" aria-label/);
   for (const source of [program, university, country, city]) assert.doesNotMatch(source, /Fenerbahçe|unsplash|verified student/i);
+});
+
+test("compact hero box copy has a deterministic twelve-word ceiling", () => {
+  const compact = compactDetailBoxText("One two three four five six seven eight nine ten eleven twelve thirteen fourteen", 12);
+  assert.equal(compact, "One two three four five six seven eight nine ten eleven twelve…");
+  assert.equal(compact.split(/\s+/u).length, 12);
+  assert.equal(compactDetailBoxText("Short verified fact", 12), "Short verified fact");
 });
 
 test("missing or unsafe catalogue photographs render no media or fabricated fallback", () => {
@@ -870,6 +877,11 @@ test("city hero combines catalogue counters and catalogue-owned language facts",
   assert.match(city, /<dt>\{fact\.title\}<\/dt><dd>\{fact\.body\}<\/dd>/);
   assert.match(css, /\.detail-city-coverstrip \{[^}]*repeat\(auto-fit, minmax\(118px, 1fr\)\)/);
   assert.match(css, /\.detail-city-coverstrip \{[^}]*overflow: hidden/);
+  assert.match(css, /\.detail-factbar \.detail-facts > div,[\s\S]*\.detail-city-coverstrip > div,[\s\S]*\.detail-country-stats > div \{[^}]*align-items: center;[^}]*justify-content: center;[^}]*text-align: center;/);
+  assert.match(city, /compactDetailBoxText/);
+  assert.match(city, /\.map\(fact => \(\{ \.\.\.fact, body: compactHeroFact\(fact\.body\) \}\)\)/);
+  assert.match(program, /<DetailFacts compactMaxWords=\{12\} items=/);
+  assert.match(editorial, /compactMaxWords && typeof item\.value === "string" \? compactDetailBoxText\(item\.value, compactMaxWords\)/);
 });
 
 test("city programs use the scope-locked browser while bounded cards retain their modal contract", () => {

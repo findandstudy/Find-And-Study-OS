@@ -759,6 +759,8 @@ test("city, university and programme plans enforce type-specific editorial contr
   assert.ok(cityPlan.sections.flatMap(item => item.allocatedEntities).length <= 3);
   assert.match(cityPlan.pageRules.join(" "), /city guide city-first/i);
   assert.match(cityPlan.pageRules.join(" "), /24–42 words/i);
+  assert.match(cityPlan.pageRules.join(" "), /6–12 words/i);
+  assert.match(cityPlan.pageRules.join(" "), /compact hero box/i);
 
   const universityPlan = buildDetailGenerationPlan({
     kind: "university",

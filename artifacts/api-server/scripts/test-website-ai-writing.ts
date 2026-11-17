@@ -133,8 +133,9 @@ test("city key facts generation asks for decision-useful copy without repeating 
     assert.equal(result.facts.body, body);
     assert.match(capturedPrompt, /90–160 word introduction/);
     assert.match(capturedPrompt, /do not repeat or narrate those counters/);
-    assert.match(capturedPrompt, /city sections whose key is campus or housing/);
-    assert.match(capturedPrompt, /8–14 words/);
+    assert.match(capturedPrompt, /city sections whose key is climate, transport, campus or housing/);
+    assert.match(capturedPrompt, /6–12 words/);
+    assert.match(capturedPrompt, /12-word ceiling is strict/);
     assert.match(capturedPrompt, /under 96 characters/);
     assert.match(capturedPrompt, /CATALOG_ENTITIES=/);
     assert.match(capturedPrompt, /complete allowlist for university and programme names/i);

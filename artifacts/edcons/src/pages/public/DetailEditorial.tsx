@@ -1,7 +1,7 @@
 import React, { useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ArrowUpRight, BookOpen, Building2, MapPin } from "lucide-react";
-import { localDetailPath, type DetailTuition, detailMoney, detailCopy } from "./detailPresentation";
+import { compactDetailBoxText, localDetailPath, type DetailTuition, detailMoney, detailCopy } from "./detailPresentation";
 
 /** A missing catalogue photograph leaves no fake campus or empty media frame. */
 export function DetailImage({ src, alt, className = "", priority = false }: { src: string | null | undefined; alt: string; className?: string; priority?: boolean }) {
@@ -31,10 +31,13 @@ export function DetailHeading({ number, eyebrow, title, children }: { number: st
   return <div className="detail-section-heading"><span className="detail-section-number" aria-hidden="true">{number}</span><div><p className="detail-eyebrow">{eyebrow}</p><h2>{title}</h2>{children}</div></div>;
 }
 
-export function DetailFacts({ items }: { items: { label: string; value?: ReactNode; icon?: ReactNode }[] }) {
+export function DetailFacts({ items, compactMaxWords }: { items: { label: string; value?: ReactNode; icon?: ReactNode }[]; compactMaxWords?: number }) {
   const visibleItems = items.filter(item => item.value !== null && item.value !== undefined && item.value !== "");
   if (visibleItems.length === 0) return null;
-  return <dl className="detail-facts">{visibleItems.map((item, index) => <div key={`${item.label}-${index}`}><dt>{item.icon && <span className="detail-fact-icon" aria-hidden="true">{item.icon}</span>}{item.label}</dt><dd><bdi>{item.value}</bdi></dd></div>)}</dl>;
+  return <dl className="detail-facts">{visibleItems.map((item, index) => {
+    const value = compactMaxWords && typeof item.value === "string" ? compactDetailBoxText(item.value, compactMaxWords) : item.value;
+    return <div key={`${item.label}-${index}`}><dt>{item.icon && <span className="detail-fact-icon" aria-hidden="true">{item.icon}</span>}{item.label}</dt><dd><bdi>{value}</bdi></dd></div>;
+  })}</dl>;
 }
 
 export function DetailPrice({ tuition, locale, verifiedLabel }: { tuition: DetailTuition | null; locale: string; verifiedLabel: string }) {
