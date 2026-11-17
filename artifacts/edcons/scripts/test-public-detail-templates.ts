@@ -141,6 +141,8 @@ test("university template preserves hero contrast and a usable editorial measure
   assert.match(css, /\.detail-overview-single \.detail-snapshot \{ max-width: 100%; \}/);
   assert.match(css, /\.detail-editorial-heading h2 \{ max-width: min\(46ch, 100%\);/);
   assert.match(css, /\.detail-section-heading h2 \{[^}]*max-width: min\(46ch, 100%\);/);
+  assert.match(css, /\.detail-hero-lead \{[^}]*max-width: min\(82ch, 100%\);/);
+  assert.match(css, /\.detail-country-cover-claim \{ max-width: min\(48ch, 100%\);/);
   assert.match(css, /\.detail-university \.detail-split \{ grid-template-columns: minmax\(260px, \.65fr\) minmax\(0, 1\.35fr\); \}/);
   assert.match(css, /\.detail-split > \.detail-editorial-content \{ grid-column: 1 \/ -1; width: 100%; margin-inline: 0; \}/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-split \{ grid-template-columns: 1fr;/);

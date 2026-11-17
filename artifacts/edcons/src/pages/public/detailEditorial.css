@@ -434,7 +434,7 @@
 .detail-program .detail-factbar .detail-facts dt { margin-bottom: 10px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .detail-program .detail-factbar .detail-facts dd { font-size: 16px; }
 .detail-university .detail-hero-main { min-height: min(72vh, 640px); padding-top: 112px; padding-bottom: 40px; grid-template-columns: minmax(0, 1.25fr) 360px; gap: 44px; }
-.detail-hero-lead { color: var(--detail-hero-text, #dce4ef); font-size: 17px; line-height: 1.65; max-width: 60ch; white-space: pre-line; margin: 12px 0 0; }
+.detail-hero-lead { color: var(--detail-hero-text, #dce4ef); font-size: 17px; line-height: 1.65; max-width: min(82ch, 100%); white-space: pre-line; margin: 12px 0 0; }
 .detail-hero-link { display: inline-flex; align-items: center; gap: 8px; color: var(--detail-hero-text, #dce9f8); font-size: 15px; line-height: 1.6; font-weight: 700; }
 .detail-hero-link:hover { text-decoration: underline; text-underline-offset: 4px; }
 .detail-cover-label { display: inline-flex; align-items: center; gap: 9px; padding: 6px 10px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.32); font-size: 11.5px; line-height: 1.5; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--detail-hero-text, #fff); }
@@ -466,7 +466,7 @@
 .detail-country-cover-kicker img { width: 24px; }
 .detail-country-cover h1, .detail-hero.is-destination.detail-country-cover h1 { margin: 14px 0 0; max-width: 14ch; color: #fff; font-size: clamp(46px, 7vw, 104px); line-height: .92; letter-spacing: -.055em; }
 .detail-country-cover-rule { height: 1px; background: rgba(255,255,255,.24); margin: 30px 0 26px; }
-.detail-country-cover-claim { max-width: 36ch; margin: 0; color: #d3dfed; font-size: clamp(18px, 2.2vw, 30px); font-weight: 600; line-height: 1.34; letter-spacing: -.022em; }
+.detail-country-cover-claim { max-width: min(48ch, 100%); margin: 0; color: #d3dfed; font-size: clamp(18px, 2.2vw, 30px); font-weight: 600; line-height: 1.34; letter-spacing: -.022em; }
 .detail-country-cover-claim span { display: block; }
 .detail-country-cover-claim b { color: #8fc2f5; font-weight: 800; letter-spacing: -.03em; }
 .detail-country-cover-foot { display: flex; flex-wrap: wrap; gap: 10px 30px; align-items: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,.24); color: #9fbbd8; font-size: 12.5px; }
