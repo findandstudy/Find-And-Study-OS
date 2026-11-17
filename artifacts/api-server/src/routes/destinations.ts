@@ -333,7 +333,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     (_, index) => cityCandidates.slice(index * 64, (index + 1) * 64).map((row) => row.id),
   );
 
-  const [localizedUniversityDelivery, localizedCityDeliveries, indexableUniversityIds, indexableProgramIds] = await Promise.all([
+  const [localizedUniversityDelivery, localizedCityDeliveries, cityHeroImageUrls, indexableUniversityIds, indexableProgramIds] = await Promise.all([
     readPublishedLocalizedEntities({
       entityType: "university",
       entityIds: universityRows.map((row) => row.id),
@@ -344,6 +344,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       entityIds,
       locale,
     }))),
+    readPublishedDetailHeroImageUrls("city", cityCandidates.map((city) => city.id), locale),
     internalLinkMode === "published"
       ? readIndexableUniversityIds({ locale, universityIds: universityRows.map((row) => row.id) })
       : Promise.resolve(null),
@@ -413,6 +414,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       name: localized.name,
       sourceName: city.name,
       universityCount: universityCountByCity.get(sourceKey) ?? 0,
+      heroImageUrl: cityHeroImageUrls.get(city.id) ?? null,
       canonicalPath: delivery.snapshot?.canonicalPath || buildPublicWebCanonicalPath({ entityType: "CITY", entityId: city.id, locale, slug: city.name }),
     }];
   }).slice(0, 24);

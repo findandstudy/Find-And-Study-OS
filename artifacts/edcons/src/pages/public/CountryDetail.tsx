@@ -77,7 +77,7 @@ type DestinationPayload = {
   destination: Destination;
   universities: UniversityBrief[];
   programs: ProgramBrief[];
-  cities: Array<{ id: number; name: string; sourceName: string; universityCount: number; canonicalPath: string }>;
+  cities: Array<{ id: number; name: string; sourceName: string; universityCount: number; heroImageUrl: string | null; canonicalPath: string }>;
   stats: { universityCount: number; programCount: number };
   meta: {
     locale: Language;
@@ -271,9 +271,9 @@ export default function CountryDetail({ slug }: { slug: string }) {
     [city.sourceName.toLocaleLowerCase("en-US"), city] as const,
   ]));
   const destinationDisplayName = localizedDestinationName;
-  const cities = [...data.cities.map(city => ({ name: detailDisplayTerm(editorial, city.sourceName || city.name, city.name), canonicalPath: city.canonicalPath, universityCount: city.universityCount })), ...cityNames
+  const cities = [...data.cities.map(city => ({ name: detailDisplayTerm(editorial, city.sourceName || city.name, city.name), canonicalPath: city.canonicalPath, universityCount: city.universityCount, heroImageUrl: fixStorageUrl(city.heroImageUrl) })), ...cityNames
     .filter(name => !cityLinks.has(name.toLocaleLowerCase("en-US")))
-    .map(name => ({ name: detailDisplayTerm(editorial, name), canonicalPath: null, universityCount: null }))];
+    .map(name => ({ name: detailDisplayTerm(editorial, name), canonicalPath: null, universityCount: null, heroImageUrl: null }))];
   const facts = [
     { label: t("countryDetail.language"), value: dest.language },
     { label: t("countryDetail.currency"), value: dest.currency },
@@ -312,9 +312,9 @@ export default function CountryDetail({ slug }: { slug: string }) {
               <span>{heroBody}</span>
             </p>
             <div className="detail-country-cover-foot">
-              {cities.length > 0 && <a href="#cities"><MapPin size={17} aria-hidden="true" />{t("countryDetail.popularCities")}</a>}
-              <Link href={primaryCtaHref}>{primaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></Link>
-              <Link href={secondaryCtaHref}>{secondaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></Link>
+              {cities.length > 0 && <a className="is-secondary" href="#cities"><MapPin size={17} aria-hidden="true" />{t("countryDetail.popularCities")}</a>}
+              <Link className="is-primary" href={primaryCtaHref}>{primaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></Link>
+              <Link className="is-secondary" href={secondaryCtaHref}>{secondaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></Link>
             </div>
           </div>
         </div>
@@ -363,7 +363,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
             const count = Number.isFinite(city.universityCount) ? city.universityCount : null;
             const countLabel = count === null ? null : t(count === 1 ? "countries.university" : "countries.universities");
             const countContent = count === null ? null : <p className="detail-city-university-count"><Building2 size={15} aria-hidden="true" /><strong>{count.toLocaleString(lang)}</strong> {countLabel}</p>;
-            return cityPath ? <DetailCard key={city.name} href={cityPath} eyebrow={destinationDisplayName} title={city.name} kind="city">{countContent}</DetailCard> : <article key={city.name} className="detail-catalog-card is-city"><MapPin aria-hidden="true" /><div><p className="detail-eyebrow">{destinationDisplayName}</p><h3>{city.name}</h3>{countContent}</div></article>;
+            return cityPath ? <DetailCard key={city.name} href={cityPath} eyebrow={destinationDisplayName} title={city.name} kind="city" layout="media" mediaUrl={city.heroImageUrl}>{countContent}</DetailCard> : <article key={city.name} className="detail-catalog-card is-city has-media"><div className="detail-card-media is-cover"><span className="detail-card-identity is-city"><MapPin aria-hidden="true" /></span></div><div className="detail-card-content"><p className="detail-eyebrow">{destinationDisplayName}</p><h3>{city.name}</h3>{countContent}</div></article>;
           })}</div>
         </div>
       </section>}
@@ -371,7 +371,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
         <div className="detail-wrap">
           <DetailHeading number="04" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: dest.name }))} />
           {detailContentIntro(editorial, "universities")}
-          <div className="detail-grid">{universities.map((uni) => <DetailCard key={uni.id} href={uni.canonicalPath} title={detailDisplayTerm(editorial, uni.name)} eyebrow={detailDisplayTerm(editorial, uni.city || dest.name, uni.city || destinationDisplayName)} kind="university" logoUrl={fixStorageUrl(uni.logoUrl)}>
+          <div className="detail-grid">{universities.map((uni) => <DetailCard key={uni.id} href={uni.canonicalPath} title={detailDisplayTerm(editorial, uni.name)} eyebrow={detailDisplayTerm(editorial, uni.city || dest.name, uni.city || destinationDisplayName)} kind="university" logoUrl={fixStorageUrl(uni.logoUrl)} layout="media" mediaFit="contain">
             <p>{[localizedUniversityType(uni.universityType, lang), catalogueCount(uni.programCount, t("countryDetail.programs"))].filter(Boolean).join(" · ")}</p>
           </DetailCard>)}</div>
         </div>

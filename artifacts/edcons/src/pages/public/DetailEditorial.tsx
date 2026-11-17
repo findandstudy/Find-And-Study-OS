@@ -43,6 +43,13 @@ export function DetailPrice({ tuition, locale, verifiedLabel }: { tuition: Detai
   return <><p className={`detail-price${price ? "" : " is-unavailable"}`}>{price && tuition?.isFrom ? `${copy.from} ${price}` : price || copy.confirmPrice}</p>{price && tuition && <p className={`detail-provenance ${tuition.verified ? "is-verified" : ""}`}>{tuition.verified ? verifiedLabel : copy.legacyPrice}{tuition.frequency ? ` · ${tuition.frequency.replaceAll("_", " ").toLowerCase()}` : ""}</p>}</>;
 }
 
-export function DetailCard({ href, eyebrow, title, children, logoUrl, kind = "program" }: { href: string; eyebrow?: string | null; title: string; children?: ReactNode; index?: number; logoUrl?: string | null; kind?: "university" | "city" | "program" }) {
-  return <Link href={href} className={`detail-catalog-card is-${kind}`}><div className="detail-card-top"><DetailIdentity src={logoUrl} name={title} kind={kind} /><ArrowUpRight aria-hidden="true" className="detail-card-arrow" /></div><div className="detail-card-content">{eyebrow && <p className="detail-eyebrow">{eyebrow}</p>}<h3>{title}</h3>{children}</div></Link>;
+export function DetailCard({ href, eyebrow, title, children, logoUrl, mediaUrl, mediaFit = "cover", kind = "program", layout = "standard" }: { href: string; eyebrow?: string | null; title: string; children?: ReactNode; index?: number; logoUrl?: string | null; mediaUrl?: string | null; mediaFit?: "cover" | "contain"; kind?: "university" | "city" | "program"; layout?: "standard" | "media" }) {
+  const media = mediaUrl || logoUrl;
+  return <Link href={href} className={`detail-catalog-card is-${kind}${layout === "media" ? " has-media" : ""}`}>
+    {layout === "media" ? <div className={`detail-card-media is-${mediaFit}`}>
+      {media ? <DetailImage src={media} alt="" className="detail-card-media-image" /> : <DetailIdentity name={title} kind={kind} />}
+      <ArrowUpRight aria-hidden="true" className="detail-card-arrow" />
+    </div> : <div className="detail-card-top"><DetailIdentity src={logoUrl} name={title} kind={kind} /><ArrowUpRight aria-hidden="true" className="detail-card-arrow" /></div>}
+    <div className="detail-card-content">{eyebrow && <p className="detail-eyebrow">{eyebrow}</p>}<h3>{title}</h3>{children}</div>
+  </Link>;
 }

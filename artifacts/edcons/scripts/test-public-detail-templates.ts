@@ -158,6 +158,16 @@ test("country template renders reviewed AI hero and gallery images", () => {
   assert.match(country, /ogImage: heroImage/);
 });
 
+test("country detail hero and catalogue cards use the shared high-contrast media treatment", () => {
+  assert.match(country, /className="is-primary" href=\{primaryCtaHref\}/);
+  assert.match(country, /kind="city" layout="media" mediaUrl=\{city\.heroImageUrl\}/);
+  assert.match(country, /kind="university"[\s\S]*layout="media" mediaFit="contain"/);
+  assert.match(editorial, /layout\?: "standard" \| "media"/);
+  assert.match(css, /\.detail-country-cover \.detail-hero-top \.detail-breadcrumbs,[\s\S]*font-weight: 800/);
+  assert.match(css, /\.detail-country-cover-foot a\.is-primary/);
+  assert.match(css, /\.detail-catalog-card\.has-media \.detail-card-media/);
+});
+
 test("public detail fees require explicit valid currencies without inventing USD", () => {
   assert.match(program, /displayTuition\(program, lang\)/);
   assert.match(universityBrowser, /displayTuition\(\{ \.\.\.program, tuition: program\.tuition \?\? null \}, lang\)/);
