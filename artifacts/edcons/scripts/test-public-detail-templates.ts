@@ -876,7 +876,9 @@ test("city hero combines catalogue counters and catalogue-owned language facts",
   assert.doesNotMatch(editorial, /compactMaxWords|compactDetailBoxText/);
   assert.match(university, /className="detail-wrap detail-university-overview"/);
   assert.match(css, /\.detail-university-overview \{[^}]*display: grid;[^}]*gap:/);
-  assert.match(css, /\.detail-university-overview > div > \.detail-snapshot \{[^}]*width: 100%;[^}]*max-width: none;/);
+  assert.match(css, /\.detail-university-overview > \.detail-section-heading \+ div \{[^}]*width: min\(960px, calc\(100% - 43px\)\);[^}]*margin-inline-start: 43px;/);
+  assert.match(css, /\.detail-university-overview > div > \.detail-snapshot \{[^}]*width: 100%;[^}]*max-width: none;[^}]*border-radius: 18px;[^}]*background: linear-gradient/);
+  assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*\.detail-university-overview > \.detail-section-heading \+ div \{ width: 100%; margin-inline-start: 0; \}/);
 });
 
 test("city programs use the scope-locked browser while bounded cards retain their modal contract", () => {

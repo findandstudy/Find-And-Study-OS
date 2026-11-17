@@ -802,8 +802,23 @@
 .detail-overview-single .detail-snapshot { max-width: 100%; }
 .detail-university-overview { display: grid; gap: clamp(20px, 3vw, 32px); }
 .detail-university-overview > .detail-section-heading { margin-bottom: 0; }
+.detail-university-overview > .detail-section-heading + div {
+  width: min(960px, calc(100% - 43px));
+  margin-inline-start: 43px;
+}
 .detail-university-overview > .detail-snapshot,
-.detail-university-overview > div > .detail-snapshot { width: 100%; max-width: none; }
+.detail-university-overview > div > .detail-snapshot {
+  width: 100%;
+  max-width: none;
+  padding: clamp(22px, 2.8vw, 32px);
+  border: 1px solid color-mix(in srgb, var(--detail-accent) 18%, var(--detail-line));
+  border-inline-start: 4px solid var(--detail-accent);
+  border-radius: 18px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--detail-sky) 76%, white), var(--detail-white));
+  box-shadow: 0 16px 42px rgba(11, 18, 32, .07);
+  font-size: 16px;
+  line-height: 1.8;
+}
 .detail-university-overview > .detail-editorial-content { width: 100%; margin-inline: 0; }
 .detail-program-story .detail-snapshot { max-width: none; }
 .detail-split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 38px; align-items: start; }
@@ -933,6 +948,7 @@
   .detail-city .detail-editorial-cards article { border-radius: 0; }
 }
 @media (max-width: 760px) {
+  .detail-university-overview > .detail-section-heading + div { width: 100%; margin-inline-start: 0; }
   .detail-wrap { width: calc(100% - 36px); }
   .detail-hero-main { grid-template-columns: 1fr; gap: 28px; min-height: 0; padding-block: 34px 30px; }
   .detail-university .detail-hero-main { grid-template-columns: minmax(0, 1fr); gap: 28px; min-height: 0; padding-block: 34px 30px; }
