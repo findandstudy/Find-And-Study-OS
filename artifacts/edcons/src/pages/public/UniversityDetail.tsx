@@ -179,6 +179,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   )].sort((left, right) => (degreeOrder.get(left) ?? 99) - (degreeOrder.get(right) ?? 99) || left.localeCompare(right));
   const location = <>{cityPath ? <Link href={cityPath}>{university.city}</Link> : university.city}{university.city && " · "}{countryPath ? <Link href={countryPath}>{university.country}</Link> : university.country}</>;
   const heroSection = detailHeroSection(editorial);
+  const factsIntro = detailContentIntro(editorial, "facts");
   const hero = heroSection?.hero;
   const primaryCtaHref = hero?.primaryCtaHref || "#programs";
   const primaryCtaLabel = hero?.primaryCtaLabel || t("catalogDetail.availablePrograms");
@@ -229,15 +230,17 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
         </div>
       </section>
       <section data-detail-section="facts" id="facts" className="detail-section is-sky">
-        <div className="detail-wrap detail-split">
+        <div className="detail-wrap detail-university-facts">
           <DetailHeading number="02" eyebrow={copy.overview} title={detailContentTitle(editorial, "facts", t("countryDetail.quickFacts"))} />
-          {detailContentIntro(editorial, "facts")}
-          <dl className="detail-keylines">
-            <div><dt><MapPin size={17} aria-hidden="true" />{copy.institutionLocation}</dt><dd>{location}</dd></div>
-            {university.address && <div><dt><Building2 size={17} aria-hidden="true" />{t("catalogDetail.location")}</dt><dd>{university.address}</dd></div>}
-            {university.universityType && <div><dt><GraduationCap size={17} aria-hidden="true" />{t("common.type")}</dt><dd>{university.universityType}</dd></div>}
-            {rankings.map(([label, value]) => <div key={String(label)}><dt><Award size={17} aria-hidden="true" />{String(label)}</dt><dd>#{String(value)}</dd></div>)}
-          </dl>
+          <div className={`detail-university-facts-grid${factsIntro ? "" : " is-single"}`}>
+            {factsIntro && <div className="detail-university-facts-copy">{factsIntro}</div>}
+            <dl className="detail-keylines detail-university-facts-list">
+              <div><dt><MapPin size={17} aria-hidden="true" />{copy.institutionLocation}</dt><dd>{location}</dd></div>
+              {university.address && <div><dt><Building2 size={17} aria-hidden="true" />{t("catalogDetail.location")}</dt><dd>{university.address}</dd></div>}
+              {university.universityType && <div><dt><GraduationCap size={17} aria-hidden="true" />{t("common.type")}</dt><dd>{university.universityType}</dd></div>}
+              {rankings.map(([label, value]) => <div key={String(label)}><dt><Award size={17} aria-hidden="true" />{String(label)}</dt><dd>#{String(value)}</dd></div>)}
+            </dl>
+          </div>
         </div>
       </section>
       {university.weather && university.city && <section data-detail-section="weather" id="weather" className="detail-section">

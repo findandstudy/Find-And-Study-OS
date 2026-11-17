@@ -820,6 +820,50 @@
   line-height: 1.8;
 }
 .detail-university-overview > .detail-editorial-content { width: 100%; margin-inline: 0; }
+.detail-university-facts { display: grid; gap: clamp(24px, 3.4vw, 38px); }
+.detail-university-facts > .detail-section-heading { margin-bottom: 0; }
+.detail-university-facts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(18px, 2.5vw, 30px);
+  align-items: stretch;
+}
+.detail-university-facts-copy,
+.detail-university-facts-list {
+  min-width: 0;
+  height: 100%;
+  border: 1px solid color-mix(in srgb, var(--detail-accent) 18%, var(--detail-line));
+  border-radius: 22px;
+  background: var(--detail-white);
+  box-shadow: 0 20px 54px rgba(11, 18, 32, .08);
+  overflow: hidden;
+}
+.detail-university-facts-copy {
+  display: flex;
+  align-items: center;
+  padding: clamp(28px, 4vw, 44px);
+  border-inline-start: 4px solid var(--detail-accent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--detail-sky) 78%, white), var(--detail-white));
+}
+.detail-university-facts-copy .detail-editorial-intro {
+  width: 100%;
+  margin: 0;
+  max-width: none;
+  font-size: clamp(15px, 1.35vw, 17px);
+  line-height: 1.78;
+}
+.detail-university-facts-list {
+  display: grid;
+  grid-auto-rows: minmax(0, 1fr);
+  margin: 0;
+  padding: 8px clamp(22px, 3vw, 32px);
+}
+.detail-university-facts-list > div {
+  min-height: 0;
+  align-content: center;
+  padding-block: clamp(16px, 2vw, 22px);
+}
+.detail-university-facts-grid.is-single .detail-university-facts-list { grid-column: 1 / -1; }
 .detail-program-story .detail-snapshot { max-width: none; }
 .detail-split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 38px; align-items: start; }
 .detail-university .detail-split { grid-template-columns: minmax(260px, .65fr) minmax(0, 1.35fr); }
@@ -949,6 +993,9 @@
 }
 @media (max-width: 760px) {
   .detail-university-overview > .detail-section-heading + div { width: 100%; margin-inline-start: 0; }
+  .detail-university-facts-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .detail-university-facts-copy { padding: 24px; border-radius: 16px; }
+  .detail-university-facts-list { border-radius: 16px; }
   .detail-wrap { width: calc(100% - 36px); }
   .detail-hero-main { grid-template-columns: 1fr; gap: 28px; min-height: 0; padding-block: 34px 30px; }
   .detail-university .detail-hero-main { grid-template-columns: minmax(0, 1fr); gap: 28px; min-height: 0; padding-block: 34px 30px; }

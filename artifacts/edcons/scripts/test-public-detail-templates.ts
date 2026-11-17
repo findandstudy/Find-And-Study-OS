@@ -879,6 +879,13 @@ test("city hero combines catalogue counters and catalogue-owned language facts",
   assert.match(css, /\.detail-university-overview > \.detail-section-heading \+ div \{[^}]*width: min\(960px, calc\(100% - 43px\)\);[^}]*margin-inline-start: 43px;/);
   assert.match(css, /\.detail-university-overview > div > \.detail-snapshot \{[^}]*width: 100%;[^}]*max-width: none;[^}]*border-radius: 18px;[^}]*background: linear-gradient/);
   assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*\.detail-university-overview > \.detail-section-heading \+ div \{ width: 100%; margin-inline-start: 0; \}/);
+  assert.match(university, /className="detail-wrap detail-university-facts"/);
+  assert.match(university, /detail-university-facts-grid\$\{factsIntro \? "" : " is-single"\}/);
+  assert.match(university, /className="detail-keylines detail-university-facts-list"/);
+  assert.match(css, /\.detail-university-facts-grid \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);[\s\S]*align-items: stretch;/);
+  assert.match(css, /\.detail-university-facts-copy,[\s\S]*\.detail-university-facts-list \{[\s\S]*height: 100%;[\s\S]*border-radius: 22px;/);
+  assert.match(css, /\.detail-university-facts-list \{[\s\S]*grid-auto-rows: minmax\(0, 1fr\);/);
+  assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*\.detail-university-facts-grid \{ grid-template-columns: minmax\(0, 1fr\);/);
 });
 
 test("city programs use the scope-locked browser while bounded cards retain their modal contract", () => {
