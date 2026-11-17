@@ -805,7 +805,7 @@ export default function CatalogPagesInventory() {
                 <p className="mt-1 text-xs opacity-80">
                   {tr
                     ? "İçerik, SEO ve görseller tek taslakta hazırlanır; elle yüklenen yerel görseller korunur, önceki otomatik görseller yenilenir ve otomatik yayın yapılmaz."
-                    : "Content, SEO and images are prepared in one review draft; manually uploaded local images are preserved, previous generated images are refreshed, and nothing is auto-published."}
+                    : "Content, SEO and images are prepared in one review draft; manually uploaded local images are preserved and previous generated images are refreshed. Nothing was auto-published."}
                 </p>
                 {generationReport.results.some((item) => item.quality) && (
                   <div className="mt-3 flex flex-wrap gap-2">
