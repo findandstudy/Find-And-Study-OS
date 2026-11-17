@@ -564,8 +564,7 @@ test("city detail emits governed city structured data and bounded related links"
   assert.match(html, /href="\/en\/universities\/example-university-7"/);
   assert.match(html, /href="\/en\/programs\/computer-science-42"/);
   assert.match(html, /hreflang="x-default"/);
-  assert.match(html, /One two three four five six seven eight nine ten eleven twelve…/);
-  assert.doesNotMatch(html, /twelve thirteen fourteen/);
+  assert.match(html, /One two three four five six seven eight nine ten eleven twelve thirteen fourteen/);
   assert.doesNotMatch(html, /service fee|commission|contact person/i);
 });
 

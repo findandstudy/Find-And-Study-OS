@@ -8,7 +8,7 @@ import { DetailBreadcrumbs, DetailCard, DetailFacts, DetailHeading } from "./Det
 import { boundDetailContent, detailContentAddon, detailContentIntro, detailContentNavigation, detailContentSections, detailContentSummary, detailContentTitle, DetailHeroMedia, detailHeroSection } from "./DetailContentSections";
 import type { CityProgramCardData } from "./CityProgramCards";
 import { DeferredBelowFold } from "./DeferredBelowFold";
-import { cityHeroCopy, compactDetailBoxText, detailCopy, detailCountLabel, localizedCountryName, localizedLanguageNames, localizedUniversityType, localDetailPath } from "./detailPresentation";
+import { cityHeroCopy, detailCopy, detailCountLabel, localizedCountryName, localizedLanguageNames, localizedUniversityType, localDetailPath } from "./detailPresentation";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
@@ -152,10 +152,6 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
   const editorialTitle = (key: string, fallback: string) => detailContentTitle(editorial, key, fallback);
   const countryName = detailDisplayTerm(editorial, city.country, localizedCountryName(city.country, city.countryCode, lang));
   const localizedEditorialFact = (key: string, fallback: string, maxLength = 180) => detailContentSummary(editorial, key, fallback, maxLength);
-  // Compact once more at the hero boundary. The public catalogue response can
-  // legitimately fall back to a longer source fact while editorial content is
-  // being regenerated; the cover strip must remain scannable in either case.
-  const compactHeroFact = (value: string) => compactDetailBoxText(detailContentSummary(null, "hero", value, 180), 12);
   const heroFacts = [
     // Hero fact labels are compact UI chrome, not editorial headings. Reusing
     // AI-generated section titles here can turn the cover strip into several
@@ -165,12 +161,11 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
       ? { title: hero?.climateLabel || weatherText.section, body: city.weather ? `${Math.round(city.weather.temperatureC)}°C · ${localizedWeatherDescription(city.weather.conditionCode, city.weather.conditionGroup, lang)}` : localizedEditorialFact("climate", city.externalFacts!.climateSummary!) }
       : null,
     city.transportModes?.length ? { title: hero?.transportLabel || heroCopy.transport, body: localizedEditorialFact("transport", city.transportModes.join(" · ")) } : null,
-    city.campusGeography ? { title: hero?.campusGeographyLabel || heroCopy.campus, body: compactHeroFact(localizedEditorialFact("campus", city.campusGeography, 96)) } : null,
+    city.campusGeography ? { title: hero?.campusGeographyLabel || heroCopy.campus, body: localizedEditorialFact("campus", city.campusGeography, 96) } : null,
     city.externalFacts?.housingSummary || city.externalFacts?.housingFormats.length
-      ? { title: hero?.housingLabel || heroCopy.housing, body: compactHeroFact(localizedEditorialFact("housing", city.externalFacts.housingSummary || city.externalFacts.housingFormats.map(item => item.name).join(" · "), 96)) }
+      ? { title: hero?.housingLabel || heroCopy.housing, body: localizedEditorialFact("housing", city.externalFacts.housingSummary || city.externalFacts.housingFormats.map(item => item.name).join(" · "), 96) }
       : null,
-  ].filter((fact): fact is { title: string; body: string } => Boolean(fact))
-    .map(fact => ({ ...fact, body: compactHeroFact(fact.body) }));
+  ].filter((fact): fact is { title: string; body: string } => Boolean(fact));
   const overviewDescription = city.description?.trim();
   const hasEditorialOverview = detailContentTitle(editorial, "overview", "") !== "";
   const countryPath = localDetailPath(city.countryPath);

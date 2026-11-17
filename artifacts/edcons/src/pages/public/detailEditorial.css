@@ -800,6 +800,11 @@
 .detail-program .detail-editorial-content > .detail-editorial-intro { max-width: 100%; }
 .detail-snapshot { padding: 22px 26px; border: 1px solid var(--detail-line); border-inline-start: 4px solid var(--detail-accent); background: var(--detail-white); }
 .detail-overview-single .detail-snapshot { max-width: 100%; }
+.detail-university-overview { display: grid; gap: clamp(20px, 3vw, 32px); }
+.detail-university-overview > .detail-section-heading { margin-bottom: 0; }
+.detail-university-overview > .detail-snapshot,
+.detail-university-overview > div > .detail-snapshot { width: 100%; max-width: none; }
+.detail-university-overview > .detail-editorial-content { width: 100%; margin-inline: 0; }
 .detail-program-story .detail-snapshot { max-width: none; }
 .detail-split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 38px; align-items: start; }
 .detail-university .detail-split { grid-template-columns: minmax(260px, .65fr) minmax(0, 1.35fr); }

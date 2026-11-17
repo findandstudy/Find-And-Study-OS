@@ -992,14 +992,6 @@ function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind
   </main>`;
 }
 
-function compactHeroBoxText(value: string, maximumWords = 12): string {
-  const normalized = value.replace(/\s+/gu, " ").trim();
-  if (!normalized || maximumWords < 1) return "";
-  const words = normalized.split(" ");
-  if (words.length <= maximumWords) return normalized;
-  return `${words.slice(0, maximumWords).join(" ").replace(/[,:;\s]+$/u, "")}…`;
-}
-
 function renderCityDetail(model: Extract<PublicCatalogRenderModel, { kind: "city_detail" }>): string {
   const city = model.city;
   const copy = RENDER_COPY[model.locale];
@@ -1013,7 +1005,7 @@ function renderCityDetail(model: Extract<PublicCatalogRenderModel, { kind: "city
     city.campusGeography ? [cityFactCopy.campus, city.campusGeography] : null,
     city.externalFacts?.housingSummary ? [cityFactCopy.housing, city.externalFacts.housingSummary] : null,
   ].filter((item): item is [string, string] => Boolean(item));
-  const heroFacts = sourceFacts.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(compactHeroBoxText(value))}</dd></div>`).join("");
+  const heroFacts = sourceFacts.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
   const universities = city.universities.map((university) => `
       <article class="rounded-2xl border border-border bg-card p-5">
         <h2 class="text-lg font-bold"><a href="${escapeHtml(university.canonicalPath)}">${escapeHtml(ssrInstitutionName(university.name, city.country, model.locale))}</a></h2>

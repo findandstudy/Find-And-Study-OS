@@ -264,7 +264,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           </div>
         </div>
         <div className="detail-factbar"><div className="detail-wrap">
-          <DetailFacts compactMaxWords={12} items={[
+          <DetailFacts items={[
             { label: t("courseFinderPage.degree"), value: program.degree, icon: <GraduationCap size={18} aria-hidden="true" /> },
             { label: durationIsAmbiguous(program.duration) ? copy.durationAsListed : t("courseFinderPage.duration"), value: program.duration, icon: <Clock3 size={18} aria-hidden="true" /> },
             { label: t("courseFinderPage.language"), value: program.language, icon: <Languages size={18} aria-hidden="true" /> },

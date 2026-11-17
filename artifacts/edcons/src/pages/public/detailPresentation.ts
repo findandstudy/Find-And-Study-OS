@@ -42,15 +42,6 @@ export function detailCountLabel(value: string | null | undefined, fallback: str
   return label && !CATALOGUE_COUNT_QUALIFIER.test(label) ? label : fallback;
 }
 
-/** Keeps compact hero/fact boxes scannable in every locale. */
-export function compactDetailBoxText(value: string, maximumWords = 12): string {
-  const normalized = value.replace(/\s+/gu, " ").trim();
-  if (!normalized || maximumWords < 1) return "";
-  const words = normalized.split(" ");
-  if (words.length <= maximumWords) return normalized;
-  return `${words.slice(0, maximumWords).join(" ").replace(/[,:;\s]+$/u, "")}…`;
-}
-
 export type RequirementMetadata = { key: "country" | "campus" | "mode"; value: string };
 export function splitRequirements(value: string | null | undefined, context?: { canonicalPath?: string; id?: number }): { requirements: string[]; metadata: RequirementMetadata[] } {
   const slug = context?.canonicalPath?.split("?")[0].replace(/\/$/, "").split("/").pop();

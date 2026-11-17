@@ -222,7 +222,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
         {detailContentNavigation(editorial)}
       </div></nav>
       <section data-detail-section="overview" id="overview" className="detail-section">
-        <div className="detail-wrap detail-split">
+        <div className="detail-wrap detail-university-overview">
           <DetailHeading number="01" eyebrow={copy.institution} title={t("countryDetail.about", { name: university.name })} />
           <div>{university.description ? <p className="detail-prose detail-snapshot">{university.description}</p> : <><p className="detail-prose">{t("countryDetail.exploreOpportunities")}</p><div className="detail-actions"><a href="#programs">{t("catalogDetail.availablePrograms")}<ArrowUpRight size={17} aria-hidden="true" /></a></div></>}</div>
           {detailContentAddon(editorial, "overview", lang, localePath("/contact"))}
