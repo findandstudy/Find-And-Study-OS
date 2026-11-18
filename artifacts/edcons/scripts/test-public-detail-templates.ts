@@ -785,23 +785,31 @@ test("empty location narratives do not repeat generic SEO copy in an empty overv
   assert.doesNotMatch(city, /city\.description \|\| payload\.meta\.description/);
 });
 
-test("program fee card shows every public fee once and keeps a safe empty state", () => {
+test("program fee card always shows every public fee and localizes missing values as free", () => {
   const start = program.indexOf('<section data-detail-section="fees"');
   assert.ok(start >= 0);
   const fees = program.slice(start, program.indexOf("</section>", start));
   assert.match(fees, /className="detail-fee-panel"/);
   assert.match(program, /const visiblePrices = payload\.prices;/);
   assert.doesNotMatch(program, /payload\.prices\.slice/);
-  assert.match(program, /const legacyFeeItems = \[/);
+  assert.match(program, /const publicFeeDefinitions = \[/);
+  assert.match(program, /const freeFeeLabel = t\("catalogDetail\.free"\)/);
+  assert.match(program, /componentType: "TUITION"/);
+  assert.match(program, /componentType: "DISCOUNTED_TUITION"/);
+  assert.match(program, /componentType: "SCHOLARSHIP"/);
   assert.match(program, /componentType: "APPLICATION_FEE"/);
   assert.match(program, /componentType: "ENROLMENT_FEE"/);
-  assert.match(fees, /feeItems\.length > 0 \? <dl className="detail-fee-list">\{feeItems\.map/);
+  assert.match(program, /componentType: "DEPOSIT_FEE"/);
+  assert.match(program, /componentType: "ADVANCED_FEE"/);
+  assert.match(program, /componentType: "LANGUAGE_FEE"/);
+  assert.match(program, /const isFree = item\.value == null \|\| item\.value <= 0/);
+  assert.match(fees, /<dl className="detail-fee-list">\{feeItems\.map/);
   assert.doesNotMatch(fees, /item\.frequency|detail-fee-panel-header|detail-fee-count/);
-  assert.match(fees, /className="detail-fee-empty"/);
-  assert.match(fees, /\{copy\.unavailable\}/);
-  assert.match(fees, /\{copy\.confirmPrice\}/);
+  assert.doesNotMatch(fees, /detail-fee-empty|copy\.unavailable|copy\.confirmPrice/);
   assert.doesNotMatch(fees, /<DetailPrice/);
   assert.match(program, /<a href="#fees">\{t\("courseFinderPage\.tuitionFee"\)\}<\/a>/);
+  assert.match(css, /\.detail-fee-list dd strong \{[^}]*font-size: clamp\(17px, 1\.7vw, 22px\)/);
+  assert.match(css, /\.detail-fee-list > div\.is-primary dd strong \{ font-size: clamp\(22px, 2\.7vw, 30px\)/);
 });
 
 test("active section navigation is local, follows visible DOM order and cleans up every listener", () => {

@@ -805,8 +805,9 @@
 .detail-fee-list > div.is-primary { grid-column: 1 / -1; padding-block: 20px; border-color: color-mix(in srgb, var(--detail-accent) 22%, var(--detail-line)); background: linear-gradient(135deg, color-mix(in srgb, var(--detail-sky) 70%, var(--detail-white)), var(--detail-white)); }
 .detail-fee-list dt { margin-bottom: 8px; color: var(--detail-muted); font-size: 11px; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
 .detail-fee-list dd { margin: 0; color: var(--detail-ink); }
-.detail-fee-list dd strong { display: block; overflow-wrap: anywhere; font-size: clamp(20px, 2.5vw, 28px); font-weight: 850; letter-spacing: -.025em; line-height: 1.05; }
-.detail-fee-list > div.is-primary dd strong { font-size: clamp(30px, 4vw, 44px); }
+.detail-fee-list dd strong { display: block; overflow-wrap: anywhere; font-size: clamp(17px, 1.7vw, 22px); font-weight: 820; letter-spacing: -.02em; line-height: 1.08; }
+.detail-fee-list > div.is-primary dd strong { font-size: clamp(22px, 2.7vw, 30px); }
+.detail-fee-list > div.is-free dd strong { color: var(--detail-accent); font-weight: 780; }
 .detail-fee-empty { display: grid; justify-items: center; gap: 8px; padding: clamp(34px, 6vw, 58px) 22px; text-align: center; color: var(--detail-muted); }
 .detail-fee-empty svg { color: var(--detail-accent); }
 .detail-fee-empty strong { color: var(--detail-ink); font-size: 17px; }

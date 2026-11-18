@@ -267,21 +267,8 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const { requirements, metadata } = splitRequirements(program.requirements, { canonicalPath: program.canonicalPath, id: program.id });
   const hasEditorialRequirements = detailContentTitle(editorial, "requirements", "") !== "";
   const countryPath = localDetailPath(program.countryPath), cityPath = localDetailPath(program.cityPath);
-  const verifiedFeeItems = visiblePrices.length > 0
-    ? visiblePrices.map(price => ({
-      id: price.id,
-      componentType: price.componentType,
-      amount: detailMoney(minorAmount(price.amountMinor, price.currencyCode), price.currencyCode, lang),
-      verified: true,
-    })).filter(item => item.amount)
-    : tuition ? [{
-      id: "catalogue-tuition",
-      componentType: "TUITION",
-      amount: detailMoney(tuition.amount, tuition.currency, lang),
-      verified: tuition.verified,
-    }] : [];
-  const verifiedFeeKeys = new Set(verifiedFeeItems.map(item => feeComponentKey(item.componentType)));
-  const legacyFeeItems = [
+  const freeFeeLabel = t("catalogDetail.free");
+  const publicFeeDefinitions = [
     { key: "tuition", componentType: "TUITION", value: program.tuitionFee },
     { key: "discounted", componentType: "DISCOUNTED_TUITION", value: program.discountedFee },
     { key: "scholarship", componentType: "SCHOLARSHIP", value: program.scholarship },
@@ -290,15 +277,33 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     { key: "deposit", componentType: "DEPOSIT_FEE", value: program.depositFee },
     { key: "advance", componentType: "ADVANCED_FEE", value: program.advancedFee },
     { key: "language", componentType: "LANGUAGE_FEE", value: program.languageFee },
-  ].filter(item => item.value != null && item.value >= 0 && !verifiedFeeKeys.has(item.key))
-    .map(item => ({
+  ];
+  const verifiedFeeItems = visiblePrices.map(price => {
+    const numericAmount = minorAmount(price.amountMinor, price.currencyCode);
+    const isFree = numericAmount == null || numericAmount === 0;
+    return {
+      id: price.id,
+      componentType: price.componentType,
+      amount: isFree ? freeFeeLabel : detailMoney(numericAmount, price.currencyCode, lang) || freeFeeLabel,
+      verified: true,
+      isFree,
+    };
+  });
+  const standardFeeKeys = new Set(publicFeeDefinitions.map(item => item.key));
+  const standardFeeItems = publicFeeDefinitions.flatMap(item => {
+    const verified = verifiedFeeItems.filter(price => feeComponentKey(price.componentType) === item.key);
+    if (verified.length > 0) return verified;
+    const isFree = item.value == null || item.value <= 0;
+    return [{
       id: `catalogue-${item.key}`,
       componentType: item.componentType,
-      amount: detailMoney(item.value, program.currency, lang),
+      amount: isFree ? freeFeeLabel : detailMoney(item.value, program.currency, lang) || freeFeeLabel,
       verified: false,
-    }))
-    .filter(item => item.amount);
-  const feeItems = [...verifiedFeeItems, ...legacyFeeItems];
+      isFree,
+    }];
+  });
+  const additionalVerifiedFeeItems = verifiedFeeItems.filter(item => !standardFeeKeys.has(feeComponentKey(item.componentType)));
+  const feeItems = [...standardFeeItems, ...additionalVerifiedFeeItems];
   const campuses = [...new Set(payload.intakes.map(intake => intake.campusName).filter(Boolean))].join(" · ");
   const institutionLocation = <>{cityPath ? <Link href={cityPath}>{program.universityCity}</Link> : program.universityCity}{program.universityCity && " · "}{countryPath ? <Link href={countryPath}>{program.universityCountry}</Link> : program.universityCountry}</>;
   const heroSection = detailHeroSection(editorial);
@@ -424,14 +429,10 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
         <div className="detail-wrap detail-split detail-program-fees-grid">
           <div><DetailHeading number="04" eyebrow={copy.program} title={detailContentTitle(editorial, "fees", t("courseFinderPage.tuitionFee"))} />{detailContentIntro(editorial, "fees")}{feeItems.some(item => item.verified) && <p className="detail-provenance">{copy.priceBasis}</p>}</div>
           <div className="detail-fee-panel">
-            {feeItems.length > 0 ? <dl className="detail-fee-list">{feeItems.map((item, index) => <div key={item.id} className={item.componentType === "TUITION" || index === 0 ? "is-primary" : undefined}>
+            <dl className="detail-fee-list">{feeItems.map((item, index) => <div key={item.id} className={[item.componentType === "TUITION" || index === 0 ? "is-primary" : "", item.isFree ? "is-free" : ""].filter(Boolean).join(" ") || undefined}>
               <dt>{feeComponentLabel(item.componentType, t)}</dt>
               <dd><strong>{item.amount}</strong></dd>
-            </div>)}</dl> : <div className="detail-fee-empty">
-              <Wallet size={24} aria-hidden="true" />
-              <strong>{copy.unavailable}</strong>
-              <span>{copy.confirmPrice}</span>
-            </div>}
+            </div>)}</dl>
           </div>
         </div>
       </section>
