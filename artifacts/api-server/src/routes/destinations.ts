@@ -314,7 +314,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
           and version.published_at <= now()
         order by version.version_number desc
         limit 1
-      )`,
+      )`.as("card_hero_image_url"),
     })
       .from(citiesTable)
       .innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id))
