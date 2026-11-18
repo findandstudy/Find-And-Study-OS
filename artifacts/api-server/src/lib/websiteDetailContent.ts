@@ -376,7 +376,7 @@ export async function readPublishedDetailHeroImageUrls(
     // frozen snapshot. This avoids losing media when a driver/runtime returns
     // nested jsonb values in a representation the defensive JS parser does
     // not recognize, while preserving the exact latest-version semantics.
-    heroSrc: sql<string | null>`jsonb_path_query_first(${versions.blocksSnapshot}, '$[0].content.sections[*] ? (@.key == "hero").images[0].src') #>> '{}'`,
+    heroSrc: sql<string | null>`jsonb_path_query_first(${versions.blocksSnapshot}, '$[0].content.sections[*] ? (@.key == "hero").images[0].src') #>> '{}'`.as("hero_src"),
   }).from(pages)
     .innerJoin(versions, eq(versions.pageId, pages.id))
     .where(and(
@@ -406,7 +406,15 @@ export async function readPublishedDetailHeroImageUrls(
     const slug = detailContentSlug(kind, entityId, contentLocale);
     const extracted = latestHeroBySlug.get(slug);
     if (extracted) return extracted;
-    const snapshot = latestBySlug.get(slug);
+    const rawSnapshot = latestBySlug.get(slug);
+    let snapshot = rawSnapshot;
+    if (typeof snapshot === "string") {
+      try {
+        snapshot = JSON.parse(snapshot);
+      } catch {
+        return null;
+      }
+    }
     if (!Array.isArray(snapshot) || snapshot.length !== 1) return null;
     const block = snapshot[0];
     if (!block || typeof block !== "object" || Array.isArray(block)) return null;
