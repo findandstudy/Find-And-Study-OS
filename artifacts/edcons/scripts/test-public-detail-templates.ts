@@ -175,6 +175,8 @@ test("country detail hero and catalogue cards use the shared high-contrast media
 test("detail templates share compact rhythm while city hero facts reuse the program fact-card language", () => {
   assert.match(css, /\.detail-section \{ padding-block: 54px;/);
   assert.match(css, /\.detail-program \.detail-section \{ padding-block: 58px;/);
+  assert.match(city, /<div className="detail-factbar detail-city-factbar"><div className="detail-wrap">/);
+  assert.match(css, /\.detail-city \.detail-city-factbar \{[^}]*margin-top: -24px;[^}]*padding-bottom: 24px;[^}]*background: transparent;[^}]*border: 0;/);
   assert.match(css, /\.detail-city-coverstrip \{[^}]*border-radius: 18px;[^}]*box-shadow: 0 18px 55px/);
   assert.match(css, /\.detail-city-coverstrip > div \{[^}]*min-height: 112px;[^}]*padding: 20px 22px;[^}]*background: rgba\(255,255,255,\.97\)/);
   assert.doesNotMatch(css, /:is\(\.detail-destination, \.detail-city, \.detail-university\) :is\(\.detail-section-heading, \.detail-editorial-heading\)/);

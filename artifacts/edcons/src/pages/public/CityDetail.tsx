@@ -187,15 +187,17 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
               {countryPath ? <Link className="detail-hero-link" href={countryPath}><Globe2 size={17} aria-hidden="true" />{countryName}<ArrowUpRight size={17} aria-hidden="true" /></Link> : <p className="detail-hero-lead">{countryName}</p>}
               {heroSection?.body && <p className="detail-hero-lead">{heroSection.body}</p>}
               <div className="detail-actions"><Link href={hero?.primaryCtaHref || programsPath}>{hero?.primaryCtaLabel || t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link><Link className="is-secondary" href={hero?.secondaryCtaHref || localePath("/contact")}>{hero?.secondaryCtaLabel || t("countryDetail.talkToAdvisor")}</Link></div>
-              <dl className="detail-city-coverstrip">
-                <div><dt>{hero?.countryLabel || copy.country}</dt><dd>{countryName}</dd></div>
-                <div><dt>{universityCountLabel}</dt><dd>{city.universityCount.toLocaleString(lang)}</dd></div>
-                <div><dt>{programCountLabel}</dt><dd>{city.programCount.toLocaleString(lang)}</dd></div>
-                {heroFacts.map((fact, index) => <div key={`${fact.title}-${index}`}><dt>{fact.title}</dt><dd>{fact.body}</dd></div>)}
-              </dl>
             </div>
           </div>
         </div>
+        <div className="detail-factbar detail-city-factbar"><div className="detail-wrap">
+          <dl className="detail-city-coverstrip">
+            <div><dt>{hero?.countryLabel || copy.country}</dt><dd>{countryName}</dd></div>
+            <div><dt>{universityCountLabel}</dt><dd>{city.universityCount.toLocaleString(lang)}</dd></div>
+            <div><dt>{programCountLabel}</dt><dd>{city.programCount.toLocaleString(lang)}</dd></div>
+            {heroFacts.map((fact, index) => <div key={`${fact.title}-${index}`}><dt>{fact.title}</dt><dd>{fact.body}</dd></div>)}
+          </dl>
+        </div></div>
       </section>
       <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", city.name)}><div className="detail-wrap">
         {(overviewDescription || hasEditorialOverview) && <a href="#overview">{copy.overview}</a>}<a href="#language-courses">{languageCourseNavigationLabel(lang)}</a><a href="#facts">{t("countryDetail.quickFacts")}</a>
