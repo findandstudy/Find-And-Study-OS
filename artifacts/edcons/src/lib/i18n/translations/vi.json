@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "Phí tạm ứng",
+    "applicationFee": "Phí đăng ký",
+    "discountedFee": "Phí chiết khấu",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "Phí ngôn ngữ",
+    "refundProcess": "Refund Process",
+    "serviceFee": "Phí dịch vụ",
     "verifiedPrice": "Giá danh mục đã xác minh",
     "deposit": "Tiền đặt cọc",
     "location": "Địa điểm",

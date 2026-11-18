@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "FAÝLAMATLAN MEK",
+    "applicationFee": "Femes:",
+    "discountedFee": "Jemi ol açylar.",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "Diller",
+    "refundProcess": "Refund Process",
+    "serviceFee": "Fewä",
     "verifiedPrice": "Tassyklanan katalog bahasy",
     "deposit": "Depozit",
     "location": "Ýerleşýän ýeri",

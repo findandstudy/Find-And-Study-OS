@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "مایوسی",
+    "applicationFee": "اطلاقیہ",
+    "discountedFee": "نقشہ‌افزائی",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "زبانی فائز",
+    "refundProcess": "Refund Process",
+    "serviceFee": "خدمتی فائز",
     "verifiedPrice": "تصدیق شدہ کیٹلاگ قیمت",
     "deposit": "ڈپازٹ",
     "location": "مقام",

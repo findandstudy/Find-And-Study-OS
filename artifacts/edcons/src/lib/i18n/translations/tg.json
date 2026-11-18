@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "Маҳдудият",
+    "applicationFee": "Нақши барнома",
+    "discountedFee": "Нақшаи партофташуда",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "Забон",
+    "refundProcess": "Refund Process",
+    "serviceFee": "Мақолаи хидмат",
     "verifiedPrice": "Нархи тасдиқшудаи каталог",
     "deposit": "Пешпардохт",
     "location": "Ҷойгиршавӣ",

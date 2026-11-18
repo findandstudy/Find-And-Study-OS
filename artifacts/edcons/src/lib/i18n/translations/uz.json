@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "Bu yerda oʻq",
+    "applicationFee": "Dastur ishga tushishGenericName",
+    "discountedFee": "Qabul qiluvchi",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "Til Fee",
+    "refundProcess": "Refund Process",
+    "serviceFee": "Comment",
     "verifiedPrice": "Tasdiqlangan katalog narxi",
     "deposit": "Depozit",
     "location": "Joylashuv",

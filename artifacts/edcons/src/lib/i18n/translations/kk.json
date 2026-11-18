@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "Дөңгел қабілеті",
+    "applicationFee": "Қолданба Fee- іComment",
+    "discountedFee": "Бөлінген сан",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "Тілді Feme",
+    "refundProcess": "Refund Process",
+    "serviceFee": "Қызмет Fee- ті",
     "verifiedPrice": "Расталған каталог бағасы",
     "deposit": "Депозит",
     "location": "Орналасқан жері",

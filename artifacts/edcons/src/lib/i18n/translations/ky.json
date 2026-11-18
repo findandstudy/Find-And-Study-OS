@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "ЕГЕРИЯ",
+    "applicationFee": "Иштеме Felease",
+    "discountedFee": "Фейма алынган",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "Тил Fee",
+    "refundProcess": "Refund Process",
+    "serviceFee": "Сергек болуу Фе",
     "verifiedPrice": "Текшерилген каталог баасы",
     "deposit": "Депозит",
     "location": "Жайгашкан жери",

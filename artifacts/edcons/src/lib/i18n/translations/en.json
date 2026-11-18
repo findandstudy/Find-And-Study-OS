@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "Advance Fee",
+    "applicationFee": "Application Fee",
+    "discountedFee": "Discounted Fee",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "Language Fee",
+    "refundProcess": "Refund Process",
+    "serviceFee": "Service Fee",
     "verifiedPrice": "Verified catalogue price",
     "deposit": "Deposit",
     "location": "Location",

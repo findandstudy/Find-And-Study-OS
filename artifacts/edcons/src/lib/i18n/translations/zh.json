@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "预付费用",
+    "applicationFee": "申请费",
+    "discountedFee": "折后费用",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "语言课程费用",
+    "refundProcess": "Refund Process",
+    "serviceFee": "服务费",
     "verifiedPrice": "已验证的目录价格",
     "deposit": "押金",
     "location": "地点",

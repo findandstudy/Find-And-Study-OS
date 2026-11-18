@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "अग्रिम शुल्क",
+    "applicationFee": "आवेदन शुल्क",
+    "discountedFee": "छूट वाला शुल्क",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "भाषा शुल्क",
+    "refundProcess": "Refund Process",
+    "serviceFee": "सेवा शुल्क",
     "verifiedPrice": "सत्यापित कैटलॉग मूल्य",
     "deposit": "जमा राशि",
     "location": "स्थान",

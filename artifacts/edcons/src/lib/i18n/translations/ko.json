@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "예치금",
+    "applicationFee": "지원비",
+    "discountedFee": "할인된 수수료",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "언어비",
+    "refundProcess": "Refund Process",
+    "serviceFee": "서비스 요금",
     "verifiedPrice": "검증된 카탈로그 가격",
     "deposit": "예치금",
     "location": "위치",

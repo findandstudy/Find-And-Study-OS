@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "Biaya Muka",
+    "applicationFee": "Biaya Aplikasi",
+    "discountedFee": "Biaya Diskon",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "Biaya Bahasa",
+    "refundProcess": "Refund Process",
+    "serviceFee": "Biaya Layanan",
     "verifiedPrice": "Harga katalog terverifikasi",
     "deposit": "Deposit",
     "location": "Lokasi",

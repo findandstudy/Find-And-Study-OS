@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "Taxa antecipada",
+    "applicationFee": "Inscrição Taxa",
+    "discountedFee": "Taxa com desconto",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "Taxa de idioma",
+    "refundProcess": "Refund Process",
+    "serviceFee": "Taxa de serviço",
     "verifiedPrice": "Preço de catálogo verificado",
     "deposit": "Depósito",
     "location": "Localização",

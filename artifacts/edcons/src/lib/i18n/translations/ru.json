@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "Авансовый платёж",
+    "applicationFee": "Сбор за подачу заявки",
+    "discountedFee": "Стоимость со скидкой",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "Плата за языковой курс",
+    "refundProcess": "Refund Process",
+    "serviceFee": "Сервисный сбор",
     "verifiedPrice": "Проверенная цена каталога",
     "deposit": "Депозит",
     "location": "Местоположение",

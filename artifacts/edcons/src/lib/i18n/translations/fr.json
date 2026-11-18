@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "Acompte",
+    "applicationFee": "Frais de dossier",
+    "discountedFee": "Frais remisés",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "Frais de langue",
+    "refundProcess": "Refund Process",
+    "serviceFee": "Frais de service",
     "verifiedPrice": "Prix du catalogue vérifié",
     "deposit": "Acompte",
     "location": "Localisation",

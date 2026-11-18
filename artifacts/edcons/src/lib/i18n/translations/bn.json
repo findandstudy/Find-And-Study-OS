@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "অগ্রিম ফি",
+    "applicationFee": "আবেদন ফি",
+    "discountedFee": "ছাড়কৃত ফি",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "ভাষা ফি",
+    "refundProcess": "Refund Process",
+    "serviceFee": "সার্ভিস ফি",
     "verifiedPrice": "যাচাইকৃত ক্যাটালগ মূল্য",
     "deposit": "জমা",
     "location": "অবস্থান",

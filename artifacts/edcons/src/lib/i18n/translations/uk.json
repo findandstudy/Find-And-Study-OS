@@ -23,6 +23,13 @@
     "limit": "Select at most 100 conversations for block actions."
   },
   "catalogDetail": {
+    "advancedFee": "Попередня плата",
+    "applicationFee": "Плата за подачу заявки",
+    "discountedFee": "Комісія зі знижкою",
+    "enrollmentFee": "Enrolment Fee",
+    "languageFee": "Збір за мову",
+    "refundProcess": "Refund Process",
+    "serviceFee": "Оплата послуги",
     "verifiedPrice": "Перевірена ціна каталогу",
     "deposit": "Депозит",
     "location": "Розташування",
