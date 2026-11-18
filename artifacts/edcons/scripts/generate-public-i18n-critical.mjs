@@ -10,6 +10,15 @@ const namespaces = [
   "countries", "countryDetail", "catalogDetail", "programs",
   "courseFinderPage", "studentJourney", "common", "seo", "apply",
 ];
+const publicCatalogDetailKeys = [
+  "advancedFee",
+  "applicationFee",
+  "discountedFee",
+  "enrollmentFee",
+  "languageFee",
+  "refundProcess",
+  "serviceFee",
+];
 
 fs.mkdirSync(outputDir, { recursive: true });
 const files = fs.readdirSync(sourceDir).filter((name) => /^[a-z]{2}\.json$/.test(name)).sort();
@@ -20,6 +29,16 @@ for (const file of files) {
   const critical = Object.fromEntries(namespaces.map((key) => {
     if (!source[key] || typeof source[key] !== "object" || Array.isArray(source[key])) {
       throw new Error(`${file} is missing public namespace ${key}`);
+    }
+    if (key === "catalogDetail") {
+      const publicLabels = Object.fromEntries(publicCatalogDetailKeys.map((labelKey) => {
+        const label = source.catalogPage?.[labelKey];
+        if (typeof label !== "string" || !label.trim()) {
+          throw new Error(`${file} is missing public catalogue label ${labelKey}`);
+        }
+        return [labelKey, label];
+      }));
+      return [key, { ...source[key], ...publicLabels }];
     }
     return [key, source[key]];
   }));

@@ -127,22 +127,22 @@ function feeComponentLabel(componentType: string, t: (key: string) => string): s
   switch (componentType.toUpperCase()) {
     case "TUITION": return t("courseFinderPage.tuitionFee");
     case "DISCOUNTED_TUITION":
-    case "DISCOUNTED_FEE": return t("catalogPage.discountedFee");
+    case "DISCOUNTED_FEE": return t("catalogDetail.discountedFee");
     case "DEPOSIT":
     case "DEPOSIT_FEE": return t("catalogDetail.deposit");
     case "APPLICATION":
-    case "APPLICATION_FEE": return t("catalogPage.applicationFee");
+    case "APPLICATION_FEE": return t("catalogDetail.applicationFee");
     case "ENROLMENT":
     case "ENROLMENT_FEE":
     case "ENROLLMENT":
-    case "ENROLLMENT_FEE": return t("catalogPage.enrollmentFee");
+    case "ENROLLMENT_FEE": return t("catalogDetail.enrollmentFee");
     case "ADVANCE":
     case "ADVANCED_FEE":
-    case "ADVANCE_FEE": return t("catalogPage.advancedFee");
+    case "ADVANCE_FEE": return t("catalogDetail.advancedFee");
     case "SERVICE":
-    case "SERVICE_FEE": return t("catalogPage.serviceFee");
+    case "SERVICE_FEE": return t("catalogDetail.serviceFee");
     case "LANGUAGE":
-    case "LANGUAGE_FEE": return t("catalogPage.languageFee");
+    case "LANGUAGE_FEE": return t("catalogDetail.languageFee");
     case "SCHOLARSHIP":
     case "DISCOUNT": return t("courseFinderPage.scholarship");
     default: return componentType.replaceAll("_", " ").toLowerCase().replace(/(^|\s)\S/g, value => value.toUpperCase());
@@ -367,7 +367,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           {(requirements.length > 0 || hasEditorialRequirements) && <a href="#requirements">{t("programs.requirements")}</a>}
           {payload.intakes.length > 0 && <a href="#intakes">{t("catalogDetail.availableIntakes")}</a>}
           <a href="#fees">{t("courseFinderPage.tuitionFee")}</a>
-          {program.refundProcess?.trim() && <a href="#refund-process">{t("catalogPage.refundProcess")}</a>}
+          {program.refundProcess?.trim() && <a href="#refund-process">{t("catalogDetail.refundProcess")}</a>}
           {detailContentNavigation(editorial)}
           {payload.related.length > 0 && <a href="#related">{t("catalogDetail.relatedPrograms")}</a>}
         </div>
@@ -437,7 +437,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       </section>
       {program.refundProcess?.trim() && <section data-detail-section="refund-process" id="refund-process" className="detail-section is-sand detail-program-refund">
         <div className="detail-wrap detail-split">
-          <DetailHeading number="05" eyebrow={copy.program} title={t("catalogPage.refundProcess")} />
+          <DetailHeading number="05" eyebrow={copy.program} title={t("catalogDetail.refundProcess")} />
           <div className="detail-prose whitespace-pre-line">{program.refundProcess}</div>
         </div>
       </section>}
