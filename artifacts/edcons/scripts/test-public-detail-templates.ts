@@ -166,7 +166,8 @@ test("country detail hero and catalogue cards use the shared high-contrast media
   assert.match(css, /\.detail-country-cover \.detail-hero-top \.detail-breadcrumbs,[\s\S]*font-weight: 800/);
   assert.match(css, /\.detail-country-cover-foot a\.is-primary/);
   assert.match(css, /\.detail-catalog-card\.has-media \.detail-card-media/);
-  assert.match(css, /\.detail-catalog-card\.has-media:is\(:hover, :focus-visible\) \.detail-card-arrow \{ color: #fff; \}/);
+  assert.match(css, /\.public-detail \.detail-catalog-card\.has-media \.detail-card-arrow \{[^}]*color: #fff/);
+  assert.match(css, /\.public-detail \.detail-catalog-card\.has-media:is\(:hover, :focus-visible\) \.detail-card-arrow \{ color: #fff; \}/);
 });
 
 test("public detail fees require explicit valid currencies without inventing USD", () => {

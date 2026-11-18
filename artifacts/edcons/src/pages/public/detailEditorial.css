@@ -908,7 +908,7 @@
 .detail-catalog-card.has-media .detail-card-media.is-cover .detail-card-media-image { object-fit: cover; }
 .detail-catalog-card.has-media .detail-card-media.is-contain .detail-card-media-image { object-fit: contain; padding: 26px; background: #fff; }
 .detail-catalog-card.has-media .detail-card-media .detail-card-identity { width: 72px; height: 72px; border-radius: 50%; }
-.detail-catalog-card.has-media .detail-card-arrow { position: absolute; z-index: 2; inset-block-start: 14px; inset-inline-end: 14px; width: 36px; height: 36px; padding: 9px; border-radius: 50%; color: #fff; background: rgba(9,27,48,.72); backdrop-filter: blur(8px); }
+.public-detail .detail-catalog-card.has-media .detail-card-arrow { position: absolute; z-index: 2; inset-block-start: 14px; inset-inline-end: 14px; width: 36px; height: 36px; padding: 9px; border-radius: 50%; color: #fff; background: rgba(9,27,48,.72); backdrop-filter: blur(8px); }
 .detail-catalog-card.has-media .detail-card-content { display: flex; min-height: 136px; flex-direction: column; padding: 20px 22px 22px; }
 .detail-catalog-card.has-media .detail-card-content > :last-child { margin-top: auto; }
 .detail-catalog-card .detail-eyebrow { font-size: 10px; margin-bottom: 6px; color: var(--detail-muted); }
@@ -916,7 +916,7 @@
 .detail-catalog-card p:not(.detail-eyebrow) { font-size: 12px; line-height: 1.7; color: var(--detail-muted); margin: 0; }
 .detail-catalog-card:hover { border-color: #a8bdeb; box-shadow: 0 6px 10px #182e520a, 0 16px 30px -18px #2354d644; }
 .detail-catalog-card:hover .detail-card-arrow { color: var(--detail-accent); }
-.detail-catalog-card.has-media:is(:hover, :focus-visible) .detail-card-arrow { color: #fff; }
+.public-detail .detail-catalog-card.has-media:is(:hover, :focus-visible) .detail-card-arrow { color: #fff; }
 .detail-catalog-card.is-city:not(.has-media) { position: relative; flex-direction: row; align-items: center; gap: 14px; padding: 20px; padding-inline-end: 44px; }
 .detail-catalog-card.is-city:not(.has-media) .detail-card-arrow { position: absolute; inset-inline-end: 18px; top: calc(50% - 9px); }
 .detail-catalog-card.is-city h3 { margin: 0; }
