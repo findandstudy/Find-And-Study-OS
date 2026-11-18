@@ -15,6 +15,8 @@ import {
   publicCatalogPath,
 } from "../lib/publicCatalogRouteContract";
 import { buildPublicWebCanonicalPath } from "../lib/publicWebContentContract";
+import { getPublicCatalogRenderModel } from "../lib/publicCatalogRenderReadModel";
+import { matchPublicCatalogRenderPath } from "../lib/publicCatalogRouteContract";
 import {
   readIndexableProgramIds,
   readIndexableUniversityIds,
@@ -417,7 +419,9 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     }];
   }).slice(0, 24);
   const cities = await Promise.all(cityCards.map(async (city) => {
-    const editorial = await readPublishedDetailContent("city", city.id, locale);
+    const route = matchPublicCatalogRenderPath(city.canonicalPath);
+    const rendered = route ? await getPublicCatalogRenderModel(route) : null;
+    const editorial = rendered?.value.kind === "city_detail" ? rendered.value.editorial : null;
     return {
       ...city,
       cardHeroImageUrl: editorial?.sections.find((section) => section.key === "hero")?.images?.[0]?.src?.trim() || null,
