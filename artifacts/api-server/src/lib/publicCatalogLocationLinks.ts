@@ -5,7 +5,7 @@ import { publicCatalogSlug, publicCatalogRouteKey, publicCatalogPath } from "./p
 import { normalizeProgramLocale } from "./programTranslationContract";
 import { addPublicCatalogConditions, getPublicCatalogPolicy } from "./publicCatalogQueryPolicy";
 import { readPublishedLocalizedEntity } from "./publicWebDiscoveryReadModel";
-import { readPublishedDetailContentEntityIds } from "./websiteDetailContent";
+import { readPublishedDetailContent, readPublishedDetailContentEntityIds } from "./websiteDetailContent";
 
 type Country = { id: number; name: string; code: string; isActive: boolean };
 type Destination = { id: number; country: string; slug: string; isActive: boolean };
@@ -152,12 +152,18 @@ export async function readCatalogCountryFallback(localeInput: unknown, slug: str
   ]);
   const universityCountByCity = new Map(cityUniversityCountRows.map(row => [row.cityKey, Number(row.universityCount)]));
   const cityLinks = await Promise.all(cities.map(async city => {
-    const delivery = await readPublishedLocalizedEntity({ entityType: "city", entityId: city.id, locale: directory.locale });
+    const [delivery, editorial] = await Promise.all([
+      readPublishedLocalizedEntity({ entityType: "city", entityId: city.id, locale: directory.locale }),
+      readPublishedDetailContent("city", city.id, directory.locale),
+    ]);
     return {
       ...city,
       sourceName: city.name,
       universityCount: universityCountByCity.get(city.name.trim().toLocaleLowerCase("en-US")) ?? 0,
       canonicalPath: delivery.snapshot?.canonicalPath ?? `/${directory.locale}/cities/${publicCatalogRouteKey(city.id, city.name)}`,
+      cardHeroImageUrl: editorial?.sections
+        .find(section => section.key === "hero")
+        ?.images?.[0]?.src?.trim() || null,
     };
   }));
   const programCounts = universities.length ? await db.select({ universityId: programsTable.universityId,
