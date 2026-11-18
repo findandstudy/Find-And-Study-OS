@@ -1505,11 +1505,13 @@ export const ListProgramsResponse = zod.object({
   "requirements": zod.string().nullish(),
   "commissionRate": zod.number().nullish(),
   "applicationFee": zod.number().nullish(),
+  "enrollmentFee": zod.number().nullish(),
   "advancedFee": zod.number().nullish(),
   "depositFee": zod.number().nullish(),
   "serviceFeeAmount": zod.number().nullish(),
   "discountedFee": zod.number().nullish(),
   "languageFee": zod.number().nullish(),
+  "refundProcess": zod.string().nullish(),
   "isActive": zod.boolean(),
   "createdAt": zod.date()
 })),
@@ -1540,11 +1542,13 @@ export const CreateProgramBody = zod.object({
   "requirements": zod.string().nullish(),
   "commissionRate": zod.number().nullish(),
   "applicationFee": zod.number().nullish(),
+  "enrollmentFee": zod.number().nullish(),
   "advancedFee": zod.number().nullish(),
   "depositFee": zod.number().nullish(),
   "serviceFeeAmount": zod.number().nullish(),
   "discountedFee": zod.number().nullish(),
   "languageFee": zod.number().nullish(),
+  "refundProcess": zod.string().nullish(),
   "isActive": zod.boolean()
 })
 
@@ -1564,11 +1568,13 @@ export const CreateProgramResponse = zod.object({
   "requirements": zod.string().nullish(),
   "commissionRate": zod.number().nullish(),
   "applicationFee": zod.number().nullish(),
+  "enrollmentFee": zod.number().nullish(),
   "advancedFee": zod.number().nullish(),
   "depositFee": zod.number().nullish(),
   "serviceFeeAmount": zod.number().nullish(),
   "discountedFee": zod.number().nullish(),
   "languageFee": zod.number().nullish(),
+  "refundProcess": zod.string().nullish(),
   "isActive": zod.boolean(),
   "createdAt": zod.date()
 })
@@ -1597,11 +1603,13 @@ export const GetProgramResponse = zod.object({
   "requirements": zod.string().nullish(),
   "commissionRate": zod.number().nullish(),
   "applicationFee": zod.number().nullish(),
+  "enrollmentFee": zod.number().nullish(),
   "advancedFee": zod.number().nullish(),
   "depositFee": zod.number().nullish(),
   "serviceFeeAmount": zod.number().nullish(),
   "discountedFee": zod.number().nullish(),
   "languageFee": zod.number().nullish(),
+  "refundProcess": zod.string().nullish(),
   "isActive": zod.boolean(),
   "createdAt": zod.date()
 })
@@ -1628,11 +1636,13 @@ export const UpdateProgramBody = zod.object({
   "requirements": zod.string().nullish(),
   "commissionRate": zod.number().nullish(),
   "applicationFee": zod.number().nullish(),
+  "enrollmentFee": zod.number().nullish(),
   "advancedFee": zod.number().nullish(),
   "depositFee": zod.number().nullish(),
   "serviceFeeAmount": zod.number().nullish(),
   "discountedFee": zod.number().nullish(),
   "languageFee": zod.number().nullish(),
+  "refundProcess": zod.string().nullish(),
   "isActive": zod.boolean().nullish()
 })
 
@@ -1652,11 +1662,13 @@ export const UpdateProgramResponse = zod.object({
   "requirements": zod.string().nullish(),
   "commissionRate": zod.number().nullish(),
   "applicationFee": zod.number().nullish(),
+  "enrollmentFee": zod.number().nullish(),
   "advancedFee": zod.number().nullish(),
   "depositFee": zod.number().nullish(),
   "serviceFeeAmount": zod.number().nullish(),
   "discountedFee": zod.number().nullish(),
   "languageFee": zod.number().nullish(),
+  "refundProcess": zod.string().nullish(),
   "isActive": zod.boolean(),
   "createdAt": zod.date()
 })

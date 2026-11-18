@@ -6,6 +6,7 @@ export interface CampaignAdjustableFees {
   discountedFee?: number | null;
   serviceFeeAmount?: number | null;
   applicationFee?: number | null;
+  enrollmentFee?: number | null;
   depositFee?: number | null;
   advancedFee?: number | null;
   languageFee?: number | null;
@@ -94,6 +95,7 @@ export function applyCampaignToFees<T extends CampaignAdjustableFees>(
     discountedFee: adjust(fees.discountedFee),
     serviceFeeAmount: adjust(fees.serviceFeeAmount),
     applicationFee: adjust(fees.applicationFee),
+    enrollmentFee: adjust(fees.enrollmentFee),
     depositFee: adjust(fees.depositFee),
     advancedFee: adjust(fees.advancedFee),
     languageFee: adjust(fees.languageFee),

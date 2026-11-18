@@ -211,7 +211,7 @@ type University = {
 };
 type UniversityOption = Pick<University, "id" | "name">;
 type ProgramTranslationSummary = { total: number; published: number; pending: number; failed: number; manual: number; target: number };
-type Program = { id: number; universityId: number; universityName?: string | null; name: string; description?: string | null; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; quota?: number | null; isActive: boolean; requiredEducationLevel?: string | null; minGradeValue?: number | null; gradeScale?: string | null; languageRequirements?: Array<{ test: string; overall: number }> | null; conditionalAdmission?: boolean | null; admissionSourceUrl?: string | null; admissionVerifiedAt?: string | null; admissionValidUntil?: string | null; sourceMetadata?: CatalogSourceMetadata; translationSummary?: ProgramTranslationSummary };
+type Program = { id: number; universityId: number; universityName?: string | null; name: string; description?: string | null; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; refundProcess?: string | null; commissionRate?: number | null; applicationFee?: number | null; enrollmentFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; quota?: number | null; isActive: boolean; requiredEducationLevel?: string | null; minGradeValue?: number | null; gradeScale?: string | null; languageRequirements?: Array<{ test: string; overall: number }> | null; conditionalAdmission?: boolean | null; admissionSourceUrl?: string | null; admissionVerifiedAt?: string | null; admissionValidUntil?: string | null; sourceMetadata?: CatalogSourceMetadata; translationSummary?: ProgramTranslationSummary };
 
 type SourceFieldOption = readonly [key: string, label: string, group: string];
 
@@ -245,8 +245,8 @@ const SOURCE_FIELDS = {
   ],
   program: [
     ["name", "Program name", "Identity"], ["description", "Description", "Overview"], ["degree", "Degree", "Academics"], ["field", "Field", "Academics"], ["language", "Teaching language", "Academics"], ["duration", "Duration", "Academics"],
-    ["tuitionFee", "Tuition fee", "Fees"], ["discountedFee", "Discounted fee", "Fees"], ["scholarship", "Scholarship", "Fees"], ["currency", "Currency", "Fees"], ["depositFee", "Deposit fee", "Fees"], ["applicationFee", "Application fee", "Fees"], ["serviceFeeAmount", "Service fee", "Fees"], ["languageFee", "Language fee", "Fees"], ["feeType", "Fee period / type", "Fees"], ["additionalFees", "Additional fees", "Fees"],
-    ["intakes", "Intakes", "Admissions"], ["requirements", "Requirements", "Admissions"], ["quota", "Quota", "Admissions"], ["admissionRules", "Admission rules", "Admissions"],
+    ["tuitionFee", "Tuition fee", "Fees"], ["discountedFee", "Discounted fee", "Fees"], ["scholarship", "Scholarship", "Fees"], ["currency", "Currency", "Fees"], ["depositFee", "Deposit fee", "Fees"], ["applicationFee", "Application fee", "Fees"], ["enrollmentFee", "Enrolment fee", "Fees"], ["serviceFeeAmount", "Service fee", "Fees"], ["languageFee", "Language fee", "Fees"], ["feeType", "Fee period / type", "Fees"], ["additionalFees", "Additional fees", "Fees"],
+    ["intakes", "Intakes", "Admissions"], ["requirements", "Requirements", "Admissions"], ["refundProcess", "Refund process", "Admissions"], ["quota", "Quota", "Admissions"], ["admissionRules", "Admission rules", "Admissions"],
     ["heroMedia", "Hero image / media", "Media"], ["gallery", "Image gallery", "Media"], ["highlights", "Highlights", "Page sections"], ["curriculum", "Curriculum", "Page sections"], ["admission", "Admissions", "Page sections"], ["fees", "Fees overview", "Page sections"],
     ["living", "Living costs", "Page sections"], ["campus", "Campus", "Page sections"], ["climate", "Climate", "Page sections"], ["housing", "Housing", "Page sections"], ["services", "Student services", "Page sections"],
     ["applyGuide", "Application guide", "Page sections"], ["studentStory", "Student story", "Page sections"], ["recognition", "Recognition", "Page sections"], ["related", "Related programs", "Page sections"], ["faq", "Frequently asked questions", "Page sections"],
@@ -2235,7 +2235,7 @@ function ProgramsTab() {
         Duration: p.duration ?? "", "Fee Type": p.feeType ?? "",
         "Tuition Fee": p.tuitionFee ?? "", Currency: p.currency ?? "",
         "Commission %": p.commissionRate ?? "", "Scholarship": p.scholarship ?? "",
-        Intakes: p.intakes ?? "", "Application Fee": p.applicationFee ?? "",
+        Intakes: p.intakes ?? "", "Application Fee": p.applicationFee ?? "", "Enrolment Fee": p.enrollmentFee ?? "", "Refund Process": p.refundProcess ?? "",
         "Advance Fee": p.advancedFee ?? "", "Deposit Fee": p.depositFee ?? "",
         "Service Fee": p.serviceFeeAmount ?? "", "Discounted Fee": p.discountedFee ?? "",
         "Language Fee": p.languageFee ?? "", "Min GPA": p.minGpa ?? "",
@@ -2408,7 +2408,8 @@ function ProgramsTab() {
     { Column: "intakes", Required: "No", Notes: "Comma-separated: 'Fall, Spring, Summer'." },
     { Column: "requirements", Required: "No", Notes: "Free text shown to students." },
     { Column: "commissionRate", Required: "No", Notes: "Agent commission percent (numeric, e.g. 10)." },
-    { Column: "applicationFee / advancedFee / depositFee / serviceFeeAmount / discountedFee / languageFee", Required: "No", Notes: "All numeric (no currency symbol). Leave blank if not applicable." },
+    { Column: "applicationFee / enrollmentFee / advancedFee / depositFee / serviceFeeAmount / discountedFee / languageFee", Required: "No", Notes: "All numeric (no currency symbol). Leave blank if not applicable." },
+    { Column: "refundProcess", Required: "No", Notes: "Refund conditions and procedure. Line breaks and paragraphs are preserved." },
     { Column: "feeType", Required: "No", Notes: "Free text: 'per year', 'per semester', 'one-time'." },
     { Column: "minGpa", Required: "No", Notes: "Numeric on a 4.0 scale (e.g. 2.5, 3.0)." },
     { Column: "minLanguageScore", Required: "No", Notes: "Numeric — IELTS / TOEFL / Duolingo equivalent." },
@@ -2797,6 +2798,10 @@ function ProgramsTab() {
                   <Input className="mt-1" type="number" placeholder={t("catalogPage.zeroNone")} value={form?.applicationFee ?? ""} onChange={e => setForm(f => ({ ...f, applicationFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
+                  <Label className="text-xs">{t("catalogPage.enrollmentFee")}</Label>
+                  <Input className="mt-1" type="number" min="0" placeholder={t("catalogPage.zeroNone")} value={form?.enrollmentFee ?? ""} onChange={e => setForm(f => ({ ...f, enrollmentFee: e.target.value ? Number(e.target.value) : null }))} />
+                </div>
+                <div>
                   <Label className="text-xs">{t("catalogPage.advancedFee")}</Label>
                   <Input className="mt-1" type="number" placeholder={t("catalogPage.zeroNone")} value={form?.advancedFee ?? ""} onChange={e => setForm(f => ({ ...f, advancedFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
@@ -2840,6 +2845,7 @@ function ProgramsTab() {
               </div>
             </div>
             <div><Label>{t("catalogPage.requirements")}</Label><Textarea className="mt-1" rows={2} placeholder={t("catalogPage.requirementsPlaceholder")} value={form?.requirements ?? ""} onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))} /></div>
+            <div><Label>{t("catalogPage.refundProcess")}</Label><Textarea className="mt-1" rows={5} placeholder={t("catalogPage.refundProcessPlaceholder")} value={form?.refundProcess ?? ""} onChange={e => setForm(f => ({ ...f, refundProcess: e.target.value }))} /></div>
 
             <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2">
               <div className="flex items-center justify-between">

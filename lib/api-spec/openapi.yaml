@@ -6568,6 +6568,8 @@ components:
           type: ["number", "null"]
         applicationFee:
           type: ["number", "null"]
+        enrollmentFee:
+          type: ["number", "null"]
         advancedFee:
           type: ["number", "null"]
         depositFee:
@@ -6578,6 +6580,8 @@ components:
           type: ["number", "null"]
         languageFee:
           type: ["number", "null"]
+        refundProcess:
+          type: ["string", "null"]
         isActive:
           type: boolean
         createdAt:
@@ -6621,6 +6625,8 @@ components:
           type: ["number", "null"]
         applicationFee:
           type: ["number", "null"]
+        enrollmentFee:
+          type: ["number", "null"]
         advancedFee:
           type: ["number", "null"]
         depositFee:
@@ -6631,6 +6637,8 @@ components:
           type: ["number", "null"]
         languageFee:
           type: ["number", "null"]
+        refundProcess:
+          type: ["string", "null"]
         isActive:
           type: boolean
       required:
@@ -6667,6 +6675,8 @@ components:
           type: ["number", "null"]
         applicationFee:
           type: ["number", "null"]
+        enrollmentFee:
+          type: ["number", "null"]
         advancedFee:
           type: ["number", "null"]
         depositFee:
@@ -6677,6 +6687,8 @@ components:
           type: ["number", "null"]
         languageFee:
           type: ["number", "null"]
+        refundProcess:
+          type: ["string", "null"]
         isActive:
           type: ["boolean", "null"]
 

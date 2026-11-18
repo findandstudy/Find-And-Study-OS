@@ -861,7 +861,7 @@ router.post("/universities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_
 const PROGRAM_TEMPLATE_FIXED_COLUMNS = [
   "universityId", "universityName", "country", "name", "description", "degree", "field", "language",
   "duration", "tuitionFee", "currency", "scholarship", "intakes",
-  "requirements", "commissionRate", "applicationFee", "advancedFee",
+  "requirements", "refundProcess", "commissionRate", "applicationFee", "enrollmentFee", "advancedFee",
   "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
   "feeType", "minGpa", "minLanguageScore", "quota", "isActive",
   "sourceMetadataJson",
@@ -900,7 +900,8 @@ router.get("/programs/import-template", requireAuth, requireRole(...MANAGER_ROLE
       { Column: "country", Required: "No", Notes: "Used when auto-creating a missing university (for example, Turkey)." },
       { Column: "description", Required: "No", Notes: "Canonical English description. The system automatically queues all configured target translations." },
       { Column: "degree / field / language / duration", Required: "No", Notes: "Free text." },
-      { Column: "tuitionFee / scholarship / applicationFee / advancedFee / depositFee / serviceFeeAmount / discountedFee / languageFee", Required: "No", Notes: "Numeric (no currency symbol)." },
+      { Column: "tuitionFee / scholarship / applicationFee / enrollmentFee / advancedFee / depositFee / serviceFeeAmount / discountedFee / languageFee", Required: "No", Notes: "Numeric (no currency symbol)." },
+      { Column: "refundProcess", Required: "No", Notes: "Canonical English refund conditions and procedure. Paragraphs and line breaks are preserved." },
       { Column: "currency", Required: "No", Notes: "ISO code: USD, EUR, TRY, GBP. Defaults to USD." },
       { Column: "intakes", Required: "No", Notes: "Comma-separated: 'Fall, Spring, Summer'." },
       { Column: "commissionRate / minGpa / minLanguageScore / quota", Required: "No", Notes: "Numeric." },
@@ -939,8 +940,8 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     universityId?: number; universityName?: string; name: string; description?: string;
     degree?: string; field?: string; language?: string;
     duration?: string; tuitionFee?: number; currency?: string;
-    scholarship?: number; intakes?: string; requirements?: string;
-    commissionRate?: number; applicationFee?: number; advancedFee?: number;
+    scholarship?: number; intakes?: string; requirements?: string; refundProcess?: string;
+    commissionRate?: number; applicationFee?: number; enrollmentFee?: number; advancedFee?: number;
     depositFee?: number; serviceFeeAmount?: number; discountedFee?: number;
     languageFee?: number; feeType?: string; minGpa?: number; minLanguageScore?: number;
     quota?: number; isActive?: string | boolean; sourceMetadata?: unknown; sourceMetadataJson?: unknown;
@@ -1010,7 +1011,7 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
   const NON_DOC_COLUMNS = new Set<string>([
     "universityId", "universityName", "name", "description", "degree", "field", "language",
     "duration", "tuitionFee", "currency", "scholarship", "intakes",
-    "requirements", "commissionRate", "applicationFee", "advancedFee",
+    "requirements", "refundProcess", "commissionRate", "applicationFee", "enrollmentFee", "advancedFee",
     "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
     "feeType", "minGpa", "minLanguageScore", "quota", "isActive", "country", "sourceMetadata", "sourceMetadataJson",
   ]);
@@ -1081,9 +1082,10 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
       tuitionFee: r.tuitionFee ? Number(r.tuitionFee) : null,
       currency: r.currency ?? "USD",
       scholarship: r.scholarship ? Number(r.scholarship) : null,
-      intakes: r.intakes ?? null, requirements: r.requirements ?? null,
+      intakes: r.intakes ?? null, requirements: r.requirements ?? null, refundProcess: r.refundProcess ?? null,
       commissionRate: r.commissionRate ? Number(r.commissionRate) : null,
       applicationFee: r.applicationFee ? Number(r.applicationFee) : null,
+      enrollmentFee: r.enrollmentFee == null ? null : Number(r.enrollmentFee),
       advancedFee: r.advancedFee ? Number(r.advancedFee) : null,
       depositFee: r.depositFee ? Number(r.depositFee) : null,
       serviceFeeAmount: r.serviceFeeAmount ? Number(r.serviceFeeAmount) : null,

@@ -68,6 +68,7 @@ test("null source fields stay null even if a provider tries to invent content", 
     duration: "invented",
     intakes: "invented",
     requirements: "invented",
+    refundProcess: "invented",
   }), sparse);
   assert.deepEqual(parsed, {
     name: "İşletme Yüksek Lisansı",
@@ -76,6 +77,7 @@ test("null source fields stay null even if a provider tries to invent content", 
     duration: null,
     intakes: null,
     requirements: null,
+    refundProcess: null,
   });
 });
 
@@ -88,12 +90,19 @@ test("migrations own durable queueing, stale-manual handling, and the 23-languag
     new URL("../../../lib/db/drizzle/0108_expand_system_and_program_locales.sql", import.meta.url),
     "utf8",
   );
+  const feeAndRefundMigration = readFileSync(
+    new URL("../../../lib/db/drizzle/0142_program_enrolment_fee_refund_process.sql", import.meta.url),
+    "utf8",
+  );
   assert.match(foundationMigration, /CREATE TABLE "program_translations"/);
   assert.match(foundationMigration, /FOR EACH ROW\s+EXECUTE FUNCTION "fas_queue_program_translations"/);
   assert.match(foundationMigration, /WHEN "program_translations"\."is_manual" THEN 'stale_manual'/);
   assert.match(foundationMigration, /fas_program_content_source_hash/);
   assert.match(expansionMigration, /bn.*pt.*ne.*vi.*ko.*uk.*it/s);
   assert.match(expansionMigration, /en,tr,ar,fr,ru,fa,zh,hi,es,id,ur,tk,ky,kk,uz,tg,bn,pt,ne,vi,ko,uk,it/);
+  assert.match(feeAndRefundMigration, /ADD COLUMN IF NOT EXISTS "enrollment_fee" real/);
+  assert.match(feeAndRefundMigration, /ADD COLUMN IF NOT EXISTS "refund_process" text/);
+  assert.match(feeAndRefundMigration, /UPDATE OF[\s\S]*"refund_process"/);
   assert.doesNotMatch(
     `${foundationMigration}\n${expansionMigration}`,
     /FROM\s+"programs"\s+p\s+CROSS JOIN/i,

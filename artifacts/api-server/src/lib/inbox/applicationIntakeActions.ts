@@ -214,6 +214,7 @@ async function createApplicationFromReadyIntake(state: ApplicationIntakeState): 
       commissionRate: program.commissionRate,
       serviceFeeAmount: program.serviceFeeAmount,
       applicationFee: program.applicationFee,
+      enrollmentFee: program.enrollmentFee,
       depositFee: program.depositFee,
       advancedFee: program.advancedFee,
       languageFee: program.languageFee,

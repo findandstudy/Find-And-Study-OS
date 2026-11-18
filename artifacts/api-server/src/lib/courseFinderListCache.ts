@@ -10,6 +10,7 @@ const COURSE_FINDER_LIST_KEYS = [
   "intake",
   "feeMin",
   "feeMax",
+  "enrollmentFee",
   "search",
   "sort",
   "page",

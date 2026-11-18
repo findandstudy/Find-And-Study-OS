@@ -29,6 +29,7 @@ type ClaimRow = {
   duration: string | null;
   intakes: string | null;
   requirements: string | null;
+  refund_process: string | null;
 };
 
 export async function claimProgramTranslation(
@@ -68,7 +69,7 @@ export async function claimProgramTranslation(
       AND program.id = translation.program_id
     RETURNING translation.program_id, translation.locale, translation.source_hash,
               translation.attempts, program.name, program.description, program.field,
-              program.duration, program.intakes, program.requirements
+              program.duration, program.intakes, program.requirements, program.refund_process
   `, [workerId, leaseSeconds]);
   const row = result.rows[0];
   if (!row || !isProgramTargetLocale(row.locale)) return null;
@@ -95,9 +96,10 @@ export async function completeProgramTranslation(
         duration = $8,
         intakes = $9,
         requirements = $10,
+        refund_process = $11,
         status = 'published',
-        provider = $11,
-        model = $12,
+        provider = $12,
+        model = $13,
         error_code = NULL,
         translated_at = now(),
         leased_at = NULL,
@@ -114,7 +116,7 @@ export async function completeProgramTranslation(
   `, [
     job.programId, job.locale, job.sourceHash, workerId,
     content.name, content.description, content.field, content.duration,
-    content.intakes, content.requirements, provider.provider, provider.model,
+    content.intakes, content.requirements, content.refundProcess, provider.provider, provider.model,
   ]);
   const committed = result.rowCount === 1;
   if (committed) {
@@ -168,7 +170,7 @@ export async function requeueProgramTranslations(
     SELECT program.id, locale,
            fas_program_content_source_hash(
              program.name, program.description, program.field, program.duration,
-             program.intakes, program.requirements
+             program.intakes, program.requirements, program.refund_process
            ),
            'queued', now(), now()
       FROM programs program
@@ -217,7 +219,7 @@ export async function reconcileMissingProgramTranslations(
   }>(`
     WITH batch AS MATERIALIZED (
       SELECT program.id, program.name, program.description, program.field,
-             program.duration, program.intakes, program.requirements
+             program.duration, program.intakes, program.requirements, program.refund_process
         FROM programs program
        WHERE program.id > $1
        ORDER BY program.id
@@ -229,7 +231,7 @@ export async function reconcileMissingProgramTranslations(
       SELECT batch.id, locale,
              fas_program_content_source_hash(
                batch.name, batch.description, batch.field, batch.duration,
-               batch.intakes, batch.requirements
+               batch.intakes, batch.requirements, batch.refund_process
              ),
              'queued', now(), now()
         FROM batch

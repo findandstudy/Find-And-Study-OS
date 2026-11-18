@@ -8,6 +8,7 @@ const COURSE_FINDER_FILTER_KEYS = [
   "field",
   "feeMin",
   "feeMax",
+  "enrollmentFee",
   "search",
 ] as const;
 

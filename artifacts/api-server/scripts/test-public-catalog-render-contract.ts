@@ -355,6 +355,8 @@ test("program SSR uses verified price components and structured active intakes",
       tuitionFee: 1,
       discountedFee: 0,
       currency: "INVALID",
+      enrollmentFee: 250,
+      refundProcess: "Submit the refund form.\nAllow 20 business days for review.",
       verifiedTuition: {
         amountMinor: "1234500",
         currencyCode: "USD",
@@ -381,6 +383,10 @@ test("program SSR uses verified price components and structured active intakes",
   };
   const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "verified-nonce" });
   assert.match(html, /\$12,345/);
+  assert.match(html, /Enrolment Fee/);
+  assert.match(html, /\$250/);
+  assert.match(html, /id="refund-process"/);
+  assert.match(html, /Allow 20 business days/);
   assert.match(html, /Fall · 2026/);
   assert.match(html, /"price":12345/);
   assert.match(html, /"priceCurrency":"USD"/);

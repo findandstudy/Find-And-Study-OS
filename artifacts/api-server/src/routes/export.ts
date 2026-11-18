@@ -212,6 +212,7 @@ router.get("/export/applications", requireAuth, requireRole(...ADMIN_ROLES), asy
     "Commission Status": r.commissionStatus || "",
     "Service Fee": r.app.serviceFeeAmount ?? "",
     "Application Fee": r.app.applicationFee ?? "",
+    "Enrolment Fee": r.app.enrollmentFee ?? "",
     "Deposit Fee": r.app.depositFee ?? "",
     "Advanced Fee": r.app.advancedFee ?? "",
     "Language Fee": r.app.languageFee ?? "",

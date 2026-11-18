@@ -36,6 +36,7 @@ describe("normalizeProgramImportRow — export round-trip (PI-1)", () => {
       Scholarship: "500",
       Intakes: "Sep",
       "Application Fee": "0",
+      "Enrolment Fee": "250",
       "Advance Fee": "0",
       "Deposit Fee": "1000",
       "Service Fee": "0",
@@ -46,6 +47,7 @@ describe("normalizeProgramImportRow — export round-trip (PI-1)", () => {
       Quota: "50",
       Active: "Yes",
       Requirements: "High school diploma",
+      "Refund Process": "Refund requests must be submitted in writing.",
     };
     const out = normalizeProgramImportRow(exportRow);
     assert.equal(out.name, "Computer Engineering");
@@ -57,6 +59,8 @@ describe("normalizeProgramImportRow — export round-trip (PI-1)", () => {
     assert.equal(out.duration, "4 Years");
     assert.equal(out.feeType, "Per Year");
     assert.equal(out.tuitionFee, "3500");
+    assert.equal(out.enrollmentFee, "250");
+    assert.equal(out.refundProcess, "Refund requests must be submitted in writing.");
     assert.equal(out.currency, "USD");
     assert.equal(out.commissionRate, "10");
     assert.equal(out.scholarship, "500");

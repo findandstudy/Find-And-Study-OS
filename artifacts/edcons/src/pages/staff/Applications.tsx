@@ -525,6 +525,7 @@ function ProgramInfoPopup({ programId, onClose, canSeeCommission }: { programId:
                   {fmtCur(p.tuitionFee) && <div><span className="text-muted-foreground text-xs">Tuition Fee</span><p className="font-medium">{fmtCur(p.tuitionFee)}</p></div>}
                   {p.feeType && <div><span className="text-muted-foreground text-xs">Fee Type</span><p className="font-medium">{p.feeType}</p></div>}
                   {fmtCur(p.applicationFee) && <div><span className="text-muted-foreground text-xs">Application Fee</span><p className="font-medium">{fmtCur(p.applicationFee)}</p></div>}
+                  {fmtCur(p.enrollmentFee) && <div><span className="text-muted-foreground text-xs">Enrolment Fee</span><p className="font-medium">{fmtCur(p.enrollmentFee)}</p></div>}
                   {fmtCur(p.depositFee) && <div><span className="text-muted-foreground text-xs">Deposit Fee</span><p className="font-medium">{fmtCur(p.depositFee)}</p></div>}
                   {fmtCur(p.serviceFeeAmount) && <div><span className="text-muted-foreground text-xs">Service Fee</span><p className="font-medium">{fmtCur(p.serviceFeeAmount)}</p></div>}
                   {canSeeCommission && fmtCur(p.commissionAmount) && <div><span className="text-muted-foreground text-xs">Commission</span><p className="font-medium text-emerald-600">{fmtCur(p.commissionAmount)}</p></div>}

@@ -40,6 +40,8 @@ type ProgramDetailPayload = {
     currency: string | null;
     intakes: string | null;
     requirements: string | null;
+    refundProcess: string | null;
+    enrollmentFee: number | null;
     depositFee: number | null;
     languageFee: number | null;
     feeType: string | null;
@@ -126,6 +128,10 @@ function feeComponentLabel(componentType: string, t: (key: string) => string): s
     case "DEPOSIT_FEE": return t("catalogDetail.deposit");
     case "APPLICATION":
     case "APPLICATION_FEE": return t("catalogPage.applicationFee");
+    case "ENROLMENT":
+    case "ENROLMENT_FEE":
+    case "ENROLLMENT":
+    case "ENROLLMENT_FEE": return t("catalogPage.enrollmentFee");
     case "ADVANCE":
     case "ADVANCED_FEE":
     case "ADVANCE_FEE": return t("catalogPage.advancedFee");
@@ -231,7 +237,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const { requirements, metadata } = splitRequirements(program.requirements, { canonicalPath: program.canonicalPath, id: program.id });
   const hasEditorialRequirements = detailContentTitle(editorial, "requirements", "") !== "";
   const countryPath = localDetailPath(program.countryPath), cityPath = localDetailPath(program.cityPath);
-  const feeItems = visiblePrices.length > 0
+  const verifiedFeeItems = visiblePrices.length > 0
     ? visiblePrices.map(price => ({
       id: price.id,
       componentType: price.componentType,
@@ -246,6 +252,16 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       frequency: tuition.frequency || "",
       verified: tuition.verified,
     }] : [];
+  const hasVerifiedEnrollmentFee = verifiedFeeItems.some(item => ["ENROLMENT", "ENROLMENT_FEE", "ENROLLMENT", "ENROLLMENT_FEE"].includes(item.componentType.toUpperCase()));
+  const feeItems = program.enrollmentFee != null && program.enrollmentFee >= 0 && !hasVerifiedEnrollmentFee
+    ? [...verifiedFeeItems, {
+      id: "catalogue-enrolment",
+      componentType: "ENROLMENT_FEE",
+      amount: detailMoney(program.enrollmentFee, program.currency || "USD", lang),
+      frequency: "one-time",
+      verified: false,
+    }]
+    : verifiedFeeItems;
   const campuses = [...new Set(payload.intakes.map(intake => intake.campusName).filter(Boolean))].join(" · ");
   const institutionLocation = <>{cityPath ? <Link href={cityPath}>{program.universityCity}</Link> : program.universityCity}{program.universityCity && " · "}{countryPath ? <Link href={countryPath}>{program.universityCountry}</Link> : program.universityCountry}</>;
   const heroSection = detailHeroSection(editorial);
@@ -314,6 +330,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           {(requirements.length > 0 || hasEditorialRequirements) && <a href="#requirements">{t("programs.requirements")}</a>}
           {payload.intakes.length > 0 && <a href="#intakes">{t("catalogDetail.availableIntakes")}</a>}
           <a href="#fees">{t("courseFinderPage.tuitionFee")}</a>
+          {program.refundProcess?.trim() && <a href="#refund-process">{t("catalogPage.refundProcess")}</a>}
           {detailContentNavigation(editorial)}
           {payload.related.length > 0 && <a href="#related">{t("catalogDetail.relatedPrograms")}</a>}
         </div>
@@ -386,9 +403,15 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           </div>
         </div>
       </section>
+      {program.refundProcess?.trim() && <section data-detail-section="refund-process" id="refund-process" className="detail-section is-sand detail-program-refund">
+        <div className="detail-wrap detail-split">
+          <DetailHeading number="05" eyebrow={copy.program} title={t("catalogPage.refundProcess")} />
+          <div className="detail-prose whitespace-pre-line">{program.refundProcess}</div>
+        </div>
+      </section>}
       {payload.related.length > 0 && <section data-detail-section="related" id="related" className="detail-section">
         <div className="detail-wrap">
-          <DetailHeading number="05" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "related", t("catalogDetail.relatedPrograms"))} />
+          <DetailHeading number="06" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "related", t("catalogDetail.relatedPrograms"))} />
           {detailContentIntro(editorial, "related")}
           <DeferredBelowFold><Suspense fallback={<div className="h-72 animate-pulse rounded-3xl bg-secondary" />}><CityProgramCards key={`${program.id}:${lang}`} programs={payload.related} /></Suspense></DeferredBelowFold>
         </div>

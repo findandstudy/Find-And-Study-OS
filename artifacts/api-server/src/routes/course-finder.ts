@@ -168,7 +168,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     res.status(400).json({ error: "INVALID_DETAIL_UNIVERSITY_CONTEXT" }); return;
   }
   const detailScope = await detailReadScope(req.query);
-  const { country, city, universityType, universityId, programId, level, language, locale, field, search, intake, feeMin, feeMax, sort, page = "1", limit = "24" } = req.query as Record<string, string>;
+  const { country, city, universityType, universityId, programId, level, language, locale, field, search, intake, feeMin, feeMax, enrollmentFee, sort, page = "1", limit = "24" } = req.query as Record<string, string>;
   const contentLocale = normalizeProgramLocale(locale);
   const localizedProgramName = sql<string>`COALESCE(${programTranslationsTable.name}, ${programsTable.name})`;
   // Cap at 500 (was 1000). Lowering further requires StudentDetail.tsx:319
@@ -230,6 +230,8 @@ router.get("/course-finder", async (req, res): Promise<void> => {
   if (feeMinNum !== null) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) >= ${feeMinNum}`);
   const feeMaxNum = parseNonNegativeInt(feeMax);
   if (feeMaxNum !== null) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) <= ${feeMaxNum}`);
+  if (enrollmentFee === "with") conditions.push(sql`${programsTable.enrollmentFee} > 0`);
+  if (enrollmentFee === "without") conditions.push(sql`COALESCE(${programsTable.enrollmentFee}, 0) <= 0`);
   if (search) {
     const escaped = escapeLikePattern(search);
     conditions.push(
@@ -280,6 +282,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     intake,
     feeMin,
     feeMax,
+    enrollmentFee,
     search,
     sort,
     page: String(pageNum),
@@ -328,8 +331,10 @@ router.get("/course-finder", async (req, res): Promise<void> => {
           translatedLocale: programTranslationsTable.locale,
           commissionRate: programsTable.commissionRate,
           applicationFee: programsTable.applicationFee,
+          enrollmentFee: programsTable.enrollmentFee,
           advancedFee: programsTable.advancedFee,
           depositFee: programsTable.depositFee,
+          refundProcess: sql<string | null>`COALESCE(${programTranslationsTable.refundProcess}, ${programsTable.refundProcess})`,
           serviceFeeAmount: programsTable.serviceFeeAmount,
           discountedFee: programsTable.discountedFee,
           languageFee: programsTable.languageFee,
@@ -924,7 +929,9 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
       commissionRate: programsTable.commissionRate,
       serviceFeeAmount: programsTable.serviceFeeAmount,
       applicationFee: programsTable.applicationFee,
+      enrollmentFee: programsTable.enrollmentFee,
       depositFee: programsTable.depositFee,
+      refundProcess: sql<string | null>`COALESCE(${programTranslationsTable.refundProcess}, ${programsTable.refundProcess})`,
       advancedFee: programsTable.advancedFee,
       languageFee: programsTable.languageFee,
       intakes: programsTable.intakes,
@@ -1008,6 +1015,7 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
     commissionRate: program.commissionRate ?? null,
     serviceFeeAmount: program.serviceFeeAmount ?? null,
     applicationFee: program.applicationFee ?? null,
+    enrollmentFee: program.enrollmentFee ?? null,
     depositFee: program.depositFee ?? null,
     advancedFee: program.advancedFee ?? null,
     languageFee: program.languageFee ?? null,

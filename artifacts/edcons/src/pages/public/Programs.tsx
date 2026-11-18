@@ -45,8 +45,10 @@ export interface Program {
   intakes: string | null;
   requirements: string | null;
   applicationFee: number | null;
+  enrollmentFee: number | null;
   advancedFee: number | null;
   depositFee: number | null;
+  refundProcess: string | null;
   languageFee: number | null;
   feeType: string | null;
   universityName: string;
@@ -116,6 +118,7 @@ export default function Programs() {
   const [level, setLevel] = useState<string[]>(() => initialQueryValues("level"));
   const [language, setLanguage] = useState<string[]>(() => initialQueryValues("language"));
   const [field, setField] = useState<string[]>(() => initialQueryValues("field"));
+  const [enrollmentFee, setEnrollmentFee] = useState<string[]>(() => initialQueryValues("enrollmentFee"));
   const [feeMin, setFeeMin] = useState("");
   const [feeMax, setFeeMax] = useState("");
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -208,10 +211,11 @@ export default function Programs() {
     if (level.length) p.set("level", level.join(","));
     if (language.length) p.set("language", language.join(","));
     if (field.length) p.set("field", field.join(","));
+    if (enrollmentFee.length === 1) p.set("enrollmentFee", enrollmentFee[0]);
     if (debouncedFeeMin) p.set("feeMin", debouncedFeeMin);
     if (debouncedFeeMax) p.set("feeMax", debouncedFeeMax);
     return p.toString();
-  }, [debouncedSearch, country, city, universityType, universityId, level, language, field, debouncedFeeMin, debouncedFeeMax]);
+  }, [debouncedSearch, country, city, universityType, universityId, level, language, field, enrollmentFee, debouncedFeeMin, debouncedFeeMax]);
 
   useEffect(() => {
     // Let the first result page settle before loading the seven cascading
@@ -267,6 +271,7 @@ export default function Programs() {
       if (level.length) params.set("level", level.join(","));
       if (language.length) params.set("language", language.join(","));
       if (field.length) params.set("field", field.join(","));
+      if (enrollmentFee.length === 1) params.set("enrollmentFee", enrollmentFee[0]);
       const requestedProgramId = initialQueryValues("programId")[0];
       if (requestedProgramId && /^\d{1,10}$/.test(requestedProgramId)) {
         params.set("programId", requestedProgramId);
@@ -290,7 +295,7 @@ export default function Programs() {
       setIsLoading(false);
       setHasLoadedInitialPrograms(true);
     }
-  }, [page, debouncedSearch, country, city, universityType, universityId, level, language, field, debouncedFeeMin, debouncedFeeMax, lang]);
+  }, [page, debouncedSearch, country, city, universityType, universityId, level, language, field, enrollmentFee, debouncedFeeMin, debouncedFeeMax, lang]);
 
   useEffect(() => { fetchPrograms(); }, [fetchPrograms]);
   useEffect(() => { setPage(1); }, [debouncedSearch, country, city, universityType, universityId, level, language, field, debouncedFeeMin, debouncedFeeMax]);
@@ -303,6 +308,7 @@ export default function Programs() {
     setLevel([]);
     setLanguage([]);
     setField([]);
+    setEnrollmentFee([]);
     setFeeMin("");
     setFeeMax("");
     setSearch("");
@@ -328,8 +334,8 @@ export default function Programs() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <PublicProgramFilters
             filters={filters}
-            selection={{ country, city, universityType, universityId, level, language, field, feeMin, feeMax }}
-            onSelect={(key, values) => ({ country: setCountry, city: setCity, universityType: setUniversityType, universityId: setUniversityId, level: setLevel, language: setLanguage, field: setField })[key](values)}
+            selection={{ country, city, universityType, universityId, level, language, field, enrollmentFee, feeMin, feeMax }}
+            onSelect={(key, values) => ({ country: setCountry, city: setCity, universityType: setUniversityType, universityId: setUniversityId, level: setLevel, language: setLanguage, field: setField, enrollmentFee: setEnrollmentFee })[key](values)}
             onFeeChange={(key, value) => key === "feeMin" ? setFeeMin(value) : setFeeMax(value)}
             search={search} onSearchChange={setSearch} onClear={clearAllFilters} total={total}
           />

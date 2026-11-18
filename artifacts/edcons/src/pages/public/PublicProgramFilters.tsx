@@ -12,7 +12,7 @@ export type PublicProgramFacets = {
 };
 export type PublicProgramSelection = {
   country: string[]; city: string[]; universityType: string[]; universityId: string[];
-  level: string[]; language: string[]; field: string[]; feeMin: string; feeMax: string;
+  level: string[]; language: string[]; field: string[]; enrollmentFee: string[]; feeMin: string; feeMax: string;
 };
 type MultiKey = Exclude<keyof PublicProgramSelection, "feeMin" | "feeMax">;
 
@@ -28,7 +28,7 @@ export function PublicProgramFilters({ filters, selection, onSelect, onFeeChange
   const [showFilters, setShowFilters] = useState(false);
   const panelId = useId();
   const locked = new Set<MultiKey>(universityLocked ? ["country", "city", "universityType", "universityId"] : lockedLocationKeys);
-  const allKeys: Array<keyof PublicProgramSelection> = ["country", "city", "universityType", "universityId", "level", "language", "field", "feeMin", "feeMax"];
+  const allKeys: Array<keyof PublicProgramSelection> = ["country", "city", "universityType", "universityId", "level", "language", "field", "enrollmentFee", "feeMin", "feeMax"];
   const activeKeys = allKeys.filter(key => !locked.has(key as MultiKey));
   const activeCount = activeKeys.filter(key => selection[key].length > 0).length;
   const hasFilters = activeCount > 0 || search.length > 0;
@@ -42,6 +42,7 @@ export function PublicProgramFilters({ filters, selection, onSelect, onFeeChange
     { key: "level", label: "programs.filterLevel", placeholder: "programs.allLevels", Icon: BookOpen, options: filters.degrees.map(value => ({ value, label: value })) },
     { key: "language", label: "programs.filterLanguage", placeholder: "programs.allLanguages", Icon: Languages, options: filters.languages.map(value => ({ value, label: value })) },
     { key: "field", label: "programs.filterField", placeholder: "programs.allFields", Icon: Award, options: filters.fields.map(value => ({ value, label: value })) },
+    { key: "enrollmentFee", label: "catalogPage.enrollmentFee", placeholder: "programs.anyEnrolmentFee", Icon: DollarSign, options: Array.from([{ value: "with", label: t("programs.withEnrolmentFee") }, { value: "without", label: t("programs.withoutEnrolmentFee") }]) },
   ] as const;
   const control = (item: typeof locationControls[number] | typeof programControls[number]) => <div key={item.key} className="space-y-1.5 min-w-0" role="group" aria-label={t(item.label)}>
     <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><item.Icon className="w-3 h-3" aria-hidden="true" />{t(item.label)}</span>

@@ -14,6 +14,7 @@ export type ProposalProgramData = {
   intakes?: string | null;
   commissionRate?: number | null;
   applicationFee?: number | null;
+  enrollmentFee?: number | null;
   discountedFee?: number | null;
   feeType?: string | null;
   serviceFeeAmount?: number | null;
@@ -170,7 +171,7 @@ export function getProposalServiceFee(
 export function getProposalFirstYearTotal(
   program: Pick<
     ProposalProgramData,
-    "discountedFee" | "tuitionFee" | "applicationFee" | "serviceFeeAmount"
+    "discountedFee" | "tuitionFee" | "applicationFee" | "enrollmentFee" | "serviceFeeAmount"
   >,
   serviceFeeMarkup = 0,
   hideServiceFee = false,
@@ -181,7 +182,7 @@ export function getProposalFirstYearTotal(
   const tuition = program.discountedFee ?? program.tuitionFee;
   if (tuition == null || !Number.isFinite(tuition)) return null;
   const serviceFee = getProposalServiceFee(program, serviceFeeMarkup, false) ?? 0;
-  return tuition + Math.max(0, program.applicationFee ?? 0) + serviceFee;
+  return tuition + Math.max(0, program.applicationFee ?? 0) + Math.max(0, program.enrollmentFee ?? 0) + serviceFee;
 }
 
 export function getProposalDateTime(date = new Date()): { date: string; time: string } {
@@ -735,6 +736,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
           .filter(
             (program) =>
               (program.applicationFee ?? 0) > 0 ||
+              (program.enrollmentFee ?? 0) > 0 ||
               getProposalServiceFee(program, serviceFeeMarkup, false) != null,
           )
           .map((program) => ({
@@ -826,7 +828,10 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     const tuition = effectiveTuition(program);
     const discount = discountData(program);
     const serviceFee = getProposalServiceFee(program, serviceFeeMarkup, hideServiceFee);
-    const hasVisibleExtras = serviceFee != null || (program.applicationFee ?? 0) > 0;
+    const hasVisibleExtras =
+      serviceFee != null ||
+      (program.applicationFee ?? 0) > 0 ||
+      (program.enrollmentFee ?? 0) > 0;
     const firstYearTotal = hasVisibleExtras
       ? getProposalFirstYearTotal(program, serviceFeeMarkup, hideServiceFee)
       : null;
@@ -1006,7 +1011,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     doc.setFont("helvetica", "normal");
     setReadableFontSize(compact ? 3.65 : 4.2);
     doc.text(
-      `${compact ? "App" : "Application"} ${feeOrFree(program.applicationFee, currency)}`,
+      `${compact ? "App" : "Application"} ${feeOrFree(program.applicationFee, currency)} · ${compact ? "Enroll" : "Enrolment"} ${feeOrFree(program.enrollmentFee, currency)}`,
       statusX + 5.7,
       y + (compact ? 9.75 : 13.9),
       { align: "center" },

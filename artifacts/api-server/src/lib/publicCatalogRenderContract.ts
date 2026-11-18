@@ -194,6 +194,7 @@ type PublicCatalogRenderModelData =
         language: string | null;
         tuitionFee: number | null;
         discountedFee: number | null;
+        enrollmentFee?: number | null;
         currency: string | null;
         verifiedTuition?: {
           amountMinor: string;
@@ -201,6 +202,7 @@ type PublicCatalogRenderModelData =
           frequency: string;
         } | null;
         requirements?: string | null;
+        refundProcess?: string | null;
       };
       intakes?: Array<{
         id: string;
@@ -853,6 +855,16 @@ function formatMinorPrice(
   }
 }
 
+function formatMajorPrice(amount: number | null | undefined, currencyCode: unknown, locale: ProgramSupportedLocale): string | null {
+  if (amount == null || !Number.isFinite(amount) || amount < 0) return null;
+  const currency = normalizedCurrency(currencyCode) || "USD";
+  try {
+    return new Intl.NumberFormat(locale, { style: "currency", currency }).format(amount);
+  } catch {
+    return `${amount.toLocaleString(locale)} ${currency}`;
+  }
+}
+
 function locationHierarchy(value: { country?: string; city?: string | null; countryPath?: string | null; cityPath?: string | null }): string {
   const link = (label: string | null | undefined, path: string | null | undefined) => {
     if (!label) return "";
@@ -902,11 +914,12 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
     const formatted = formatMinorPrice(item.amountMinor, item.currencyCode, model.locale) || "—";
     return `<div><dt>${escapeHtml(item.componentType)}</dt><dd>${escapeHtml(formatted)} · ${escapeHtml(item.frequency.toLowerCase())}</dd></div>`;
   }).join("");
-  const feeContent = priceRows || (price ? `<div><dt>${escapeHtml(copy.tuition)}</dt><dd>${escapeHtml(price)}</dd></div>` : "");
+  const enrollmentPrice = formatMajorPrice(program.enrollmentFee, program.currency, model.locale) || "";
+  const feeContent = `${priceRows || (price ? `<div><dt>${escapeHtml(copy.tuition)}</dt><dd>${escapeHtml(price)}</dd></div>` : "")}${enrollmentPrice && !prices.some(item => ["ENROLMENT", "ENROLMENT_FEE", "ENROLLMENT", "ENROLLMENT_FEE"].includes(item.componentType.toUpperCase())) ? `<div><dt>${model.locale === "tr" ? "Kayıt Ücreti" : "Enrolment Fee"}</dt><dd>${escapeHtml(enrollmentPrice)}</dd></div>` : ""}`;
   const related = model.relatedPrograms.map((item) => `<article class="rounded-2xl border border-border p-5"><p class="text-sm text-primary">${escapeHtml(ssrInstitutionName(item.universityName, program.country, model.locale))}</p><h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(item.canonicalPath)}">${escapeHtml(ssrProgramName(item.name, model.locale))}</a></h3><p class="mt-2 text-muted-foreground">${escapeHtml([ssrDegreeName(item.degree, model.locale), ssrFieldName(item.field, model.locale)].filter(Boolean).join(" · "))}</p></article>`).join("");
   return `<main data-public-render-shell="program-detail" class="mx-auto max-w-7xl px-4 py-24">
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/programs">${escapeHtml(copy.programs)}</a> / <span>${escapeHtml(programName)}</span></nav>
-    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(programName)}"><a href="#overview">${escapeHtml(copy.degree)}</a>${feeContent ? `<a href="#fees">${escapeHtml(copy.tuition)}</a>` : ""}${related ? `<a href="#related">${escapeHtml(copy.programs)}</a>` : ""}</nav>
+    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(programName)}"><a href="#overview">${escapeHtml(copy.degree)}</a>${feeContent ? `<a href="#fees">${escapeHtml(copy.tuition)}</a>` : ""}${program.refundProcess ? `<a href="#refund-process">${model.locale === "tr" ? "Ücret İade Süreci" : "Refund Process"}</a>` : ""}${related ? `<a href="#related">${escapeHtml(copy.programs)}</a>` : ""}</nav>
     <article id="overview" class="mt-8">
       <p class="text-sm text-primary"><a href="${escapeHtml(program.universityPath)}">${escapeHtml(universityName)}</a></p>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(programName)}</h1>
@@ -925,6 +938,7 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
     ${requirements ? `<section data-detail-section="requirements" id="requirements" class="mt-10"><h2>Requirements</h2><p>${escapeHtml(requirements)}</p></section>` : ""}
     ${intakes ? `<section data-detail-section="intakes" id="intakes" class="mt-10"><h2 class="text-2xl font-bold">Available intakes</h2><div class="mt-5 grid gap-4 sm:grid-cols-2">${intakes}</div></section>` : ""}
     ${feeContent ? `<section data-detail-section="fees" id="fees" class="mt-10" aria-label="${escapeHtml(copy.tuition)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.tuition)}</h2><dl class="mt-5 grid gap-4 sm:grid-cols-2">${feeContent}</dl></section>` : ""}
+    ${program.refundProcess ? `<section data-detail-section="refund-process" id="refund-process" class="mt-10"><h2 class="text-2xl font-bold">${model.locale === "tr" ? "Ücret İade Süreci" : "Refund Process"}</h2><p class="mt-4 whitespace-pre-line">${escapeHtml(program.refundProcess)}</p></section>` : ""}
     ${related ? `<section data-detail-section="related" id="related" class="mt-12" aria-label="${escapeHtml(copy.programs)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">${related}</div></section>` : ""}
   </main>`;
 }

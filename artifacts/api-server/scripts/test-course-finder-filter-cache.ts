@@ -8,8 +8,9 @@ test("filter cache key is stable and follows the server filter order", () => {
       language: "English",
       country: "Turkey",
       level: "Bachelor",
+      enrollmentFee: "with",
     }),
-    "country=Turkey&level=Bachelor&language=English",
+    "country=Turkey&level=Bachelor&language=English&enrollmentFee=with",
   );
 });
 

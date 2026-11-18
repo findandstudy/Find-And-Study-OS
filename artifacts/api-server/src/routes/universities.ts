@@ -60,7 +60,7 @@ const PROG_PATCH_FIELDS = [
   "universityId", "name", "description", "degree", "field", "language", "duration",
   "tuitionFee", "currency", "scholarship", "intakes", "requirements",
   "commissionRate", "applicationFee", "advancedFee", "depositFee",
-  "serviceFeeAmount", "discountedFee", "languageFee", "feeType",
+  "enrollmentFee", "serviceFeeAmount", "discountedFee", "languageFee", "feeType", "refundProcess",
   "minGpa", "minLanguageScore", "quota", "isActive", "requiredEducationLevel",
   "minGradeValue", "gradeScale", "languageRequirements", "conditionalAdmission",
   "admissionSourceUrl", "admissionVerifiedAt", "admissionValidUntil",
@@ -518,6 +518,7 @@ router.get("/programs", async (req, res): Promise<void> => {
       duration: sql<string | null>`coalesce(${programTranslationsTable.duration}, ${programsTable.duration})`,
       intakes: sql<string | null>`coalesce(${programTranslationsTable.intakes}, ${programsTable.intakes})`,
       requirements: sql<string | null>`coalesce(${programTranslationsTable.requirements}, ${programsTable.requirements})`,
+      refundProcess: sql<string | null>`coalesce(${programTranslationsTable.refundProcess}, ${programsTable.refundProcess})`,
       translatedLocale: programTranslationsTable.locale,
       universityName: universitiesTable.name,
     })
@@ -573,8 +574,8 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
   const {
     universityId, name, description, degree, field, language, duration,
     tuitionFee, currency = "USD", scholarship, intakes, requirements, commissionRate,
-    applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee,
-    feeType, minGpa, minLanguageScore, quota, isActive = true,
+    applicationFee, enrollmentFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee,
+    feeType, refundProcess, minGpa, minLanguageScore, quota, isActive = true,
     requiredEducationLevel, minGradeValue, gradeScale, languageRequirements,
     conditionalAdmission, admissionSourceUrl, admissionVerifiedAt, admissionValidUntil, sourceMetadata,
   } = req.body;
@@ -612,12 +613,14 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     intakes: intakes || null, requirements: requirements || null,
     commissionRate: n(commissionRate),
     applicationFee: n(applicationFee),
+    enrollmentFee: n(enrollmentFee),
     advancedFee: n(advancedFee),
     depositFee: n(depositFee),
     serviceFeeAmount: n(serviceFeeAmount),
     discountedFee: n(discountedFee),
     languageFee: n(languageFee),
     feeType: feeType || null,
+    refundProcess: refundProcess || null,
     minGpa: n(minGpa),
     minLanguageScore: n(minLanguageScore),
     requiredEducationLevel: requiredEducationLevel || null,
@@ -725,6 +728,7 @@ router.get("/programs/:id", async (req, res): Promise<void> => {
     duration: sql<string | null>`coalesce(${programTranslationsTable.duration}, ${programsTable.duration})`,
     intakes: sql<string | null>`coalesce(${programTranslationsTable.intakes}, ${programsTable.intakes})`,
     requirements: sql<string | null>`coalesce(${programTranslationsTable.requirements}, ${programsTable.requirements})`,
+    refundProcess: sql<string | null>`coalesce(${programTranslationsTable.refundProcess}, ${programsTable.refundProcess})`,
     translatedLocale: programTranslationsTable.locale,
   }).from(programsTable)
     .leftJoin(programTranslationsTable, and(
@@ -818,21 +822,22 @@ router.put("/programs/:id/translations/:locale", requireAuth, requireRole(...MAN
       duration: req.body?.duration,
       intakes: req.body?.intakes,
       requirements: req.body?.requirements,
+      refundProcess: req.body?.refundProcess,
     }), source);
     const result = await pool.query(`
       INSERT INTO program_translations (
         program_id, locale, name, description, field, duration, intakes,
-        requirements, source_hash, status, is_manual, attempts, error_code,
+        requirements, refund_process, source_hash, status, is_manual, attempts, error_code,
         translated_at, next_attempt_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8,
-        fas_program_content_source_hash($9,$10,$11,$12,$13,$14),
+        $1, $2, $3, $4, $5, $6, $7, $8, $9,
+        fas_program_content_source_hash($10,$11,$12,$13,$14,$15,$16),
         'published', true, 0, NULL, now(), now(), now()
       )
       ON CONFLICT (program_id, locale) DO UPDATE
       SET name=EXCLUDED.name, description=EXCLUDED.description, field=EXCLUDED.field,
           duration=EXCLUDED.duration, intakes=EXCLUDED.intakes,
-          requirements=EXCLUDED.requirements, source_hash=EXCLUDED.source_hash,
+          requirements=EXCLUDED.requirements, refund_process=EXCLUDED.refund_process, source_hash=EXCLUDED.source_hash,
           status='published', is_manual=true, attempts=0, error_code=NULL,
           provider='manual', model=NULL, translated_at=now(), next_attempt_at=now(),
           leased_at=NULL, lease_expires_at=NULL, worker_id=NULL, updated_at=now()
@@ -840,8 +845,8 @@ router.put("/programs/:id/translations/:locale", requireAuth, requireRole(...MAN
       RETURNING program_id
     `, [
       id, locale, content.name, content.description, content.field, content.duration,
-      content.intakes, content.requirements, source.name, source.description,
-      source.field, source.duration, source.intakes, source.requirements,
+      content.intakes, content.requirements, content.refundProcess, source.name, source.description,
+      source.field, source.duration, source.intakes, source.requirements, source.refundProcess,
     ]);
     if (result.rowCount !== 1) { res.status(409).json({ error: "Translation is currently processing" }); return; }
     invalidatePublicCatalogRenderCache({ entityType: "catalog" });

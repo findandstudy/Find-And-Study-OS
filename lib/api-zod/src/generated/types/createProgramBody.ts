@@ -34,6 +34,8 @@ export interface CreateProgramBody {
   /** @nullable */
   applicationFee?: number | null;
   /** @nullable */
+  enrollmentFee?: number | null;
+  /** @nullable */
   advancedFee?: number | null;
   /** @nullable */
   depositFee?: number | null;
@@ -43,5 +45,7 @@ export interface CreateProgramBody {
   discountedFee?: number | null;
   /** @nullable */
   languageFee?: number | null;
+  /** @nullable */
+  refundProcess?: string | null;
   isActive: boolean;
 }

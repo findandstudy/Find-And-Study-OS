@@ -29,6 +29,7 @@ const sampleProgram: ProposalProgramData = {
   discountedFee: 5100,
   currency: "USD",
   applicationFee: 100,
+  enrollmentFee: 200,
   serviceFeeAmount: 250,
   intakes: "Sep",
   universityName: "Altinbas University",
@@ -73,7 +74,7 @@ test("single-currency PDF fee adjustment uses the normalized selected currency",
 
 test("hidden service fees cannot be inferred from a first-year total", () => {
   assert.equal(getProposalFirstYearTotal(sampleProgram, 100, true), null);
-  assert.equal(getProposalFirstYearTotal(sampleProgram, 100, false), 5_550);
+  assert.equal(getProposalFirstYearTotal(sampleProgram, 100, false), 5_750);
 });
 
 test("rendered PDF shows the adjusted fee and hide removes it plus the derived total", async () => {
@@ -98,7 +99,7 @@ test("rendered PDF shows the adjusted fee and hide removes it plus the derived t
 
   const visibleText = await extractText(false);
   assert.match(visibleText, /Service fee \$375/);
-  assert.match(visibleText, /\$5,575 including visible fees/);
+  assert.match(visibleText, /\$5,775 including visible fees/);
 
   const hiddenText = await extractText(true);
   assert.doesNotMatch(hiddenText, /Service fee/);

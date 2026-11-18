@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "wouter";
-import { Award, BookOpen, Building2, Calendar, Clock, Globe2, GraduationCap, Info, Languages, MapPin, Shield } from "lucide-react";
+import { Award, BookOpen, Building2, Calendar, Clock, DollarSign, Globe2, GraduationCap, Info, Languages, MapPin, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
@@ -28,6 +28,7 @@ export interface PublicProgramCardData {
   discountedFee?: number | null;
   scholarship?: number | null;
   depositFee?: number | null;
+  enrollmentFee?: number | null;
   languageFee?: number | null;
   currency?: string | null;
   feeType?: string | null;
@@ -185,6 +186,12 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
           <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-700/30 rounded-lg px-3 py-2 text-[11px] text-indigo-700 dark:text-indigo-400 font-medium">
             <Shield className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
             <span>{t("courseFinderPage.depositStrip", { fee: formatFee(prog.depositFee, prog.currency) })}</span>
+          </div>
+        )}
+        {!hasTuitionOverride && prog.enrollmentFee != null && prog.enrollmentFee > 0 && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <DollarSign className="h-3.5 w-3.5 text-teal-500" aria-hidden="true" />
+            <span>{t("catalogPage.enrollmentFee")}: {formatFee(prog.enrollmentFee, prog.currency)}</span>
           </div>
         )}
 

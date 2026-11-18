@@ -255,6 +255,7 @@ export async function createApplicationForStudent(studentId: number, programId: 
     let snapshotCommissionRate: number | null = null;
     let snapshotServiceFeeAmount: number | null = null;
     let snapshotApplicationFee: number | null = null;
+    let snapshotEnrollmentFee: number | null = null;
     let snapshotDepositFee: number | null = null;
     let snapshotAdvancedFee: number | null = null;
     let snapshotLanguageFee: number | null = null;
@@ -318,6 +319,7 @@ export async function createApplicationForStudent(studentId: number, programId: 
         snapshotCommissionRate = prog.commissionRate ?? null;
         snapshotServiceFeeAmount = prog.serviceFeeAmount ?? null;
         snapshotApplicationFee = prog.applicationFee ?? null;
+        snapshotEnrollmentFee = prog.enrollmentFee ?? null;
         snapshotDepositFee = prog.depositFee ?? null;
         snapshotAdvancedFee = prog.advancedFee ?? null;
         snapshotLanguageFee = prog.languageFee ?? null;
@@ -382,6 +384,7 @@ export async function createApplicationForStudent(studentId: number, programId: 
       commissionRate: snapshotCommissionRate,
       serviceFeeAmount: snapshotServiceFeeAmount,
       applicationFee: snapshotApplicationFee,
+      enrollmentFee: snapshotEnrollmentFee,
       depositFee: snapshotDepositFee,
       advancedFee: snapshotAdvancedFee,
       languageFee: snapshotLanguageFee,

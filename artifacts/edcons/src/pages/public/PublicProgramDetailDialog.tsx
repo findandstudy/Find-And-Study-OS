@@ -15,6 +15,8 @@ export interface PublicProgramDetailData extends PublicProgramCardData {
   universityTimesRanking?: string | number | null;
   applicationFee?: number | null;
   advancedFee?: number | null;
+  enrollmentFee?: number | null;
+  refundProcess?: string | null;
 }
 
 export interface PublicProgramDetailDialogProps {
@@ -78,6 +80,7 @@ export function PublicProgramDetailDialog({ open, onClose, program, tuitionConte
   if (!hasTuitionOverride) {
     if (program.feeType) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-emerald-500" aria-hidden="true" />, label: t("apply.feeType"), value: program.feeType });
     if (program.applicationFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-amber-500" aria-hidden="true" />, label: t("apply.applicationFee"), value: formatFee(program.applicationFee, program.currency) });
+    if (program.enrollmentFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-teal-500" aria-hidden="true" />, label: t("catalogPage.enrollmentFee"), value: formatFee(program.enrollmentFee, program.currency) });
     if (program.depositFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-cyan-500" aria-hidden="true" />, label: t("apply.depositFee"), value: formatFee(program.depositFee, program.currency) });
     if (program.advancedFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-sky-500" aria-hidden="true" />, label: t("apply.advancedFee"), value: formatFee(program.advancedFee, program.currency) });
     if (program.languageFee) detailRows.push({ icon: <Languages className="w-4 h-4 text-indigo-500" aria-hidden="true" />, label: t("apply.languageFee"), value: formatFee(program.languageFee, program.currency) });
@@ -155,6 +158,10 @@ export function PublicProgramDetailDialog({ open, onClose, program, tuitionConte
           {program.requirements && <div className="space-y-1.5">
             <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{t("programs.requirements")}</p>
             <p className="text-sm text-foreground/80 whitespace-pre-line leading-relaxed break-words"><bdi>{program.requirements}</bdi></p>
+          </div>}
+          {program.refundProcess && <div className="space-y-1.5">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{t("catalogPage.refundProcess")}</p>
+            <p className="text-sm text-foreground/80 whitespace-pre-line leading-relaxed break-words"><bdi>{program.refundProcess}</bdi></p>
           </div>}
           {program.universityDescription && <div className="space-y-1.5 pt-2 border-t border-border/30">
             <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{t("apply.universityInfo")}</p>

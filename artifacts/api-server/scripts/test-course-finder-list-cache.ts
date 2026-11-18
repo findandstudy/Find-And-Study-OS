@@ -30,6 +30,7 @@ test("list cache key keeps pagination and sort isolated", () => {
   const base = courseFinderListCacheKey({ page: "1", limit: "24" });
   assert.notEqual(base, courseFinderListCacheKey({ page: "2", limit: "24" }));
   assert.notEqual(base, courseFinderListCacheKey({ page: "1", limit: "24", sort: "price_asc" }));
+  assert.notEqual(base, courseFinderListCacheKey({ page: "1", limit: "24", enrollmentFee: "with" }));
 });
 
 test("list cache keeps each private-field permission set isolated", () => {

@@ -87,8 +87,10 @@ type Program = {
   scholarship?: number | null;
   intakes?: string | null;
   requirements?: string | null;
+  refundProcess?: string | null;
   commissionRate?: number | null;
   applicationFee?: number | null;
+  enrollmentFee?: number | null;
   advancedFee?: number | null;
   depositFee?: number | null;
   serviceFeeAmount?: number | null;
@@ -138,6 +140,7 @@ type Filters = {
   search: string;
   feeMin: string;
   feeMax: string;
+  enrollmentFee: "" | "with" | "without";
 };
 
 type CourseFinderPage = {
@@ -215,7 +218,7 @@ export default function CourseFinder() {
   const resolveProposalDocMeta = useResolveDocMeta();
   const [filters, setFilters] = useState<Filters>({
     country: [], city: [], universityType: [], universityId: [],
-    level: [], language: [], field: [], search: "", feeMin: "", feeMax: "",
+    level: [], language: [], field: [], search: "", feeMin: "", feeMax: "", enrollmentFee: "",
   });
   // Text and numeric inputs update immediately in the UI, but wait briefly
   // before changing the server query. This prevents one list request plus
@@ -295,6 +298,7 @@ export default function CourseFinder() {
     if (debouncedSearch) p.set("search", debouncedSearch);
     if (debouncedFeeMin) p.set("feeMin", debouncedFeeMin);
     if (debouncedFeeMax) p.set("feeMax", debouncedFeeMax);
+    if (filters.enrollmentFee) p.set("enrollmentFee", filters.enrollmentFee);
     return p.toString();
   }, [filters, debouncedSearch, debouncedFeeMin, debouncedFeeMax]);
 
@@ -453,6 +457,7 @@ export default function CourseFinder() {
     if (filters.search) allParams.set("search", filters.search);
     if (filters.feeMin) allParams.set("feeMin", filters.feeMin);
     if (filters.feeMax) allParams.set("feeMax", filters.feeMax);
+    if (filters.enrollmentFee) allParams.set("enrollmentFee", filters.enrollmentFee);
     return allParams;
   }
 
@@ -669,13 +674,13 @@ export default function CourseFinder() {
   }
 
   function clearFilters() {
-    setFilters({ country: [], city: [], universityType: [], universityId: [], level: [], language: [], field: [], search: "", feeMin: "", feeMax: "" });
+    setFilters({ country: [], city: [], universityType: [], universityId: [], level: [], language: [], field: [], search: "", feeMin: "", feeMax: "", enrollmentFee: "" });
     setPage(1);
     setSelectedIds(new Set());
     setPdfMarkup(0);
   }
 
-  const hasActiveFilters = filters.country.length || filters.city.length || filters.universityType.length || filters.universityId.length || filters.level.length || filters.language.length || filters.field.length || filters.search || filters.feeMin || filters.feeMax;
+  const hasActiveFilters = filters.country.length || filters.city.length || filters.universityType.length || filters.universityId.length || filters.level.length || filters.language.length || filters.field.length || filters.search || filters.feeMin || filters.feeMax || filters.enrollmentFee;
 
   function handleSort(field: string) {
     if (sortField === field) {
@@ -753,6 +758,7 @@ export default function CourseFinder() {
         if (filters.search) allParams.set("search", filters.search);
         if (filters.feeMin) allParams.set("feeMin", filters.feeMin);
         if (filters.feeMax) allParams.set("feeMax", filters.feeMax);
+        if (filters.enrollmentFee) allParams.set("enrollmentFee", filters.enrollmentFee);
         const allData = await apiFetch(`${BASE_URL}/api/course-finder?${allParams.toString()}`) as { data: Program[] };
         exportPrograms = allData.data;
       } catch {}
@@ -771,6 +777,8 @@ export default function CourseFinder() {
       "Currency": p.currency || "USD",
       "Scholarship": p.scholarship ?? "",
       "Application Fee": p.applicationFee ?? "",
+      "Enrolment Fee": p.enrollmentFee ?? "",
+      "Refund Process": p.refundProcess ?? "",
       "Commission Rate (%)": p.commissionRate ?? "",
       "Commission Amount": calcCommissionAmount(p, agentShareRate) ?? "",
       "Fee Type": p.feeType || "",
@@ -903,6 +911,23 @@ export default function CourseFinder() {
                   className="h-9 rounded-lg text-sm w-full"
                 />
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{t("catalogPage.enrollmentFee")}</Label>
+              <Select
+                value={filters.enrollmentFee || "all"}
+                onValueChange={value => handleFilterChange("enrollmentFee", value === "all" ? "" : value)}
+              >
+                <SelectTrigger className="h-9 rounded-lg text-sm">
+                  <SelectValue placeholder={t("programs.anyEnrolmentFee")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("programs.anyEnrolmentFee")}</SelectItem>
+                  <SelectItem value="with">{t("programs.withEnrolmentFee")}</SelectItem>
+                  <SelectItem value="without">{t("programs.withoutEnrolmentFee")}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-end sm:col-span-1">
@@ -1476,6 +1501,11 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
                           -{Math.round(((p.tuitionFee! - p.discountedFee!) / p.tuitionFee!) * 100)}%
                         </Badge>
                       )}
+                      {p.enrollmentFee != null && p.enrollmentFee > 0 && (
+                        <span className="block text-[10px] text-muted-foreground mt-1">
+                          {t("catalogPage.enrollmentFee")}: {formatCurrency(p.enrollmentFee, cur)}
+                        </span>
+                      )}
                     </div>
                   </td>
                   {(showCommission || showServiceFee) && (
@@ -1672,6 +1702,13 @@ function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, o
           <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-700/30 rounded-lg px-3 py-2 text-[11px] text-indigo-700 dark:text-indigo-400 font-medium">
             <Shield className="w-3.5 h-3.5 shrink-0" />
             {t("courseFinderPage.depositStrip", { fee: formatCurrency(p.depositFee, cur) })}
+          </div>
+        )}
+
+        {p.enrollmentFee != null && p.enrollmentFee > 0 && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/35 px-3 py-2 text-[11px]">
+            <span className="text-muted-foreground">{t("catalogPage.enrollmentFee")}</span>
+            <span className="font-bold">{formatCurrency(p.enrollmentFee, cur)}</span>
           </div>
         )}
 
@@ -1964,6 +2001,7 @@ function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate
         ...(p.feeType ? [{ label: "Fee Type", value: p.feeType }] : []),
         ...(hasDiscount ? [{ label: "Discounted Fee", value: formatCurrency(p.discountedFee, cur), highlight: "amber" }] : []),
         ...(showApplicationFee ? [{ label: "Application Fee", value: formatCurrency(p.applicationFee, cur) }] : []),
+        { label: "Enrolment Fee", value: formatCurrency(p.enrollmentFee, cur) },
         { label: "Deposit Fee", value: formatCurrency(p.depositFee, cur) },
         { label: "Advanced Fee", value: formatCurrency(p.advancedFee, cur) },
         { label: "Language Fee", value: formatCurrency(p.languageFee, cur) },
@@ -2042,6 +2080,12 @@ function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate
               <div className="bg-muted/30 rounded-xl p-3">
                 <p className="text-sm text-muted-foreground whitespace-pre-wrap">{p.requirements}</p>
               </div>
+            </div>
+          )}
+          {p.refundProcess && (
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <h3 className="font-semibold text-sm">Refund Process</h3>
+              <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">{p.refundProcess}</p>
             </div>
           )}
         </div>

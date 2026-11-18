@@ -35,6 +35,7 @@ export const applicationsTable = pgTable("applications", {
   commissionRate: real("commission_rate"),
   serviceFeeAmount: real("service_fee_amount"),
   applicationFee: real("application_fee"),
+  enrollmentFee: real("enrollment_fee"),
   depositFee: real("deposit_fee"),
   advancedFee: real("advanced_fee"),
   languageFee: real("language_fee"),

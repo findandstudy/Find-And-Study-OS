@@ -31,6 +31,7 @@ export const programTranslationsTable = pgTable(
     duration: text("duration"),
     intakes: text("intakes"),
     requirements: text("requirements"),
+    refundProcess: text("refund_process"),
     sourceHash: text("source_hash").notNull(),
     status: text("status").notNull().default("queued"),
     isManual: boolean("is_manual").notNull().default(false),

@@ -203,7 +203,7 @@ const APP_PATCH_FIELDS = [
   "universityApplicationId",
   "level", "instructionLanguage", "deadline",
   "tuitionFee", "discountedFee", "scholarship", "commissionRate",
-  "serviceFeeAmount", "applicationFee", "depositFee", "advancedFee",
+  "serviceFeeAmount", "applicationFee", "enrollmentFee", "depositFee", "advancedFee",
   "languageFee", "currency", "notes", "season",
 ];
 
@@ -1123,6 +1123,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
   let snapshotCommissionRate: number | null = null;
   let snapshotServiceFeeAmount: number | null = null;
   let snapshotApplicationFee: number | null = null;
+  let snapshotEnrollmentFee: number | null = null;
   let snapshotDepositFee: number | null = null;
   let snapshotAdvancedFee: number | null = null;
   let snapshotLanguageFee: number | null = null;
@@ -1196,6 +1197,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
       snapshotCommissionRate = prog.commissionRate ?? null;
       snapshotServiceFeeAmount = prog.serviceFeeAmount ?? null;
       snapshotApplicationFee = prog.applicationFee ?? null;
+      snapshotEnrollmentFee = prog.enrollmentFee ?? null;
       snapshotDepositFee = prog.depositFee ?? null;
       snapshotAdvancedFee = prog.advancedFee ?? null;
       snapshotLanguageFee = prog.languageFee ?? null;
@@ -1265,6 +1267,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
         discountedFee: snapshotDiscountedFee,
         serviceFeeAmount: snapshotServiceFeeAmount,
         applicationFee: snapshotApplicationFee,
+        enrollmentFee: snapshotEnrollmentFee,
         depositFee: snapshotDepositFee,
         advancedFee: snapshotAdvancedFee,
         languageFee: snapshotLanguageFee,
@@ -1273,6 +1276,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
       snapshotDiscountedFee = adjusted.discountedFee ?? null;
       snapshotServiceFeeAmount = adjusted.serviceFeeAmount ?? null;
       snapshotApplicationFee = adjusted.applicationFee ?? null;
+      snapshotEnrollmentFee = adjusted.enrollmentFee ?? null;
       snapshotDepositFee = adjusted.depositFee ?? null;
       snapshotAdvancedFee = adjusted.advancedFee ?? null;
       snapshotLanguageFee = adjusted.languageFee ?? null;
@@ -1340,6 +1344,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     commissionRate: snapshotCommissionRate,
     serviceFeeAmount: snapshotServiceFeeAmount,
     applicationFee: snapshotApplicationFee,
+    enrollmentFee: snapshotEnrollmentFee,
     depositFee: snapshotDepositFee,
     advancedFee: snapshotAdvancedFee,
     languageFee: snapshotLanguageFee,

@@ -1,6 +1,6 @@
 import type { PublicProgramSelection } from "./PublicProgramFilters";
 
-export const emptyProgramSelection = (): PublicProgramSelection => ({ country: [], city: [], universityType: [], universityId: [], level: [], language: [], field: [], feeMin: "", feeMax: "" });
+export const emptyProgramSelection = (): PublicProgramSelection => ({ country: [], city: [], universityType: [], universityId: [], level: [], language: [], field: [], enrollmentFee: [], feeMin: "", feeMax: "" });
 
 export type DetailProgramScope =
   | { kind: "country"; country: string }
@@ -9,7 +9,7 @@ export type DetailProgramScope =
 
 export function detailProgramQuery(scope: DetailProgramScope, locale: string, search: string, selection: PublicProgramSelection): string {
   const query = new URLSearchParams({ scope: "public", locale });
-  const selectable: Array<keyof PublicProgramSelection> = ["level", "language", "field"];
+  const selectable: Array<keyof PublicProgramSelection> = ["level", "language", "field", "enrollmentFee"];
   if (scope.kind === "country") {
     if (!scope.country.trim()) throw new Error("Invalid country scope");
     query.set("country", scope.country.trim());

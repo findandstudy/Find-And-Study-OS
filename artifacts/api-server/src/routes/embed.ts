@@ -1570,6 +1570,8 @@ router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
     discountedFee: programsTable.discountedFee,
     feeType: programsTable.feeType,
     applicationFee: programsTable.applicationFee,
+    enrollmentFee: programsTable.enrollmentFee,
+    refundProcess: programsTable.refundProcess,
     depositFee: programsTable.depositFee,
     advancedFee: programsTable.advancedFee,
     languageFee: programsTable.languageFee,
@@ -5635,6 +5637,7 @@ function renderDetailContent(p){
   if(p.intakes)rows.push({i:ICON_BOOK,c:'#f97316',l:'Intakes',v:p.intakes});
   if(p.feeType)rows.push({i:ICON_DOLLAR,c:'#10b981',l:'Fee Type',v:p.feeType});
   if(p.applicationFee)rows.push({i:ICON_DOLLAR,c:'#f59e0b',l:'Application Fee',v:fmtFee(p.applicationFee,p.currency)});
+  if(p.enrollmentFee)rows.push({i:ICON_DOLLAR,c:'#14b8a6',l:'Enrolment Fee',v:fmtFee(p.enrollmentFee,p.currency)});
   if(p.depositFee)rows.push({i:ICON_DOLLAR,c:'#06b6d4',l:'Deposit Fee',v:fmtFee(p.depositFee,p.currency)});
   if(p.advancedFee)rows.push({i:ICON_DOLLAR,c:'#0ea5e9',l:'Advanced Fee',v:fmtFee(p.advancedFee,p.currency)});
   if(p.languageFee)rows.push({i:ICON_LANG,c:'#6366f1',l:'Language Fee',v:fmtFee(p.languageFee,p.currency)});
