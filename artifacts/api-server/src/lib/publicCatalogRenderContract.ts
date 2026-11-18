@@ -194,7 +194,12 @@ type PublicCatalogRenderModelData =
         language: string | null;
         tuitionFee: number | null;
         discountedFee: number | null;
+        scholarship?: number | null;
+        applicationFee?: number | null;
         enrollmentFee?: number | null;
+        advancedFee?: number | null;
+        depositFee?: number | null;
+        languageFee?: number | null;
         currency: string | null;
         verifiedTuition?: {
           amountMinor: string;
@@ -683,7 +688,10 @@ function detailTemplateVariablesForModel(model: PublicCatalogRenderModel): Recor
     return {
       "program.name": ssrProgramName(model.program.name, model.locale), "program.degree": ssrDegreeName(model.program.degree, model.locale), "program.field": ssrFieldName(model.program.field, model.locale),
       "program.language": model.program.language, "program.duration": ssrDuration(model.program.duration, model.locale), "program.tuitionFee": money(tuition),
-      "program.discountedFee": money(model.program.discountedFee), "program.currency": currency, "program.requirements": model.program.requirements ?? null,
+      "program.discountedFee": money(model.program.discountedFee), "program.scholarship": money(model.program.scholarship), "program.currency": currency,
+      "program.applicationFee": money(model.program.applicationFee), "program.enrollmentFee": money(model.program.enrollmentFee), "program.depositFee": money(model.program.depositFee),
+      "program.advancedFee": money(model.program.advancedFee), "program.languageFee": money(model.program.languageFee),
+      "program.requirements": model.program.requirements ?? null, "program.refundProcess": model.program.refundProcess ?? null,
       "university.name": ssrInstitutionName(model.program.universityName, model.program.country, model.locale), "university.country": ssrCountryName(model.program.country, null, model.locale), "university.city": model.program.city ? ssrCityName(model.program.city, model.program.country, model.locale) : null,
       "stats.intakeCount": templateNumber(model.intakes?.length ?? 0, model.locale), "stats.relatedProgramCount": templateNumber(model.relatedPrograms.length, model.locale),
     };
@@ -910,12 +918,46 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
         <h3 class="font-semibold">${escapeHtml(intake.intakeKey)} · ${escapeHtml(String(intake.academicYear))}</h3>
         <p class="mt-2 text-sm text-muted-foreground">${escapeHtml([intake.startsOn ? `Starts ${intake.startsOn}` : "", intake.applicationDeadlineAt ? `Deadline ${intake.applicationDeadlineAt.slice(0, 10)}` : "", intake.campusName || ""].filter(Boolean).join(" · "))}</p>
       </article>`).join("");
-  const priceRows = prices.map((item) => {
+  const feeKey = (componentType: string) => {
+    const normalized = componentType.toUpperCase();
+    if (["APPLICATION", "APPLICATION_FEE"].includes(normalized)) return "application";
+    if (["ENROLMENT", "ENROLMENT_FEE", "ENROLLMENT", "ENROLLMENT_FEE"].includes(normalized)) return "enrollment";
+    if (["DEPOSIT", "DEPOSIT_FEE"].includes(normalized)) return "deposit";
+    if (["ADVANCE", "ADVANCE_FEE", "ADVANCED_FEE"].includes(normalized)) return "advance";
+    if (["SERVICE", "SERVICE_FEE"].includes(normalized)) return "service";
+    if (["LANGUAGE", "LANGUAGE_FEE"].includes(normalized)) return "language";
+    if (["DISCOUNT", "DISCOUNTED_FEE", "DISCOUNTED_TUITION"].includes(normalized)) return "discounted";
+    if (normalized === "SCHOLARSHIP") return "scholarship";
+    if (normalized === "TUITION") return "tuition";
+    return normalized;
+  };
+  const feeLabel = (componentType: string) => {
+    const key = feeKey(componentType);
+    const labels = model.locale === "tr"
+      ? { tuition: "Öğrenim Ücreti", discounted: "İndirimli Ücret", scholarship: "Burs", application: "Başvuru Ücreti", enrollment: "Kayıt Ücreti", deposit: "Depozito", advance: "Ön Ödeme", service: "Hizmet Ücreti", language: "Dil Ücreti" }
+      : { tuition: "Tuition Fee", discounted: "Discounted Fee", scholarship: "Scholarship", application: "Application Fee", enrollment: "Enrolment Fee", deposit: "Deposit Fee", advance: "Advance Fee", service: "Service Fee", language: "Language Fee" };
+    return labels[key as keyof typeof labels] || componentType.replaceAll("_", " ").toLowerCase().replace(/(^|\s)\S/g, value => value.toUpperCase());
+  };
+  const verifiedFeeKeys = new Set(prices.map(item => feeKey(item.componentType)));
+  const verifiedPriceRows = prices.map((item) => {
     const formatted = formatMinorPrice(item.amountMinor, item.currencyCode, model.locale) || "—";
-    return `<div><dt>${escapeHtml(item.componentType)}</dt><dd>${escapeHtml(formatted)} · ${escapeHtml(item.frequency.toLowerCase())}</dd></div>`;
+    return `<div><dt>${escapeHtml(feeLabel(item.componentType))}</dt><dd>${escapeHtml(formatted)}</dd></div>`;
   }).join("");
-  const enrollmentPrice = formatMajorPrice(program.enrollmentFee, program.currency, model.locale) || "";
-  const feeContent = `${priceRows || (price ? `<div><dt>${escapeHtml(copy.tuition)}</dt><dd>${escapeHtml(price)}</dd></div>` : "")}${enrollmentPrice && !prices.some(item => ["ENROLMENT", "ENROLMENT_FEE", "ENROLLMENT", "ENROLLMENT_FEE"].includes(item.componentType.toUpperCase())) ? `<div><dt>${model.locale === "tr" ? "Kayıt Ücreti" : "Enrolment Fee"}</dt><dd>${escapeHtml(enrollmentPrice)}</dd></div>` : ""}`;
+  const legacyPriceRows = [
+    { key: "tuition", type: "TUITION", value: program.tuitionFee },
+    { key: "discounted", type: "DISCOUNTED_TUITION", value: program.discountedFee },
+    { key: "scholarship", type: "SCHOLARSHIP", value: program.scholarship },
+    { key: "application", type: "APPLICATION_FEE", value: program.applicationFee },
+    { key: "enrollment", type: "ENROLMENT_FEE", value: program.enrollmentFee },
+    { key: "deposit", type: "DEPOSIT_FEE", value: program.depositFee },
+    { key: "advance", type: "ADVANCED_FEE", value: program.advancedFee },
+    { key: "language", type: "LANGUAGE_FEE", value: program.languageFee },
+  ].filter(item => item.value != null && item.value >= 0 && !verifiedFeeKeys.has(item.key))
+    .map(item => {
+      const formatted = formatMajorPrice(item.value, program.currency, model.locale);
+      return formatted ? `<div><dt>${escapeHtml(feeLabel(item.type))}</dt><dd>${escapeHtml(formatted)}</dd></div>` : "";
+    }).join("");
+  const feeContent = `${verifiedPriceRows}${legacyPriceRows}`;
   const related = model.relatedPrograms.map((item) => `<article class="rounded-2xl border border-border p-5"><p class="text-sm text-primary">${escapeHtml(ssrInstitutionName(item.universityName, program.country, model.locale))}</p><h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(item.canonicalPath)}">${escapeHtml(ssrProgramName(item.name, model.locale))}</a></h3><p class="mt-2 text-muted-foreground">${escapeHtml([ssrDegreeName(item.degree, model.locale), ssrFieldName(item.field, model.locale)].filter(Boolean).join(" · "))}</p></article>`).join("");
   return `<main data-public-render-shell="program-detail" class="mx-auto max-w-7xl px-4 py-24">
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/programs">${escapeHtml(copy.programs)}</a> / <span>${escapeHtml(programName)}</span></nav>

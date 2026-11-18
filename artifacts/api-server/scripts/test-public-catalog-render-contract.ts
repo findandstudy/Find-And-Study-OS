@@ -354,8 +354,13 @@ test("program SSR uses verified price components and structured active intakes",
       language: "English",
       tuitionFee: 1,
       discountedFee: 0,
-      currency: "INVALID",
+      scholarship: 1000,
+      applicationFee: 75,
+      currency: "USD",
       enrollmentFee: 250,
+      advancedFee: 300,
+      depositFee: 400,
+      languageFee: 90,
       refundProcess: "Submit the refund form.\nAllow 20 business days for review.",
       verifiedTuition: {
         amountMinor: "1234500",
@@ -385,6 +390,12 @@ test("program SSR uses verified price components and structured active intakes",
   assert.match(html, /\$12,345/);
   assert.match(html, /Enrolment Fee/);
   assert.match(html, /\$250/);
+  assert.match(html, /Application Fee/);
+  assert.match(html, /Advance Fee/);
+  assert.match(html, /Deposit Fee/);
+  assert.match(html, /Language Fee/);
+  assert.match(html, /Scholarship/);
+  assert.doesNotMatch(html, /ANNUAL/);
   assert.match(html, /id="refund-process"/);
   assert.match(html, /Allow 20 business days/);
   assert.match(html, /Fall · 2026/);

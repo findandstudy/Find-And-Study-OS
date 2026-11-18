@@ -37,11 +37,13 @@ type ProgramDetailPayload = {
     tuitionFee: number | null;
     discountedFee: number | null;
     scholarship: number | null;
+    applicationFee: number | null;
     currency: string | null;
     intakes: string | null;
     requirements: string | null;
     refundProcess: string | null;
     enrollmentFee: number | null;
+    advancedFee: number | null;
     depositFee: number | null;
     languageFee: number | null;
     feeType: string | null;
@@ -124,6 +126,8 @@ function minorAmount(value: string, currency: string): number | null {
 function feeComponentLabel(componentType: string, t: (key: string) => string): string {
   switch (componentType.toUpperCase()) {
     case "TUITION": return t("courseFinderPage.tuitionFee");
+    case "DISCOUNTED_TUITION":
+    case "DISCOUNTED_FEE": return t("catalogPage.discountedFee");
     case "DEPOSIT":
     case "DEPOSIT_FEE": return t("catalogDetail.deposit");
     case "APPLICATION":
@@ -142,6 +146,32 @@ function feeComponentLabel(componentType: string, t: (key: string) => string): s
     case "SCHOLARSHIP":
     case "DISCOUNT": return t("courseFinderPage.scholarship");
     default: return componentType.replaceAll("_", " ").toLowerCase().replace(/(^|\s)\S/g, value => value.toUpperCase());
+  }
+}
+
+function feeComponentKey(componentType: string): string {
+  switch (componentType.toUpperCase()) {
+    case "TUITION": return "tuition";
+    case "DISCOUNTED_TUITION":
+    case "DISCOUNTED_FEE": return "discounted";
+    case "APPLICATION":
+    case "APPLICATION_FEE": return "application";
+    case "ENROLMENT":
+    case "ENROLMENT_FEE":
+    case "ENROLLMENT":
+    case "ENROLLMENT_FEE": return "enrollment";
+    case "DEPOSIT":
+    case "DEPOSIT_FEE": return "deposit";
+    case "ADVANCE":
+    case "ADVANCED_FEE":
+    case "ADVANCE_FEE": return "advance";
+    case "SERVICE":
+    case "SERVICE_FEE": return "service";
+    case "LANGUAGE":
+    case "LANGUAGE_FEE": return "language";
+    case "SCHOLARSHIP":
+    case "DISCOUNT": return "scholarship";
+    default: return componentType.toUpperCase();
   }
 }
 
@@ -242,26 +272,33 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       id: price.id,
       componentType: price.componentType,
       amount: detailMoney(minorAmount(price.amountMinor, price.currencyCode), price.currencyCode, lang),
-      frequency: price.frequency,
       verified: true,
-    }))
+    })).filter(item => item.amount)
     : tuition ? [{
       id: "catalogue-tuition",
       componentType: "TUITION",
       amount: detailMoney(tuition.amount, tuition.currency, lang),
-      frequency: tuition.frequency || "",
       verified: tuition.verified,
     }] : [];
-  const hasVerifiedEnrollmentFee = verifiedFeeItems.some(item => ["ENROLMENT", "ENROLMENT_FEE", "ENROLLMENT", "ENROLLMENT_FEE"].includes(item.componentType.toUpperCase()));
-  const feeItems = program.enrollmentFee != null && program.enrollmentFee >= 0 && !hasVerifiedEnrollmentFee
-    ? [...verifiedFeeItems, {
-      id: "catalogue-enrolment",
-      componentType: "ENROLMENT_FEE",
-      amount: detailMoney(program.enrollmentFee, program.currency || "USD", lang),
-      frequency: "one-time",
+  const verifiedFeeKeys = new Set(verifiedFeeItems.map(item => feeComponentKey(item.componentType)));
+  const legacyFeeItems = [
+    { key: "tuition", componentType: "TUITION", value: program.tuitionFee },
+    { key: "discounted", componentType: "DISCOUNTED_TUITION", value: program.discountedFee },
+    { key: "scholarship", componentType: "SCHOLARSHIP", value: program.scholarship },
+    { key: "application", componentType: "APPLICATION_FEE", value: program.applicationFee },
+    { key: "enrollment", componentType: "ENROLMENT_FEE", value: program.enrollmentFee },
+    { key: "deposit", componentType: "DEPOSIT_FEE", value: program.depositFee },
+    { key: "advance", componentType: "ADVANCED_FEE", value: program.advancedFee },
+    { key: "language", componentType: "LANGUAGE_FEE", value: program.languageFee },
+  ].filter(item => item.value != null && item.value >= 0 && !verifiedFeeKeys.has(item.key))
+    .map(item => ({
+      id: `catalogue-${item.key}`,
+      componentType: item.componentType,
+      amount: detailMoney(item.value, program.currency, lang),
       verified: false,
-    }]
-    : verifiedFeeItems;
+    }))
+    .filter(item => item.amount);
+  const feeItems = [...verifiedFeeItems, ...legacyFeeItems];
   const campuses = [...new Set(payload.intakes.map(intake => intake.campusName).filter(Boolean))].join(" · ");
   const institutionLocation = <>{cityPath ? <Link href={cityPath}>{program.universityCity}</Link> : program.universityCity}{program.universityCity && " · "}{countryPath ? <Link href={countryPath}>{program.universityCountry}</Link> : program.universityCountry}</>;
   const heroSection = detailHeroSection(editorial);
@@ -387,14 +424,9 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
         <div className="detail-wrap detail-split detail-program-fees-grid">
           <div><DetailHeading number="04" eyebrow={copy.program} title={detailContentTitle(editorial, "fees", t("courseFinderPage.tuitionFee"))} />{detailContentIntro(editorial, "fees")}{feeItems.some(item => item.verified) && <p className="detail-provenance">{copy.priceBasis}</p>}</div>
           <div className="detail-fee-panel">
-            <div className="detail-fee-panel-header">
-              <span className="detail-fee-panel-icon" aria-hidden="true"><Wallet size={20} /></span>
-              <p>{t("courseFinderPage.tuitionFee")}</p>
-              {feeItems.length > 0 && <span className="detail-fee-count">{new Intl.NumberFormat(lang).format(feeItems.length)}</span>}
-            </div>
             {feeItems.length > 0 ? <dl className="detail-fee-list">{feeItems.map((item, index) => <div key={item.id} className={item.componentType === "TUITION" || index === 0 ? "is-primary" : undefined}>
               <dt>{feeComponentLabel(item.componentType, t)}</dt>
-              <dd><strong>{item.amount || copy.confirmPrice}</strong>{item.frequency && <small>{item.frequency.replaceAll("_", " ").toLowerCase()}</small>}</dd>
+              <dd><strong>{item.amount}</strong></dd>
             </div>)}</dl> : <div className="detail-fee-empty">
               <Wallet size={24} aria-hidden="true" />
               <strong>{copy.unavailable}</strong>

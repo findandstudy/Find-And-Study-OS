@@ -792,8 +792,11 @@ test("program fee card shows every public fee once and keeps a safe empty state"
   assert.match(fees, /className="detail-fee-panel"/);
   assert.match(program, /const visiblePrices = payload\.prices;/);
   assert.doesNotMatch(program, /payload\.prices\.slice/);
-  assert.match(program, /visiblePrices\.length > 0[\s\S]*: tuition \? \[/);
+  assert.match(program, /const legacyFeeItems = \[/);
+  assert.match(program, /componentType: "APPLICATION_FEE"/);
+  assert.match(program, /componentType: "ENROLMENT_FEE"/);
   assert.match(fees, /feeItems\.length > 0 \? <dl className="detail-fee-list">\{feeItems\.map/);
+  assert.doesNotMatch(fees, /item\.frequency|detail-fee-panel-header|detail-fee-count/);
   assert.match(fees, /className="detail-fee-empty"/);
   assert.match(fees, /\{copy\.unavailable\}/);
   assert.match(fees, /\{copy\.confirmPrice\}/);
