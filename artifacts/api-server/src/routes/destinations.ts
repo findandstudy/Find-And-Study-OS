@@ -16,7 +16,7 @@ import {
 } from "../lib/publicCatalogRouteContract";
 import { buildPublicWebCanonicalPath } from "../lib/publicWebContentContract";
 import { getPublicCatalogRenderModel } from "../lib/publicCatalogRenderReadModel";
-import { matchPublicCatalogRenderPath } from "../lib/publicCatalogRouteContract";
+import { matchPublicCatalogRenderPath } from "../lib/publicCatalogRenderContract";
 import {
   readIndexableProgramIds,
   readIndexableUniversityIds,
