@@ -333,7 +333,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     (_, index) => cityCandidates.slice(index * 64, (index + 1) * 64).map((row) => row.id),
   );
 
-  const [localizedUniversityDelivery, localizedCityDeliveries, cityHeroImageById, indexableUniversityIds, indexableProgramIds] = await Promise.all([
+  const [localizedUniversityDelivery, localizedCityDeliveries, indexableUniversityIds, indexableProgramIds] = await Promise.all([
     readPublishedLocalizedEntities({
       entityType: "university",
       entityIds: universityRows.map((row) => row.id),
@@ -344,7 +344,6 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       entityIds,
       locale,
     }))),
-    readPublishedDetailHeroImageUrls("city", cityCandidates.map((city) => city.id), locale),
     internalLinkMode === "published"
       ? readIndexableUniversityIds({ locale, universityIds: universityRows.map((row) => row.id) })
       : Promise.resolve(null),
@@ -398,7 +397,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       name: program.name,
     }),
   }));
-  const cities = cityCandidates.flatMap((city) => {
+  const cityCards = cityCandidates.flatMap((city) => {
     const delivery = selectLocalizedEntityDelivery(localizedCityDelivery, city.id);
     const localized = resolveLocalizedCityFields({
       locale,
@@ -414,10 +413,16 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       name: localized.name,
       sourceName: city.name,
       universityCount: universityCountByCity.get(sourceKey) ?? 0,
-      cardHeroImageUrl: cityHeroImageById.get(Number(city.id)) ?? null,
       canonicalPath: delivery.snapshot?.canonicalPath || buildPublicWebCanonicalPath({ entityType: "CITY", entityId: city.id, locale, slug: city.name }),
     }];
   }).slice(0, 24);
+  const cities = await Promise.all(cityCards.map(async (city) => {
+    const editorial = await readPublishedDetailContent("city", city.id, locale);
+    return {
+      ...city,
+      cardHeroImageUrl: editorial?.sections.find((section) => section.key === "hero")?.images?.[0]?.src?.trim() || null,
+    };
+  }));
 
   const stats = {
     universityCount: Number(universityCount?.count ?? 0),
