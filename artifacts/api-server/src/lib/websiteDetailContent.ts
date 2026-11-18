@@ -372,6 +372,11 @@ export async function readPublishedDetailHeroImageUrls(
     slug: pages.slug,
     snapshot: versions.blocksSnapshot,
     versionNumber: versions.versionNumber,
+    // Extract the reviewed hero source in PostgreSQL as well as retaining the
+    // frozen snapshot. This avoids losing media when a driver/runtime returns
+    // nested jsonb values in a representation the defensive JS parser does
+    // not recognize, while preserving the exact latest-version semantics.
+    heroSrc: sql<string | null>`jsonb_path_query_first(${versions.blocksSnapshot}, '$[0].content.sections[*] ? (@.key == "hero").images[0].src') #>> '{}'`,
   }).from(pages)
     .innerJoin(versions, eq(versions.pageId, pages.id))
     .where(and(
@@ -383,8 +388,12 @@ export async function readPublishedDetailHeroImageUrls(
     .orderBy(desc(versions.versionNumber));
 
   const latestBySlug = new Map<string, unknown>();
+  const latestHeroBySlug = new Map<string, string | null>();
   for (const row of rows) {
-    if (!latestBySlug.has(row.slug)) latestBySlug.set(row.slug, row.snapshot);
+    if (!latestBySlug.has(row.slug)) {
+      latestBySlug.set(row.slug, row.snapshot);
+      latestHeroBySlug.set(row.slug, typeof row.heroSrc === "string" && row.heroSrc.trim() ? row.heroSrc.trim() : null);
+    }
   }
   const read = (entityId: number, contentLocale: string): DetailContent | null => {
     const snapshot = latestBySlug.get(detailContentSlug(kind, entityId, contentLocale));
@@ -394,7 +403,10 @@ export async function readPublishedDetailHeroImageUrls(
     return content?.kind === kind && content.entityId === entityId && content.locale === contentLocale ? content : null;
   };
   const readRawHeroSrc = (entityId: number, contentLocale: string): string | null => {
-    const snapshot = latestBySlug.get(detailContentSlug(kind, entityId, contentLocale));
+    const slug = detailContentSlug(kind, entityId, contentLocale);
+    const extracted = latestHeroBySlug.get(slug);
+    if (extracted) return extracted;
+    const snapshot = latestBySlug.get(slug);
     if (!Array.isArray(snapshot) || snapshot.length !== 1) return null;
     const block = snapshot[0];
     if (!block || typeof block !== "object" || Array.isArray(block)) return null;
