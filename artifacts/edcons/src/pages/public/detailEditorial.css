@@ -489,10 +489,10 @@
 .detail-city .detail-hero-main { display: block; min-height: min(74vh, 640px); padding-top: 112px; padding-bottom: 0; }
 .detail-city .detail-hero h1 { max-width: 11ch; margin: 12px 0 16px; font-size: clamp(40px, 5.6vw, 80px); line-height: .94; }
 .detail-city-cover-inner > div { display: flex; min-height: inherit; flex-direction: column; justify-content: flex-end; }
-.detail-city-coverstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 1px; margin: 30px 0 0; overflow: hidden; border: 1px solid rgba(255,255,255,.16); border-radius: 16px; background: rgba(255,255,255,.22); }
-.detail-city-coverstrip > div { min-width: 0; padding: 13px 13px 14px; background: rgba(9,18,32,.72); backdrop-filter: blur(8px); }
-.detail-city-coverstrip dt { color: var(--detail-hero-accent, #9fbbd8); font-size: 11px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
-.detail-city-coverstrip dd { margin: 5px 0 0; color: var(--detail-hero-text, #fff); font-size: 15px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.detail-city-coverstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 1px; margin: 30px 0 0; overflow: hidden; border: 0; border-radius: 18px; background: var(--detail-line); box-shadow: 0 18px 55px rgba(11,18,32,.18); }
+.detail-city-coverstrip > div { min-width: 0; min-height: 112px; padding: 20px 22px; background: rgba(255,255,255,.97); backdrop-filter: blur(8px); }
+.detail-city-coverstrip dt { color: var(--detail-muted); font-size: 11px; font-weight: 850; letter-spacing: .04em; text-transform: none; }
+.detail-city-coverstrip dd { margin: 7px 0 0; color: var(--detail-ink); font-size: 15px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; }
 .detail-city .detail-hero .detail-actions > a:first-child { background: var(--detail-hero-accent, var(--detail-navy)); }
 
 /* Country/city pages follow country-turkiye-v4's final visual refresh. */
@@ -984,28 +984,6 @@
   .detail-program-overview-grid,
   .detail-program-requirements-grid,
   .detail-program-fees-grid { gap: 30px; }
-}
-
-/* Carry the compact, raised fact-card language from the program hero into the
-   content hierarchy of the other detail templates. This keeps chapter labels
-   easy to scan without adding another oversized vertical band. */
-:is(.detail-destination, .detail-city, .detail-university) :is(.detail-section-heading, .detail-editorial-heading) {
-  padding: 14px 17px;
-  border: 1px solid color-mix(in srgb, var(--detail-accent) 14%, var(--detail-line));
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--detail-white) 94%, var(--detail-sky));
-  box-shadow: 0 12px 32px rgba(11,18,32,.07);
-}
-:is(.detail-destination, .detail-city, .detail-university) .detail-section-number {
-  border-radius: 11px;
-}
-:is(.detail-destination, .detail-city, .detail-university) .detail-section.is-dark :is(.detail-section-heading, .detail-editorial-heading) {
-  border-color: rgba(255,255,255,.18);
-  background: rgba(255,255,255,.08);
-  box-shadow: none;
-}
-:is(.detail-destination, .detail-city, .detail-university) .detail-section.is-dark :is(.detail-section-heading h2, .detail-editorial-heading h2) {
-  color: #fff;
 }
 
 /* Cross-template reading comfort and visual rhythm. Keep catalogue facts full
