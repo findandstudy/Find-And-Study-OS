@@ -168,6 +168,16 @@ test("country detail hero and catalogue cards use the shared high-contrast media
   assert.match(css, /\.detail-catalog-card\.has-media \.detail-card-media/);
   assert.match(css, /\.public-detail \.detail-catalog-card\.has-media \.detail-card-arrow \{[^}]*color: #fff/);
   assert.match(css, /\.public-detail \.detail-catalog-card\.has-media:is\(:hover, :focus-visible\) \.detail-card-arrow \{ color: #fff; \}/);
+  assert.match(css, /\.detail-country-cover-rule \{ display: none; \}/);
+  assert.match(css, /\.detail-country-cover-foot \{[^}]*padding-top: 0;[^}]*border-top: 0;/);
+});
+
+test("detail templates share compact section rhythm and raised chapter headings", () => {
+  assert.match(css, /\.detail-section \{ padding-block: 54px;/);
+  assert.match(css, /\.detail-program \.detail-section \{ padding-block: 58px;/);
+  assert.match(css, /:is\(\.detail-destination, \.detail-city, \.detail-university\) :is\(\.detail-section-heading, \.detail-editorial-heading\) \{[^}]*padding: 14px 17px;[^}]*border-radius: 18px;[^}]*box-shadow:/);
+  assert.match(css, /@media \(min-width: 761px\)[\s\S]*\.detail-city > \.detail-section \{ padding-block: clamp\(50px, 4\.2vw, 60px\); \}/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-program \.detail-section \{ padding-block: 44px; \}/);
 });
 
 test("public detail fees require explicit valid currencies without inventing USD", () => {
