@@ -916,6 +916,7 @@
 .detail-catalog-card p:not(.detail-eyebrow) { font-size: 12px; line-height: 1.7; color: var(--detail-muted); margin: 0; }
 .detail-catalog-card:hover { border-color: #a8bdeb; box-shadow: 0 6px 10px #182e520a, 0 16px 30px -18px #2354d644; }
 .detail-catalog-card:hover .detail-card-arrow { color: var(--detail-accent); }
+.detail-catalog-card.has-media:is(:hover, :focus-visible) .detail-card-arrow { color: #fff; }
 .detail-catalog-card.is-city:not(.has-media) { position: relative; flex-direction: row; align-items: center; gap: 14px; padding: 20px; padding-inline-end: 44px; }
 .detail-catalog-card.is-city:not(.has-media) .detail-card-arrow { position: absolute; inset-inline-end: 18px; top: calc(50% - 9px); }
 .detail-catalog-card.is-city h3 { margin: 0; }
