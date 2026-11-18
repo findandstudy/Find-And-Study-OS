@@ -119,6 +119,26 @@ function minorAmount(value: string, currency: string): number | null {
   return amountMinor / (10 ** digits);
 }
 
+function feeComponentLabel(componentType: string, t: (key: string) => string): string {
+  switch (componentType.toUpperCase()) {
+    case "TUITION": return t("courseFinderPage.tuitionFee");
+    case "DEPOSIT":
+    case "DEPOSIT_FEE": return t("catalogDetail.deposit");
+    case "APPLICATION":
+    case "APPLICATION_FEE": return t("catalogPage.applicationFee");
+    case "ADVANCE":
+    case "ADVANCED_FEE":
+    case "ADVANCE_FEE": return t("catalogPage.advancedFee");
+    case "SERVICE":
+    case "SERVICE_FEE": return t("catalogPage.serviceFee");
+    case "LANGUAGE":
+    case "LANGUAGE_FEE": return t("catalogPage.languageFee");
+    case "SCHOLARSHIP":
+    case "DISCOUNT": return t("courseFinderPage.scholarship");
+    default: return componentType.replaceAll("_", " ").toLowerCase().replace(/(^|\s)\S/g, value => value.toUpperCase());
+  }
+}
+
 export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
@@ -207,11 +227,25 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     );
   }
 
-  const visiblePrices = payload.prices.slice(0, 8);
+  const visiblePrices = payload.prices;
   const { requirements, metadata } = splitRequirements(program.requirements, { canonicalPath: program.canonicalPath, id: program.id });
   const hasEditorialRequirements = detailContentTitle(editorial, "requirements", "") !== "";
   const countryPath = localDetailPath(program.countryPath), cityPath = localDetailPath(program.cityPath);
-  const hasFees = visiblePrices.length > 0 || tuition !== null;
+  const feeItems = visiblePrices.length > 0
+    ? visiblePrices.map(price => ({
+      id: price.id,
+      componentType: price.componentType,
+      amount: detailMoney(minorAmount(price.amountMinor, price.currencyCode), price.currencyCode, lang),
+      frequency: price.frequency,
+      verified: true,
+    }))
+    : tuition ? [{
+      id: "catalogue-tuition",
+      componentType: "TUITION",
+      amount: detailMoney(tuition.amount, tuition.currency, lang),
+      frequency: tuition.frequency || "",
+      verified: tuition.verified,
+    }] : [];
   const campuses = [...new Set(payload.intakes.map(intake => intake.campusName).filter(Boolean))].join(" · ");
   const institutionLocation = <>{cityPath ? <Link href={cityPath}>{program.universityCity}</Link> : program.universityCity}{program.universityCity && " · "}{countryPath ? <Link href={countryPath}>{program.universityCountry}</Link> : program.universityCountry}</>;
   const heroSection = detailHeroSection(editorial);
@@ -279,7 +313,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           <a href="#language-courses">{languageCourseNavigationLabel(lang)}</a>
           {(requirements.length > 0 || hasEditorialRequirements) && <a href="#requirements">{t("programs.requirements")}</a>}
           {payload.intakes.length > 0 && <a href="#intakes">{t("catalogDetail.availableIntakes")}</a>}
-          {hasFees && <a href="#fees">{t("courseFinderPage.tuitionFee")}</a>}
+          <a href="#fees">{t("courseFinderPage.tuitionFee")}</a>
           {detailContentNavigation(editorial)}
           {payload.related.length > 0 && <a href="#related">{t("catalogDetail.relatedPrograms")}</a>}
         </div>
@@ -332,17 +366,26 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           </article>)}</div>
         </div>
       </section>}
-      {hasFees && <section data-detail-section="fees" id="fees" className="detail-section is-sky detail-program-fees">
+      <section data-detail-section="fees" id="fees" className="detail-section is-sky detail-program-fees">
         <div className="detail-wrap detail-split detail-program-fees-grid">
-          <div><DetailHeading number="04" eyebrow={copy.program} title={detailContentTitle(editorial, "fees", t("courseFinderPage.tuitionFee"))} />{detailContentIntro(editorial, "fees")}{tuition?.source !== "legacy" && <p className="detail-provenance">{copy.priceBasis}</p>}</div>
-          <div className="detail-fee-panel">{tuition && <DetailPrice tuition={tuition} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} />}
-            {visiblePrices.length > 0 && <dl className="detail-keylines">{visiblePrices.map(price => <div key={price.id}>
-              <dt>{price.componentType === "TUITION" ? t("courseFinderPage.tuitionFee") : price.componentType === "DEPOSIT" ? t("catalogDetail.deposit") : price.componentType.replaceAll("_", " ").toLowerCase()}</dt>
-              <dd>{detailMoney(minorAmount(price.amountMinor, price.currencyCode), price.currencyCode, lang) || copy.confirmPrice}<small className="block">{price.frequency.replaceAll("_", " ").toLowerCase()}</small></dd>
-            </div>)}</dl>}
+          <div><DetailHeading number="04" eyebrow={copy.program} title={detailContentTitle(editorial, "fees", t("courseFinderPage.tuitionFee"))} />{detailContentIntro(editorial, "fees")}{feeItems.some(item => item.verified) && <p className="detail-provenance">{copy.priceBasis}</p>}</div>
+          <div className="detail-fee-panel">
+            <div className="detail-fee-panel-header">
+              <span className="detail-fee-panel-icon" aria-hidden="true"><Wallet size={20} /></span>
+              <p>{t("courseFinderPage.tuitionFee")}</p>
+              {feeItems.length > 0 && <span className="detail-fee-count">{new Intl.NumberFormat(lang).format(feeItems.length)}</span>}
+            </div>
+            {feeItems.length > 0 ? <dl className="detail-fee-list">{feeItems.map((item, index) => <div key={item.id} className={item.componentType === "TUITION" || index === 0 ? "is-primary" : undefined}>
+              <dt>{feeComponentLabel(item.componentType, t)}</dt>
+              <dd><strong>{item.amount || copy.confirmPrice}</strong>{item.frequency && <small>{item.frequency.replaceAll("_", " ").toLowerCase()}</small>}</dd>
+            </div>)}</dl> : <div className="detail-fee-empty">
+              <Wallet size={24} aria-hidden="true" />
+              <strong>{copy.unavailable}</strong>
+              <span>{copy.confirmPrice}</span>
+            </div>}
           </div>
         </div>
-      </section>}
+      </section>
       {payload.related.length > 0 && <section data-detail-section="related" id="related" className="detail-section">
         <div className="detail-wrap">
           <DetailHeading number="05" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "related", t("catalogDetail.relatedPrograms"))} />

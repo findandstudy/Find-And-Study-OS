@@ -95,7 +95,7 @@ test("program information architecture stays data-bound", () => {
   for (const anchor of ["overview", "requirements", "intakes", "fees", "related"]) {
     assert.match(program, new RegExp(`(?:href=\\"#${anchor}\\"|id=\\"${anchor}\\")`));
   }
-  assert.match(program, /payload\.prices\.slice\(0, 8\)/);
+  assert.match(program, /const visiblePrices = payload\.prices/);
   assert.match(program, /applicationDeadlineAt/);
   assert.match(program, /PUBLISHED_INDEXABLE_ONLY/);
   assert.doesNotMatch(program, /Fenerbahçe|3000|30 Nov 2026|unsplash/i);
@@ -741,7 +741,7 @@ test("missing optional facts and tuition do not become invented values", () => {
   assert.doesNotMatch(price, /Verified price|£|\$|€|\bUSD\b/);
   assert.match(program, /\(requirements\.length > 0 \|\| hasEditorialRequirements\) && <section/);
   assert.match(program, /payload\.intakes\.length > 0 && <section/);
-  assert.match(program, /hasFees && <section/);
+  assert.match(program, /<section data-detail-section="fees" id="fees"/);
   assert.match(university, /university\.address &&/);
   assert.match(university, /university\.universityType &&/);
 });
@@ -785,15 +785,20 @@ test("empty location narratives do not repeat generic SEO copy in an empty overv
   assert.doesNotMatch(city, /city\.description \|\| payload\.meta\.description/);
 });
 
-test("legacy-only tuition keeps its price without rendering an empty component breakdown", () => {
-  const start = program.indexOf('{hasFees && <section data-detail-section="fees"');
+test("program fee card shows every public fee once and keeps a safe empty state", () => {
+  const start = program.indexOf('<section data-detail-section="fees"');
   assert.ok(start >= 0);
   const fees = program.slice(start, program.indexOf("</section>", start));
   assert.match(fees, /className="detail-fee-panel"/);
-  assert.match(fees, /tuition && <DetailPrice tuition=\{tuition\}/);
-  assert.match(fees, /visiblePrices\.length > 0 && <dl className="detail-keylines">\{visiblePrices\.map/);
-  assert.match(program, /const hasFees = visiblePrices\.length > 0 \|\| tuition !== null/);
-  assert.match(fees, /tuition\?\.source !== "legacy" && <p className="detail-provenance">\{copy\.priceBasis\}/);
+  assert.match(program, /const visiblePrices = payload\.prices;/);
+  assert.doesNotMatch(program, /payload\.prices\.slice/);
+  assert.match(program, /visiblePrices\.length > 0[\s\S]*: tuition \? \[/);
+  assert.match(fees, /feeItems\.length > 0 \? <dl className="detail-fee-list">\{feeItems\.map/);
+  assert.match(fees, /className="detail-fee-empty"/);
+  assert.match(fees, /\{copy\.unavailable\}/);
+  assert.match(fees, /\{copy\.confirmPrice\}/);
+  assert.doesNotMatch(fees, /<DetailPrice/);
+  assert.match(program, /<a href="#fees">\{t\("courseFinderPage\.tuitionFee"\)\}<\/a>/);
 });
 
 test("active section navigation is local, follows visible DOM order and cleans up every listener", () => {
