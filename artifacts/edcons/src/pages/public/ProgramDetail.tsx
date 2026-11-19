@@ -309,6 +309,8 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const feeItems = [...standardFeeItems, ...additionalVerifiedFeeItems];
   const heroPrimaryAmount = tuition ? detailMoney(tuition.amount, tuition.currency, lang) : null;
   const heroPrimaryFeeIndex = heroPrimaryAmount ? feeItems.findIndex(item => item.amount === heroPrimaryAmount) : -1;
+  const heroPrimaryFee = heroPrimaryFeeIndex >= 0 ? feeItems[heroPrimaryFeeIndex] : null;
+  const heroPrimaryFeeLabel = heroPrimaryFee ? feeComponentLabel(heroPrimaryFee.componentType, t) : t("courseFinderPage.tuitionFee");
   const heroFeeItems = feeItems.filter((_, index) => index !== heroPrimaryFeeIndex).slice(0, 4);
   const campuses = [...new Set(payload.intakes.map(intake => intake.campusName).filter(Boolean))].join(" · ");
   const institutionLocation = <>{cityPath ? <Link href={cityPath}>{program.universityCity}</Link> : program.universityCity}{program.universityCity && " · "}{countryPath ? <Link href={countryPath}>{program.universityCountry}</Link> : program.universityCountry}</>;
@@ -349,8 +351,8 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
                 {program.field && <span className="detail-meta-pill"><BookOpen size={15} aria-hidden="true" />{program.field}</span>}
               </div>
             </div>
-            <aside className="detail-hero-card" aria-label={t("courseFinderPage.tuitionFee")}>
-              <p className="detail-eyebrow detail-icon-line"><Wallet size={16} aria-hidden="true" />{t("courseFinderPage.tuitionFee")}</p>
+            <aside className="detail-hero-card" aria-label={heroPrimaryFeeLabel}>
+              <p className="detail-eyebrow detail-icon-line"><Wallet size={16} aria-hidden="true" />{heroPrimaryFeeLabel}</p>
               <DetailPrice tuition={tuition} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} />
               <dl className="detail-hero-fees">{heroFeeItems.map(item => <div key={`hero-${item.id}`} className={item.isFree ? "is-free" : undefined}>
                 <dt>{feeComponentLabel(item.componentType, t)}</dt>

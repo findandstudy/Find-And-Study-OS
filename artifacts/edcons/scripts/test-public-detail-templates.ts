@@ -228,6 +228,7 @@ test("program detail uses the shared decision-focused responsive template", () =
   assert.match(program, /detail-program-hero-grid/);
   assert.match(program, /<aside className="detail-hero-card"/);
   assert.match(program, /const heroFeeItems = feeItems\.filter\(\(_, index\) => index !== heroPrimaryFeeIndex\)\.slice\(0, 4\)/);
+  assert.match(program, /const heroPrimaryFeeLabel = heroPrimaryFee \? feeComponentLabel\(heroPrimaryFee\.componentType, t\) : t\("courseFinderPage\.tuitionFee"\)/);
   assert.match(program, /<dl className="detail-hero-fees">\{heroFeeItems\.map/);
   assert.doesNotMatch(program, /<aside className="detail-hero-card"[\s\S]*?detail-summary-list/);
   assert.match(program, /detail-program-overview-grid/);
