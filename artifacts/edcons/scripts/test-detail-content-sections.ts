@@ -252,6 +252,27 @@ test("renderer exposes accessible gallery, FAQ, table and steps without public e
   assert.match(nav, /href="#editorial-faq"/);
 });
 
+test("text-only sections stay compact even when legacy records contain empty structured fields", () => {
+  const proseOnly: DetailContent = {
+    version: 1,
+    kind: "university",
+    entityId: 3120,
+    locale: "en",
+    sections: [{
+      key: "admission",
+      title: "Admission route",
+      body: "Follow the current application guide.",
+      cards: [],
+      steps: [],
+      images: [],
+      questions: [],
+      table: { columns: [], rows: [] },
+    }],
+  };
+  const markup = renderToStaticMarkup(React.createElement(React.Fragment, null, detailContentSections(proseOnly, "en", "/en/contact")));
+  assert.match(markup, /class="detail-section detail-editorial-section is-admission is-prose-only"/);
+});
+
 test("hero uses only reviewed CMS media and does not duplicate it in editorial content", () => {
   const heroContent: DetailContent = {
     ...fixture,

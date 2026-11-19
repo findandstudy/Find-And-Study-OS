@@ -92,13 +92,18 @@ function hasPublicSectionContent(section: DetailContentSection): boolean {
  * galleries, cards, tables and step-based modules. Keep this content-driven so
  * every current and future detail template receives the same compact treatment. */
 function isProseOnlySection(section: DetailContentSection): boolean {
+  const hasCards = section.cards?.some(card => !!card.title.trim() || !!card.body.trim() || !!card.href?.trim()) ?? false;
+  const hasTable = !!section.table && (section.table.columns.some(column => !!column.trim()) || section.table.rows.some(row => row.some(cell => !!cell.trim())));
+  const hasSteps = section.steps?.some(step => !!step.title.trim() || !!step.body.trim()) ?? false;
+  const hasImages = section.images?.some(image => !!image.src.trim()) ?? false;
+  const hasQuestions = section.questions?.some(question => !!question.question.trim() || !!question.answer.trim()) ?? false;
   return !!section.body?.trim()
-    && !section.hero
-    && !section.cards?.length
-    && !section.table
-    && !section.steps?.length
-    && !section.images?.length
-    && !section.questions?.length;
+    && section.key !== "hero"
+    && !hasCards
+    && !hasTable
+    && !hasSteps
+    && !hasImages
+    && !hasQuestions;
 }
 
 function publicDetailSections(content: DetailContent | null): DetailContentSection[] {
