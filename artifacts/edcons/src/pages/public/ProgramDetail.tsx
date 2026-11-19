@@ -307,6 +307,9 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     return !standardFeeKeys.has(key) && !excludedFeeKeys.has(key);
   });
   const feeItems = [...standardFeeItems, ...additionalVerifiedFeeItems];
+  const heroPrimaryAmount = tuition ? detailMoney(tuition.amount, tuition.currency, lang) : null;
+  const heroPrimaryFeeIndex = heroPrimaryAmount ? feeItems.findIndex(item => item.amount === heroPrimaryAmount) : -1;
+  const heroFeeItems = feeItems.filter((_, index) => index !== heroPrimaryFeeIndex).slice(0, 4);
   const campuses = [...new Set(payload.intakes.map(intake => intake.campusName).filter(Boolean))].join(" · ");
   const institutionLocation = <>{cityPath ? <Link href={cityPath}>{program.universityCity}</Link> : program.universityCity}{program.universityCity && " · "}{countryPath ? <Link href={countryPath}>{program.universityCountry}</Link> : program.universityCountry}</>;
   const heroSection = detailHeroSection(editorial);
@@ -349,10 +352,10 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
             <aside className="detail-hero-card" aria-label={t("courseFinderPage.tuitionFee")}>
               <p className="detail-eyebrow detail-icon-line"><Wallet size={16} aria-hidden="true" />{t("courseFinderPage.tuitionFee")}</p>
               <DetailPrice tuition={tuition} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} />
-              {(program.duration || payload.intakes.length > 0) && <dl className="detail-summary-list">
-                {program.duration && <div><dt><Clock3 size={16} aria-hidden="true" />{durationIsAmbiguous(program.duration) ? copy.durationAsListed : t("courseFinderPage.duration")}</dt><dd><bdi>{program.duration}</bdi></dd></div>}
-                {payload.intakes.length > 0 && <div><dt><CalendarDays size={16} aria-hidden="true" />{t("catalogDetail.availableIntakes")}</dt><dd>{new Intl.NumberFormat(lang).format(payload.intakes.length)}</dd></div>}
-              </dl>}
+              <dl className="detail-hero-fees">{heroFeeItems.map(item => <div key={`hero-${item.id}`} className={item.isFree ? "is-free" : undefined}>
+                <dt>{feeComponentLabel(item.componentType, t)}</dt>
+                <dd>{item.amount}</dd>
+              </div>)}</dl>
               <div className="detail-actions">{apply}</div>
               <div className="detail-actions"><a href={secondaryCtaHref} className="is-secondary" {...(secondaryCtaHref.startsWith("https:") ? { target: "_blank", rel: "noopener noreferrer" } : {})}>{secondaryCtaLabel}</a></div>
             </aside>

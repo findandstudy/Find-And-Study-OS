@@ -227,11 +227,15 @@ test("program detail labels legacy display fees but reserves offers for verified
 test("program detail uses the shared decision-focused responsive template", () => {
   assert.match(program, /detail-program-hero-grid/);
   assert.match(program, /<aside className="detail-hero-card"/);
+  assert.match(program, /const heroFeeItems = feeItems\.filter\(\(_, index\) => index !== heroPrimaryFeeIndex\)\.slice\(0, 4\)/);
+  assert.match(program, /<dl className="detail-hero-fees">\{heroFeeItems\.map/);
+  assert.doesNotMatch(program, /<aside className="detail-hero-card"[\s\S]*?detail-summary-list/);
   assert.match(program, /detail-program-overview-grid/);
   assert.match(program, /detail-program-requirements-grid/);
   assert.match(program, /detail-program-fees/);
   assert.match(css, /\.detail-program \.detail-hero-main \{ min-height: clamp\(500px, 62vh, 600px\)/);
   assert.doesNotMatch(css, /\.detail-program \.detail-hero-card::before/);
+  assert.match(css, /\.detail-hero-fees \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); gap: 7px/);
   assert.match(css, /\.detail-program \.detail-factbar \.detail-facts \{[^}]*border-radius: 18px/);
   assert.match(css, /@media \(max-width: 480px\)[\s\S]*\.detail-program \.detail-hero-card \.detail-actions \{ display: none; \}/);
 });
