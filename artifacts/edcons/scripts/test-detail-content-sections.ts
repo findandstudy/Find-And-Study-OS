@@ -348,6 +348,10 @@ test("public detail presentation retains the approved HTML-reference visual lang
   assert.match(styles, /\.detail-hero-main \{[^}]*grid-template-columns: minmax\(0, 1\.2fr\) 380px/);
   assert.match(styles, /\.detail-section \{ padding-block: 46px/);
   assert.match(styles, /\.detail-program \.detail-section \{ padding-block: 48px/);
+  assert.match(contentSectionsSource, /function isProseOnlySection\(section: DetailContentSection\)/);
+  assert.match(contentSectionsSource, /isProseOnlySection\(section\) \? " is-prose-only" : ""/);
+  assert.match(styles, /\.public-detail > \.detail-editorial-section\.is-prose-only \{ padding-block: clamp\(24px, 2\.1vw, 30px\); \}/);
+  assert.match(styles, /\.detail-editorial-section\.is-prose-only \+ \.detail-editorial-section\.is-prose-only \{ border-top: 1px solid var\(--detail-line-soft\); \}/);
   assert.match(styles, /\.public-detail \{[\s\S]*--detail-hero-content-min-height: clamp\(520px, 62vh, 600px\)/);
   assert.match(styles, /\.detail-program \.detail-hero-main \{ min-height: var\(--detail-hero-content-min-height\)/);
   assert.match(styles, /\.detail-university \.detail-hero-main \{ min-height: var\(--detail-hero-content-min-height\)/);

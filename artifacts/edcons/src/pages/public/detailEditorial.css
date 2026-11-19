@@ -286,6 +286,8 @@
 .detail-editorial-section.detail-band { color: #fff; background: var(--detail-navy); }
 .detail-editorial-section.detail-band :is(.detail-editorial-heading h2,.detail-editorial-intro,.detail-service-grid h3,.detail-service-grid p) { color: inherit; }
 .detail-editorial-section.detail-band .detail-editorial-heading > span { color: #b9d0fc; }
+.public-detail > .detail-editorial-section.is-prose-only { padding-block: clamp(24px, 2.1vw, 30px); }
+.public-detail > .detail-editorial-section.is-prose-only + .detail-editorial-section.is-prose-only { border-top: 1px solid var(--detail-line-soft); }
 
 .detail-editorial-heading { display: block; margin-bottom: 18px; }
 .detail-editorial-heading > span { display: block; margin-bottom: 8px; color: var(--detail-accent); font-size: 10px; font-weight: 850; line-height: 1.5; letter-spacing: .13em; text-transform: uppercase; }

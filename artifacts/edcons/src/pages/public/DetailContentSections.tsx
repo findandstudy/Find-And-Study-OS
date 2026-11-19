@@ -88,6 +88,19 @@ function hasPublicSectionContent(section: DetailContentSection): boolean {
     || !!section.questions?.length;
 }
 
+/** Text-only sections need reading rhythm, not the large stage reserved for
+ * galleries, cards, tables and step-based modules. Keep this content-driven so
+ * every current and future detail template receives the same compact treatment. */
+function isProseOnlySection(section: DetailContentSection): boolean {
+  return !!section.body?.trim()
+    && !section.hero
+    && !section.cards?.length
+    && !section.table
+    && !section.steps?.length
+    && !section.images?.length
+    && !section.questions?.length;
+}
+
 function publicDetailSections(content: DetailContent | null): DetailContentSection[] {
   return effectiveDetailContentSections(content).map(publicDetailSection);
 }
@@ -303,7 +316,7 @@ export function detailContentIntro(
 /** Returned as direct children so the existing CMS layout can order/hide each standalone section. */
 export function detailContentSections(content: DetailContent | null, locale: string, correctionPath: string, exclude: readonly string[] = []): ReactNode[] {
   if (!content) return [];
-  return publicDetailSections(content).filter(section => hasPublicSectionContent(section) && !exclude.includes(section.key) && !DETAIL_GENERATED_CONTENT_KEYS.includes(section.key as (typeof DETAIL_GENERATED_CONTENT_KEYS)[number])).map(section => <section key={section.key} data-detail-section={`editorial-${section.key}`} id={`editorial-${section.key}`} className={`detail-section detail-editorial-section is-${section.key} ${section.key === "services" || section.key === "support" ? "detail-band" : ""}`}>
+  return publicDetailSections(content).filter(section => hasPublicSectionContent(section) && !exclude.includes(section.key) && !DETAIL_GENERATED_CONTENT_KEYS.includes(section.key as (typeof DETAIL_GENERATED_CONTENT_KEYS)[number])).map(section => <section key={section.key} data-detail-section={`editorial-${section.key}`} id={`editorial-${section.key}`} className={`detail-section detail-editorial-section is-${section.key}${isProseOnlySection(section) ? " is-prose-only" : ""}${section.key === "services" || section.key === "support" ? " detail-band" : ""}`}>
     {detailContentSectionBody(section, locale, correctionPath)}
   </section>);
 }
