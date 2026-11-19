@@ -271,7 +271,6 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const publicFeeDefinitions = [
     { key: "tuition", componentType: "TUITION", value: program.tuitionFee },
     { key: "discounted", componentType: "DISCOUNTED_TUITION", value: program.discountedFee },
-    { key: "scholarship", componentType: "SCHOLARSHIP", value: program.scholarship },
     { key: "application", componentType: "APPLICATION_FEE", value: program.applicationFee },
     { key: "enrollment", componentType: "ENROLMENT_FEE", value: program.enrollmentFee },
     { key: "deposit", componentType: "DEPOSIT_FEE", value: program.depositFee },
@@ -290,6 +289,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     };
   });
   const standardFeeKeys = new Set(publicFeeDefinitions.map(item => item.key));
+  const excludedFeeKeys = new Set(["scholarship", "service"]);
   const standardFeeItems = publicFeeDefinitions.flatMap(item => {
     const verified = verifiedFeeItems.filter(price => feeComponentKey(price.componentType) === item.key);
     if (verified.length > 0) return verified;
@@ -302,7 +302,10 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       isFree,
     }];
   });
-  const additionalVerifiedFeeItems = verifiedFeeItems.filter(item => !standardFeeKeys.has(feeComponentKey(item.componentType)));
+  const additionalVerifiedFeeItems = verifiedFeeItems.filter(item => {
+    const key = feeComponentKey(item.componentType);
+    return !standardFeeKeys.has(key) && !excludedFeeKeys.has(key);
+  });
   const feeItems = [...standardFeeItems, ...additionalVerifiedFeeItems];
   const campuses = [...new Set(payload.intakes.map(intake => intake.campusName).filter(Boolean))].join(" · ");
   const institutionLocation = <>{cityPath ? <Link href={cityPath}>{program.universityCity}</Link> : program.universityCity}{program.universityCity && " · "}{countryPath ? <Link href={countryPath}>{program.universityCountry}</Link> : program.universityCountry}</>;

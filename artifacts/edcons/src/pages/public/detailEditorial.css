@@ -794,16 +794,17 @@
 .detail-program-requirements .detail-program-points li + li { margin-top: 8px; }
 .detail-program-requirements .detail-program-points li:nth-child(odd) { background: var(--detail-sky); }
 .detail-program-requirements .detail-program-points li svg { flex: 0 0 auto; width: 20px; height: 20px; padding: 9px; box-sizing: content-box; border-radius: 10px; background: color-mix(in srgb, var(--detail-accent) 10%, white); }
-.detail-program-fees-grid { grid-template-columns: minmax(0, .8fr) minmax(320px, 1.2fr); gap: clamp(22px, 3.5vw, 44px); align-items: start; }
-.detail-program-fees .detail-fee-panel { overflow: hidden; border: 1px solid color-mix(in srgb, var(--detail-accent) 20%, var(--detail-line)); border-radius: 22px; padding: 14px; background: var(--detail-white); box-shadow: 0 18px 48px rgba(11,18,32,.09); }
+.detail-program-fees-grid { grid-template-columns: minmax(0, .9fr) minmax(390px, 1.1fr); gap: clamp(18px, 2.2vw, 28px); align-items: start; }
+.detail-program-fees .detail-fee-panel { overflow: hidden; border: 1px solid color-mix(in srgb, var(--detail-accent) 16%, var(--detail-line)); border-radius: 18px; padding: 9px; background: color-mix(in srgb, var(--detail-white) 94%, var(--detail-sky)); box-shadow: 0 14px 34px rgba(11,18,32,.075); }
 .detail-fee-panel-header { display: flex; align-items: center; gap: 12px; min-height: 66px; padding: 13px 18px; border-bottom: 1px solid var(--detail-line); background: color-mix(in srgb, var(--detail-sky) 45%, var(--detail-white)); }
 .detail-fee-panel-header p { flex: 1; margin: 0; color: var(--detail-ink); font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .detail-fee-panel-icon { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid color-mix(in srgb, var(--detail-accent) 18%, var(--detail-line)); border-radius: 13px; color: var(--detail-accent); background: var(--detail-white); }
 .detail-fee-count { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 25px; padding-inline: 9px; border-radius: 999px; color: var(--detail-white); background: var(--detail-accent); font-size: 12px; font-weight: 800; }
-.detail-fee-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 10px; margin: 0; background: transparent; }
-.detail-fee-list > div { min-width: 0; padding: 16px 17px; border: 1px solid var(--detail-line); border-radius: 14px; background: color-mix(in srgb, var(--detail-paper) 72%, var(--detail-white)); }
-.detail-fee-list > div.is-primary { grid-column: 1 / -1; padding-block: 20px; border-color: color-mix(in srgb, var(--detail-accent) 22%, var(--detail-line)); background: linear-gradient(135deg, color-mix(in srgb, var(--detail-sky) 70%, var(--detail-white)), var(--detail-white)); }
-.detail-fee-list dt { margin-bottom: 8px; color: var(--detail-muted); font-size: 11px; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
+.detail-fee-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin: 0; background: transparent; }
+.detail-fee-list > div { display: flex; min-width: 0; min-height: 72px; flex-direction: column; justify-content: space-between; padding: 12px 13px; border: 1px solid color-mix(in srgb, var(--detail-line) 88%, transparent); border-radius: 12px; background: var(--detail-white); transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
+.detail-fee-list > div:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--detail-accent) 26%, var(--detail-line)); box-shadow: 0 8px 18px rgba(11,18,32,.06); }
+.detail-fee-list > div.is-primary { grid-column: 1 / -1; min-height: 82px; padding: 15px 16px; border-color: color-mix(in srgb, var(--detail-accent) 20%, var(--detail-line)); background: linear-gradient(135deg, color-mix(in srgb, var(--detail-sky) 62%, var(--detail-white)), var(--detail-white)); }
+.detail-fee-list dt { margin-bottom: 5px; color: var(--detail-muted); font-size: 10px; font-weight: 780; letter-spacing: .05em; text-transform: uppercase; }
 .detail-fee-list dd { margin: 0; color: var(--detail-ink); }
 .detail-fee-list dd strong { display: block; overflow-wrap: anywhere; font-size: clamp(17px, 1.7vw, 22px); font-weight: 820; letter-spacing: -.02em; line-height: 1.08; }
 .detail-fee-list > div.is-primary dd strong { font-size: clamp(22px, 2.7vw, 30px); }
@@ -997,8 +998,8 @@
   .detail-editorial-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-program .detail-hero-main { grid-template-columns: minmax(0, 1fr) 330px; gap: 32px; min-height: 540px; padding-top: 46px; }
   .detail-program-overview-grid,
-  .detail-program-requirements-grid,
-  .detail-program-fees-grid { gap: 30px; }
+  .detail-program-requirements-grid { gap: 30px; }
+  .detail-program-fees-grid { gap: 22px; }
 }
 
 /* Cross-template reading comfort and visual rhythm. Keep catalogue facts full
@@ -1077,6 +1078,7 @@
   .detail-program-overview-grid,
   .detail-program-requirements-grid,
   .detail-program-fees-grid { grid-template-columns: 1fr; gap: 26px; }
+  .detail-fee-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-program-story .detail-snapshot { border-radius: 0 14px 14px 0; font-size: 15px; }
   .detail-program-profile { padding: 20px; }
   .detail-editorial-cards,
@@ -1128,6 +1130,8 @@
   .detail-mobile-actions .detail-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-program .detail-factbar .detail-facts { grid-template-columns: minmax(0, 1fr); }
   .detail-program .detail-hero-card .detail-actions { display: none; }
+  .detail-program-fees .detail-fee-panel { padding: 8px; }
+  .detail-fee-list { grid-template-columns: minmax(0, 1fr); }
   .detail-program-card-heading { align-items: flex-start; }
   .detail-program-card-meta { display: grid; grid-template-columns: minmax(0, 1fr); }
 }

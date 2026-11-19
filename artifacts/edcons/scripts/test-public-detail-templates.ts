@@ -796,12 +796,12 @@ test("program fee card always shows every public fee and localizes missing value
   assert.match(program, /const freeFeeLabel = t\("catalogDetail\.free"\)/);
   assert.match(program, /componentType: "TUITION"/);
   assert.match(program, /componentType: "DISCOUNTED_TUITION"/);
-  assert.match(program, /componentType: "SCHOLARSHIP"/);
   assert.match(program, /componentType: "APPLICATION_FEE"/);
   assert.match(program, /componentType: "ENROLMENT_FEE"/);
   assert.match(program, /componentType: "DEPOSIT_FEE"/);
   assert.match(program, /componentType: "ADVANCED_FEE"/);
   assert.match(program, /componentType: "LANGUAGE_FEE"/);
+  assert.match(program, /const excludedFeeKeys = new Set\(\["scholarship", "service"\]\)/);
   assert.match(program, /const isFree = item\.value == null \|\| item\.value <= 0/);
   assert.match(fees, /<dl className="detail-fee-list">\{feeItems\.map/);
   assert.doesNotMatch(fees, /item\.frequency|detail-fee-panel-header|detail-fee-count/);
@@ -810,6 +810,7 @@ test("program fee card always shows every public fee and localizes missing value
   assert.match(program, /<a href="#fees">\{t\("courseFinderPage\.tuitionFee"\)\}<\/a>/);
   assert.match(css, /\.detail-fee-list dd strong \{[^}]*font-size: clamp\(17px, 1\.7vw, 22px\)/);
   assert.match(css, /\.detail-fee-list > div\.is-primary dd strong \{ font-size: clamp\(22px, 2\.7vw, 30px\)/);
+  assert.match(css, /\.detail-fee-list \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); gap: 7px/);
 });
 
 test("active section navigation is local, follows visible DOM order and cleans up every listener", () => {
