@@ -811,6 +811,7 @@ test("program fee card always shows every public fee and localizes missing value
   assert.match(css, /\.detail-fee-list dd strong \{[^}]*font-size: clamp\(17px, 1\.7vw, 22px\)/);
   assert.match(css, /\.detail-fee-list > div\.is-primary dd strong \{ font-size: clamp\(22px, 2\.7vw, 30px\)/);
   assert.match(css, /\.detail-fee-list \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); gap: 7px/);
+  assert.match(css, /@media \(max-width: 480px\) \{[\s\S]*?\.detail-fee-list \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); gap: 6px; \}/);
 });
 
 test("active section navigation is local, follows visible DOM order and cleans up every listener", () => {
