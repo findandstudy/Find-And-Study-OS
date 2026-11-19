@@ -13,7 +13,7 @@
   --detail-accent: #174a7e;
   --detail-navy: #0e2138;
   --detail-shadow: 0 10px 30px rgba(11, 18, 32, .10);
-  --detail-hero-content-min-height: clamp(500px, 62vh, 600px);
+  --detail-hero-content-min-height: clamp(520px, 62vh, 600px);
   color: var(--detail-ink);
   background: var(--detail-paper);
   padding-bottom: 1px;

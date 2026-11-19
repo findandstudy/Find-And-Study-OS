@@ -252,7 +252,7 @@ test("program detail uses the shared decision-focused responsive template", () =
   assert.match(program, /detail-program-overview-grid/);
   assert.match(program, /detail-program-requirements-grid/);
   assert.match(program, /detail-program-fees/);
-  assert.match(css, /\.public-detail \{[\s\S]*--detail-hero-content-min-height: clamp\(500px, 62vh, 600px\)/);
+  assert.match(css, /\.public-detail \{[\s\S]*--detail-hero-content-min-height: clamp\(520px, 62vh, 600px\)/);
   assert.match(css, /\.detail-hero-main \{[\s\S]*min-height: var\(--detail-hero-content-min-height\)/);
   assert.match(css, /\.detail-country-cover-inner \{[\s\S]*min-height: var\(--detail-hero-content-min-height\)/);
   assert.match(css, /\.detail-university \.detail-hero-main \{[\s\S]*min-height: var\(--detail-hero-content-min-height\)/);
