@@ -107,6 +107,17 @@ type ProgramDetailPayload = {
 
 const CityProgramCards = lazy(() => import("./CityProgramCards").then(module => ({ default: module.CityProgramCards })));
 
+type ProgramFeeDisplayItem = {
+  id: string;
+  componentType: string;
+  amount: string;
+  numericAmount: number | null;
+  currency: string | null;
+  frequency: string | null;
+  verified: boolean;
+  isFree: boolean;
+};
+
 function localizedDate(value: string | null, locale: string): string | null {
   if (!value) return null;
   const date = new Date(value);
@@ -269,35 +280,42 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const countryPath = localDetailPath(program.countryPath), cityPath = localDetailPath(program.cityPath);
   const freeFeeLabel = t("catalogDetail.free");
   const publicFeeDefinitions = [
-    { key: "tuition", componentType: "TUITION", value: program.tuitionFee },
     { key: "discounted", componentType: "DISCOUNTED_TUITION", value: program.discountedFee },
+    { key: "tuition", componentType: "TUITION", value: program.tuitionFee },
     { key: "application", componentType: "APPLICATION_FEE", value: program.applicationFee },
     { key: "enrollment", componentType: "ENROLMENT_FEE", value: program.enrollmentFee },
     { key: "deposit", componentType: "DEPOSIT_FEE", value: program.depositFee },
     { key: "advance", componentType: "ADVANCED_FEE", value: program.advancedFee },
     { key: "language", componentType: "LANGUAGE_FEE", value: program.languageFee },
   ];
-  const verifiedFeeItems = visiblePrices.map(price => {
+  const verifiedFeeItems: ProgramFeeDisplayItem[] = visiblePrices.map(price => {
     const numericAmount = minorAmount(price.amountMinor, price.currencyCode);
     const isFree = numericAmount == null || numericAmount === 0;
     return {
       id: price.id,
       componentType: price.componentType,
       amount: isFree ? freeFeeLabel : detailMoney(numericAmount, price.currencyCode, lang) || freeFeeLabel,
+      numericAmount,
+      currency: price.currencyCode,
+      frequency: price.frequency,
       verified: true,
       isFree,
     };
   });
   const standardFeeKeys = new Set(publicFeeDefinitions.map(item => item.key));
   const excludedFeeKeys = new Set(["scholarship", "service"]);
-  const standardFeeItems = publicFeeDefinitions.flatMap(item => {
-    const verified = verifiedFeeItems.filter(price => feeComponentKey(price.componentType) === item.key);
+  const standardFeeItems = publicFeeDefinitions.flatMap<ProgramFeeDisplayItem>(item => {
+    const verified = verifiedFeeItems.filter(price => feeComponentKey(price.componentType) === item.key && (item.key !== "discounted" || !price.isFree));
     if (verified.length > 0) return verified;
+    if (item.key === "discounted" && (item.value == null || item.value <= 0)) return [];
     const isFree = item.value == null || item.value <= 0;
     return [{
       id: `catalogue-${item.key}`,
       componentType: item.componentType,
       amount: isFree ? freeFeeLabel : detailMoney(item.value, program.currency, lang) || freeFeeLabel,
+      numericAmount: isFree ? 0 : item.value,
+      currency: program.currency,
+      frequency: null,
       verified: false,
       isFree,
     }];
@@ -307,10 +325,21 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     return !standardFeeKeys.has(key) && !excludedFeeKeys.has(key);
   });
   const feeItems = [...standardFeeItems, ...additionalVerifiedFeeItems];
-  const heroPrimaryAmount = tuition ? detailMoney(tuition.amount, tuition.currency, lang) : null;
-  const heroPrimaryFeeIndex = heroPrimaryAmount ? feeItems.findIndex(item => item.amount === heroPrimaryAmount) : -1;
+  const discountedFeeIndex = feeItems.findIndex(item => feeComponentKey(item.componentType) === "discounted");
+  const heroPrimaryFeeIndex = discountedFeeIndex >= 0
+    ? discountedFeeIndex
+    : feeItems.findIndex(item => feeComponentKey(item.componentType) === "tuition");
   const heroPrimaryFee = heroPrimaryFeeIndex >= 0 ? feeItems[heroPrimaryFeeIndex] : null;
   const heroPrimaryFeeLabel = heroPrimaryFee ? feeComponentLabel(heroPrimaryFee.componentType, t) : t("courseFinderPage.tuitionFee");
+  const heroPrimaryTuition: DetailTuition | null = heroPrimaryFee && heroPrimaryFee.numericAmount != null && heroPrimaryFee.currency
+    ? {
+        amount: heroPrimaryFee.numericAmount,
+        currency: heroPrimaryFee.currency,
+        verified: heroPrimaryFee.verified,
+        source: heroPrimaryFee.verified ? "verified" : "legacy",
+        frequency: heroPrimaryFee.frequency,
+      }
+    : tuition;
   const heroFeeItems = feeItems.filter((_, index) => index !== heroPrimaryFeeIndex).slice(0, 4);
   const campuses = [...new Set(payload.intakes.map(intake => intake.campusName).filter(Boolean))].join(" · ");
   const institutionLocation = <>{cityPath ? <Link href={cityPath}>{program.universityCity}</Link> : program.universityCity}{program.universityCity && " · "}{countryPath ? <Link href={countryPath}>{program.universityCountry}</Link> : program.universityCountry}</>;
@@ -353,7 +382,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
             </div>
             <aside className="detail-hero-card" aria-label={heroPrimaryFeeLabel}>
               <p className="detail-eyebrow detail-icon-line"><Wallet size={16} aria-hidden="true" />{heroPrimaryFeeLabel}</p>
-              <DetailPrice tuition={tuition} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} />
+              <DetailPrice tuition={heroPrimaryTuition} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} />
               <dl className="detail-hero-fees">{heroFeeItems.map(item => <div key={`hero-${item.id}`} className={item.isFree ? "is-free" : undefined}>
                 <dt>{feeComponentLabel(item.componentType, t)}</dt>
                 <dd>{item.amount}</dd>
@@ -437,7 +466,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
         <div className="detail-wrap detail-split detail-program-fees-grid">
           <div><DetailHeading number="04" eyebrow={copy.program} title={detailContentTitle(editorial, "fees", t("courseFinderPage.tuitionFee"))} />{detailContentIntro(editorial, "fees")}{feeItems.some(item => item.verified) && <p className="detail-provenance">{copy.priceBasis}</p>}</div>
           <div className="detail-fee-panel">
-            <dl className="detail-fee-list">{feeItems.map((item, index) => <div key={item.id} className={[item.componentType === "TUITION" || index === 0 ? "is-primary" : "", item.isFree ? "is-free" : ""].filter(Boolean).join(" ") || undefined}>
+            <dl className="detail-fee-list">{feeItems.map((item, index) => <div key={item.id} className={[index === 0 ? "is-primary" : "", item.isFree ? "is-free" : ""].filter(Boolean).join(" ") || undefined}>
               <dt>{feeComponentLabel(item.componentType, t)}</dt>
               <dd><strong>{item.amount}</strong></dd>
             </div>)}</dl>

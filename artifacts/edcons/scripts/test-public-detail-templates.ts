@@ -227,8 +227,11 @@ test("program detail labels legacy display fees but reserves offers for verified
 test("program detail uses the shared decision-focused responsive template", () => {
   assert.match(program, /detail-program-hero-grid/);
   assert.match(program, /<aside className="detail-hero-card"/);
+  assert.match(program, /const discountedFeeIndex = feeItems\.findIndex\(item => feeComponentKey\(item\.componentType\) === "discounted"\)/);
+  assert.match(program, /const heroPrimaryFeeIndex = discountedFeeIndex >= 0/);
   assert.match(program, /const heroFeeItems = feeItems\.filter\(\(_, index\) => index !== heroPrimaryFeeIndex\)\.slice\(0, 4\)/);
   assert.match(program, /const heroPrimaryFeeLabel = heroPrimaryFee \? feeComponentLabel\(heroPrimaryFee\.componentType, t\) : t\("courseFinderPage\.tuitionFee"\)/);
+  assert.match(program, /<DetailPrice tuition=\{heroPrimaryTuition\}/);
   assert.match(program, /<dl className="detail-hero-fees">\{heroFeeItems\.map/);
   assert.doesNotMatch(program, /<aside className="detail-hero-card"[\s\S]*?detail-summary-list/);
   assert.match(program, /detail-program-overview-grid/);
@@ -799,6 +802,7 @@ test("program fee card always shows every public fee and localizes missing value
   assert.doesNotMatch(program, /payload\.prices\.slice/);
   assert.match(program, /const publicFeeDefinitions = \[/);
   assert.match(program, /const freeFeeLabel = t\("catalogDetail\.free"\)/);
+  assert.ok(program.indexOf('{ key: "discounted", componentType: "DISCOUNTED_TUITION"') < program.indexOf('{ key: "tuition", componentType: "TUITION"'), "discounted fee must precede tuition");
   assert.match(program, /componentType: "TUITION"/);
   assert.match(program, /componentType: "DISCOUNTED_TUITION"/);
   assert.match(program, /componentType: "APPLICATION_FEE"/);
@@ -807,8 +811,11 @@ test("program fee card always shows every public fee and localizes missing value
   assert.match(program, /componentType: "ADVANCED_FEE"/);
   assert.match(program, /componentType: "LANGUAGE_FEE"/);
   assert.match(program, /const excludedFeeKeys = new Set\(\["scholarship", "service"\]\)/);
+  assert.match(program, /if \(item\.key === "discounted" && \(item\.value == null \|\| item\.value <= 0\)\) return \[\]/);
   assert.match(program, /const isFree = item\.value == null \|\| item\.value <= 0/);
   assert.match(fees, /<dl className="detail-fee-list">\{feeItems\.map/);
+  assert.match(fees, /className=\{\[index === 0 \? "is-primary"/);
+  assert.doesNotMatch(fees, /item\.componentType === "TUITION"/);
   assert.doesNotMatch(fees, /item\.frequency|detail-fee-panel-header|detail-fee-count/);
   assert.doesNotMatch(fees, /detail-fee-empty|copy\.unavailable|copy\.confirmPrice/);
   assert.doesNotMatch(fees, /<DetailPrice/);
