@@ -26,7 +26,14 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { MAX_DOCUMENT_PARTS, isSingleImageDocumentType, mergeDocumentParts } from "@/lib/documentPartMerge";
-import type { Program } from "./Programs";
+
+export type PublicApplicationProgram = {
+  id: number;
+  name: string;
+  degree?: string | null;
+  universityName: string;
+  universityCountry?: string | null;
+};
 
 const DocumentScanner = lazy(() => import("@/components/LazyDocumentScanner"));
 
@@ -345,7 +352,7 @@ interface ExistingDocInfo {
   type: string;
 }
 
-export default function PublicProgramApplicationDialog({ open, onClose, program, countries }: { open: boolean; onClose: () => void; program: Program | null; countries: string[] }) {
+export default function PublicProgramApplicationDialog({ open, onClose, program }: { open: boolean; onClose: () => void; program: PublicApplicationProgram | null }) {
   const { t, localePath } = useI18n();
   const [, setLocation] = useLocation();
   const { toast } = useToast();

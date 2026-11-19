@@ -454,7 +454,7 @@ test("university programs are responsive factual cards with accessible navigatio
   for (const value of ["Master", "Engineering", "English", "12 months"]) assert.ok(html.includes(`<bdi>${value}</bdi>`));
 });
 
-test("Programs and university reuse the same card and filters without changing dialog callbacks", () => {
+test("Programs and every detail catalogue reuse the same in-place application dialog", () => {
   for (const source of [programs, universityBrowser]) {
     assert.match(source, /import \{ PublicProgramCard(?:, type PublicProgramCardData)? \} from "\.\/PublicProgramCard"/);
     assert.match(source, /import \{ PublicProgramFilters/);
@@ -471,8 +471,17 @@ test("Programs and university reuse the same card and filters without changing d
   assert.match(programs, /if \(requestedProgramId && resp\.data\?\.length === 1\)\s*\{\s*setApplyProgram\(\(current\) => current \|\| resp\.data\[0\]\)/);
   assert.match(programCard, /onClick=\{onDetails\}/);
   assert.match(programCard, /onClick=\{onApply\}/);
-  assert.match(universityBrowser, /applyHref=\{`\$\{localePath\("\/programs"\)\}\?programId=\$\{program\.id\}`\}/);
+  assert.match(universityBrowser, /onApply=\{\(\) => setApplyProgram\(program\)\}/);
   assert.match(universityBrowser, /applyDisabled=\{!admissionsOpen \|\| !programAdmissionsOpen\(program\)\}/);
+  assert.match(universityBrowser, /<PublicProgramApplicationDialog open onClose=\{\(\) => setApplyProgram\(null\)\} program=\{applyProgram\}/);
+  assert.doesNotMatch(universityBrowser, /applyHref=|\?programId=/);
+  assert.match(cityProgramCards, /onApply=\{\(\) => setApplyProgram\(program\)\}/);
+  assert.match(cityProgramCards, /<PublicProgramApplicationDialog open onClose=\{\(\) => setApplyProgram\(null\)\} program=\{applyProgram\}/);
+  assert.doesNotMatch(cityProgramCards, /applyHref=|\?programId=/);
+  assert.match(program, /onClick=\{\(\) => setApplicationOpen\(true\)\}/);
+  assert.match(program, /<PublicProgramApplicationDialog open onClose=\{\(\) => setApplicationOpen\(false\)\} program=\{program\}/);
+  assert.doesNotMatch(program, /primaryCtaHref|\?programId=/);
+  for (const source of [country, city, university]) assert.match(source, /(?:DetailProgramBrowser|UniversityProgramBrowser)/);
   const callbacks = renderProgramCard({ onApply: () => {}, onDetails: () => {} });
   assert.match(callbacks, /<button[^>]*aria-label="programs.programDetails"/);
   assert.doesNotMatch(callbacks, /href="[^\"]*\?programId=/);
@@ -486,11 +495,12 @@ test("university Info opens the shared modal while the program title remains can
   }
   assert.match(universityBrowser, /onDetails=\{\(\) => setDetailProgram\(\{ \.\.\.program, requirements: splitRequirements/);
   assert.match(universityBrowser, /onClose=\{\(\) => setDetailProgram\(null\)\}/);
-  const html = renderProgramCard({ onDetails: () => {}, applyHref: "/en/programs?programId=145792" });
+  const html = renderProgramCard({ onDetails: () => {}, onApply: () => {} });
   assert.match(html, /<button[^>]*aria-label="programs.programDetails"/);
   assert.doesNotMatch(html, /<a[^>]*aria-label="programs.programDetails"/);
   assert.match(html, /<a href="\/en\/programs\/source-program-145792"[^>]*><h3/);
-  assert.match(html, /href="\/en\/programs\?programId=145792"/);
+  assert.doesNotMatch(html, /href="\/en\/programs\?programId=145792"/);
+  assert.match(html, /<button[^>]*>courseFinderPage\.apply/);
 });
 
 test("university modal receives authoritative tuition and conservative requirements, never importer timing", () => {
@@ -693,7 +703,8 @@ test("new presentation preserves canonical SEO, governed sections and guarded ap
   assert.match(program, /"@type": "Course"/);
   assert.match(university, /"@type": "CollegeOrUniversity"/);
   assert.match(program, /const apply = programAdmissionsOpen\(program\)/);
-  assert.match(program, /\?programId=\$\{program\.id\}/);
+  assert.match(program, /onClick=\{\(\) => setApplicationOpen\(true\)\}/);
+  assert.doesNotMatch(program, /\?programId=\$\{program\.id\}/);
   assert.match(program, /<button disabled>/);
   assert.match(program, /<div className="detail-actions">\{apply\}<\/div>/);
   assert.match(program, /offers: tuitionOffer\(tuition, programAdmissionsOpen\(program\)\)/);
@@ -971,24 +982,26 @@ test("city programs use the scope-locked browser while bounded cards retain thei
   assert.match(cityProgramCards, /selected \? <Suspense fallback=\{null\}>/);
   assert.match(cityProgramCards, /className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">\{programs\.map/);
   assert.match(cityProgramCards, /onDetails=\{\(\) => setSelected\(/);
+  assert.match(cityProgramCards, /onApply=\{\(\) => setApplyProgram\(program\)\}/);
   assert.match(cityProgramCards, /onClose=\{\(\) => setSelected\(null\)\}/);
   assert.doesNotMatch(cityProgramCards, /customFetch|\bfetch\(|setLocation|window\.location|PublicProgramFilters|useEffect|<table/);
   const html = renderPublicElement(createElement(CityProgramCards, { programs: [{ ...cardFixture, isActive: true, universityIsActive: true }] }));
   assert.match(html, /<button[^>]*aria-label="programs.programDetails"/);
   assert.doesNotMatch(html, /<a[^>]*aria-label="programs.programDetails"/);
   assert.match(html, /<a href="\/en\/programs\/source-program-145792"[^>]*><h3/);
-  assert.match(html, /href="\/en\/programs\?programId=145792"/);
+  assert.doesNotMatch(html, /href="\/en\/programs\?programId=145792"/);
+  assert.match(html, /<button[^>]*>courseFinderPage\.apply/);
 });
 
 test("city cards fail closed for missing or closed admissions while retaining program details", () => {
   assert.match(cityProgramCards, /applyDisabled=\{program\.isActive !== true \|\| program\.universityIsActive !== true\}/);
   for (const isActive of [undefined, false, true]) for (const universityIsActive of [undefined, false, true]) {
     const html = renderPublicElement(createElement(CityProgramCards, { programs: [{ ...cardFixture, isActive, universityIsActive }] }));
-    const hasApplyLink = html.includes('href="/en/programs?programId=145792"');
-    assert.equal(hasApplyLink, isActive === true && universityIsActive === true, `${isActive}/${universityIsActive}`);
+    const hasEnabledApply = !/<button[^>]*disabled=""[^>]*>courseFinderPage\.apply/.test(html);
+    assert.equal(hasEnabledApply, isActive === true && universityIsActive === true, `${isActive}/${universityIsActive}`);
     assert.match(html, /<button[^>]*aria-label="programs.programDetails"/);
     assert.match(html, /href="\/en\/programs\/source-program-145792"/);
-    if (!hasApplyLink) assert.match(html, /<button[^>]*disabled=""/);
+    if (!hasEnabledApply) assert.match(html, /<button[^>]*disabled=""/);
   }
 });
 
@@ -1030,8 +1043,8 @@ test("city program actions stay locale-aware with factual RTL metadata and no cl
   const html = renderPublicElement(createElement(CityProgramCards, { programs: rows }), "ar");
   assert.equal((html.match(/class="public-program-card /g) ?? []).length, 12);
   assert.equal((html.match(/aria-label="programs\.programDetails"/g) ?? []).length, 12);
-  assert.match(html, /href="\/ar\/programs\?programId=1"/);
-  assert.match(html, /href="\/ar\/programs\?programId=12"/);
+  assert.equal((html.match(/>courseFinderPage\.apply /g) ?? []).length, 12);
+  assert.doesNotMatch(html, /\?programId=/);
   assert.match(html, /<bdi>برنامج 1<\/bdi>/);
   assert.match(html, /<bdi>12 months<\/bdi>/);
   assert.doesNotMatch(html, /href="\/en\//);

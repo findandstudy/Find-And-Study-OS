@@ -7,6 +7,7 @@ import { displayTuition, splitRequirements, type DetailTuition } from "./detailP
 
 const PublicProgramDetailDialog = lazy(() => import("./PublicProgramDetailDialog")
   .then(module => ({ default: module.PublicProgramDetailDialog })));
+const PublicProgramApplicationDialog = lazy(() => import("./PublicProgramApplicationDialog"));
 
 /** Additive city API fields may be absent while an older response is cached. */
 export type CityProgramCardData = Omit<PublicProgramDetailData, "universityPath"> & {
@@ -19,8 +20,9 @@ export type CityProgramCardData = Omit<PublicProgramDetailData, "universityPath"
 
 /** The city's existing bounded programme sample, using the public catalogue UI. */
 export function CityProgramCards({ programs }: { programs: CityProgramCardData[] }) {
-  const { t, lang, localePath } = useI18n();
+  const { t, lang } = useI18n();
   const [selected, setSelected] = useState<CityProgramCardData | null>(null);
+  const [applyProgram, setApplyProgram] = useState<CityProgramCardData | null>(null);
   const price = (program: CityProgramCardData) => <div className="university-program-tuition">
     <p className="text-[10px] text-muted-foreground mb-1.5">{t("courseFinderPage.tuitionFee")}</p>
     <DetailPrice tuition={displayTuition({ ...program, tuition: program.tuition ?? null }, lang)} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} />
@@ -29,13 +31,16 @@ export function CityProgramCards({ programs }: { programs: CityProgramCardData[]
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">{programs.map((program, index) => <PublicProgramCard
       key={program.id} index={index} program={{ ...program, universityPath: program.universityPath ?? "" }}
       onDetails={() => setSelected({ ...program, requirements: splitRequirements(program.requirements, { canonicalPath: program.canonicalPath, id: program.id }).requirements.join("\n") })}
-      applyHref={`${localePath("/programs")}?programId=${program.id}`}
+      onApply={() => setApplyProgram(program)}
       applyDisabled={program.isActive !== true || program.universityIsActive !== true}
       omitLegacyTiming tuitionContent={price(program)} />)}</div>
     {selected ? <Suspense fallback={null}>
       <PublicProgramDetailDialog open onClose={() => setSelected(null)}
         program={{ ...selected, universityPath: selected.universityPath ?? "" }}
         omitLegacyTiming tuitionContent={price(selected)} />
+    </Suspense> : null}
+    {applyProgram ? <Suspense fallback={null}>
+      <PublicProgramApplicationDialog open onClose={() => setApplyProgram(null)} program={applyProgram} />
     </Suspense> : null}
   </div>;
 }

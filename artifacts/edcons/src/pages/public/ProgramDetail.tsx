@@ -1,6 +1,6 @@
 import { DetailLayout } from "./DetailLayout";
 import { programAdmissionsOpen } from "@/lib/programAdmissions";
-import { lazy, Suspense, useEffect, useContext } from "react";
+import { lazy, Suspense, useEffect, useContext, useState } from "react";
 import { DetailPreviewContext } from "./DetailPreviewContext";
 import { Link, useLocation } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
@@ -106,6 +106,7 @@ type ProgramDetailPayload = {
 };
 
 const CityProgramCards = lazy(() => import("./CityProgramCards").then(module => ({ default: module.CityProgramCards })));
+const PublicProgramApplicationDialog = lazy(() => import("./PublicProgramApplicationDialog"));
 
 type ProgramFeeDisplayItem = {
   id: string;
@@ -204,6 +205,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const editorial = resolveDetailTemplateContent(boundDetailContent(payload?.editorial, "program", program?.id, lang), detailTemplateVariableValues("program", payload, lang));
   const tuition = program ? displayTuition(program, lang) : null;
   const copy = detailCopy(lang);
+  const [applicationOpen, setApplicationOpen] = useState(false);
 
   useSeo({
     title: editorial?.seo?.title || program?.name || t("programs.programDetails"),
@@ -345,12 +347,11 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const institutionLocation = <>{cityPath ? <Link href={cityPath}>{program.universityCity}</Link> : program.universityCity}{program.universityCity && " · "}{countryPath ? <Link href={countryPath}>{program.universityCountry}</Link> : program.universityCountry}</>;
   const heroSection = detailHeroSection(editorial);
   const hero = heroSection?.hero;
-  const primaryCtaHref = hero?.primaryCtaHref || `${localePath("/programs")}?programId=${program.id}`;
   const primaryCtaLabel = hero?.primaryCtaLabel || t("courseFinderPage.apply");
   const secondaryCtaHref = hero?.secondaryCtaHref || localePath("/contact");
   const secondaryCtaLabel = hero?.secondaryCtaLabel || t("countryDetail.talkToAdvisor");
   const apply = programAdmissionsOpen(program)
-    ? <a href={primaryCtaHref} {...(primaryCtaHref.startsWith("https:") ? { target: "_blank", rel: "noopener noreferrer" } : {})}>{primaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></a>
+    ? <button type="button" onClick={() => setApplicationOpen(true)}>{primaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></button>
     : <button disabled>{t("courseFinderPage.apply")} · {t("common.inactive")}</button>;
 
   return (
@@ -488,6 +489,9 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       </section>}
       {detailContentSections(editorial, lang, localePath("/contact"), ["hero", "overview", "requirements"])}
       <DetailMobileActions data-detail-section="mobileActions">{apply}<Link className="is-secondary" href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</Link></DetailMobileActions>
+      {applicationOpen ? <Suspense fallback={null}>
+        <PublicProgramApplicationDialog open onClose={() => setApplicationOpen(false)} program={program} />
+      </Suspense> : null}
     </DetailLayout>
   );
 }

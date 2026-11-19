@@ -28,6 +28,7 @@ function facetsFromRows(rows: ProgramRow[]): PublicProgramFacets {
 }
 const PublicProgramDetailDialog = lazy(() => import("./PublicProgramDetailDialog")
   .then(module => ({ default: module.PublicProgramDetailDialog })));
+const PublicProgramApplicationDialog = lazy(() => import("./PublicProgramApplicationDialog"));
 
 /** Full server-paged discovery inside one university, not the 12 related links. */
 export function DetailProgramBrowser({ scope, admissionsOpen, previewPrograms = [], previewTotal }: { scope: DetailProgramScope; admissionsOpen: boolean; previewPrograms?: ProgramRow[]; previewTotal?: number }) {
@@ -42,6 +43,7 @@ export function DetailProgramBrowser({ scope, admissionsOpen, previewPrograms = 
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [detailProgram, setDetailProgram] = useState<ProgramRow | null>(null);
+  const [applyProgram, setApplyProgram] = useState<ProgramRow | null>(null);
   const query = detailProgramQuery(scope, lang, search, selection);
   const [settledQuery, setSettledQuery] = useState(query);
   useEffect(() => { const timer = setTimeout(() => setSettledQuery(query), 300); return () => clearTimeout(timer); }, [query]);
@@ -86,7 +88,7 @@ export function DetailProgramBrowser({ scope, admissionsOpen, previewPrograms = 
       : result.data.length === 0 ? <div className="text-center py-16 bg-card rounded-2xl border border-border/30"><h3 className="text-xl font-bold mb-2">{t("programs.noResults")}</h3><p className="text-muted-foreground mb-6">{t("programs.noResultsDesc")}</p><Button variant="outline" onClick={clear}>{t("programs.clearFilters")}</Button></div>
       : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">{result.data.map((program, index) => <PublicProgramCard key={program.id} program={program} index={index}
         onDetails={() => setDetailProgram({ ...program, requirements: splitRequirements(program.requirements, { canonicalPath: program.canonicalPath, id: program.id }).requirements.join("\n") })}
-        applyHref={`${localePath("/programs")}?programId=${program.id}`} applyDisabled={!admissionsOpen || !programAdmissionsOpen(program)} omitLegacyTiming
+        onApply={() => setApplyProgram(program)} applyDisabled={!admissionsOpen || !programAdmissionsOpen(program)} omitLegacyTiming
         tuitionContent={<div className="university-program-tuition"><p className="text-[10px] text-muted-foreground mb-1.5">{t("courseFinderPage.tuitionFee")}</p><DetailPrice tuition={displayTuition({ ...program, tuition: program.tuition ?? null }, lang)} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} /></div>} />)}</div>}
     {!failed && result.meta.totalPages > 1 && <nav aria-label={t("catalogDetail.availablePrograms")} className="flex flex-wrap items-center justify-center gap-1.5 mt-10">
       <Button variant="outline" size="icon" disabled={busy || page <= 1} onClick={() => setPage(value => value - 1)} className="rounded-full w-10 h-10" aria-label={t("programs.prevPage")}><ChevronLeft className="w-4 h-4 rtl:rotate-180" aria-hidden="true" /></Button>
@@ -96,6 +98,9 @@ export function DetailProgramBrowser({ scope, admissionsOpen, previewPrograms = 
     {detailProgram ? <Suspense fallback={null}>
       <PublicProgramDetailDialog open onClose={() => setDetailProgram(null)} program={detailProgram} omitLegacyTiming
         tuitionContent={<div className="university-program-tuition"><p className="text-[10px] text-muted-foreground mb-1.5">{t("courseFinderPage.tuitionFee")}</p><DetailPrice tuition={displayTuition({ ...detailProgram, tuition: detailProgram.tuition ?? null }, lang)} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} /></div>} />
+    </Suspense> : null}
+    {applyProgram ? <Suspense fallback={null}>
+      <PublicProgramApplicationDialog open onClose={() => setApplyProgram(null)} program={applyProgram} />
     </Suspense> : null}
   </div>;
 }

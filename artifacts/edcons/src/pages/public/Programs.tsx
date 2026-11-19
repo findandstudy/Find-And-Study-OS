@@ -437,7 +437,6 @@ export default function Programs() {
             open
             onClose={() => setApplyProgram(null)}
             program={applyProgram}
-            countries={filters.countries}
           />
         </Suspense>
       ) : null}
