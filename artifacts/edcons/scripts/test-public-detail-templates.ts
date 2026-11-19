@@ -147,7 +147,7 @@ test("university template keeps overview, facts and governed programs connected"
 test("university template preserves hero contrast and a usable editorial measure", () => {
   assert.match(css, /\[data-detail-section="hero"\][\s\S]*\.detail-identity \.detail-eyebrow[\s\S]*color: var\(--detail-hero-text, #fff\)/);
   assert.match(css, /\.detail-hero \.detail-breadcrumbs, \.detail-hero \.detail-breadcrumbs a \{[^}]*font-weight: 800/);
-  assert.match(css, /\.detail-program \.detail-hero-content > \.detail-eyebrow \{[^}]*color: #fff/);
+  assert.match(css, /\.public-detail\.detail-program > \[data-detail-section="hero"\] \.detail-hero \.detail-hero-content > p\.detail-eyebrow \{[^}]*color: #fff !important/);
   assert.match(css, /\.detail-prose \{[^}]*max-width: 100%;/);
   assert.match(css, /\.detail-destination \.detail-editorial-intro,[\s\S]*\.detail-city \.detail-editorial-intro \{[\s\S]*max-width: calc\(100% - 76px\);/);
   assert.match(css, /\.detail-editorial-content > \.detail-editorial-intro \{ max-width: 100%; \}/);

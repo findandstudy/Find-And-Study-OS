@@ -431,7 +431,10 @@
 .detail-program .detail-hero h1 { font-size: clamp(38px, 4.2vw, 60px); line-height: 1; max-width: 16ch; }
 .detail-program .detail-hero-main { min-height: clamp(500px, 62vh, 600px); padding-top: 52px; padding-bottom: 44px; align-items: center; }
 .detail-program .detail-hero-content { max-width: 800px; }
-.detail-program .detail-hero-content > .detail-eyebrow { color: #fff; text-shadow: 0 1px 14px rgba(2,10,24,.78); }
+.public-detail.detail-program > [data-detail-section="hero"] .detail-hero .detail-hero-content > p.detail-eyebrow {
+  color: #fff !important;
+  text-shadow: 0 1px 14px rgba(2,10,24,.78);
+}
 .detail-program .detail-identity { display: inline-flex; max-width: 100%; padding: 7px 12px 7px 7px; border: 1px solid rgba(255,255,255,.22); border-radius: 14px; background: rgba(8,23,39,.36); backdrop-filter: blur(12px); }
 .detail-program .detail-identity .detail-card-identity { width: 42px; height: 42px; border-radius: 10px; }
 .detail-program .detail-hero-link { min-width: 0; overflow-wrap: anywhere; }
