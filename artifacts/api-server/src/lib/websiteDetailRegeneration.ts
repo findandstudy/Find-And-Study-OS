@@ -14,6 +14,8 @@ import {
 import { buildAutomaticEnglishDetailSeo, buildAutomaticEnglishDetailSeoFromSections } from "./websiteDetailSeo";
 export { buildAutomaticEnglishDetailSeo } from "./websiteDetailSeo";
 import {
+  detailTranslationSourceDigest,
+  readExactPublishedDetailContent,
   readDetailContentDraft,
   readDetailContentEditorContext,
   saveGeneratedDetailContentDraft,
@@ -41,7 +43,7 @@ export type DetailRegenerationResult = {
   generatedImages?: number;
   imageFailures?: number;
   quality?: DetailContentQualityReport;
-  error?: "AI_NOT_CONFIGURED" | "SOURCE_NOT_FOUND" | "INVALID_GENERATED_CONTENT" | "QUALITY_BLOCKED" | "CONFLICT" | "UNAVAILABLE";
+  error?: "AI_NOT_CONFIGURED" | "SOURCE_NOT_FOUND" | "ENGLISH_SOURCE_NOT_PUBLISHED" | "INVALID_GENERATED_CONTENT" | "QUALITY_BLOCKED" | "CONFLICT" | "UNAVAILABLE";
 };
 
 const generatedImageStorage = new ObjectStorageService();
@@ -150,17 +152,27 @@ function catalogueDisplayTerms(kind: DetailContentKind, payload: unknown): strin
     const normalized = value.trim();
     if (normalized.length >= 2 && normalized.length <= 240 && !/^https?:\/\//iu.test(normalized)) target.add(normalized);
   };
-  for (const key of ["destination", "country", "city", "university", "program"]) add(facts[key]);
+  for (const key of ["destination", "country", "city", "university", "program", "degree", "field", "teachingLanguage", "duration", "type"]) add(facts[key]);
   for (const collection of [facts.cities, facts.universities]) if (Array.isArray(collection)) {
     for (const item of collection) {
       const value = record(item);
       add(value?.name);
       add(value?.university);
+      add(value?.city);
+      add(value?.type);
+      add(value?.degree);
+      add(value?.field);
+      add(value?.language);
+      add(value?.duration);
     }
   }
   if (Array.isArray(facts.programs)) for (const item of facts.programs) {
     const value = record(item);
     add(value?.university);
+    add(value?.degree);
+    add(value?.field);
+    add(value?.language);
+    add(value?.duration);
     add(value?.name, programTerms);
   }
   if (Array.isArray(facts.officialSources)) for (const item of facts.officialSources) {
@@ -458,21 +470,20 @@ export async function regenerateDetailContentDraft(params: {
     const rawPayload = await readDetailContentEditorContext(kind, entityId, locale);
     if (!rawPayload) return { entityId, locale, status: "failed", error: "SOURCE_NOT_FOUND" };
     const payload = await hydrateDetailSourceDocuments(kind, rawPayload);
-    const [target, english, layout] = await Promise.all([
+    const [target, englishPublished, layout] = await Promise.all([
       readDetailContentDraft(kind, entityId, locale),
-      locale === "en" ? Promise.resolve(null) : readDetailContentDraft(kind, entityId, "en"),
+      locale === "en" ? Promise.resolve(null) : readExactPublishedDetailContent(kind, entityId, "en"),
       readPublishedDetailLayout(kind),
     ]);
+    if (locale !== "en" && !englishPublished) return { entityId, locale, status: "failed", pageId: target.pageId, error: "ENGLISH_SOURCE_NOT_PUBLISHED" };
     if (locale === "en" && mode === "regenerate" && !ai) return { entityId, locale, status: "failed", pageId: target.pageId, error: "AI_NOT_CONFIGURED" };
-    const aiEnglish = locale === "en" && mode === "regenerate" && ai
-      ? await buildAiEnglishSource(kind, entityId, payload, layout, target.content, ai)
-      : { content: buildEnglishSource(kind, entityId, payload, layout), plan: null as DetailGenerationPlan | null, generatedSections: 0, generatedImages: 0, imageFailures: 0 };
+    const aiEnglish = locale !== "en"
+      ? { content: englishPublished!, plan: null as DetailGenerationPlan | null, generatedSections: 0, generatedImages: 0, imageFailures: 0 }
+      : mode === "regenerate" && ai
+        ? await buildAiEnglishSource(kind, entityId, payload, layout, target.content, ai)
+        : { content: buildEnglishSource(kind, entityId, payload, layout), plan: null as DetailGenerationPlan | null, generatedSections: 0, generatedImages: 0, imageFailures: 0 };
     const generatedEnglish = aiEnglish.content;
-    const savedEnglish = english?.content.sections.length ? new Map(english.content.sections.map(section => [section.key, section])) : null;
-    const englishBase = savedEnglish ? {
-      ...generatedEnglish,
-      sections: generatedEnglish.sections.map(section => savedEnglish.get(section.key) ?? section),
-    } : generatedEnglish;
+    const englishBase = generatedEnglish;
     let generated: DetailContent;
     let addedSections = 0;
     const manualSeo = Boolean(target.content.seo && target.content.seoMode !== "auto");
@@ -498,8 +509,11 @@ export async function regenerateDetailContentDraft(params: {
       generated = { ...englishBase, ...(preserveManualSeo ? { seoMode: "manual" as const, seo: target.content.seo } : {}), sections: englishBase.sections.map(section => mode === "regenerate" && regeneratedKeys.has(section.key) ? section : existing.get(section.key) ?? section) };
       addedSections = generated.sections.length - existing.size;
     } else {
-      const missing = DETAIL_CONTENT_KEYS[kind].filter(key => !target.content.sections.some(section => section.key === key));
-      if (!missing.length && mode === "fill_missing") return { entityId, locale, status: "preserved", pageId: target.pageId, addedSections: 0 };
+      const sourceDigest = detailTranslationSourceDigest(englishBase);
+      const sourceKeys = englishBase.sections.map(section => section.key);
+      const missing = sourceKeys.filter(key => !target.content.sections.some(section => section.key === key));
+      const sourceChanged = target.content.translationSource?.digest !== sourceDigest;
+      if (!missing.length && !sourceChanged && mode === "fill_missing") return { entityId, locale, status: "preserved", pageId: target.pageId, addedSections: 0 };
       if (!ai) return { entityId, locale, status: "failed", pageId: target.pageId, error: "AI_NOT_CONFIGURED" };
       const preferredTerms = await aiPreferredTranslationTerms(kind, payload, locale, ai);
       const translated = await translateStructuredDetailContent(englishBase, locale, ai, {
@@ -519,19 +533,20 @@ export async function regenerateDetailContentDraft(params: {
       generated = inheritEnglishDetailStructure({
         ...target.content,
         locale,
-        displayTerms: { ...(target.content.displayTerms ?? {}), ...preferredTerms },
+        displayTerms: { ...(target.content.displayTerms ?? {}), ...(translated.displayTerms ?? {}), ...preferredTerms },
+        translationSource: { locale: "en", digest: sourceDigest },
         seoMode: preserveManualSeo ? "manual" : "auto",
         seo: preserveManualSeo ? target.content.seo : translated.seo,
         sectionOrder: [...DETAIL_CONTENT_LAYOUT_KEYS[kind]],
-        sections: mode === "regenerate"
+        sections: mode === "regenerate" || sourceChanged
           ? translated.sections
           : [...target.content.sections, ...missing.map(key => translatedByKey.get(key)!).filter(Boolean)],
       }, englishBase);
-      addedSections = mode === "regenerate" ? translated.sections.length : missing.length;
+      addedSections = mode === "regenerate" || sourceChanged ? translated.sections.length : missing.length;
     }
     const valid = parseDetailContent(generated);
     if (!valid) return { entityId, locale, status: "failed", pageId: target.pageId, error: "INVALID_GENERATED_CONTENT" };
-    const quality = mode === "regenerate" ? evaluateDetailContentQuality({ content: valid, plan: qualityPlan, previous: target.content }) : undefined;
+    const quality = mode === "regenerate" ? evaluateDetailContentQuality({ content: valid, plan: qualityPlan, previous: locale === "en" ? target.content : undefined }) : undefined;
     if (quality?.status === "blocked") {
       console.warn("[website-detail-regeneration] quality blocked", {
         kind,

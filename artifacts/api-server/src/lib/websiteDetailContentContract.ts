@@ -55,7 +55,8 @@ export type DetailSeo = {
   twitterTitle: string; twitterDescription: string;
 };
 export type DetailSeoFacts = { city?: string; country?: string; university?: string; program?: string };
-export type DetailContent = { version: 1; kind: DetailContentKind; entityId: number; locale: string; seo?: DetailSeo; seoMode?: "auto" | "manual"; displayTerms?: Record<string, string>; sectionOrder?: string[]; sections: DetailContentSection[]; templateSections?: DetailTemplateSectionCopy[] };
+export type DetailTranslationSource = { locale: "en"; digest: string };
+export type DetailContent = { version: 1; kind: DetailContentKind; entityId: number; locale: string; seo?: DetailSeo; seoMode?: "auto" | "manual"; displayTerms?: Record<string, string>; translationSource?: DetailTranslationSource; sectionOrder?: string[]; sections: DetailContentSection[]; templateSections?: DetailTemplateSectionCopy[] };
 
 /** Uses the reviewed AI display term saved with this locale; never translates at render time. */
 export function detailDisplayTerm(content: DetailContent | null | undefined, source: string | null | undefined, fallback?: string): string {
@@ -145,14 +146,17 @@ const HERO_VISUAL_KEYS = ["backgroundColor", "overlayColor", "overlayOpacity", "
 /** Keep every locale on the English design while leaving all visible copy locale-owned. */
 export function inheritEnglishDetailStructure(localized: DetailContent, english: DetailContent | null): DetailContent {
   if (!english || english.kind !== localized.kind || english.entityId !== localized.entityId || localized.locale === "en") return localized;
-  const englishByKey = new Map(english.sections.map(section => [section.key, section] as const));
-  const sections = localized.sections.map((section): DetailContentSection => {
-    const englishSection = englishByKey.get(section.key);
-    if (!englishSection) return section;
+  const localizedByKey = new Map(localized.sections.map(section => [section.key, section] as const));
+  const sections = english.sections.flatMap((englishSection): DetailContentSection[] => {
+    const section = localizedByKey.get(englishSection.key);
+    // English is the structural source of truth. A stale translated section
+    // must not survive after it was removed from English, and a missing
+    // translation must not be replaced with visitor-visible English copy.
+    if (!section) return [];
     const visualSettings: Partial<DetailHeroSettings> = {};
     for (const key of HERO_VISUAL_KEYS) if (englishSection.hero?.[key] !== undefined) visualSettings[key] = englishSection.hero[key] as never;
     const hero = section.hero || Object.keys(visualSettings).length ? { ...(section.hero ?? {}), ...visualSettings } : undefined;
-    return { ...section, presentation: englishSection.presentation, hero };
+    return [{ ...section, presentation: englishSection.presentation, hero }];
   });
   return { ...localized, sectionOrder: english.sectionOrder ? [...english.sectionOrder] : undefined, sections };
 }
@@ -212,7 +216,7 @@ export function safeDetailContentUrl(v: unknown, externalOnly = false): boolean 
   try { const u = new URL(v); return u.protocol === "https:" && !u.username && !u.password; } catch { return false; }
 }
 export function parseDetailContent(value: unknown, today = new Date().toISOString().slice(0,10)): DetailContent | null {
-  if (!record(value) || !keys(value,["version","kind","entityId","locale","seo","seoMode","displayTerms","sectionOrder","sections","templateSections"],["version","kind","entityId","locale","sections"])
+  if (!record(value) || !keys(value,["version","kind","entityId","locale","seo","seoMode","displayTerms","translationSource","sectionOrder","sections","templateSections"],["version","kind","entityId","locale","sections"])
     || value.version !== 1 || !DETAIL_CONTENT_KINDS.includes(value.kind as DetailContentKind)
     || !Number.isSafeInteger(value.entityId) || Number(value.entityId) <= 0 || Number(value.entityId) > 2147483647
     || !DETAIL_CONTENT_LOCALES.includes(value.locale as typeof DETAIL_CONTENT_LOCALES[number])
@@ -222,6 +226,10 @@ export function parseDetailContent(value: unknown, today = new Date().toISOStrin
   if (value.displayTerms !== undefined && (!record(value.displayTerms)
     || Object.keys(value.displayTerms).length > 96
     || !Object.entries(value.displayTerms).every(([source, target]) => text(source, 240) && text(target, 240)))) return null;
+  if (value.translationSource !== undefined && (!record(value.translationSource)
+    || !keys(value.translationSource, ["locale", "digest"], ["locale", "digest"])
+    || value.locale === "en" || value.translationSource.locale !== "en"
+    || typeof value.translationSource.digest !== "string" || !/^[0-9a-f]{64}$/.test(value.translationSource.digest))) return null;
   if (value.seo !== undefined && (!record(value.seo)
     || !keys(value.seo, ["title", "description", "ogTitle", "ogDescription", "twitterTitle", "twitterDescription"], ["title", "description", "ogTitle", "ogDescription", "twitterTitle", "twitterDescription"])
     || !text(value.seo.title, 160) || !text(value.seo.description, 320)

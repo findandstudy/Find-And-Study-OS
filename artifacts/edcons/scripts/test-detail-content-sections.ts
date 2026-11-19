@@ -3,10 +3,11 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
-import { parseDetailContent, resolveDetailTemplateContent, DETAIL_CONTENT_KEYS, DETAIL_CONTENT_KINDS, DETAIL_CONTENT_LAYOUT_KEYS, DETAIL_CONTENT_LOCALES, DETAIL_GENERATED_CONTENT_KEYS, type DetailContent } from "../src/lib/website/detailContentContract";
-import { defaultDetailLayout } from "../src/lib/website/detailLayoutContract";
+import { inheritEnglishDetailStructure, parseDetailContent, resolveDetailTemplateContent, DETAIL_CONTENT_KEYS, DETAIL_CONTENT_KINDS, DETAIL_CONTENT_LAYOUT_KEYS, DETAIL_CONTENT_LOCALES, DETAIL_GENERATED_CONTENT_KEYS, type DetailContent } from "../src/lib/website/detailContentContract";
+import { defaultDetailLayout, detailTemplateSectionsForLocale } from "../src/lib/website/detailLayoutContract";
 import { resolveCmsValue } from "../src/lib/website/cmsTextVariables";
 import { DetailHeroMedia, boundDetailContent, detailContentAddon, detailContentIntro, detailContentLabels, detailContentNavigation, detailContentSections, detailContentSummary, detailContentTitle, detailSectionKicker, isDetailEditorInstruction } from "../src/pages/public/DetailContentSections";
+import { detailTemplateVariableValues } from "../src/pages/public/detailTemplateVariables";
 
 const fixture: DetailContent = { version: 1, kind: "program", entityId: 42, locale: "en", sections: [{
   key: "faq", title: "Questions & answers", body: "Published narrative", reviewedOn: "2026-01-01",
@@ -175,6 +176,35 @@ test("shared template copy supplies defaults while page copy keeps precedence", 
   assert.equal(parseDetailContent({ ...sharedOnly, templateSections: [{ key: "hero", title: "Must not replace entity name" }] }), null);
 });
 
+test("English publication owns translated section structure for every detail kind", () => {
+  for (const kind of DETAIL_CONTENT_KINDS) {
+    const keys = DETAIL_CONTENT_KEYS[kind];
+    const section = (key: string, title: string) => ({ key, title, body: `${title} body`, sources: [{ label: "Source", url: "https://example.org" }], reviewedOn: "2026-01-01" });
+    const english: DetailContent = { version: 1, kind, entityId: 42, locale: "en", sectionOrder: [...DETAIL_CONTENT_LAYOUT_KEYS[kind]], sections: [section(keys[0], "English first"), section(keys[1], "English second")] };
+    const translated: DetailContent = { version: 1, kind, entityId: 42, locale: "tr", sections: [section(keys[1], "Türkçe ikinci"), section(keys.at(-1)!, "Eski fazlalık"), section(keys[0], "Türkçe birinci")] };
+    const aligned = inheritEnglishDetailStructure(translated, english);
+    assert.deepEqual(aligned.sections.map(item => item.key), english.sections.map(item => item.key));
+    assert.deepEqual(aligned.sections.map(item => item.title), ["Türkçe birinci", "Türkçe ikinci"]);
+    assert.deepEqual(aligned.sectionOrder, english.sectionOrder);
+  }
+});
+
+test("translated admin hydration instructions cannot become public template copy", () => {
+  const layout = defaultDetailLayout("program");
+  layout.copy.en = {};
+  layout.copy.en["editorial-living"] = { title: "Living costs", body: "Edit the living costs section for {{program.name}} from this page." };
+  layout.copy.tr = { ...layout.copy.tr, "editorial-living": { title: "Yaşam giderleri", body: "{{program.name}} hakkında değerlendirme yapmanıza yardımcı olabilecek yaşam giderlerini inceleyin." } };
+  const translated = detailTemplateSectionsForLocale(layout, "tr").find(section => section.key === "living");
+  assert.equal(translated?.title, "Yaşam giderleri");
+  assert.equal(translated?.body, undefined);
+});
+
+test("translated pages bind to an exact English source digest", () => {
+  assert.ok(parseDetailContent({ ...fixture, locale: "tr", translationSource: { locale: "en", digest: "a".repeat(64) } }));
+  assert.equal(parseDetailContent({ ...fixture, locale: "en", translationSource: { locale: "en", digest: "a".repeat(64) } }), null);
+  assert.equal(parseDetailContent({ ...fixture, locale: "tr", translationSource: { locale: "en", digest: "stale" } }), null);
+});
+
 test("shared template variables resolve from the exact page projection before rendering", () => {
   const content: DetailContent = {
     ...fixture,
@@ -184,6 +214,22 @@ test("shared template variables resolve from the exact page projection before re
   const resolved = resolveDetailTemplateContent(content, { "program.name": "Computer Science", "program.duration": null, "university.name": "Example University" });
   assert.equal(detailContentTitle(resolved, "overview", "Fallback"), "Study Computer Science");
   assert.match(renderToStaticMarkup(React.createElement(React.Fragment, null, detailContentIntro(resolved, "overview"))), /Duration on request at Example University/);
+});
+
+test("all detail template variables prefer reviewed localized display terms", () => {
+  const displayTerms = {
+    Turkey: "Türkiye", Istanbul: "İstanbul", University: "Üniversite",
+    "Example University": "Örnek Üniversitesi", Associate: "Ön Lisans",
+    Anesthesia: "Anestezi", Turkish: "Türkçe", "24 Months": "24 Ay",
+  };
+  const content = { ...fixture, locale: "tr", displayTerms } satisfies DetailContent;
+  assert.equal(detailTemplateVariableValues("destination", { destination: { name: "Turkey", country: "Turkey", language: "Turkish" }, stats: {} }, "tr", { ...content, kind: "destination" })["destination.name"], "Türkiye");
+  assert.equal(detailTemplateVariableValues("city", { data: { name: "Istanbul", country: "Turkey", programLanguages: ["Turkish"] } }, "tr", { ...content, kind: "city" })["city.programLanguages"], "Türkçe");
+  assert.equal(detailTemplateVariableValues("university", { data: { name: "Example University", country: "Turkey", city: "Istanbul", universityType: "University" }, meta: {} }, "tr", { ...content, kind: "university" })["university.name"], "Örnek Üniversitesi");
+  const programValues = detailTemplateVariableValues("program", { data: { name: "Anesthesia", degree: "Associate", field: "Anesthesia", language: "Turkish", duration: "24 Months", universityName: "Example University", universityCountry: "Turkey", universityCity: "Istanbul" } }, "tr", content);
+  assert.equal(programValues["program.degree"], "Ön Lisans");
+  assert.equal(programValues["program.language"], "Türkçe");
+  assert.equal(programValues["university.city"], "İstanbul");
 });
 
 test("page-specific detail copy and managed CMS copy resolve only from their page context", () => {

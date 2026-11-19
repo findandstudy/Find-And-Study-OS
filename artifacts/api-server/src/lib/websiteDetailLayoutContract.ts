@@ -300,11 +300,18 @@ export function parseDetailLayout(value: unknown): DetailLayout | null {
 /** Converts layout keys to the content keys consumed by public detail pages. */
 export function detailTemplateSectionsForLocale(layout: DetailLayout, locale: string) {
   const localized = layout.copy[locale] ?? {};
+  const english = layout.copy.en ?? {};
+  const editorInstruction = (value: string | undefined) => /^(?:Edit the .+ section for .+ from this page\.|(?:Current )?.+ for .+ (?:is|are) (?:shown together with|supplied from) the (?:current )?(?:connected )?source records\.)$/iu.test(value?.replace(/\s+/g, " ").trim() ?? "");
   return layout.sections.flatMap(layoutKey => {
     // Section order and presentation are language-neutral. Visible copy stays
     // locale-owned so an incomplete translation never leaks English text.
     const value = localized[layoutKey];
     if (!value) return [];
-    return [{ key: layoutKey.startsWith("editorial-") ? layoutKey.slice(10) : layoutKey, ...value }];
+    // Hydration instructions are admin-only. Use the canonical English copy
+    // to identify them so an AI-translated paraphrase can never become public
+    // content in Turkish or any other locale.
+    const body = editorInstruction(english[layoutKey]?.body) ? undefined : value.body;
+    if (!value.title && !body) return [];
+    return [{ key: layoutKey.startsWith("editorial-") ? layoutKey.slice(10) : layoutKey, ...(value.title ? { title: value.title } : {}), ...(body ? { body } : {}) }];
   });
 }

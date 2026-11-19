@@ -10,6 +10,11 @@ import { addPublicCatalogConditions, getPublicCatalogPolicy } from "./publicCata
 
 export const detailContentSlug = (kind: DetailContentKind, entityId: number, locale: string) => `_detail-content-${kind}-${entityId}-${locale}`;
 export const detailContentDigest = (pageId: number, updatedAt: string, content: DetailContent) => createHash("sha256").update(JSON.stringify({ pageId, updatedAt, content })).digest("hex");
+/** Stable binding used by every non-English page to identify its exact English source. */
+export const detailTranslationSourceDigest = (content: DetailContent) => {
+  const { translationSource: _translationSource, locale: _locale, ...source } = content;
+  return createHash("sha256").update(JSON.stringify({ ...source, locale: "en" })).digest("hex");
+};
 export async function detailContentEntityExists(kind: DetailContentKind, entityId: number, executor: Pick<typeof db, "select"> = db) {
   const table = kind === "program" ? programsTable : kind === "university" ? universitiesTable : kind === "destination" ? countriesTable : citiesTable;
   return !!(await executor.select({ id: table.id }).from(table).where(eq(table.id, entityId)).limit(1).for("share"))[0];
@@ -260,7 +265,7 @@ export async function readDetailContentEditorContext(kind: DetailContentKind, en
     intakes: [], prices: [], related: [], meta,
   };
 }
-async function readPublishedDetailContentRecord(kind: DetailContentKind, entityId: number, locale: string): Promise<DetailContent | null> {
+export async function readExactPublishedDetailContent(kind: DetailContentKind, entityId: number, locale: string): Promise<DetailContent | null> {
   const [row] = await db.select({ snapshot: versions.blocksSnapshot }).from(pages)
     .innerJoin(versions, eq(versions.pageId, pages.id))
     .where(and(eq(pages.slug, detailContentSlug(kind, entityId, locale)), eq(pages.template, `detail-content:${kind}`), isNotNull(versions.publishedAt), lte(versions.publishedAt, new Date())))
@@ -272,7 +277,7 @@ async function readPublishedDetailContentRecord(kind: DetailContentKind, entityI
 
 /** Exact-locale authored publication check; shared templates alone never open a public entity route. */
 export async function hasPublishedDetailContent(kind: DetailContentKind, entityId: number, locale: string): Promise<boolean> {
-  return Boolean(await readPublishedDetailContentRecord(kind, entityId, locale));
+  return Boolean(await readExactPublishedDetailContent(kind, entityId, locale));
 }
 
 /**
@@ -313,8 +318,8 @@ export async function readPublishedDetailContentLocales(
 
 export async function readPublishedDetailContent(kind: DetailContentKind, entityId: number, locale: string): Promise<DetailContent | null> {
   const [localized, english] = await Promise.all([
-    readPublishedDetailContentRecord(kind, entityId, locale),
-    locale === "en" ? Promise.resolve(null) : readPublishedDetailContentRecord(kind, entityId, "en"),
+    readExactPublishedDetailContent(kind, entityId, locale),
+    locale === "en" ? Promise.resolve(null) : readExactPublishedDetailContent(kind, entityId, "en"),
   ]);
   const bound = localized ? inheritEnglishDetailStructure(localized, english) : null;
   const layout = await readPublishedDetailLayout(kind);

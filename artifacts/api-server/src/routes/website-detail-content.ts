@@ -8,7 +8,7 @@ import {
 import { eq, desc, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { getSession, getSessionId } from "../lib/replitAuth";
-import { ensureDetailSeo, parseDetailContent } from "../lib/websiteDetailContentContract";
+import { DETAIL_CONTENT_LOCALES, ensureDetailSeo, parseDetailContent } from "../lib/websiteDetailContentContract";
 import {
   detailContentSlug,
   detailContentDigest,
@@ -17,8 +17,10 @@ import {
   readDetailContentEditorContext,
   readDetailContentDraft,
   publishDetailContentDraft,
+  readPublishedDetailContentLocales,
 } from "../lib/websiteDetailContent";
 import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
+import { enqueuePublishedLocaleRefreshes } from "../lib/websiteTranslationQueue";
 
 const router = Router();
 router.use(
@@ -227,6 +229,29 @@ router.post("/publish", async (req, res) => {
     }
     const content = await publishDetailContentDraft(req.body.pageId, req.body.digest, req.user!.id, req.user!.role === "super_admin");
     invalidatePublicCatalogRenderCache({ detailTemplate: content.kind });
+    if (content.locale === "en") {
+      try {
+        const publishedLocales = await readPublishedDetailContentLocales(
+          content.kind,
+          content.entityId,
+          DETAIL_CONTENT_LOCALES.filter(locale => locale !== "en"),
+        );
+        await enqueuePublishedLocaleRefreshes({
+          kind: content.kind,
+          entityId: content.entityId,
+          locales: [...publishedLocales],
+          actorId: req.user!.id,
+        });
+      } catch (error) {
+        // Publishing English must remain reliable even when translation budget
+        // or provider configuration temporarily prevents a refresh enqueue.
+        console.warn("[website-detail-content] translation refresh enqueue failed", {
+          kind: content.kind,
+          entityId: content.entityId,
+          error: error instanceof Error ? error.message : "UNEXPECTED",
+        });
+      }
+    }
     res.json(
       await readDetailContentDraft(
         content.kind,

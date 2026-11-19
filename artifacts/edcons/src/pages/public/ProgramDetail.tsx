@@ -12,7 +12,7 @@ import { boundDetailContent, detailContentAddon, detailContentIntro, detailConte
 import type { CityProgramCardData } from "./CityProgramCards";
 import { DeferredBelowFold } from "./DeferredBelowFold";
 import { detailCopy, detailMoney, displayTuition, durationIsAmbiguous, localDetailPath, splitRequirements, tuitionOffer, type DetailTuition } from "./detailPresentation";
-import { detailContentPresentationOverrides, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
+import { detailContentPresentationOverrides, detailDisplayTerm, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { usePublicDetailPayload } from "./publicDetailQuery";
 import { DetailPageSkeleton } from "@/components/public/PublicAsyncFeedback";
@@ -202,14 +202,28 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const loading = detail.loading;
   const error = detail.error;
   const program = payload?.data;
-  const editorial = resolveDetailTemplateContent(boundDetailContent(payload?.editorial, "program", program?.id, lang), detailTemplateVariableValues("program", payload, lang));
+  const boundEditorial = boundDetailContent(payload?.editorial, "program", program?.id, lang);
+  const editorial = resolveDetailTemplateContent(boundEditorial, detailTemplateVariableValues("program", payload, lang, boundEditorial));
+  const localizedCatalogReady = lang === "en" || !program?.fallbackUsed;
+  const displayTerm = (value: string | null | undefined) => detailDisplayTerm(editorial, value, value ?? "");
+  const displayName = displayTerm(program?.name);
+  const displayDegree = displayTerm(program?.degree);
+  const displayField = displayTerm(program?.field);
+  const displayLanguage = displayTerm(program?.language);
+  const displayDuration = displayTerm(program?.duration);
+  const displayUniversity = displayTerm(program?.universityName);
+  const displayCountry = displayTerm(program?.universityCountry);
+  const displayCity = displayTerm(program?.universityCity);
+  const localizedDescription = localizedCatalogReady ? program?.description : null;
+  const localizedRequirements = localizedCatalogReady ? program?.requirements : null;
+  const localizedRefundProcess = localizedCatalogReady ? program?.refundProcess : null;
   const tuition = program ? displayTuition(program, lang) : null;
   const copy = detailCopy(lang);
   const [applicationOpen, setApplicationOpen] = useState(false);
 
   useSeo({
-    title: editorial?.seo?.title || program?.name || t("programs.programDetails"),
-    description: editorial?.seo?.description || program?.description || [program?.degree, program?.field, program?.universityName].filter(Boolean).join(" · ") || t("programs.subtitle"),
+    title: editorial?.seo?.title || displayName || t("programs.programDetails"),
+    description: editorial?.seo?.description || localizedDescription || [displayDegree, displayField, displayUniversity].filter(Boolean).join(" · ") || t("programs.subtitle"),
     ogTitle: editorial?.seo?.ogTitle,
     ogDescription: editorial?.seo?.ogDescription,
     twitterTitle: editorial?.seo?.twitterTitle,
@@ -224,21 +238,21 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       "@context": "https://schema.org",
       "@type": "Course",
       "@id": `${SITE_URL}${program.canonicalPath}#course`,
-      name: program.name,
-      description: editorial?.seo?.description || program.description || undefined,
+      name: displayName,
+      description: editorial?.seo?.description || localizedDescription || undefined,
       url: `${SITE_URL}${program.canonicalPath}`,
       provider: {
         "@type": "CollegeOrUniversity",
-        name: program.universityName,
+        name: displayUniversity,
         url: `${SITE_URL}${program.universityPath}`,
         address: {
           "@type": "PostalAddress",
-          addressLocality: program.universityCity || undefined,
-          addressCountry: program.universityCountry,
+          addressLocality: displayCity || undefined,
+          addressCountry: displayCountry,
         },
       },
-      inLanguage: program.language || undefined,
-      timeRequired: program.duration || undefined,
+      inLanguage: displayLanguage || undefined,
+      timeRequired: displayDuration || undefined,
       offers: tuitionOffer(tuition, programAdmissionsOpen(program)),
     },
     {
@@ -247,7 +261,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       itemListElement: [
         { "@type": "ListItem", position: 1, name: SITE_NAME, item: SITE_URL },
         { "@type": "ListItem", position: 2, name: t("nav.programs"), item: `${SITE_URL}${localePath("/programs")}` },
-        { "@type": "ListItem", position: 3, name: program.name, item: `${SITE_URL}${program.canonicalPath}` },
+        { "@type": "ListItem", position: 3, name: displayName, item: `${SITE_URL}${program.canonicalPath}` },
       ],
     },
   ] : []);
@@ -277,7 +291,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   }
 
   const visiblePrices = payload.prices;
-  const { requirements, metadata } = splitRequirements(program.requirements, { canonicalPath: program.canonicalPath, id: program.id });
+  const { requirements, metadata } = splitRequirements(localizedRequirements, { canonicalPath: program.canonicalPath, id: program.id });
   const hasEditorialRequirements = detailContentTitle(editorial, "requirements", "") !== "";
   const countryPath = localDetailPath(program.countryPath), cityPath = localDetailPath(program.cityPath);
   const freeFeeLabel = t("catalogDetail.free");
@@ -344,7 +358,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     : tuition;
   const heroFeeItems = feeItems.filter((_, index) => index !== heroPrimaryFeeIndex).slice(0, 4);
   const campuses = [...new Set(payload.intakes.map(intake => intake.campusName).filter(Boolean))].join(" · ");
-  const institutionLocation = <>{cityPath ? <Link href={cityPath}>{program.universityCity}</Link> : program.universityCity}{program.universityCity && " · "}{countryPath ? <Link href={countryPath}>{program.universityCountry}</Link> : program.universityCountry}</>;
+  const institutionLocation = <>{cityPath ? <Link href={cityPath}>{displayCity}</Link> : displayCity}{displayCity && " · "}{countryPath ? <Link href={countryPath}>{displayCountry}</Link> : displayCountry}</>;
   const heroSection = detailHeroSection(editorial);
   const hero = heroSection?.hero;
   const primaryCtaLabel = hero?.primaryCtaLabel || t("courseFinderPage.apply");
@@ -361,24 +375,24 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           <DetailHeroMedia content={editorial} />
           <div className="detail-wrap detail-hero-top"><DetailBreadcrumbs label={copy.catalogue} items={[
             { label: t("nav.programs"), path: localePath("/programs") },
-            { label: program.universityCountry, path: countryPath },
-            { label: program.universityCity || "", path: cityPath },
-            { label: program.universityName, path: program.universityPath },
-            { label: program.name },
+            { label: displayCountry, path: countryPath },
+            { label: displayCity, path: cityPath },
+            { label: displayUniversity, path: program.universityPath },
+            { label: displayName },
           ]} /></div>
           <div className="detail-wrap detail-hero-main detail-program-hero-grid">
             <div className="detail-hero-content">
               <div className="detail-identity">
-                <DetailIdentity src={program.universityLogoUrl} name={program.universityName} />
-                <Link className="detail-hero-link" href={program.universityPath}>{program.universityName}<ArrowUpRight size={17} aria-hidden="true" /></Link>
+                <DetailIdentity src={program.universityLogoUrl} name={displayUniversity} />
+                <Link className="detail-hero-link" href={program.universityPath}>{displayUniversity}<ArrowUpRight size={17} aria-hidden="true" /></Link>
               </div>
               <p className="detail-eyebrow">{hero?.eyebrow || copy.program}</p>
-              <h1>{heroSection?.title || program.name}</h1>
+              <h1>{heroSection?.title || displayName}</h1>
               <p className="detail-hero-lead detail-icon-line"><MapPin size={18} aria-hidden="true" /><span>{institutionLocation}</span></p>
               {heroSection?.body && <p className="detail-hero-lead">{heroSection.body}</p>}
               <div className="detail-meta-pills">
-                {program.degree && <span className="detail-meta-pill"><GraduationCap size={15} aria-hidden="true" />{program.degree}</span>}
-                {program.field && <span className="detail-meta-pill"><BookOpen size={15} aria-hidden="true" />{program.field}</span>}
+                {displayDegree && <span className="detail-meta-pill"><GraduationCap size={15} aria-hidden="true" />{displayDegree}</span>}
+                {displayField && <span className="detail-meta-pill"><BookOpen size={15} aria-hidden="true" />{displayField}</span>}
               </div>
             </div>
             <aside className="detail-hero-card" aria-label={heroPrimaryFeeLabel}>
@@ -395,9 +409,9 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
         </div>
         <div className="detail-factbar"><div className="detail-wrap">
           <DetailFacts items={[
-            { label: t("courseFinderPage.degree"), value: program.degree, icon: <GraduationCap size={18} aria-hidden="true" /> },
-            { label: durationIsAmbiguous(program.duration) ? copy.durationAsListed : t("courseFinderPage.duration"), value: program.duration, icon: <Clock3 size={18} aria-hidden="true" /> },
-            { label: t("courseFinderPage.language"), value: program.language, icon: <Languages size={18} aria-hidden="true" /> },
+            { label: t("courseFinderPage.degree"), value: displayDegree, icon: <GraduationCap size={18} aria-hidden="true" /> },
+            { label: durationIsAmbiguous(program.duration) ? copy.durationAsListed : t("courseFinderPage.duration"), value: displayDuration, icon: <Clock3 size={18} aria-hidden="true" /> },
+            { label: t("courseFinderPage.language"), value: displayLanguage, icon: <Languages size={18} aria-hidden="true" /> },
             { label: campuses ? copy.campus : copy.institutionLocation, value: campuses || institutionLocation, icon: <MapPin size={18} aria-hidden="true" /> },
           ]} />
         </div></div>
@@ -410,7 +424,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           {(requirements.length > 0 || hasEditorialRequirements) && <a href="#requirements">{t("programs.requirements")}</a>}
           {payload.intakes.length > 0 && <a href="#intakes">{t("catalogDetail.availableIntakes")}</a>}
           <a href="#fees">{t("courseFinderPage.tuitionFee")}</a>
-          {program.refundProcess?.trim() && <a href="#refund-process">{t("catalogDetail.refundProcess")}</a>}
+          {localizedRefundProcess?.trim() && <a href="#refund-process">{t("catalogDetail.refundProcess")}</a>}
           {detailContentNavigation(editorial)}
           {payload.related.length > 0 && <a href="#related">{t("catalogDetail.relatedPrograms")}</a>}
         </div>
@@ -420,17 +434,17 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           <DetailHeading number="01" eyebrow={copy.program} title={copy.overview} />
           <div className="detail-split detail-program-overview-grid">
             <div className="detail-program-story">
-              {program.description ? <p className="detail-prose detail-snapshot">{program.description}</p> : <DetailFacts items={[
-                { label: t("courseFinderPage.degree"), value: program.degree },
-                { label: t("courseFinderPage.field"), value: program.field },
-                { label: t("courseFinderPage.language"), value: program.language },
+              {localizedDescription ? <p className="detail-prose detail-snapshot">{localizedDescription}</p> : <DetailFacts items={[
+                { label: t("courseFinderPage.degree"), value: displayDegree },
+                { label: t("courseFinderPage.field"), value: displayField },
+                { label: t("courseFinderPage.language"), value: displayLanguage },
               ]} />}
               {durationIsAmbiguous(program.duration) && <p className="detail-provenance">{copy.durationNote}</p>}
             </div>
             <aside className="detail-program-profile">
               <p className="detail-eyebrow">{copy.courseInformation}</p>
               <dl className="detail-keylines">
-                <div><dt><Building2 size={17} aria-hidden="true" />{copy.institution}</dt><dd><Link href={program.universityPath}>{program.universityName}</Link></dd></div>
+                <div><dt><Building2 size={17} aria-hidden="true" />{copy.institution}</dt><dd><Link href={program.universityPath}>{displayUniversity}</Link></dd></div>
                 <div><dt><MapPin size={17} aria-hidden="true" />{copy.institutionLocation}</dt><dd>{institutionLocation}</dd></div>
                 {metadata.map((item, index) => <div key={index}><dt><BookOpen size={17} aria-hidden="true" />{copy[item.key]}</dt><dd>{item.value}</dd></div>)}
               </dl>
@@ -474,10 +488,10 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           </div>
         </div>
       </section>
-      {program.refundProcess?.trim() && <section data-detail-section="refund-process" id="refund-process" className="detail-section is-sand detail-program-refund">
+      {localizedRefundProcess?.trim() && <section data-detail-section="refund-process" id="refund-process" className="detail-section is-sand detail-program-refund">
         <div className="detail-wrap detail-split">
           <DetailHeading number="05" eyebrow={copy.program} title={t("catalogDetail.refundProcess")} />
-          <div className="detail-prose whitespace-pre-line">{program.refundProcess}</div>
+          <div className="detail-prose whitespace-pre-line">{localizedRefundProcess}</div>
         </div>
       </section>}
       {payload.related.length > 0 && <section data-detail-section="related" id="related" className="detail-section">

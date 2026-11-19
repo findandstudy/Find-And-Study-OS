@@ -80,7 +80,10 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
   const loading = detail.loading;
   const error = detail.error;
   const city = payload?.data;
-  const editorial = resolveDetailTemplateContent(boundDetailContent(payload?.editorial, "city", city?.id, lang), detailTemplateVariableValues("city", payload, lang));
+  const boundEditorial = boundDetailContent(payload?.editorial, "city", city?.id, lang);
+  const editorial = resolveDetailTemplateContent(boundEditorial, detailTemplateVariableValues("city", payload, lang, boundEditorial));
+  const cityName = detailDisplayTerm(editorial, city?.name, city?.name ?? "");
+  const countryName = detailDisplayTerm(editorial, city?.country, city ? localizedCountryName(city.country, city.countryCode, lang) : "");
 
   useSeo({
     title: editorial?.seo?.title || payload?.meta.title || t("countryDetail.studyDestination"),
@@ -99,10 +102,10 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
       "@context": "https://schema.org",
       "@type": "City",
       "@id": `${SITE_URL}${payload.meta.canonicalPath}#city`,
-      name: city.name,
+      name: cityName,
       description: editorial?.seo?.description || payload.meta.description,
       url: `${SITE_URL}${payload.meta.canonicalPath}`,
-      containedInPlace: { "@type": "Country", name: city.country },
+      containedInPlace: { "@type": "Country", name: countryName },
     },
     {
       "@context": "https://schema.org",
@@ -110,7 +113,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
       itemListElement: [
         { "@type": "ListItem", position: 1, name: SITE_NAME, item: SITE_URL },
         { "@type": "ListItem", position: 2, name: t("nav.countries"), item: `${SITE_URL}${localePath("/countries")}` },
-        { "@type": "ListItem", position: 3, name: city.name, item: `${SITE_URL}${payload.meta.canonicalPath}` },
+        { "@type": "ListItem", position: 3, name: cityName, item: `${SITE_URL}${payload.meta.canonicalPath}` },
       ],
     },
   ] : []);
@@ -150,7 +153,6 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
     ...(hero?.accentColor ? { "--detail-hero-accent": hero.accentColor } : {}),
   } as CSSProperties;
   const editorialTitle = (key: string, fallback: string) => detailContentTitle(editorial, key, fallback);
-  const countryName = detailDisplayTerm(editorial, city.country, localizedCountryName(city.country, city.countryCode, lang));
   const localizedEditorialFact = (key: string, fallback: string, maxLength = 180) => detailContentSummary(editorial, key, fallback, maxLength);
   const heroFacts = [
     // Hero fact labels are compact UI chrome, not editorial headings. Reusing
@@ -178,12 +180,12 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
         <div className="detail-hero is-city" style={heroStyle}>
           <DetailHeroMedia content={editorial} />
           <div className="detail-wrap detail-hero-top">
-            <DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: countryName, path: countryPath }, { label: city.name }]} />
+            <DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: countryName, path: countryPath }, { label: cityName }]} />
           </div>
           <div className="detail-wrap detail-hero-main detail-city-cover-inner">
             <div>
               <div className="detail-cover-label"><MapPin size={18} aria-hidden="true" /><span>{hero?.eyebrow || copy.city}</span></div>
-              <h1>{heroSection?.title || city.name}</h1>
+              <h1>{heroSection?.title || cityName}</h1>
               {countryPath ? <Link className="detail-hero-link" href={countryPath}><Globe2 size={17} aria-hidden="true" />{countryName}<ArrowUpRight size={17} aria-hidden="true" /></Link> : <p className="detail-hero-lead">{countryName}</p>}
               {heroSection?.body && <p className="detail-hero-lead">{heroSection.body}</p>}
               <div className="detail-actions"><Link href={hero?.primaryCtaHref || programsPath}>{hero?.primaryCtaLabel || t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link><Link className="is-secondary" href={hero?.secondaryCtaHref || localePath("/contact")}>{hero?.secondaryCtaLabel || t("countryDetail.talkToAdvisor")}</Link></div>
@@ -199,7 +201,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
           </dl>
         </div></div>
       </section>
-      <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", city.name)}><div className="detail-wrap">
+      <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", cityName)}><div className="detail-wrap">
         {(overviewDescription || hasEditorialOverview) && <a href="#overview">{copy.overview}</a>}<a href="#language-courses">{languageCourseNavigationLabel(lang)}</a><a href="#facts">{t("countryDetail.quickFacts")}</a>
         {city.weather && <a href="#weather">{lang === "tr" ? "Hava" : "Weather"}</a>}
         {city.universities.length > 0 && <a href="#universities">{t("countryDetail.universities")}</a>}
@@ -209,27 +211,27 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
       {(overviewDescription || hasEditorialOverview) && <section data-detail-section="overview" id="overview" className="detail-section">
         <div className={hasEditorialOverview ? "detail-wrap" : "detail-wrap detail-split"}>
           {hasEditorialOverview ? detailContentAddon(editorial, "overview", lang, localePath("/contact")) : <>
-            <DetailHeading number="01" eyebrow={copy.city} title={t("countryDetail.about", { name: city.name })} />
+            <DetailHeading number="01" eyebrow={copy.city} title={t("countryDetail.about", { name: cityName })} />
             {overviewDescription && <p className="detail-prose detail-snapshot">{overviewDescription}</p>}
           </>}
         </div>
       </section>}
       <section data-detail-section="facts" id="facts" className="detail-section is-sky">
         <div className="detail-wrap">
-          <DetailHeading number="02" eyebrow={city.name} title={detailContentTitle(editorial, "facts", t("countryDetail.quickFacts"))} />
+          <DetailHeading number="02" eyebrow={cityName} title={detailContentTitle(editorial, "facts", t("countryDetail.quickFacts"))} />
           {detailContentIntro(editorial, "facts")}
           <DetailFacts items={[{ label: copy.country, icon: <Globe2 size={19} />, value: countryPath ? <Link href={countryPath}>{countryName}</Link> : countryName }, { label: copy.universityCount, icon: <Building2 size={19} />, value: city.universityCount }, { label: copy.programCount, icon: <GraduationCap size={19} />, value: city.programCount }]} />
         </div>
       </section>
       {city.weather && <section data-detail-section="weather" id="weather" className="detail-section">
         <div className="detail-wrap">
-          <DetailHeading number="03" eyebrow={city.name} title={editorialTitle("weather", weatherText.cityTitle)} />
-          <CityWeatherCard cityName={city.name} locale={lang} weather={city.weather} />
+          <DetailHeading number="03" eyebrow={cityName} title={editorialTitle("weather", weatherText.cityTitle)} />
+          <CityWeatherCard cityName={cityName} locale={lang} weather={city.weather} />
         </div>
       </section>}
       {city.universities.length > 0 && <section data-detail-section="universities" id="universities" className="detail-section is-sand">
         <div className="detail-wrap">
-          <DetailHeading number={city.weather ? "04" : "03"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: city.name }))} />
+          <DetailHeading number={city.weather ? "04" : "03"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: cityName }))} />
           {detailContentIntro(editorial, "universities")}
           <div className="detail-grid">{city.universities.map((university) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={localizedUniversityType(university.universityType, lang)} title={detailDisplayTerm(editorial, university.name)} kind="university" />)}</div>
         </div>

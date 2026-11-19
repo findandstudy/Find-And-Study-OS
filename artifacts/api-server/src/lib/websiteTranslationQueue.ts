@@ -76,6 +76,23 @@ export async function enqueueWebsiteTranslations(input: { kind: QueueKind; entit
   });
 }
 
+/**
+ * Refresh only language editions that already have a published page when the
+ * canonical English page changes. This keeps English as the single editorial
+ * source without unexpectedly creating every supported language or spending
+ * model budget on locales that are not in use.
+ */
+export async function enqueuePublishedLocaleRefreshes(input: { kind: QueueKind; entityId: number; locales: string[]; actorId: number }) {
+  const [row] = await db.select({ featureFlags: settingsTable.featureFlags }).from(settingsTable).limit(1);
+  const settings = readWebsiteAiSettings(row?.featureFlags);
+  const publicKind = input.kind === "destination" ? "country" : input.kind;
+  if (!settings.enabled || !settings.allowedKinds.includes(publicKind)) return { batchId: null, queued: 0 };
+  const eligible = [...new Set(input.locales)]
+    .filter(locale => locale !== "en" && settings.allowedLocales.includes(locale));
+  if (!eligible.length) return { batchId: null, queued: 0 };
+  return enqueueWebsiteTranslations({ kind: input.kind, entityIds: [input.entityId], locales: eligible, actorId: input.actorId });
+}
+
 export async function claimWebsiteTranslation(workerId: string): Promise<Claimed | null> {
   const result = await pool.query<any>(`WITH candidate AS (
     SELECT id, status AS original_status FROM website_translation_jobs
@@ -134,7 +151,7 @@ export async function processWebsiteTranslation(job: Claimed, workerId: string) 
     // A quality gate decision is deterministic for the generated draft and is
     // not a transient provider failure. Retrying it automatically burns model
     // budget and can repeat the same rejected output without human action.
-    const retryable = !["SOURCE_NOT_FOUND", "INVALID_CONTENT", "INVALID_GENERATED_CONTENT", "POLICY_DENIED", "QUALITY_BLOCKED"].includes(message);
+    const retryable = !["SOURCE_NOT_FOUND", "ENGLISH_SOURCE_NOT_PUBLISHED", "INVALID_CONTENT", "INVALID_GENERATED_CONTENT", "POLICY_DENIED", "QUALITY_BLOCKED"].includes(message);
     await markFailure(job, workerId, message.slice(0, 120), retryable, resolved.settings.maxAttempts, providerCalls);
   }
 }

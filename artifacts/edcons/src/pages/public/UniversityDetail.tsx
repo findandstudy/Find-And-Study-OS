@@ -10,7 +10,7 @@ import { boundDetailContent, detailContentAddon, detailContentIntro, detailConte
 import { detailCopy, detailCountLabel, localDetailPath, type DetailTuition } from "./detailPresentation";
 import { DeferredBelowFold } from "./DeferredBelowFold";
 import { Button } from "@/components/ui/button";
-import { detailContentPresentationOverrides, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
+import { detailContentPresentationOverrides, detailDisplayTerm, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { ArrowLeft, Building2, ExternalLink, ArrowUpRight, MapPin, GraduationCap, Award } from "lucide-react";
 import { CityWeatherCard, type CityWeatherSnapshot } from "./CityWeatherCard";
@@ -97,11 +97,17 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   const loading = detail.loading;
   const error = detail.error;
   const university = payload?.data;
-  const editorial = resolveDetailTemplateContent(boundDetailContent(payload?.editorial, "university", university?.id, lang), detailTemplateVariableValues("university", payload, lang));
+  const boundEditorial = boundDetailContent(payload?.editorial, "university", university?.id, lang);
+  const editorial = resolveDetailTemplateContent(boundEditorial, detailTemplateVariableValues("university", payload, lang, boundEditorial));
+  const displayTerm = (value: string | null | undefined) => detailDisplayTerm(editorial, value, value ?? "");
+  const displayUniversity = displayTerm(university?.name);
+  const displayCountry = displayTerm(university?.country);
+  const displayCity = displayTerm(university?.city);
+  const displayUniversityType = displayTerm(university?.universityType);
 
   useSeo({
-    title: editorial?.seo?.title || university?.name || t("countryDetail.universities"),
-    description: editorial?.seo?.description || university?.description || [university?.city, university?.country].filter(Boolean).join(", ") || t("programs.subtitle"),
+    title: editorial?.seo?.title || displayUniversity || t("countryDetail.universities"),
+    description: editorial?.seo?.description || university?.description || [displayCity, displayCountry].filter(Boolean).join(", ") || t("programs.subtitle"),
     ogTitle: editorial?.seo?.ogTitle,
     ogDescription: editorial?.seo?.ogDescription,
     twitterTitle: editorial?.seo?.twitterTitle,
@@ -116,15 +122,15 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
       "@context": "https://schema.org",
       "@type": "CollegeOrUniversity",
       "@id": `${SITE_URL}${university.canonicalPath}#institution`,
-      name: university.name,
+      name: displayUniversity,
       description: editorial?.seo?.description || university.description || undefined,
       url: `${SITE_URL}${university.canonicalPath}`,
       logo: university.logoUrl ? `${SITE_URL}${university.logoUrl}` : undefined,
       address: {
         "@type": "PostalAddress",
         streetAddress: university.address || undefined,
-        addressLocality: university.city || undefined,
-        addressCountry: university.country,
+        addressLocality: displayCity || undefined,
+        addressCountry: displayCountry,
       },
     },
     {
@@ -133,7 +139,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
       itemListElement: [
         { "@type": "ListItem", position: 1, name: SITE_NAME, item: SITE_URL },
         { "@type": "ListItem", position: 2, name: t("nav.countries"), item: `${SITE_URL}${localePath("/countries")}` },
-        { "@type": "ListItem", position: 3, name: university.name, item: `${SITE_URL}${university.canonicalPath}` },
+        { "@type": "ListItem", position: 3, name: displayUniversity, item: `${SITE_URL}${university.canonicalPath}` },
       ],
     },
   ] : []);
@@ -177,7 +183,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
       .filter((value): value is string => Boolean(value?.trim()))
       .map(normalizeDegreeLevel),
   )].sort((left, right) => (degreeOrder.get(left) ?? 99) - (degreeOrder.get(right) ?? 99) || left.localeCompare(right));
-  const location = <>{cityPath ? <Link href={cityPath}>{university.city}</Link> : university.city}{university.city && " · "}{countryPath ? <Link href={countryPath}>{university.country}</Link> : university.country}</>;
+  const location = <>{cityPath ? <Link href={cityPath}>{displayCity}</Link> : displayCity}{displayCity && " · "}{countryPath ? <Link href={countryPath}>{displayCountry}</Link> : displayCountry}</>;
   const heroSection = detailHeroSection(editorial);
   const factsIntro = detailContentIntro(editorial, "facts");
   const hero = heroSection?.hero;
@@ -191,20 +197,20 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
         <div className="detail-hero" style={detailHeroStyle(editorial)}>
           <DetailHeroMedia content={editorial} />
           <div className="detail-wrap detail-hero-top">
-            <DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: university.country, path: countryPath }, { label: university.city || "", path: cityPath }, { label: university.name }]} />
+            <DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: displayCountry, path: countryPath }, { label: displayCity, path: cityPath }, { label: displayUniversity }]} />
           </div>
           <div className="detail-wrap detail-hero-main">
             <div className="detail-hero-content">
               <div className="detail-identity">
-                <DetailIdentity src={university.logoUrl} name={university.name} />
+                <DetailIdentity src={university.logoUrl} name={displayUniversity} />
                 <p className="detail-eyebrow">{hero?.eyebrow || copy.institution}</p>
               </div>
-              <h1>{heroSection?.title || university.name}</h1>
+              <h1>{heroSection?.title || displayUniversity}</h1>
               <p className="detail-hero-lead detail-icon-line"><MapPin size={18} aria-hidden="true" /><span>{location}</span></p>
               {heroSection?.body && <p className="detail-hero-lead">{heroSection.body}</p>}
               <div className="detail-meta-pills">
-                {university.universityType && <span className="detail-meta-pill"><Building2 size={15} aria-hidden="true" />{university.universityType}</span>}
-                {degrees.map(degree => <span className="detail-meta-pill" key={degree}><GraduationCap size={15} aria-hidden="true" />{degree}</span>)}
+                {displayUniversityType && <span className="detail-meta-pill"><Building2 size={15} aria-hidden="true" />{displayUniversityType}</span>}
+                {degrees.map(degree => <span className="detail-meta-pill" key={degree}><GraduationCap size={15} aria-hidden="true" />{displayTerm(degree)}</span>)}
               </div>
               {university.isActive === false && <p className="detail-provenance" role="status">{t("courseFinderPage.apply")} · {t("common.inactive")}</p>}
             </div>
@@ -218,13 +224,13 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
         </div>
         {detailContentAddon(editorial, "hero", lang, localePath("/contact"))}
       </section>
-      <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", university.name)}><div className="detail-wrap">
+      <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", displayUniversity)}><div className="detail-wrap">
         <a href="#overview">{copy.overview}</a><a href="#language-courses">{languageCourseNavigationLabel(lang)}</a><a href="#facts">{t("countryDetail.quickFacts")}</a>{university.weather && <a href="#weather">{weatherText.section}</a>}<a href="#programs">{t("catalogDetail.availablePrograms")}</a>
         {detailContentNavigation(editorial)}
       </div></nav>
       <section data-detail-section="overview" id="overview" className="detail-section">
         <div className="detail-wrap detail-university-overview">
-          <DetailHeading number="01" eyebrow={copy.institution} title={t("countryDetail.about", { name: university.name })} />
+          <DetailHeading number="01" eyebrow={copy.institution} title={t("countryDetail.about", { name: displayUniversity })} />
           <div>{university.description ? <p className="detail-prose detail-snapshot">{university.description}</p> : <><p className="detail-prose">{t("countryDetail.exploreOpportunities")}</p><div className="detail-actions"><a href="#programs">{t("catalogDetail.availablePrograms")}<ArrowUpRight size={17} aria-hidden="true" /></a></div></>}</div>
           {detailContentAddon(editorial, "overview", lang, localePath("/contact"))}
         </div>
@@ -237,7 +243,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
             <dl className="detail-keylines detail-university-facts-list">
               <div><dt><MapPin size={17} aria-hidden="true" />{copy.institutionLocation}</dt><dd>{location}</dd></div>
               {university.address && <div><dt><Building2 size={17} aria-hidden="true" />{t("catalogDetail.location")}</dt><dd>{university.address}</dd></div>}
-              {university.universityType && <div><dt><GraduationCap size={17} aria-hidden="true" />{t("common.type")}</dt><dd>{university.universityType}</dd></div>}
+              {displayUniversityType && <div><dt><GraduationCap size={17} aria-hidden="true" />{t("common.type")}</dt><dd>{displayUniversityType}</dd></div>}
               {rankings.map(([label, value]) => <div key={String(label)}><dt><Award size={17} aria-hidden="true" />{String(label)}</dt><dd>#{String(value)}</dd></div>)}
             </dl>
           </div>
@@ -245,8 +251,8 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
       </section>
       {university.weather && university.city && <section data-detail-section="weather" id="weather" className="detail-section">
         <div className="detail-wrap">
-          <DetailHeading number="03" eyebrow={university.city} title={detailContentTitle(editorial, "weather", weatherText.campusTitle)} />
-          <CityWeatherCard cityName={university.city} locale={lang} weather={university.weather} />
+          <DetailHeading number="03" eyebrow={displayCity} title={detailContentTitle(editorial, "weather", weatherText.campusTitle)} />
+          <CityWeatherCard cityName={displayCity} locale={lang} weather={university.weather} />
         </div>
       </section>}
       <section data-detail-section="programs" id="programs" className="detail-section is-sand">

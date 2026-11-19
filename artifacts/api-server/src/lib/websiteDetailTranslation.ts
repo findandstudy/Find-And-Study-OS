@@ -2,7 +2,7 @@ import type { AiContentService } from "./aiService";
 import type { DetailContent } from "./websiteDetailContentContract";
 
 const nonTranslatableKeys = new Set([
-  "key", "locale", "seoMode", "url", "href", "src", "reviewedOn",
+  "key", "locale", "digest", "seoMode", "url", "href", "src", "reviewedOn",
   "backgroundColor", "overlayColor", "textColor", "accentColor",
 ]);
 
