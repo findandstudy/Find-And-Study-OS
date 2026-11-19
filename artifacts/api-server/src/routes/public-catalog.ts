@@ -103,6 +103,7 @@ router.get(
     const [program] = await db
       .select({
         id: programsTable.id,
+        sourceName: programsTable.name,
         name: localizedName,
         description: sql<string | null>`COALESCE(${programTranslationsTable.description}, ${programsTable.description})`,
         degree: programsTable.degree,
@@ -169,15 +170,14 @@ router.get(
       id: program.id,
       name: program.name,
     });
-    const relatedScore = sql<number>`(
-      CASE WHEN ${programsTable.universityId} = ${program.universityId} THEN 8 ELSE 0 END
-      + CASE WHEN lower(coalesce(${programsTable.field}, '')) = lower(${program.field ?? ""}::text) AND ${program.field ?? ""}::text <> '' THEN 4 ELSE 0 END
-      + CASE WHEN lower(coalesce(${programsTable.degree}, '')) = lower(${program.degree ?? ""}::text) AND ${program.degree ?? ""}::text <> '' THEN 2 ELSE 0 END
-      + CASE WHEN lower(${universitiesTable.country}) = lower(${program.universityCountry}) THEN 1 ELSE 0 END
-    )`;
     const relatedConditions: any[] = [
       eq(programsTable.isActive, true),
       ne(programsTable.id, program.id),
+      ne(programsTable.universityId, program.universityId),
+      sql`lower(trim(${programsTable.name})) = lower(trim(${program.sourceName}::text))`,
+      program.universityCity?.trim()
+        ? sql`lower(trim(coalesce(${universitiesTable.city}, ''))) = lower(trim(${program.universityCity.trim()}::text))`
+        : sql`false`,
     ];
     addPublicCatalogConditions(relatedConditions, policy);
 
@@ -207,7 +207,6 @@ router.get(
           universityIsActive: universitiesTable.isActive,
           universityWebsite: universitiesTable.website,
           universityHasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL AND length(trim(${universitiesTable.logoUrl})) > 0`,
-          score: relatedScore,
         })
         .from(programsTable)
         .innerJoin(
@@ -223,7 +222,7 @@ router.get(
           ),
         )
         .where(and(...relatedConditions))
-        .orderBy(desc(relatedScore), asc(universitiesTable.name), asc(programsTable.id))
+        .orderBy(asc(universitiesTable.name), asc(programsTable.id))
         .limit(internalLinkMode === "published" ? PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT : PUBLIC_CATALOG_RELATED_LIMIT),
       db
         .select({
@@ -306,6 +305,7 @@ router.get(
       editorial: await readPublishedDetailContent("program", program.id, locale),
       data: {
         ...program,
+        sourceName: undefined,
         description: program.description || (locale === "en" ? automaticSeo.description : null),
         ...locationLinks,
         requirements: publicCatalogRequirements(program.requirements, { canonicalPath, id: program.id }),
@@ -330,7 +330,7 @@ router.get(
         ...price,
         amountMinor: price.amountMinor.toString(),
       })),
-      related: relatedPrograms.map(({ score: _score, universityHasLogo, ...related }) => {
+      related: relatedPrograms.map(({ universityHasLogo, ...related }) => {
         const localizedUniversity = resolveLocalizedUniversityFields({ locale,
           delivery: selectLocalizedEntityDelivery(localizedRelatedUniversities, related.universityId),
           base: { name: related.universityName, description: null, universityType: related.universityType } });

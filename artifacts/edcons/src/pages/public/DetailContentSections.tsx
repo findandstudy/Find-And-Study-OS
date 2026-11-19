@@ -97,14 +97,14 @@ function Gallery({ images, title, locale }: { images: NonNullable<DetailContentS
   const [loaded, setLoaded] = useState<string[]>([]);
   const [selected, setSelected] = useState<(typeof images)[number] | null>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
-  const visible = images.filter(image => !failed.includes(image.src));
+  const visible = images.filter(image => !failed.includes(image.src)).slice(0, 3);
   if (!visible.length) return null;
   return <>
     <div className="detail-editorial-gallery">{visible.map((image, index) => <figure key={`${image.src}-${index}`}>
       <button type="button" aria-label={`${detailContentLabels(locale)}: ${image.alt}`} onClick={event => { opener.current = event.currentTarget; setSelected(image); }}>
         <img src={image.src} alt={image.alt} className={`detail-progressive-image ${loaded.includes(image.src) ? "is-loaded" : ""}`} loading="lazy" decoding="async" width="800" height="560" onLoad={() => setLoaded(old => old.includes(image.src) ? old : [...old, image.src])} onError={() => setFailed(old => [...old, image.src])} />
         <span aria-hidden="true"><ArrowUpRight size={19} /></span>
-      </button>{image.caption && <figcaption>{image.caption}</figcaption>}
+      </button>
     </figure>)}</div>
     {selected && <Suspense fallback={null}><DetailGalleryDialog
       image={selected}
@@ -216,7 +216,24 @@ function detailContentSectionBody(section: DetailContentSection, locale: string,
     {section.table && <div className="detail-editorial-table" role="region" aria-label={section.title} tabIndex={0}><table><caption className="sr-only">{section.title}</caption><thead><tr>{section.table.columns.map((column, i) => <th scope="col" key={i}>{column}</th>)}</tr></thead><tbody>{section.table.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => j === 0 ? <th scope="row" key={j}>{cell}</th> : <td key={j}>{cell}</td>)}</tr>)}</tbody></table></div>}
   </div>;
 
-  if (section.key === "studentStory" || section.key === "reviews") return <div className="detail-wrap detail-editorial-content">
+  if (section.key === "studentStory") {
+    const stories = section.cards?.length
+      ? section.cards.map(card => ({ body: card.body, attribution: card.title }))
+      : section.body?.trim()
+        ? [{ body: section.body, attribution: "" }]
+        : [];
+    return <div className="detail-wrap detail-editorial-content detail-student-story">
+      <div className="detail-editorial-heading"><span lang={locale}>{detailSectionKicker(section.key, locale)}</span><h2>{section.title}</h2></div>
+      <div className={`detail-story-quote${section.images?.[0] ? " has-media" : ""}`}>
+        {section.images?.[0] && <figure><img src={section.images[0].src} alt={section.images[0].alt} loading="lazy" decoding="async" width="900" height="650" /></figure>}
+        <div className="detail-story-copy"><span className="detail-story-mark" aria-hidden="true">“</span>{stories.map((story, i) => <blockquote key={i}>
+          <p>{story.body}</p>{story.attribution && <cite>{story.attribution}</cite>}
+        </blockquote>)}</div>
+      </div>
+    </div>;
+  }
+
+  if (section.key === "reviews") return <div className="detail-wrap detail-editorial-content">
     {heading}
     <div className="detail-review-grid">{section.images?.[0] && <figure><img src={section.images[0].src} alt={section.images[0].alt} loading="lazy" decoding="async" width="900" height="650" /></figure>}
       {!!section.cards?.length && <div>{section.cards.map((card, i) => <blockquote key={i}><p>“{card.body}”</p><cite>{card.title}</cite></blockquote>)}</div>}

@@ -626,6 +626,7 @@ async function readProgramDetail(
   const [program] = await db
     .select({
       id: programsTable.id,
+      sourceName: programsTable.name,
       name: sql<string>`COALESCE(${programTranslationsTable.name}, ${programsTable.name})`,
       description: sql<string | null>`COALESCE(${programTranslationsTable.description}, ${programsTable.description})`,
       requirements: sql<string | null>`COALESCE(${programTranslationsTable.requirements}, ${programsTable.requirements})`,
@@ -679,14 +680,13 @@ async function readProgramDetail(
   const relatedConditions: any[] = [
     eq(programsTable.isActive, true),
     ne(programsTable.id, program.id),
+    ne(programsTable.universityId, program.universityId),
+    sql`lower(trim(${programsTable.name})) = lower(trim(${program.sourceName}::text))`,
+    program.city?.trim()
+      ? sql`lower(trim(coalesce(${universitiesTable.city}, ''))) = lower(trim(${program.city.trim()}::text))`
+      : sql`false`,
   ];
   addPublicCatalogConditions(relatedConditions, policy);
-  const relatedScore = sql<number>`(
-    CASE WHEN ${programsTable.universityId} = ${program.universityId} THEN 8 ELSE 0 END
-    + CASE WHEN lower(coalesce(${programsTable.field}, '')) = lower(${program.field ?? ""}::text) AND ${program.field ?? ""}::text <> '' THEN 4 ELSE 0 END
-    + CASE WHEN lower(coalesce(${programsTable.degree}, '')) = lower(${program.degree ?? ""}::text) AND ${program.degree ?? ""}::text <> '' THEN 2 ELSE 0 END
-    + CASE WHEN lower(${universitiesTable.country}) = lower(${program.country}) THEN 1 ELSE 0 END
-  )`;
   const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
   const now = new Date();
   const [seoState, relatedCandidates, intakeRows, priceRows] = await Promise.all([
@@ -717,7 +717,6 @@ async function readProgramDetail(
         universityIsActive: universitiesTable.isActive,
         universityWebsite: universitiesTable.website,
         universityHasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL AND length(trim(${universitiesTable.logoUrl})) > 0`,
-        score: relatedScore,
       })
       .from(programsTable)
       .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
@@ -727,7 +726,7 @@ async function readProgramDetail(
         eq(programTranslationsTable.status, "published"),
       ))
       .where(and(...relatedConditions))
-      .orderBy(desc(relatedScore), asc(universitiesTable.name), asc(programsTable.id))
+      .orderBy(asc(universitiesTable.name), asc(programsTable.id))
       .limit(internalLinkMode === "published" ? PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT : 0),
     db
       .select({

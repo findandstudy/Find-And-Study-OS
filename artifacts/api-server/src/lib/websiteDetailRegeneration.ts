@@ -45,7 +45,7 @@ export type DetailRegenerationResult = {
 };
 
 const generatedImageStorage = new ObjectStorageService();
-const AI_IMAGE_TARGETS = [{ key: "hero", count: 1 }, { key: "gallery", count: 2 }] as const;
+const AI_IMAGE_TARGETS = [{ key: "hero", count: 1 }, { key: "gallery", count: 3 }] as const;
 
 const titles: Record<string, string> = {
   hero: "Introduction", navigation: "Page navigation", overview: "Overview", gallery: "Image gallery",
@@ -53,7 +53,7 @@ const titles: Record<string, string> = {
   admission: "Admission information", fees: "Fees", intakes: "Intakes", scholarships: "Scholarships",
   living: "Living costs", campus: "Campus", climate: "Weather and climate", housing: "Housing",
   services: "Student services", applyGuide: "Application guide", studentStory: "Student experience",
-  recognition: "Recognition and accreditation", related: "Related programs", faq: "Frequently asked questions",
+  recognition: "Recognition and accreditation", related: "Other options", faq: "Frequently asked questions",
   mobileActions: "Mobile actions", programs: "Programs", facts: "Key facts", education: "Education",
   support: "Student support", reviews: "Student reviews", cities: "Cities", universities: "Universities",
   visa: "Visa and calendar", transport: "Transport", intakeGuide: "Intakes and calendar", cta: "Next step",

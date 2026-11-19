@@ -2,7 +2,7 @@ const labels: Record<string, readonly [string, string]> = {
   program: ["Program", "Program"], university: ["University", "Üniversite"], destination: ["Country / destination", "Ülke / destinasyon"], city: ["City", "Şehir"],
   draft: ["Draft", "Taslak"], published: ["Published", "Yayında"], archived: ["Archived", "Arşivlendi"], default: ["Default layout", "Varsayılan düzen"], absent: ["Not saved yet", "Henüz kaydedilmedi"],
   hero: ["Hero", "Üst bölüm"], navigation: ["Page navigation", "Bölüm gezinmesi"], overview: ["Overview", "Genel bakış"],
-  requirements: ["Requirements", "Gereklilikler"], intakes: ["Intakes", "Başvuru dönemleri"], fees: ["Fees", "Ücretler"], related: ["Related programs", "İlgili programlar"],
+  requirements: ["Requirements", "Gereklilikler"], intakes: ["Intakes", "Başvuru dönemleri"], fees: ["Fees", "Ücretler"], related: ["Other options", "Diğer seçenekler"],
   facts: ["Key facts", "Temel bilgiler"], weather: ["Stored weather", "Saklanan hava durumu"], programs: ["Programs", "Programlar"], universities: ["Universities", "Üniversiteler"], cities: ["Cities", "Şehirler"],
   languageCourses: ["Free language courses", "Ücretsiz dil kursları"], cta: ["Next step", "Sonraki adım"], mobileActions: ["Mobile actions", "Mobil işlem düğmeleri"],
   "editorial-gallery": ["Image gallery", "Görsel galerisi"], "editorial-highlights": ["Highlights", "Öne çıkanlar"],

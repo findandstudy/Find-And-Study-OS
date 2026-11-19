@@ -24,6 +24,7 @@ const pageEditor = readFileSync(new URL("../src/pages/admin/website/PageEditor.t
 const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const blockTypes = readFileSync(new URL("../src/lib/website/blockTypes.ts", import.meta.url), "utf8");
 const editorial = readFileSync(new URL("../src/pages/public/DetailEditorial.tsx", import.meta.url), "utf8");
+const detailContentSections = readFileSync(new URL("../src/pages/public/DetailContentSections.tsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("../src/pages/public/detailEditorial.css", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../src/pages/public/DetailLayout.tsx", import.meta.url), "utf8");
 const languageCourseBanner = readFileSync(new URL("../src/pages/public/LanguageCourseBanner.tsx", import.meta.url), "utf8");
@@ -45,12 +46,22 @@ const jsonLdHook = readFileSync(new URL("../src/hooks/use-json-ld.ts", import.me
 const seoHook = readFileSync(new URL("../src/hooks/use-seo.ts", import.meta.url), "utf8");
 
 test("detail sections collapse safely across tablet and mobile layouts", () => {
+  assert.match(css, /\.detail-editorial-gallery \{ display: grid; grid-template-columns: minmax\(0, 1\.55fr\) minmax\(260px, \.85fr\); grid-template-rows: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(css, /@media \(max-width: 1050px\)[\s\S]*\.detail-editorial-gallery \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-city-coverstrip \{ grid-template-columns: repeat\(auto-fit, minmax\(140px, 1fr\)\)/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-country-stats \{ grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-facts \{ grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(css, /\.detail-editorial-gallery,[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(programCard, /grid grid-cols-1 min-\[420px\]:grid-cols-2 sm:grid-cols-3/);
+});
+
+test("gallery and student story use the governed editorial presentation", () => {
+  assert.match(detailContentSections, /filter\(image => !failed\.includes\(image\.src\)\)\.slice\(0, 3\)/);
+  assert.doesNotMatch(detailContentSections, /<figcaption>/);
+  assert.match(detailContentSections, /section\.key === "studentStory"/);
+  assert.match(detailContentSections, /detail-story-quote/);
+  assert.match(detailContentSections, /<blockquote/);
+  assert.match(css, /\.detail-story-copy p/);
 });
 
 test("the shared language banner features English first", () => {
@@ -100,6 +111,8 @@ test("program information architecture stays data-bound", () => {
   assert.match(program, /PUBLISHED_INDEXABLE_ONLY/);
   assert.doesNotMatch(program, /Fenerbahçe|3000|30 Nov 2026|unsplash/i);
   assert.doesNotMatch(program, /dangerouslySetInnerHTML/);
+  assert.match(program, /title=\{t\("catalogDetail\.relatedPrograms"\)\}/);
+  assert.doesNotMatch(program, /detailContentTitle\(editorial, "related"/);
 });
 
 test("program discovery keeps initial cards bounded and defers optional facets", () => {

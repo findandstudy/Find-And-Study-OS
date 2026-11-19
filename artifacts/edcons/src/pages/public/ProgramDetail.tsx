@@ -481,7 +481,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       </section>}
       {payload.related.length > 0 && <section data-detail-section="related" id="related" className="detail-section">
         <div className="detail-wrap">
-          <DetailHeading number="06" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "related", t("catalogDetail.relatedPrograms"))} />
+          <DetailHeading number="06" eyebrow={copy.studyOptions} title={t("catalogDetail.relatedPrograms")} />
           {detailContentIntro(editorial, "related")}
           <DeferredBelowFold><Suspense fallback={<div className="h-72 animate-pulse rounded-3xl bg-secondary" />}><CityProgramCards key={`${program.id}:${lang}`} programs={payload.related} /></Suspense></DeferredBelowFold>
         </div>

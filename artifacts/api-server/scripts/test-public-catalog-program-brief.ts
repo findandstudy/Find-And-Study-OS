@@ -70,6 +70,10 @@ test("API related cards preserve catalogue and publication boundaries with bound
   assert.match(program, /readPublishedLocalizedEntities\(\{ entityType: "university", entityIds: relatedUniversityIds, locale \}\)/);
   assert.match(program, /indexableRelatedUniversityIds === null \|\| indexableRelatedUniversityIds.has\(related.universityId\)/);
   assert.match(program, /projectPublicProgramBrief\(/);
+  assert.match(program, /ne\(programsTable\.universityId, program\.universityId\)/);
+  assert.match(program, /lower\(trim\(\$\{programsTable\.name\}\)\) = lower\(trim\(\$\{program\.sourceName\}::text\)\)/);
+  assert.match(program, /lower\(trim\(coalesce\(\$\{universitiesTable\.city\}, ''\)\)\) = lower\(trim\(\$\{program\.universityCity\.trim\(\)\}::text\)\)/);
+  assert.doesNotMatch(program, /relatedScore/);
 });
 
 test("SSR related enrichment uses the same projection after strict eligible-candidate filtering", () => {
@@ -80,4 +84,8 @@ test("SSR related enrichment uses the same projection after strict eligible-cand
   assert.match(program, /readPublicCatalogPrices\(deliveredRelatedPrograms.map\(row => row.id\), now\)/);
   assert.match(program, /readIndexableUniversityIds\(\{ locale: route.locale, universityIds: relatedUniversityIds \}\)/);
   assert.match(program, /return projectPublicProgramBrief\(candidate,/);
+  assert.match(program, /ne\(programsTable\.universityId, program\.universityId\)/);
+  assert.match(program, /lower\(trim\(\$\{programsTable\.name\}\)\) = lower\(trim\(\$\{program\.sourceName\}::text\)\)/);
+  assert.match(program, /lower\(trim\(coalesce\(\$\{universitiesTable\.city\}, ''\)\)\) = lower\(trim\(\$\{program\.city\.trim\(\)\}::text\)\)/);
+  assert.doesNotMatch(program, /relatedScore/);
 });

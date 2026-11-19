@@ -257,10 +257,10 @@ router.post("/website/catalog-pages/reapply", ...adminOnly, async (req, res) => 
     }
     const usage = await readWebsiteAiUsage(1);
     const reservedTokens = sourceIds.length * locales.length * (mode === "regenerate" ? 10_000 : 4_000);
-    // English full regeneration can add one hero and two gallery images. Count
+    // English full regeneration can add one hero and three gallery images. Count
     // those provider calls conservatively even when existing images later make
     // the actual total smaller.
-    const reservedRequests = sourceIds.length * locales.length + (mode === "regenerate" && locales.includes("en") ? sourceIds.length * 3 : 0);
+    const reservedRequests = sourceIds.length * locales.length + (mode === "regenerate" && locales.includes("en") ? sourceIds.length * 4 : 0);
     if (usage.requests + reservedRequests > policy.dailyRequestLimit || usage.estimatedTokens + reservedTokens > policy.dailyEstimatedTokenLimit) {
       res.status(429).json({ error: "Daily AI content budget has been reached" }); return;
     }

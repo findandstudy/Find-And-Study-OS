@@ -249,7 +249,7 @@ const SOURCE_FIELDS = {
     ["intakes", "Intakes", "Admissions"], ["requirements", "Requirements", "Admissions"], ["refundProcess", "Refund process", "Admissions"], ["quota", "Quota", "Admissions"], ["admissionRules", "Admission rules", "Admissions"],
     ["heroMedia", "Hero image / media", "Media"], ["gallery", "Image gallery", "Media"], ["highlights", "Highlights", "Page sections"], ["curriculum", "Curriculum", "Page sections"], ["admission", "Admissions", "Page sections"], ["fees", "Fees overview", "Page sections"],
     ["living", "Living costs", "Page sections"], ["campus", "Campus", "Page sections"], ["climate", "Climate", "Page sections"], ["housing", "Housing", "Page sections"], ["services", "Student services", "Page sections"],
-    ["applyGuide", "Application guide", "Page sections"], ["studentStory", "Student story", "Page sections"], ["recognition", "Recognition", "Page sections"], ["related", "Related programs", "Page sections"], ["faq", "Frequently asked questions", "Page sections"],
+    ["applyGuide", "Application guide", "Page sections"], ["studentStory", "Student story", "Page sections"], ["recognition", "Recognition", "Page sections"], ["related", "Other options", "Page sections"], ["faq", "Frequently asked questions", "Page sections"],
   ],
 } as const satisfies Record<string, readonly SourceFieldOption[]>;
 

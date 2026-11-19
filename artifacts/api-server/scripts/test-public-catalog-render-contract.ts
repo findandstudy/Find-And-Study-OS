@@ -30,7 +30,8 @@ test("reviewed editorial SSR is bound, escaped, layout-controlled and cannot cha
   const html = render();
   assert.match(html, /id="editorial-faq"/); assert.match(html, /Questions &amp; answers/);
   assert.match(html, /Contact admissions &amp; discuss/); assert.match(html, /content="noindex, follow"/);
-  for (const text of ["Sourced editorial body", "Support card", "Contact support", "Prepare", "Review your documents", "Campus photo", "Approved image", "Sourced item"]) assert.ok(html.includes(text), text);
+  for (const text of ["Sourced editorial body", "Support card", "Contact support", "Prepare", "Review your documents", "Campus photo", "Sourced item"]) assert.ok(html.includes(text), text);
+  assert.doesNotMatch(html, /<figcaption>|Approved image/);
   assert.match(html, /"@type":"FAQPage"/);
   model.detailLayout!.hidden = ["editorial-faq"];
   assert.doesNotMatch(render(), /id="editorial-faq"|href="#editorial-faq"|When can I ask/);

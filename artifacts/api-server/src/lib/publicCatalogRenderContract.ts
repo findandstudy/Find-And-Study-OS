@@ -449,6 +449,14 @@ const RENDER_COPY: Record<ProgramSupportedLocale, RenderCopy> = {
   it: { programs: "Programmi", countries: "Paesi", degree: "Titolo", field: "Area", duration: "Durata", language: "Lingua", location: "Località", tuition: "Retta", institutionType: "Tipo di istituzione" },
 };
 
+const OTHER_OPTIONS_COPY: Record<ProgramSupportedLocale, string> = {
+  en: "Other options", tr: "Diğer seçenekler", ar: "خيارات أخرى", fr: "Autres options", ru: "Другие варианты",
+  fa: "گزینه‌های دیگر", zh: "其他选择", hi: "अन्य विकल्प", es: "Otras opciones", id: "Pilihan lain",
+  ur: "دیگر اختیارات", tk: "Beýleki mümkinçilikler", ky: "Башка варианттар", kk: "Басқа нұсқалар",
+  uz: "Boshqa variantlar", tg: "Имконоти дигар", bn: "অন্যান্য বিকল্প", pt: "Outras opções",
+  ne: "अन्य विकल्पहरू", vi: "Lựa chọn khác", ko: "다른 옵션", uk: "Інші варіанти", it: "Altre opzioni",
+};
+
 export function parsePublicWebRenderMode(value: unknown): PublicWebRenderMode {
   const normalized = String(value ?? "").trim().toLocaleLowerCase("en-US");
   return normalized === "allowlist" || normalized === "all"
@@ -742,7 +750,7 @@ function isPublicEditorInstruction(value: string | null | undefined): boolean {
 function renderDetailContentSection(section: DetailContentSection, wrapped: boolean): string {
   const cardsClass = section.key === "climate" ? "detail-climate-ribbon" : section.key === "housing" ? "detail-housing-strip" : ["services", "support"].includes(section.key) ? "detail-service-grid" : "detail-editorial-cards";
   const cards = section.cards?.map((card, index) => `<article><span class="detail-editorial-index">${String(index + 1).padStart(2, "0")}</span><h3>${card.href ? `<a href="${escapeHtml(card.href)}" rel="noopener noreferrer">${escapeHtml(card.title)}</a>` : escapeHtml(card.title)}</h3><p>${escapeHtml(card.body)}</p></article>`).join("") || "";
-  const images = section.images?.map(image => `<figure><img loading="lazy" decoding="async" src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt)}" width="800" height="560" />${image.caption ? `<figcaption>${escapeHtml(image.caption)}</figcaption>` : ""}</figure>`).join("") || "";
+  const images = section.images?.slice(0, 3).map(image => `<figure><img loading="lazy" decoding="async" src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt)}" width="800" height="560" /></figure>`).join("") || "";
   const table = section.table ? `<div class="detail-editorial-table" role="region" aria-label="${escapeHtml(section.title)}" tabindex="0"><table><caption>${escapeHtml(section.title)}</caption><thead><tr>${section.table.columns.map(column => `<th scope="col">${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody>${section.table.rows.map(row => `<tr>${row.map((cell,index) => index ? `<td>${escapeHtml(cell)}</td>` : `<th scope="row">${escapeHtml(cell)}</th>`).join("")}</tr>`).join("")}</tbody></table></div>` : "";
   const steps = section.steps ? `<ol class="detail-editorial-steps">${section.steps.map((step, index) => `<li><span>${index + 1}</span><div><h3>${escapeHtml(step.title)}</h3><p>${escapeHtml(step.body)}</p></div></li>`).join("")}</ol>` : "";
   const faq = section.questions?.length ? `<div class="detail-editorial-faq">${section.questions.map(item => `<details><summary>${escapeHtml(item.question)}</summary><p>${escapeHtml(item.answer)}</p></details>`).join("")}</div>` : "";
@@ -750,7 +758,12 @@ function renderDetailContentSection(section: DetailContentSection, wrapped: bool
     ? `<footer class="detail-editorial-evidence">${section.sources.map(source => `<cite><a href="${escapeHtml(source.url)}" rel="noopener noreferrer">${escapeHtml(source.label)}</a></cite>`).join(" · ")} <time datetime="${section.reviewedOn}">${section.reviewedOn}</time></footer>`
     : "";
   const publicBody = isPublicEditorInstruction(section.body) ? "" : section.body;
-  const inner = `<div class="detail-wrap detail-editorial-content"><div class="detail-editorial-heading"><h2>${escapeHtml(section.title)}</h2></div>${publicBody ? `<p class="detail-prose detail-editorial-intro">${escapeHtml(publicBody)}</p>` : ""}${images ? `<div class="detail-editorial-gallery">${images}</div>` : ""}${cards ? `<div class="${cardsClass}">${cards}</div>` : ""}${table}${steps}${faq}${evidence}</div>`;
+  const storyBody = section.cards?.[0]?.body || publicBody;
+  const storyAttribution = section.cards?.[0]?.title || "";
+  const storyImage = section.images?.[0];
+  const inner = section.key === "studentStory" && storyBody
+    ? `<div class="detail-wrap detail-editorial-content detail-student-story"><div class="detail-editorial-heading"><h2>${escapeHtml(section.title)}</h2></div><div class="detail-story-quote${storyImage ? " has-media" : ""}">${storyImage ? `<figure><img loading="lazy" decoding="async" src="${escapeHtml(storyImage.src)}" alt="${escapeHtml(storyImage.alt)}" width="900" height="650" /></figure>` : ""}<div class="detail-story-copy"><span class="detail-story-mark" aria-hidden="true">“</span><blockquote><p>${escapeHtml(storyBody)}</p>${storyAttribution ? `<cite>${escapeHtml(storyAttribution)}</cite>` : ""}</blockquote></div></div></div>`
+    : `<div class="detail-wrap detail-editorial-content"><div class="detail-editorial-heading"><h2>${escapeHtml(section.title)}</h2></div>${publicBody ? `<p class="detail-prose detail-editorial-intro">${escapeHtml(publicBody)}</p>` : ""}${images ? `<div class="detail-editorial-gallery">${images}</div>` : ""}${cards ? `<div class="${cardsClass}">${cards}</div>` : ""}${table}${steps}${faq}${evidence}</div>`;
   const layoutKey = `editorial-${section.key}`;
   const band = ["services", "support"].includes(section.key) ? " detail-band" : "";
   return wrapped ? `<section data-detail-section="${escapeHtml(layoutKey)}" id="${escapeHtml(layoutKey)}" class="detail-section detail-editorial-section is-${escapeHtml(section.key)}${band}">${inner}</section>` : inner;
@@ -909,6 +922,7 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
   const universityName = ssrInstitutionName(program.universityName, program.country, model.locale);
   const requirements = publicCatalogRequirements(program.requirements, { canonicalPath: model.canonicalPath, id: program.id });
   const copy = RENDER_COPY[model.locale];
+  const otherOptions = OTHER_OPTIONS_COPY[model.locale];
   const prices = model.prices ?? [];
   const verifiedTuition = program.verifiedTuition || prices.find((item) => item.componentType === "TUITION") || null;
   const tuition = projectPublicTuition(program, prices.length ? prices : verifiedTuition ? [{ ...verifiedTuition, componentType: "TUITION" }] : []);
@@ -961,7 +975,7 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
   const related = model.relatedPrograms.map((item) => `<article class="rounded-2xl border border-border p-5"><p class="text-sm text-primary">${escapeHtml(ssrInstitutionName(item.universityName, program.country, model.locale))}</p><h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(item.canonicalPath)}">${escapeHtml(ssrProgramName(item.name, model.locale))}</a></h3><p class="mt-2 text-muted-foreground">${escapeHtml([ssrDegreeName(item.degree, model.locale), ssrFieldName(item.field, model.locale)].filter(Boolean).join(" · "))}</p></article>`).join("");
   return `<main data-public-render-shell="program-detail" class="mx-auto max-w-7xl px-4 py-24">
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/programs">${escapeHtml(copy.programs)}</a> / <span>${escapeHtml(programName)}</span></nav>
-    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(programName)}"><a href="#overview">${escapeHtml(copy.degree)}</a>${feeContent ? `<a href="#fees">${escapeHtml(copy.tuition)}</a>` : ""}${program.refundProcess ? `<a href="#refund-process">${model.locale === "tr" ? "Ücret İade Süreci" : "Refund Process"}</a>` : ""}${related ? `<a href="#related">${escapeHtml(copy.programs)}</a>` : ""}</nav>
+    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(programName)}"><a href="#overview">${escapeHtml(copy.degree)}</a>${feeContent ? `<a href="#fees">${escapeHtml(copy.tuition)}</a>` : ""}${program.refundProcess ? `<a href="#refund-process">${model.locale === "tr" ? "Ücret İade Süreci" : "Refund Process"}</a>` : ""}${related ? `<a href="#related">${escapeHtml(otherOptions)}</a>` : ""}</nav>
     <article id="overview" class="mt-8">
       <p class="text-sm text-primary"><a href="${escapeHtml(program.universityPath)}">${escapeHtml(universityName)}</a></p>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(programName)}</h1>
@@ -981,7 +995,7 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
     ${intakes ? `<section data-detail-section="intakes" id="intakes" class="mt-10"><h2 class="text-2xl font-bold">Available intakes</h2><div class="mt-5 grid gap-4 sm:grid-cols-2">${intakes}</div></section>` : ""}
     ${feeContent ? `<section data-detail-section="fees" id="fees" class="mt-10" aria-label="${escapeHtml(copy.tuition)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.tuition)}</h2><dl class="mt-5 grid gap-4 sm:grid-cols-2">${feeContent}</dl></section>` : ""}
     ${program.refundProcess ? `<section data-detail-section="refund-process" id="refund-process" class="mt-10"><h2 class="text-2xl font-bold">${model.locale === "tr" ? "Ücret İade Süreci" : "Refund Process"}</h2><p class="mt-4 whitespace-pre-line">${escapeHtml(program.refundProcess)}</p></section>` : ""}
-    ${related ? `<section data-detail-section="related" id="related" class="mt-12" aria-label="${escapeHtml(copy.programs)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">${related}</div></section>` : ""}
+    ${related ? `<section data-detail-section="related" id="related" class="mt-12" aria-label="${escapeHtml(otherOptions)}"><h2 class="text-2xl font-bold">${escapeHtml(otherOptions)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">${related}</div></section>` : ""}
   </main>`;
 }
 
