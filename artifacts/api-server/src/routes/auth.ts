@@ -28,6 +28,10 @@ import { validate, getValidated } from "../middlewares/validate";
 import { consumeEmailVerificationToken, issueEmailVerificationToken } from "../lib/emailVerificationToken";
 import { evaluateRegistrationCandidate } from "../lib/studentRegistrationMatching";
 import { registrationIdentitySchema } from "../lib/registrationIdentitySchema";
+import {
+  LOGIN_RATE_LIMIT_POINTS,
+  LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+} from "../lib/loginRateLimitPolicy";
 
 const loginBodySchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -104,17 +108,18 @@ const rateLimiter = new RateLimiterPostgres({
   duration: 900,
 });
 
-// Login brute-force protection: 5 failed attempts per 15 minutes per IP and
-// per email. Successful logins reset both counters so a legitimate user is
-// never locked out of their own account by their own activity.
+// Login brute-force protection is enforced independently per IP and per email.
+// Successful logins reset both counters so a legitimate user is never locked
+// out by their own past failures. The bounded environment override allows an
+// operator to tune the threshold without disabling brute-force protection.
 const loginRateLimiter = new RateLimiterPostgres({
   storeClient: pool,
   storeType: "pool",
   tableName: "rate_limits",
   tableCreated: true,
   keyPrefix: "login",
-  points: 5,
-  duration: 900,
+  points: LOGIN_RATE_LIMIT_POINTS,
+  duration: LOGIN_RATE_LIMIT_WINDOW_SECONDS,
 });
 
 async function isLoginRateLimited(ipKey: string, emailKey: string): Promise<boolean> {
@@ -123,7 +128,7 @@ async function isLoginRateLimited(ipKey: string, emailKey: string): Promise<bool
     loginRateLimiter.get(emailKey),
   ]);
   return [ipState, emailState].some(
-    (state) => state !== null && state.consumedPoints >= 5,
+    (state) => state !== null && state.consumedPoints >= LOGIN_RATE_LIMIT_POINTS,
   );
 }
 
