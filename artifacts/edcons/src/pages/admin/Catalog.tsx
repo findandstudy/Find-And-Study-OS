@@ -735,9 +735,10 @@ function CountriesTab() {
       qc.invalidateQueries({ queryKey: ["public-catalog-settings"] });
       qc.invalidateQueries({ queryKey: ["country-public-university-types"] });
       setForm(null);
+      toast({ title: t("common.saved") });
     },
     onError: (error: Error) => toast({
-      title: t("adminCatalog.publicCatalogSaveFailed"),
+      title: t("catalogPage.saveFailed"),
       description: error.message,
       variant: "destructive",
     }),
@@ -953,7 +954,10 @@ function CountriesTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
-            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.code || Boolean(form?.id && countryTypeRuleQuery.isLoading)}>{t("common.save")}</Button>
+            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.code || Boolean(form?.id && countryTypeRuleQuery.isLoading)}>
+              {save.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {save.isPending ? t("common.saving") : t("common.save")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1085,7 +1089,16 @@ function CitiesTab() {
       await api(`/api/cities/${city.id}/external-facts`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(externalForm) });
       return city;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["cities"] }); setForm(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cities"] });
+      setForm(null);
+      toast({ title: t("common.saved") });
+    },
+    onError: (error: Error) => toast({
+      title: t("catalogPage.saveFailed"),
+      description: error.message,
+      variant: "destructive",
+    }),
   });
 
   const del = useMutation({
@@ -1340,7 +1353,10 @@ function CitiesTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
-            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.countryId}>{t("common.save")}</Button>
+            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.countryId}>
+              {save.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {save.isPending ? t("common.saving") : t("common.save")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2006,6 +2022,7 @@ function UniversitiesTab() {
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
             <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.country}>
+              {save.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {save.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
@@ -2309,6 +2326,11 @@ function ProgramsTab() {
       toast({ title: t("common.success"), description: t("catalogPage.autoTranslationQueued") });
       setForm(null);
     },
+    onError: (error: Error) => toast({
+      title: t("catalogPage.saveFailed"),
+      description: error.message,
+      variant: "destructive",
+    }),
   });
 
   const del = useMutation({
@@ -2918,7 +2940,10 @@ function ProgramsTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
-            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.universityId}>{t("common.save")}</Button>
+            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.universityId}>
+              {save.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {save.isPending ? t("common.saving") : t("common.save")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
