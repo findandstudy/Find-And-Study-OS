@@ -273,7 +273,9 @@ test("each public detail integrates only bound approved content; apply stays on 
   assert.match(program, /detailContentAddon\(editorial, "overview"/);
   assert.match(program, /detailContentAddon\(editorial, "requirements"/);
   assert.match(program, /programAdmissionsOpen\(program\)/);
-  assert.match(program, /\?programId=\$\{program.id\}/);
+  assert.match(program, /onClick=\{\(\) => setApplicationOpen\(true\)\}/);
+  assert.match(program, /<PublicProgramApplicationDialog open onClose=\{\(\) => setApplicationOpen\(false\)\} program=\{program\}/);
+  assert.doesNotMatch(program, /\?programId=\$\{program.id\}/);
   assert.match(program, /programs=\{payload.related\}/);
   const styles = readFileSync(new URL("../src/pages/public/detailEditorial.css", import.meta.url), "utf8");
   assert.match(styles, /\.detail-editorial-table \{ overflow-x: auto/);
