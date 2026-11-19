@@ -13,6 +13,7 @@
   --detail-accent: #174a7e;
   --detail-navy: #0e2138;
   --detail-shadow: 0 10px 30px rgba(11, 18, 32, .10);
+  --detail-hero-content-min-height: clamp(500px, 62vh, 600px);
   color: var(--detail-ink);
   background: var(--detail-paper);
   padding-bottom: 1px;
@@ -425,11 +426,11 @@
 .detail-hero .detail-editorial-content { color: #fff; padding-bottom: 34px; }
 .detail-hero .detail-editorial-content .detail-editorial-intro { color: #dce4ef; }
 .detail-hero-top .detail-breadcrumbs { padding-block: 22px 0; border: 0; }
-.detail-hero-main { display: grid; grid-template-columns: minmax(0, 1.2fr) 380px; gap: 48px; align-items: end; padding-block: 64px 44px; min-height: 510px; }
+.detail-hero-main { display: grid; grid-template-columns: minmax(0, 1.2fr) 380px; gap: 48px; align-items: center; padding-block: 52px 44px; min-height: var(--detail-hero-content-min-height); }
 .detail-hero-main > * { min-width: 0; }
 .detail-hero h1 { font-size: clamp(38px, 5.2vw, 68px); letter-spacing: -.05em; line-height: .98; font-weight: 800; margin: 16px 0 20px; max-width: 16ch; text-wrap: balance; }
 .detail-program .detail-hero h1 { font-size: clamp(38px, 4.2vw, 60px); line-height: 1; max-width: 16ch; }
-.detail-program .detail-hero-main { min-height: clamp(500px, 62vh, 600px); padding-top: 52px; padding-bottom: 44px; align-items: center; }
+.detail-program .detail-hero-main { min-height: var(--detail-hero-content-min-height); padding-top: 52px; padding-bottom: 44px; align-items: center; }
 .detail-program .detail-hero-content { max-width: 800px; }
 .public-detail.detail-program > [data-detail-section="hero"] .detail-hero .detail-hero-content > p.detail-eyebrow {
   color: #fff !important;
@@ -461,7 +462,7 @@
 .detail-city-coverstrip dd { text-align: center; }
 .detail-program .detail-factbar .detail-facts dt { margin-bottom: 10px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .detail-program .detail-factbar .detail-facts dd { font-size: 16px; }
-.detail-university .detail-hero-main { min-height: min(72vh, 640px); padding-top: 112px; padding-bottom: 40px; grid-template-columns: minmax(0, 1.25fr) 360px; gap: 44px; }
+.detail-university .detail-hero-main { min-height: var(--detail-hero-content-min-height); padding-top: 52px; padding-bottom: 44px; grid-template-columns: minmax(0, 1.25fr) 360px; gap: 44px; }
 .detail-hero-lead { color: var(--detail-hero-text, #dce4ef); font-size: 17px; line-height: 1.65; max-width: min(82ch, 100%); white-space: pre-line; margin: 12px 0 0; }
 .detail-hero-link { display: inline-flex; align-items: center; gap: 8px; color: var(--detail-hero-text, #dce9f8); font-size: 15px; line-height: 1.6; font-weight: 700; }
 .detail-hero-link:hover { text-decoration: underline; text-underline-offset: 4px; }
@@ -488,7 +489,7 @@
 .detail-country-cover { background: var(--detail-navy); }
 .detail-country-cover::before { content: ""; position: absolute; inset: 0; background: radial-gradient(1200px 620px at 76% 26%, rgba(23,74,126,.55), transparent 74%); pointer-events: none; }
 .detail-country-cover::after { display: block; }
-.detail-country-cover-inner { position: relative; z-index: 3; padding: 60px 0 68px; }
+.detail-country-cover-inner { position: relative; z-index: 3; display: flex; min-height: var(--detail-hero-content-min-height); flex-direction: column; justify-content: center; padding: 52px 0 44px; }
 .detail-country-cover-kicker { display: flex; align-items: center; gap: 10px; color: #f4f8ff; font-size: 12.5px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; text-shadow: 0 1px 14px rgba(2,10,24,.72); }
 .detail-country-cover-kicker::before { content: ""; width: 34px; height: 1px; background: #5e86ae; }
 .detail-country-cover-kicker img { width: 24px; }
@@ -507,7 +508,7 @@
 .detail-country-cover .detail-hero-top .detail-breadcrumbs,
 .detail-country-cover .detail-hero-top .detail-breadcrumbs a { color: #f7fbff; font-size: 14px; font-weight: 800; line-height: 1.5; text-shadow: 0 1px 14px rgba(2,10,24,.78); }
 .detail-country-cover .detail-hero-top .detail-breadcrumbs li + li::before { color: rgba(255,255,255,.74); }
-.detail-city .detail-hero-main { display: block; min-height: min(74vh, 640px); padding-top: 112px; padding-bottom: 44px; }
+.detail-city .detail-hero-main { display: block; min-height: var(--detail-hero-content-min-height); padding-top: 52px; padding-bottom: 44px; }
 .detail-city .detail-hero h1 { max-width: 11ch; margin: 12px 0 16px; font-size: clamp(40px, 5.6vw, 80px); line-height: .94; }
 .detail-city-cover-inner > div { display: flex; min-height: inherit; flex-direction: column; justify-content: flex-end; }
 .detail-city .detail-city-factbar { position: relative; z-index: 4; margin-top: -24px; padding-bottom: 24px; background: transparent; border: 0; }
@@ -515,7 +516,13 @@
 .detail-city-coverstrip > div { min-width: 0; min-height: 112px; padding: 20px 22px; background: rgba(255,255,255,.97); backdrop-filter: blur(8px); }
 .detail-city-coverstrip dt { color: var(--detail-muted); font-size: 11px; font-weight: 850; letter-spacing: .04em; text-transform: none; }
 .detail-city-coverstrip dd { margin: 7px 0 0; color: var(--detail-ink); font-size: 15px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; }
-.detail-city .detail-hero .detail-actions > a:first-child { background: var(--detail-hero-accent, var(--detail-navy)); }
+.detail-city .detail-hero .detail-actions > a {
+  border-radius: 10px;
+  box-shadow: 0 14px 34px rgba(3, 12, 25, .18);
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.detail-city .detail-hero .detail-actions > a:first-child { background: var(--detail-navy); }
+.detail-city .detail-hero .detail-actions > a:hover { transform: translateY(-2px); box-shadow: 0 18px 42px rgba(3, 12, 25, .24); }
 
 /* Country/city pages follow country-turkiye-v4's final visual refresh. */
 .detail-destination,
@@ -1017,7 +1024,7 @@
   .detail-housing-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 0; }
   .detail-housing-strip > article:first-child { grid-column: 1 / -1; }
   .detail-editorial-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .detail-program .detail-hero-main { grid-template-columns: minmax(0, 1fr) 330px; gap: 32px; min-height: 540px; padding-top: 46px; }
+  .detail-program .detail-hero-main { grid-template-columns: minmax(0, 1fr) 330px; gap: 32px; min-height: var(--detail-hero-content-min-height); padding-top: 52px; }
   .detail-program-overview-grid,
   .detail-program-requirements-grid { gap: 30px; }
   .detail-program-fees-grid { gap: 22px; }
@@ -1031,7 +1038,7 @@
   .detail-university .detail-section,
   .detail-program .detail-section { padding-block: clamp(50px, 4vw, 60px); }
   .detail-university .detail-hero-main {
-    min-height: clamp(520px, 66vh, 600px);
+    min-height: var(--detail-hero-content-min-height);
     grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
   }
   .detail-university .detail-hero h1 { font-size: clamp(42px, 4.5vw, 60px); max-width: 18ch; }
@@ -1054,11 +1061,11 @@
   .detail-wrap { width: calc(100% - 36px); }
   .detail-hero-main { grid-template-columns: 1fr; gap: 28px; min-height: 0; padding-block: 34px 30px; }
   .detail-university .detail-hero-main { grid-template-columns: minmax(0, 1fr); gap: 28px; min-height: 0; padding-block: 34px 30px; }
-  .detail-city .detail-hero-main { min-height: min(74vh, 640px); padding-top: 84px; padding-bottom: 38px; }
+  .detail-city .detail-hero-main { min-height: 0; padding-top: 36px; padding-bottom: 50px; }
   .detail-city .detail-city-factbar { margin-top: -18px; padding-block: 0 18px; }
   .detail-city-coverstrip { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); border-radius: 12px; }
   .detail-city-coverstrip > div:last-child:nth-child(odd) { grid-column: auto; }
-  .detail-country-cover-inner { padding: 40px 0 44px; }
+  .detail-country-cover-inner { min-height: 0; padding: 36px 0 50px; }
   .detail-hero-top .detail-breadcrumbs { padding-top: 15px; }
   .detail-hero h1 { font-size: clamp(30px, 7vw, 44px); max-width: none; margin-block: 14px 16px; }
   .detail-program .detail-hero-main { grid-template-columns: 1fr; min-height: 0; padding-top: 36px; padding-bottom: 50px; }
