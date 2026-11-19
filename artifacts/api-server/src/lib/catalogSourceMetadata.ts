@@ -8,6 +8,16 @@ export const CATALOG_SOURCE_FIELDS = {
 export type CatalogSourceEntity = keyof typeof CATALOG_SOURCE_FIELDS;
 export type CatalogSourceEntry = { sourceName?: string; sourceUrl?: string; verifiedAt?: string; validUntil?: string; notes?: string };
 
+// Older staging imports used source_metadata for transfer provenance and stored
+// weather coordinate evidence under separate latitude/longitude keys. These
+// values predate the field-level source contract. Keep edits backwards
+// compatible without turning arbitrary unknown fields into accepted input.
+const LEGACY_SOURCE_FIELD_ALIASES: Partial<Record<CatalogSourceEntity, Record<string, string | null>>> = {
+  city: { latitude: "coordinates", longitude: "coordinates" },
+  university: { localCatalogTransfer: null },
+  program: { localCatalogTransfer: null, disclaimer: null, purpose: null, synthetic: null },
+};
+
 const SOURCE_COLUMN_PROPERTIES = {
   "source / institution": "sourceName", source: "sourceName", institution: "sourceName", name: "sourceName",
   "source url": "sourceUrl", url: "sourceUrl", "last verified": "verifiedAt", "verified at": "verifiedAt",
@@ -57,16 +67,34 @@ export function normalizeCatalogSourceMetadata(entity: CatalogSourceEntity, valu
   if (typeof value === "string") { try { value = JSON.parse(value); } catch { throw new Error("Source metadata JSON is invalid"); } }
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Source metadata must be an object");
   const allowed = new Set<string>(CATALOG_SOURCE_FIELDS[entity]);
+  const legacyAliases = LEGACY_SOURCE_FIELD_ALIASES[entity] ?? {};
   const result: Record<string, CatalogSourceEntry> = {};
-  if (Object.keys(value).length > allowed.size) throw new Error("Too many source metadata fields");
-  for (const [field, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (!allowed.has(field)) throw new Error(`Unsupported source field: ${field}`);
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length > allowed.size + Object.keys(legacyAliases).length) throw new Error("Too many source metadata fields");
+
+  const normalizeEntry = (field: string, raw: unknown) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`Invalid source metadata for ${field}`);
     const input = raw as Record<string, unknown>;
     const entry: CatalogSourceEntry = { sourceName: text(input.sourceName, 160), sourceUrl: url(input.sourceUrl), verifiedAt: date(input.verifiedAt, "Verified at"), validUntil: date(input.validUntil, "Valid until"), notes: text(input.notes, 500) };
     if (entry.verifiedAt && entry.validUntil && new Date(entry.validUntil) < new Date(entry.verifiedAt)) throw new Error(`Valid until cannot be before verified at for ${field}`);
-    const cleaned = Object.fromEntries(Object.entries(entry).filter(([, item]) => item !== undefined));
-    if (Object.keys(cleaned).length) result[field] = cleaned;
+    return Object.fromEntries(Object.entries(entry).filter(([, item]) => item !== undefined));
+  };
+
+  // Canonical fields always win over a legacy alias for the same destination.
+  for (const [field, raw] of entries) {
+    if (allowed.has(field)) {
+      const cleaned = normalizeEntry(field, raw);
+      if (Object.keys(cleaned).length) result[field] = cleaned;
+      continue;
+    }
+    if (!Object.prototype.hasOwnProperty.call(legacyAliases, field)) throw new Error(`Unsupported source field: ${field}`);
+  }
+  for (const [field, raw] of entries) {
+    if (allowed.has(field)) continue;
+    const target = legacyAliases[field];
+    if (target == null || result[target]) continue;
+    const cleaned = normalizeEntry(field, raw);
+    if (Object.keys(cleaned).length) result[target] = cleaned;
   }
   return result;
 }

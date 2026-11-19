@@ -289,7 +289,10 @@ function catalogSourceNotes(fields: readonly SourceFieldOption[]): Record<string
 }
 
 function SourceMetadataEditor({ value, fields, onChange }: { value?: CatalogSourceMetadata; fields: readonly SourceFieldOption[]; onChange: (value: CatalogSourceMetadata) => void }) {
-  const metadata = value ?? {};
+  const supportedKeys = new Set(fields.map(([key]) => key));
+  const metadata = Object.fromEntries(
+    Object.entries(value ?? {}).filter(([key, entry]) => supportedKeys.has(key) && entry && typeof entry === "object"),
+  ) as CatalogSourceMetadata;
   const [selectedField, setSelectedField] = useState("");
   const [isOpen, setIsOpen] = useState(true);
   const available = fields.filter(([key]) => !metadata[key]);

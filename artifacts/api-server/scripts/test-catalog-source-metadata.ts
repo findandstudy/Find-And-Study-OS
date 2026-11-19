@@ -32,6 +32,24 @@ test("round-trips readable import columns", () => {
   assert.equal(result.climate.sourceUrl, "https://weather.example/evidence");
 });
 
+test("normalizes known legacy source keys without accepting arbitrary fields", () => {
+  const city = normalizeCatalogSourceMetadata("city", {
+    latitude: { sourceName: "OpenWeather Current Weather", sourceUrl: "https://openweathermap.org/current" },
+    longitude: { sourceName: "OpenWeather Current Weather", sourceUrl: "https://openweathermap.org/current" },
+  });
+  assert.equal(city.coordinates.sourceName, "OpenWeather Current Weather");
+  assert.equal(city.coordinates.sourceUrl, "https://openweathermap.org/current");
+
+  assert.deepEqual(normalizeCatalogSourceMetadata("university", { localCatalogTransfer: true }), {});
+  assert.deepEqual(normalizeCatalogSourceMetadata("program", {
+    localCatalogTransfer: true,
+    synthetic: true,
+    purpose: "staging_catalog_diversity",
+    disclaimer: "Staging UI sample only",
+  }), {});
+  assert.throws(() => normalizeCatalogSourceMetadata("program", { unexpectedLegacyKey: true }), /Unsupported source field/);
+});
+
 test("keeps internal notes out of public/editor generation context", () => {
   const metadata = { climate: { sourceName: "Official", sourceUrl: "https://weather.example", verifiedAt: "2026-10-01", notes: "private reviewer note" } };
   assert.deepEqual(omitCatalogSourceMetadata({ id: 1, sourceMetadata: metadata }), { id: 1 });
