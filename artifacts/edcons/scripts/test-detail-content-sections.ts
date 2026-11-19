@@ -346,8 +346,8 @@ test("public detail presentation retains the approved HTML-reference visual lang
   assert.match(styles, /\.detail-hero > \.detail-hero-media \{ position: absolute; z-index: 0; inset: 0; \}/);
   assert.match(styles, /rgba\(4, 10, 22, \.90\) 100%/);
   assert.match(styles, /\.detail-hero-main \{[^}]*grid-template-columns: minmax\(0, 1\.2fr\) 380px/);
-  assert.match(styles, /\.detail-section \{ padding-block: 54px/);
-  assert.match(styles, /\.detail-program \.detail-section \{ padding-block: 58px/);
+  assert.match(styles, /\.detail-section \{ padding-block: 46px/);
+  assert.match(styles, /\.detail-program \.detail-section \{ padding-block: 48px/);
   assert.match(styles, /\.public-detail \{[\s\S]*--detail-hero-content-min-height: clamp\(520px, 62vh, 600px\)/);
   assert.match(styles, /\.detail-program \.detail-hero-main \{ min-height: var\(--detail-hero-content-min-height\)/);
   assert.match(styles, /\.detail-university \.detail-hero-main \{ min-height: var\(--detail-hero-content-min-height\)/);

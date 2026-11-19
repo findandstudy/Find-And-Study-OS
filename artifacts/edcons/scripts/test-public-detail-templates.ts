@@ -188,14 +188,14 @@ test("country detail hero and catalogue cards use the shared high-contrast media
 });
 
 test("detail templates share compact rhythm while city hero facts reuse the program fact-card language", () => {
-  assert.match(css, /\.detail-section \{ padding-block: 54px;/);
-  assert.match(css, /\.detail-program \.detail-section \{ padding-block: 58px;/);
+  assert.match(css, /\.detail-section \{ padding-block: 46px;/);
+  assert.match(css, /\.detail-program \.detail-section \{ padding-block: 48px;/);
   assert.match(city, /<div className="detail-factbar detail-city-factbar"><div className="detail-wrap">/);
   assert.match(css, /\.detail-city \.detail-city-factbar \{[^}]*margin-top: -24px;[^}]*padding-bottom: 24px;[^}]*background: transparent;[^}]*border: 0;/);
   assert.match(css, /\.detail-city-coverstrip \{[^}]*border-radius: 18px;[^}]*box-shadow: 0 18px 55px/);
   assert.match(css, /\.detail-city-coverstrip > div \{[^}]*min-height: 112px;[^}]*padding: 20px 22px;[^}]*background: rgba\(255,255,255,\.97\)/);
   assert.doesNotMatch(css, /:is\(\.detail-destination, \.detail-city, \.detail-university\) :is\(\.detail-section-heading, \.detail-editorial-heading\)/);
-  assert.match(css, /@media \(min-width: 761px\)[\s\S]*\.detail-city > \.detail-section \{ padding-block: clamp\(50px, 4\.2vw, 60px\); \}/);
+  assert.match(css, /@media \(min-width: 761px\)[\s\S]*\.detail-city > \.detail-section \{ padding-block: clamp\(42px, 3\.6vw, 50px\); \}/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-program \.detail-section \{ padding-block: 44px; \}/);
 });
 
@@ -972,8 +972,12 @@ test("city hero combines catalogue counters and catalogue-owned language facts",
   assert.match(university, /detail-university-facts-grid\$\{factsIntro \? "" : " is-single"\}/);
   assert.match(university, /className="detail-keylines detail-university-facts-list"/);
   assert.match(css, /\.detail-university-facts-grid \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);[\s\S]*align-items: stretch;/);
-  assert.match(css, /\.detail-university-facts-copy,[\s\S]*\.detail-university-facts-list \{[\s\S]*height: 100%;[\s\S]*border-radius: 22px;/);
+  assert.match(css, /\.detail-university-facts-copy,[\s\S]*\.detail-university-facts-list \{[\s\S]*height: 100%;[\s\S]*border-radius: 20px;/);
   assert.match(css, /\.detail-university-facts-list \{[\s\S]*grid-auto-rows: minmax\(0, 1fr\);/);
+  assert.match(css, /\.detail-university \.detail-hero-card \.detail-actions > \* \{[\s\S]*border-radius: 999px;/);
+  assert.match(css, /\.detail-university-facts-grid \{[\s\S]*border-radius: 28px;[\s\S]*linear-gradient/);
+  assert.match(css, /\.detail-university-facts-copy::before \{[\s\S]*border-radius: 50%;/);
+  assert.match(css, /\.detail-university-facts-list > div:hover \{[\s\S]*translateY\(-1px\)/);
   assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*\.detail-university-facts-grid \{ grid-template-columns: minmax\(0, 1fr\);/);
 });
 
