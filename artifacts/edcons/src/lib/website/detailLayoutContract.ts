@@ -307,6 +307,9 @@ export function detailTemplateSectionsForLocale(layout: DetailLayout, locale: st
     // locale-owned so an incomplete translation never leaks English text.
     const value = localized[layoutKey];
     if (!value) return [];
+    // Hydration instructions are admin-only. Use the canonical English copy
+    // to identify them so an AI-translated paraphrase can never become public
+    // content in Turkish or any other locale.
     const body = editorInstruction(english[layoutKey]?.body) ? undefined : value.body;
     if (!value.title && !body) return [];
     return [{ key: layoutKey.startsWith("editorial-") ? layoutKey.slice(10) : layoutKey, ...(value.title ? { title: value.title } : {}), ...(body ? { body } : {}) }];

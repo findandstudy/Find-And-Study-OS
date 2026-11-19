@@ -777,7 +777,7 @@ test("missing optional facts and tuition do not become invented values", () => {
   assert.match(program, /payload\.intakes\.length > 0 && <section/);
   assert.match(program, /<section data-detail-section="fees" id="fees"/);
   assert.match(university, /university\.address &&/);
-  assert.match(university, /university\.universityType &&/);
+  assert.match(university, /displayUniversityType &&/);
 });
 
 test("no detail template hardcodes the reference prototype's facts, photographs or trust claims", () => {
