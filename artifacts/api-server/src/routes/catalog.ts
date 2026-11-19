@@ -124,6 +124,57 @@ function universityTypeOptionLabel(option: { value: string; metadata: Record<str
   return label || option.value;
 }
 
+type CountryUniversityTypeInput = {
+  inheritDefault: boolean;
+  universityTypes: string[];
+};
+
+class InvalidCountryUniversityTypeError extends Error {}
+
+function readCountryUniversityTypeInput(value: unknown): CountryUniversityTypeInput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  return {
+    inheritDefault: input.inheritDefault === true,
+    universityTypes: normaliseStringList(input.universityTypes),
+  };
+}
+
+async function persistCountryUniversityTypeRule(
+  tx: any,
+  country: typeof countriesTable.$inferSelect,
+  input: CountryUniversityTypeInput,
+) {
+  const [optionRows, observedCountries] = await Promise.all([
+    activeUniversityTypeOptions(tx),
+    tx.selectDistinct({ value: universitiesTable.country }).from(universitiesTable),
+  ]);
+  const availableTypes = new Set(optionRows.map((option: { value: string }) => option.value));
+  if (!input.inheritDefault && input.universityTypes.some(value => !availableTypes.has(value))) {
+    throw new InvalidCountryUniversityTypeError("Invalid university type option");
+  }
+
+  let [settings] = await tx.select().from(settingsTable).limit(1).for("update");
+  if (!settings) [settings] = await tx.insert(settingsTable).values({}).returning();
+  const rules = normaliseCountryRules(settings.publicCatalogCountryRules);
+  for (const key of Object.keys(rules)) {
+    if (countryMatches(key, country)) delete rules[key];
+  }
+  const sourceCountryNames: string[] = [...new Set<string>((observedCountries as Array<{ value: string }>)
+    .map((row: { value: string }) => row.value)
+    .filter((value: string) => countryMatches(value, country)))];
+  if (!input.inheritDefault) {
+    for (const key of [...new Set([country.name, ...sourceCountryNames])]) {
+      rules[key] = input.universityTypes;
+    }
+  }
+  await tx.update(settingsTable).set({
+    publicCatalogCountryRules: rules,
+    updatedAt: new Date(),
+  }).where(eq(settingsTable.id, settings.id));
+  return sourceCountryNames;
+}
+
 /* ─── COUNTRIES ─────────────────────────────────────────────── */
 
 router.get("/countries", async (req, res): Promise<void> => {
@@ -185,13 +236,31 @@ router.post("/countries", requireAuth, requireRole(...MANAGER_ROLES), async (req
   let sourceMetadata: ReturnType<typeof normalizeCatalogSourceMetadata>;
   try { sourceMetadata = normalizeCatalogSourceMetadata("country", req.body.sourceMetadata); }
   catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+  const publicUniversityTypes = readCountryUniversityTypeInput(req.body.publicUniversityTypes);
   try {
-    const [country] = await db.insert(countriesTable).values({ name, code: code.toUpperCase(), flagEmoji, dialCode: normalizeDialCode(dialCode), isActive, sourceMetadata }).returning();
+    const country = await db.transaction(async tx => {
+      const [created] = await tx.insert(countriesTable).values({ name, code: code.toUpperCase(), flagEmoji, dialCode: normalizeDialCode(dialCode), isActive, sourceMetadata }).returning();
+      if (publicUniversityTypes) {
+        const sourceCountryNames = await persistCountryUniversityTypeRule(tx, created, publicUniversityTypes);
+        await tx.insert(auditLogsTable).values({
+          userId: req.user!.id,
+          action: "update_country_public_university_types",
+          resource: "country",
+          resourceId: created.id,
+          changes: JSON.stringify({ ...publicUniversityTypes, sourceCountryNames }),
+          ipAddress: req.ip || null,
+        });
+      }
+      return created;
+    });
     invalidatePublicCatalogRenderCache({ entityType: "catalog" });
     invalidatePublicWebDiscoveryCache();
     await logAudit(req.user!.id, "create_country", "country", country.id, { name, code }, req.ip);
     res.status(201).json(country);
-  } catch { res.status(409).json({ error: "Country code or name already exists" }); }
+  } catch (error) {
+    if (error instanceof InvalidCountryUniversityTypeError) { res.status(400).json({ error: error.message }); return; }
+    res.status(409).json({ error: "Country code or name already exists" });
+  }
 });
 
 router.post("/countries/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
@@ -257,50 +326,27 @@ router.patch("/countries/:id/public-university-types", requireAuth, requireRole(
   const id = parseInt(String(req.params.id), 10);
   const inheritDefault = req.body?.inheritDefault === true;
   const selectedTypes = normaliseStringList(req.body?.universityTypes);
-  const saved = await db.transaction(async (tx) => {
-    const [country] = await tx.select().from(countriesTable).where(eq(countriesTable.id, id)).limit(1).for("update");
-    if (!country) return { kind: "missing" as const };
-    const [optionRows, observedCountries] = await Promise.all([
-      activeUniversityTypeOptions(tx),
-      tx.selectDistinct({ value: universitiesTable.country }).from(universitiesTable),
-    ]);
-    const availableTypes = new Set(optionRows.map((option) => option.value));
-    if (!inheritDefault && selectedTypes.some((value) => !availableTypes.has(value))) {
-      return { kind: "invalid" as const };
-    }
-
-    let [settings] = await tx.select().from(settingsTable).limit(1).for("update");
-    if (!settings) {
-      [settings] = await tx.insert(settingsTable).values({}).returning();
-    }
-    const rules = normaliseCountryRules(settings.publicCatalogCountryRules);
-    for (const key of Object.keys(rules)) {
-      if (countryMatches(key, country)) delete rules[key];
-    }
-    const sourceCountryNames = [...new Set(observedCountries
-      .map((row) => row.value)
-      .filter((value) => countryMatches(value, country)))];
-    if (!inheritDefault) {
-      for (const key of [...new Set([country.name, ...sourceCountryNames])]) {
-        rules[key] = selectedTypes;
-      }
-    }
-    await tx.update(settingsTable).set({
-      publicCatalogCountryRules: rules,
-      updatedAt: new Date(),
-    }).where(eq(settingsTable.id, settings.id));
-    await tx.insert(auditLogsTable).values({
-      userId: req.user!.id,
-      action: "update_country_public_university_types",
-      resource: "country",
-      resourceId: country.id,
-      changes: JSON.stringify({ inheritDefault, universityTypes: selectedTypes, sourceCountryNames }),
-      ipAddress: req.ip || null,
+  let saved: { kind: "missing" } | { kind: "saved" };
+  try {
+    saved = await db.transaction(async (tx) => {
+      const [country] = await tx.select().from(countriesTable).where(eq(countriesTable.id, id)).limit(1).for("update");
+      if (!country) return { kind: "missing" as const };
+      const sourceCountryNames = await persistCountryUniversityTypeRule(tx, country, { inheritDefault, universityTypes: selectedTypes });
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "update_country_public_university_types",
+        resource: "country",
+        resourceId: country.id,
+        changes: JSON.stringify({ inheritDefault, universityTypes: selectedTypes, sourceCountryNames }),
+        ipAddress: req.ip || null,
+      });
+      return { kind: "saved" as const };
     });
-    return { kind: "saved" as const, country, optionRows };
-  });
+  } catch (error) {
+    if (error instanceof InvalidCountryUniversityTypeError) { res.status(400).json({ error: error.message }); return; }
+    throw error;
+  }
   if (saved.kind === "missing") { res.status(404).json({ error: "Not found" }); return; }
-  if (saved.kind === "invalid") { res.status(400).json({ error: "Invalid university type option" }); return; }
   clearPublicCatalogPolicyCache();
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
   invalidatePublicWebDiscoveryCache();
@@ -320,7 +366,27 @@ router.patch("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), async
     try { updates.sourceMetadata = normalizeCatalogSourceMetadata("country", req.body.sourceMetadata); }
     catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
   }
-  const [country] = await db.update(countriesTable).set(updates).where(eq(countriesTable.id, id)).returning();
+  const publicUniversityTypes = readCountryUniversityTypeInput(req.body.publicUniversityTypes);
+  let country: typeof countriesTable.$inferSelect | undefined;
+  try {
+    country = await db.transaction(async tx => {
+      const [updated] = await tx.update(countriesTable).set(updates).where(eq(countriesTable.id, id)).returning();
+      if (!updated || !publicUniversityTypes) return updated;
+      const sourceCountryNames = await persistCountryUniversityTypeRule(tx, updated, publicUniversityTypes);
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "update_country_public_university_types",
+        resource: "country",
+        resourceId: updated.id,
+        changes: JSON.stringify({ ...publicUniversityTypes, sourceCountryNames }),
+        ipAddress: req.ip || null,
+      });
+      return updated;
+    });
+  } catch (error) {
+    if (error instanceof InvalidCountryUniversityTypeError) { res.status(400).json({ error: error.message }); return; }
+    throw error;
+  }
   if (!country) { res.status(404).json({ error: "Not found" }); return; }
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
   invalidatePublicWebDiscoveryCache();

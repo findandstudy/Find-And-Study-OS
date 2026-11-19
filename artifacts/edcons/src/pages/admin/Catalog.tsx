@@ -14,7 +14,7 @@ import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Sear
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { CountryFlag } from "@/components/CountryFlag";
+import { CountryFlag, countryNameToIso } from "@/components/CountryFlag";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ColumnHeader } from "@/components/ui/column-header";
 import { apiFetch } from "@/lib/apiFetch";
@@ -45,7 +45,7 @@ function useOpenCatalogEntry<T extends { id: number }>(tab: CatalogSourceTab, ro
   const { toast } = useToast();
   useEffect(() => {
     const id = entry.current.sourceId;
-    if (!id || !["programs", "universities"].includes(tab)) return;
+    if (!id || opened.current || !["programs", "universities"].includes(tab)) return;
     let cancelled = false;
     opened.current = true;
     api(`/api/${tab}/${id}`).then(row => {
@@ -60,6 +60,22 @@ function useOpenCatalogEntry<T extends { id: number }>(tab: CatalogSourceTab, ro
     opened.current = true;
     open(row);
   }, [rows, open]);
+}
+
+function normalizeCatalogCountry(value: string) {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+}
+
+function findCatalogCountry(countries: Country[], value?: string | null) {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  const normalized = normalizeCatalogCountry(raw);
+  const iso = raw.length === 2 ? raw.toLowerCase() : countryNameToIso(raw);
+  return countries.find(country => (
+    normalizeCatalogCountry(country.name) === normalized
+    || country.code.toLowerCase() === normalized
+    || Boolean(iso && country.code.toLowerCase() === iso)
+  ));
 }
 
 async function api(url: string, opts?: RequestInit) {
@@ -720,17 +736,16 @@ function CountriesTab() {
 
   const save = useMutation({
     mutationFn: async (f: Partial<Country>) => {
-      const saved = f.id
-        ? await api(`/api/countries/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) })
-        : await api("/api/countries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
-      await api(`/api/countries/${saved.id}/public-university-types`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const payload = {
+        ...f,
+        publicUniversityTypes: {
           inheritDefault: inheritUniversityTypes,
           universityTypes: inheritUniversityTypes ? [] : countryUniversityTypes,
-        }),
-      });
+        },
+      };
+      const saved = f.id
+        ? await api(`/api/countries/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+        : await api("/api/countries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       return saved;
     },
     onSuccess: () => {
@@ -1622,7 +1637,7 @@ function UniversitiesTab() {
     try {
       const university = await api(`/api/universities/${id}`);
       setForm(university);
-      setSelCountryId(allCountries.find(c => c.name === university.country)?.id ?? null);
+      setSelCountryId(findCatalogCountry(allCountries, university.country)?.id ?? null);
     } catch (error: any) {
       toast({
         title: t("common.error"),
@@ -1814,7 +1829,7 @@ function UniversitiesTab() {
                     className="mt-1"
                     value={form?.country ?? ""}
                     onValueChange={v => {
-                      const found = allCountries.find(c => c.name === v);
+                      const found = findCatalogCountry(allCountries, v);
                       setF({ country: v, city: null });
                       setSelCountryId(found?.id ?? null);
                     }}
