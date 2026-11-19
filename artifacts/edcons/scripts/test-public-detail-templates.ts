@@ -973,12 +973,15 @@ test("city hero combines catalogue counters and catalogue-owned language facts",
   assert.match(university, /className="detail-keylines detail-university-facts-list"/);
   assert.match(css, /\.detail-university-facts-grid \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);[\s\S]*align-items: stretch;/);
   assert.match(css, /\.detail-university-facts-copy \{[\s\S]*display: block;[\s\S]*min-height: 0;[\s\S]*border-radius: 18px;/);
-  assert.match(css, /\.detail-university-facts-copy \.detail-editorial-intro \{[\s\S]*max-width: 70ch;[\s\S]*columns: 1;/);
+  assert.match(css, /\.detail-university-facts-copy \.detail-editorial-intro \{[\s\S]*max-width: none;[\s\S]*columns: 1;/);
   assert.match(css, /\.detail-university-facts-list \{[\s\S]*display: grid;[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(css, /\.detail-university-facts-list > div \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);[\s\S]*min-height: 126px;/);
   assert.match(css, /\.detail-university \.detail-hero-card \.detail-actions > \* \{[\s\S]*border-radius: 10px;/);
   assert.match(css, /\.detail-university-facts-grid \{[\s\S]*border-radius: 24px;[\s\S]*linear-gradient/);
-  assert.match(css, /\.detail-university-facts-copy::before \{[\s\S]*border-radius: 50%;/);
+  assert.doesNotMatch(css, /\.detail-university-facts-copy::before/);
+  assert.match(css, /\.detail-university-facts-list dt \{[\s\S]*flex-direction: column;[\s\S]*text-align: center;/);
+  assert.match(css, /\.detail-university-facts-list dt svg \{[\s\S]*background: transparent;/);
+  assert.match(css, /\.detail-university-facts-list dd \{[\s\S]*text-align: center;/);
   assert.match(css, /\.detail-university-facts-list > div:hover \{[\s\S]*translateY\(-1px\)/);
   assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*\.detail-university-facts-grid \{ grid-template-columns: minmax\(0, 1fr\);/);
   assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*\.detail-university-facts-list \{ grid-template-columns: minmax\(0, 1fr\);/);
