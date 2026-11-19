@@ -104,6 +104,7 @@ router.get(
       .select({
         id: programsTable.id,
         sourceName: programsTable.name,
+        sourceField: programsTable.field,
         name: localizedName,
         description: sql<string | null>`COALESCE(${programTranslationsTable.description}, ${programsTable.description})`,
         degree: programsTable.degree,
@@ -170,14 +171,23 @@ router.get(
       id: program.id,
       name: program.name,
     });
-    const relatedConditions: any[] = [
-      eq(programsTable.isActive, true),
-      ne(programsTable.id, program.id),
+    const exactProgramCityMatch = and(
       ne(programsTable.universityId, program.universityId),
       sql`lower(trim(${programsTable.name})) = lower(trim(${program.sourceName}::text))`,
       program.universityCity?.trim()
         ? sql`lower(trim(coalesce(${universitiesTable.city}, ''))) = lower(trim(${program.universityCity.trim()}::text))`
         : sql`false`,
+    );
+    const sameUniversityFieldMatch = program.sourceField?.trim()
+      ? and(
+          eq(programsTable.universityId, program.universityId),
+          sql`lower(trim(coalesce(${programsTable.field}, ''))) = lower(trim(${program.sourceField.trim()}::text))`,
+        )
+      : sql`false`;
+    const relatedConditions: any[] = [
+      eq(programsTable.isActive, true),
+      ne(programsTable.id, program.id),
+      or(exactProgramCityMatch, sameUniversityFieldMatch),
     ];
     addPublicCatalogConditions(relatedConditions, policy);
 
@@ -186,6 +196,7 @@ router.get(
       db
         .select({
           id: programsTable.id,
+          matchTier: sql<"program_city" | "university_field">`CASE WHEN ${exactProgramCityMatch} THEN 'program_city' ELSE 'university_field' END`,
           name: sql<string>`COALESCE(${programTranslationsTable.name}, ${programsTable.name})`,
           degree: programsTable.degree,
           field: sql<string | null>`COALESCE(${programTranslationsTable.field}, ${programsTable.field})`,
@@ -222,7 +233,12 @@ router.get(
           ),
         )
         .where(and(...relatedConditions))
-        .orderBy(asc(universitiesTable.name), asc(programsTable.id))
+        .orderBy(
+          sql`CASE WHEN ${exactProgramCityMatch} THEN 0 ELSE 1 END`,
+          asc(universitiesTable.name),
+          asc(programsTable.name),
+          asc(programsTable.id),
+        )
         .limit(internalLinkMode === "published" ? PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT : PUBLIC_CATALOG_RELATED_LIMIT),
       db
         .select({
@@ -279,8 +295,13 @@ router.get(
         programIds: relatedRows.map((related) => related.id),
       })
       : null;
-    const relatedPrograms = relatedRows
-      .filter((related) => relatedProgramIds === null || relatedProgramIds.has(related.id))
+    const eligibleRelatedPrograms = relatedRows
+      .filter((related) => relatedProgramIds === null || relatedProgramIds.has(related.id));
+    const exactProgramCityPrograms = eligibleRelatedPrograms.filter((related) => related.matchTier === "program_city");
+    const sameUniversityFieldPrograms = eligibleRelatedPrograms.filter((related) => related.matchTier === "university_field");
+    const relatedPrograms = (exactProgramCityPrograms.length > 0
+      ? exactProgramCityPrograms
+      : sameUniversityFieldPrograms)
       .slice(0, PUBLIC_CATALOG_RELATED_LIMIT);
     const relatedUniversityIds = [...new Set(relatedPrograms.map(row => row.universityId))];
     const [relatedPrices, localizedRelatedUniversities, indexableRelatedUniversityIds] = await Promise.all([
@@ -306,6 +327,7 @@ router.get(
       data: {
         ...program,
         sourceName: undefined,
+        sourceField: undefined,
         description: program.description || (locale === "en" ? automaticSeo.description : null),
         ...locationLinks,
         requirements: publicCatalogRequirements(program.requirements, { canonicalPath, id: program.id }),
