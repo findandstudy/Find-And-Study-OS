@@ -1594,6 +1594,12 @@ function UniversitiesTab() {
   });
   const formCities: City[] = formCitiesResp?.data ?? [];
 
+  useEffect(() => {
+    if (!form?.country || selCountryId != null || allCountries.length === 0) return;
+    const country = findCatalogCountry(allCountries, form.country);
+    if (country) setSelCountryId(country.id);
+  }, [allCountries, form?.country, selCountryId]);
+
   const save = useMutation({
     mutationFn: async (f: Partial<University>) => f.id
       ? api(`/api/universities/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) })

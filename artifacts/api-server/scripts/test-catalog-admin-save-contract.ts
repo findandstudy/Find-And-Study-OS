@@ -37,6 +37,8 @@ test("university editor resolves localized country aliases before loading cities
   assert.match(catalog, /function findCatalogCountry\(/);
   assert.match(catalog, /countryNameToIso\(raw\)/);
   assert.match(catalog, /setSelCountryId\(findCatalogCountry\(allCountries, university\.country\)\?\.id \?\? null\)/);
+  assert.match(catalog, /if \(!form\?\.country \|\| selCountryId != null \|\| allCountries\.length === 0\) return;/);
+  assert.match(catalog, /const country = findCatalogCountry\(allCountries, form\.country\);/);
 });
 
 test("country details and public university-type policy save atomically", () => {
