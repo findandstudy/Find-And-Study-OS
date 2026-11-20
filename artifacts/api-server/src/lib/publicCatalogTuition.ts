@@ -24,7 +24,19 @@ export function publicMinorAmount(value: unknown, currency: unknown): number | n
 }
 
 type Price = { componentType: string; amountMinor: unknown; currencyCode: string; frequency: string; intakeId?: string | null };
-type Legacy = { tuitionFee?: number | null; discountedFee?: number | null; currency?: string | null };
+type Legacy = { tuitionFee?: number | string | null; discountedFee?: number | string | null; currency?: string | null };
+
+function publicLegacyAmount(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : null;
+  if (typeof value !== "string") return null;
+  const normalized = value;
+  // PostgreSQL numeric columns are returned as strings by the driver. Accept
+  // only a plain, non-negative decimal representation; never coerce arbitrary
+  // catalogue text into an advertised public price.
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(normalized)) return null;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount >= 0 ? amount : null;
+}
 
 /** verifiedPrices MUST come from the current, verified, date/intake-bound read-model. */
 export function projectPublicTuition(legacy: Legacy, verifiedPrices: readonly Price[]): PublicTuition | null {
@@ -41,7 +53,7 @@ export function projectPublicTuition(legacy: Legacy, verifiedPrices: readonly Pr
       frequency: first.price.frequency, isFrom: new Set(valid.map(item => item.amount)).size > 1 };
   }
   const currency = publicCurrency(legacy.currency);
-  const amount = legacy.discountedFee ?? legacy.tuitionFee;
-  if (!currency || typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) return null;
+  const amount = publicLegacyAmount(legacy.discountedFee ?? legacy.tuitionFee);
+  if (!currency || amount === null) return null;
   return { amount, currency, verified: false, source: "legacy", frequency: null, isFrom: false };
 }

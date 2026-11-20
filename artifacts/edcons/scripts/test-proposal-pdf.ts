@@ -54,6 +54,22 @@ test("catalog programs reuse the proposal PDF flow for selected and filtered res
   assert.match(catalogSource, /loadProposalDocumentRequirements/);
 });
 
+test("public detail templates expose result and selected-program proposal PDFs", async () => {
+  const [actions, browser, relatedCards, card] = await Promise.all([
+    readFile(new URL("../src/pages/public/PublicProgramProposalActions.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/pages/public/UniversityProgramBrowser.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/pages/public/CityProgramCards.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/pages/public/PublicProgramCard.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(actions, /import\("@\/lib\/generateProposalPdf"\)/);
+  assert.match(actions, /downloadResultsProposalPdf/);
+  assert.match(actions, /downloadSelectedProposalPdf/);
+  assert.match(actions, /showCommission: false/);
+  assert.match(browser, /<PublicProgramProposalActions/);
+  assert.match(relatedCards, /<PublicProgramProposalActions/);
+  assert.match(card, /onToggleProposalSelection/);
+});
+
 test("service fee adjustment is PDF-only arithmetic and clamps below zero", () => {
   assert.equal(getProposalServiceFee(sampleProgram, 125, false), 375);
   assert.equal(getProposalServiceFee(sampleProgram, -500, false), null);

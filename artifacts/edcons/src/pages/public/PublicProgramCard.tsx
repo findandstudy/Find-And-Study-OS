@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "wouter";
-import { Award, BookOpen, Building2, Calendar, Clock, DollarSign, Globe2, GraduationCap, Info, Languages, MapPin, Shield } from "lucide-react";
+import { Award, BookOpen, Building2, Calendar, Check, Clock, DollarSign, Globe2, GraduationCap, Info, Languages, MapPin, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
@@ -44,6 +44,8 @@ export interface PublicProgramCardProps {
   /** An explicit slot (including null) replaces every legacy fee decoration. */
   tuitionContent?: ReactNode;
   omitLegacyTiming?: boolean;
+  selectedForProposal?: boolean;
+  onToggleProposalSelection?: () => void;
 }
 
 const BASE_URL = import.meta.env?.BASE_URL?.replace(/\/$/, "") || "";
@@ -86,7 +88,7 @@ function fixStorageUrl(url: string | null | undefined): string | null {
 const detailsClassName = "w-9 h-9 rounded-full border-2 border-border/60 flex items-center justify-center text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all shrink-0";
 const applyClassName = "flex-1 min-w-0 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300";
 
-export function PublicProgramCard({ program: prog, index: _index, onApply, onDetails, applyHref, applyDisabled = false, tuitionContent, omitLegacyTiming = false }: PublicProgramCardProps) {
+export function PublicProgramCard({ program: prog, index: _index, onApply, onDetails, applyHref, applyDisabled = false, tuitionContent, omitLegacyTiming = false, selectedForProposal = false, onToggleProposalSelection }: PublicProgramCardProps) {
   const { t, lang } = useI18n();
   const effectiveFee = prog.discountedFee ?? prog.tuitionFee;
   const hasDiscount = !!(prog.discountedFee && prog.tuitionFee && prog.discountedFee < prog.tuitionFee);
@@ -121,6 +123,11 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
     <div
       className="public-program-card group min-w-0 bg-card rounded-2xl overflow-hidden shadow-md shadow-black/[0.04] hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary/[0.08] transition-all duration-300 border border-border/40 hover:border-primary/20 flex flex-col">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 bg-card">
+        {onToggleProposalSelection ? <button type="button" onClick={onToggleProposalSelection}
+          aria-pressed={selectedForProposal} aria-label={t("common.select")}
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors ${selectedForProposal ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-transparent hover:border-primary/60"}`}>
+          <Check className="h-4 w-4" aria-hidden="true" />
+        </button> : null}
         {universityWebsite ? (
           <a href={universityWebsite} target="_blank" rel="noopener noreferrer" aria-label={institutionName}
             className="w-10 h-10 rounded-xl border border-border/60 bg-background flex items-center justify-center shrink-0 overflow-hidden hover:border-primary/40 hover:scale-105 transition-all cursor-pointer"

@@ -12,6 +12,12 @@ test("legacy fallback is labelled unverified, not a verified offer", () => {
   assert.equal(projectPublicTuition(legacy, [])?.verified, false);
   assert.equal(projectPublicTuition({ ...legacy, discountedFee: 0 }, [])?.amount, 0);
 });
+test("legacy PostgreSQL numeric strings are accepted without coercing arbitrary text", () => {
+  assert.equal(projectPublicTuition({ tuitionFee: "3500.00", discountedFee: "2625.00", currency: "USD" }, [])?.amount, 2625);
+  for (const amount of ["2,625", " 2625 ", "+2625", "1e3", "free", "-1"]) {
+    assert.equal(projectPublicTuition({ tuitionFee: amount, currency: "USD" }, []), null);
+  }
+});
 test("missing or invalid currency never assumes USD", () => {
   for (const currency of [null, "", "   ", "AAA", "javascript:usd"]) assert.equal(projectPublicTuition({ ...legacy, currency }, []), null);
   assert.equal(publicCurrency(" try "), "TRY");

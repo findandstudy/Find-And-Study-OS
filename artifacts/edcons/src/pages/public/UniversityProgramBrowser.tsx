@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { programAdmissionsOpen } from "@/lib/programAdmissions";
 import { PublicProgramCard } from "./PublicProgramCard";
+import { PublicProgramProposalActions } from "./PublicProgramProposalActions";
 import type { PublicProgramDetailData } from "./PublicProgramDetailDialog";
 import { PublicProgramFilters, type PublicProgramFacets, type PublicProgramSelection } from "./PublicProgramFilters";
 import { detailCopy, displayTuition, splitRequirements, type DetailTuition } from "./detailPresentation";
@@ -44,6 +45,7 @@ export function DetailProgramBrowser({ scope, admissionsOpen, previewPrograms = 
   const [attempt, setAttempt] = useState(0);
   const [detailProgram, setDetailProgram] = useState<ProgramRow | null>(null);
   const [applyProgram, setApplyProgram] = useState<ProgramRow | null>(null);
+  const [proposalPrograms, setProposalPrograms] = useState<Map<number, ProgramRow>>(() => new Map());
   const query = detailProgramQuery(scope, lang, search, selection);
   const [settledQuery, setSettledQuery] = useState(query);
   useEffect(() => { const timer = setTimeout(() => setSettledQuery(query), 300); return () => clearTimeout(timer); }, [query]);
@@ -79,14 +81,17 @@ export function DetailProgramBrowser({ scope, admissionsOpen, previewPrograms = 
       search={search} onSearchChange={value => { setSearch(value); setPage(1); }} onClear={clear} total={result.meta.total}
       lockedLocationKeys={scope.kind === "university" ? ["country", "city", "universityType", "universityId"] : scope.kind === "city" ? ["country", "city"] : ["country"]}
       feeHint={detailCopy(lang).legacyPrice} />
-    <div className="flex items-center gap-3 my-6 bg-card/60 rounded-2xl px-6 py-4 border border-border/30 shadow-sm" role="status" aria-live="polite">
-      <BookOpen className="w-4 h-4 text-primary" aria-hidden="true" />
-      {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-label={t("common.loading")} /> : <p className="text-muted-foreground">{failed ? t("common.error") : t("programs.showingResults", { count: String(result.meta.total) })}</p>}
+    <div className="flex flex-wrap items-center justify-between gap-3 my-6 bg-card/60 rounded-2xl px-6 py-4 border border-border/30 shadow-sm">
+      <div className="flex items-center gap-3" role="status" aria-live="polite"><BookOpen className="w-4 h-4 text-primary" aria-hidden="true" />
+        {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-label={t("common.loading")} /> : <p className="text-muted-foreground">{failed ? t("common.error") : t("programs.showingResults", { count: String(result.meta.total) })}</p>}
+      </div>
+      {!failed && !busy && result.data.length ? <PublicProgramProposalActions results={result.data} selected={proposalPrograms} /> : null}
     </div>
     {failed && !busy ? <div className="text-center py-12" role="alert"><p className="mb-4">{t("common.error")}</p><Button variant="outline" onClick={() => setAttempt(value => value + 1)}>{t("common.retry")}</Button></div>
       : busy ? <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" aria-busy="true">{[0, 1, 2].map(key => <div key={key} className="h-72 rounded-2xl bg-secondary animate-pulse" />)}</div>
       : result.data.length === 0 ? <div className="text-center py-16 bg-card rounded-2xl border border-border/30"><h3 className="text-xl font-bold mb-2">{t("programs.noResults")}</h3><p className="text-muted-foreground mb-6">{t("programs.noResultsDesc")}</p><Button variant="outline" onClick={clear}>{t("programs.clearFilters")}</Button></div>
       : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">{result.data.map((program, index) => <PublicProgramCard key={program.id} program={program} index={index}
+        selectedForProposal={proposalPrograms.has(program.id)} onToggleProposalSelection={() => setProposalPrograms(current => { const next = new Map(current); next.has(program.id) ? next.delete(program.id) : next.set(program.id, program); return next; })}
         onDetails={() => setDetailProgram({ ...program, requirements: splitRequirements(program.requirements, { canonicalPath: program.canonicalPath, id: program.id }).requirements.join("\n") })}
         onApply={() => setApplyProgram(program)} applyDisabled={!admissionsOpen || !programAdmissionsOpen(program)} omitLegacyTiming
         tuitionContent={<div className="university-program-tuition"><p className="text-[10px] text-muted-foreground mb-1.5">{t("courseFinderPage.tuitionFee")}</p><DetailPrice tuition={displayTuition({ ...program, tuition: program.tuition ?? null }, lang)} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} /></div>} />)}</div>}
