@@ -12,7 +12,7 @@ import { DeferredBelowFold } from "./DeferredBelowFold";
 import { Button } from "@/components/ui/button";
 import { detailContentPresentationOverrides, detailDisplayTerm, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
 import { detailTemplateVariableValues } from "./detailTemplateVariables";
-import { ArrowLeft, Building2, ExternalLink, ArrowUpRight, MapPin, GraduationCap, Award } from "lucide-react";
+import { ArrowLeft, Building2, ArrowUpRight, MapPin, GraduationCap, Award } from "lucide-react";
 import { CityWeatherCard, type CityWeatherSnapshot } from "./CityWeatherCard";
 import { weatherCopy } from "./weatherPresentation";
 import { usePublicDetailPayload } from "./publicDetailQuery";
@@ -208,8 +208,6 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   const hero = heroSection?.hero;
   const primaryCtaHref = hero?.primaryCtaHref || "#programs";
   const primaryCtaLabel = hero?.primaryCtaLabel || t("catalogDetail.availablePrograms");
-  const secondaryCtaHref = hero?.secondaryCtaHref || university.website || localePath("/contact");
-  const secondaryCtaLabel = hero?.secondaryCtaLabel || (university.website ? t("programs.visitUniversity") : t("countryDetail.talkToAdvisor"));
   return (
     <DetailLayout kind="university" sectionOrder={editorial?.sectionOrder} sectionPresentation={detailContentPresentationOverrides(editorial)}>
       <section data-detail-section="hero">
@@ -240,7 +238,6 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
                 {heroDegreeCounts.map(([degree, count]) => <div key={degree}><dt>{new Intl.NumberFormat(lang).format(count)}</dt><dd>{degreeProgramLabel(degree, count, lang, displayTerm(degree), copy.programCount)}</dd></div>)}
               </dl> : null}
               <div className="detail-actions"><a href={primaryCtaHref} rel="noopener noreferrer" {...(primaryCtaHref.startsWith("https:") ? { target: "_blank" } : {})}>{primaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></a></div>
-              <div className="detail-actions"><a className="is-secondary" href={secondaryCtaHref} rel="noopener noreferrer" {...(secondaryCtaHref.startsWith("https:") ? { target: "_blank" } : {})}>{secondaryCtaLabel}{secondaryCtaHref.startsWith("https:") ? <ExternalLink size={16} aria-hidden="true" /> : null}</a></div>
             </aside>
           </div>
         </div>

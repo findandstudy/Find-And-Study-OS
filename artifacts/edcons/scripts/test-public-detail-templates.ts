@@ -984,7 +984,9 @@ test("city hero combines catalogue counters and catalogue-owned language facts",
   assert.match(css, /\.detail-university \.detail-hero-card \{ border-radius: 18px; \}/);
   assert.match(university, /className="detail-program-total"/);
   assert.match(university, /payload\.meta\.programCount/);
-  assert.match(css, /\.detail-university \.detail-identity \.detail-card-identity \{[\s\S]*width: 76px;[\s\S]*height: 76px;/);
+  assert.match(css, /\.detail-university \.detail-identity \.detail-card-identity \{[\s\S]*width: 96px;[\s\S]*height: 96px;[\s\S]*padding: 0;[\s\S]*border: 0;[\s\S]*background: transparent;[\s\S]*box-shadow: none;/);
+  assert.match(css, /\.detail-university \.detail-identity \.detail-card-identity img \{[^}]*padding: 0;[^}]*background: transparent;/);
+  assert.doesNotMatch(university, /programs\.visitUniversity|secondaryCtaHref|secondaryCtaLabel/);
   assert.match(css, /\.detail-program-total \{[\s\S]*background: var\(--detail-navy\);/);
   assert.match(css, /\.detail-program \.detail-meta-pill,[\s\S]*\.detail-university \.detail-meta-pill \{[\s\S]*border-radius: 999px;/);
   assert.match(css, /\.detail-program-level-counts dt \{[\s\S]*font-size: 20px;/);
