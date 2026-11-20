@@ -44,7 +44,7 @@ export function PublicProgramProposalActions({ results, selected }: {
     try {
       const [{ generateProposalPdf }, settings] = await Promise.all([
         import("@/lib/generateProposalPdf"),
-        customFetch<PdfSettings>("/api/settings/client", { method: "GET" }),
+        customFetch<PdfSettings>("/api/settings/branding", { method: "GET" }),
       ]);
       const branding = resolveProposalBranding(undefined, settings, undefined);
       await generateProposalPdf({

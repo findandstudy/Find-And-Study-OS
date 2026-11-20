@@ -67,6 +67,8 @@ test("public detail templates expose result and selected-program proposal PDFs",
   assert.match(actions, /showCommission: false/);
   assert.match(browser, /<PublicProgramProposalActions/);
   assert.match(relatedCards, /<PublicProgramProposalActions/);
+  assert.match(actions, /\/api\/settings\/branding/);
+  assert.doesNotMatch(actions, /\/api\/settings\/client/);
   assert.match(card, /onToggleProposalSelection/);
 });
 
