@@ -60,6 +60,7 @@ type UniversityPayload = {
   meta: {
     programCount: number;
     degreeLevels?: string[];
+    degreeLevelCounts?: Array<{ degree: string; count: number }>;
     canonicalPath: string;
     requestedPathIsCanonical: boolean;
     indexable: boolean;
@@ -81,6 +82,15 @@ const normalizeDegreeLevel = (value: string) => {
 };
 
 const degreeOrder = new Map(["Foundation / Pathway", "Associate", "Bachelor", "Master", "Doctorate"].map((value, index) => [value, index]));
+
+const degreeProgramLabel = (degree: string, count: number, locale: string, localizedDegree: string, localizedPrograms: string) => {
+  const suffix = count === 1 ? "program" : "programs";
+  if (locale.startsWith("tr")) {
+    return `${localizedDegree} programı`;
+  }
+  if (locale.startsWith("en")) return `${degree === "Doctorate" ? "Ph.D" : degree} ${suffix}`;
+  return `${localizedDegree} · ${localizedPrograms}`;
+};
 
 export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   const preview = useContext(DetailPreviewContext);
@@ -183,6 +193,15 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
       .filter((value): value is string => Boolean(value?.trim()))
       .map(normalizeDegreeLevel),
   )].sort((left, right) => (degreeOrder.get(left) ?? 99) - (degreeOrder.get(right) ?? 99) || left.localeCompare(right));
+  const degreeCounts = [...(payload.meta.degreeLevelCounts ?? [])]
+    .reduce((counts, item) => {
+      const degree = normalizeDegreeLevel(item.degree);
+      counts.set(degree, (counts.get(degree) ?? 0) + item.count);
+      return counts;
+    }, new Map<string, number>());
+  const heroDegreeCounts = [...degreeCounts.entries()]
+    .filter(([degree]) => degreeOrder.has(degree))
+    .sort(([left], [right]) => (degreeOrder.get(left) ?? 99) - (degreeOrder.get(right) ?? 99));
   const location = <>{cityPath ? <Link href={cityPath}>{displayCity}</Link> : displayCity}{displayCity && " · "}{countryPath ? <Link href={countryPath}>{displayCountry}</Link> : displayCountry}</>;
   const heroSection = detailHeroSection(editorial);
   const factsIntro = detailContentIntro(editorial, "facts");
@@ -216,7 +235,9 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
             </div>
             <aside className="detail-hero-card" aria-label={t("catalogDetail.availablePrograms")}>
               <p className="detail-eyebrow">{copy.studyOptions}</p>
-              <p className="detail-summary-count"><strong>{new Intl.NumberFormat(lang).format(payload.meta.programCount)}</strong><span>{detailCountLabel(hero?.programCountLabel, copy.programCount)}</span></p>
+              {heroDegreeCounts.length > 0 ? <dl className="detail-program-level-counts">
+                {heroDegreeCounts.map(([degree, count]) => <div key={degree}><dt>{new Intl.NumberFormat(lang).format(count)}</dt><dd>{degreeProgramLabel(degree, count, lang, displayTerm(degree), copy.programCount)}</dd></div>)}
+              </dl> : <p className="detail-summary-count"><strong>{new Intl.NumberFormat(lang).format(payload.meta.programCount)}</strong><span>{detailCountLabel(hero?.programCountLabel, copy.programCount)}</span></p>}
               <div className="detail-actions"><a href={primaryCtaHref} rel="noopener noreferrer" {...(primaryCtaHref.startsWith("https:") ? { target: "_blank" } : {})}>{primaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></a></div>
               <div className="detail-actions"><a className="is-secondary" href={secondaryCtaHref} rel="noopener noreferrer" {...(secondaryCtaHref.startsWith("https:") ? { target: "_blank" } : {})}>{secondaryCtaLabel}{secondaryCtaHref.startsWith("https:") ? <ExternalLink size={16} aria-hidden="true" /> : null}</a></div>
             </aside>
@@ -260,7 +281,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
           <DetailHeading number={university.weather ? "04" : "03"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} />
           {detailContentIntro(editorial, "programs")}
           <DeferredBelowFold minHeight={520}><Suspense fallback={<div className="h-[32rem] animate-pulse rounded-3xl bg-secondary" />}><UniversityProgramBrowser key={`${university.id}:${lang}`} universityId={university.id} admissionsOpen={university.isActive !== false} /></Suspense></DeferredBelowFold>
-          <div className="detail-actions"><Link href={`${localePath("/programs")}?universityId=${university.id}`}>{t("countryDetail.viewAllPrograms")} · {payload.meta.programCount}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
+          <div className="detail-actions detail-programs-footer-actions"><Link href={`${localePath("/programs")}?universityId=${university.id}`}>{t("countryDetail.viewAllPrograms")} · {payload.meta.programCount}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
         </div>
       </section>
       {detailContentSections(editorial, lang, localePath("/contact"), ["hero", "overview"])}

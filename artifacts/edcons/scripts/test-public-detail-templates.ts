@@ -136,6 +136,8 @@ test("university template keeps overview, facts and governed programs connected"
   }
   assert.match(university, /payload\.meta\.programCount/);
   assert.match(university, /payload\.meta\.degreeLevels/);
+  assert.match(university, /payload\.meta\.degreeLevelCounts/);
+  assert.match(university, /detail-program-level-counts/);
   assert.match(university, /\.\.\.\(payload\.meta\.degreeLevels \?\? \[\]\), \.\.\.payload\.programs\.map/);
   assert.match(university, /normalizeDegreeLevel/);
   assert.match(university, /programLinkPolicy/);
@@ -146,7 +148,7 @@ test("university template keeps overview, facts and governed programs connected"
 
 test("university template preserves hero contrast and a usable editorial measure", () => {
   assert.match(css, /\[data-detail-section="hero"\][\s\S]*\.detail-identity \.detail-eyebrow[\s\S]*color: var\(--detail-hero-text, #fff\)/);
-  assert.match(css, /\.detail-hero \.detail-breadcrumbs, \.detail-hero \.detail-breadcrumbs a \{[^}]*font-weight: 800/);
+  assert.match(css, /\.detail-hero \.detail-breadcrumbs, \.detail-hero \.detail-breadcrumbs a \{[^}]*font-size: 14px;[^}]*font-weight: 800;[^}]*text-shadow:/);
   assert.match(css, /\.public-detail\.detail-program > \[data-detail-section="hero"\] \.detail-hero \.detail-hero-content > p\.detail-eyebrow \{[^}]*color: #fff !important/);
   assert.match(css, /\.detail-prose \{[^}]*max-width: 100%;/);
   assert.match(css, /\.detail-destination \.detail-editorial-intro,[\s\S]*\.detail-city \.detail-editorial-intro \{[\s\S]*max-width: calc\(100% - 76px\);/);
@@ -180,6 +182,7 @@ test("country detail hero and catalogue cards use the shared high-contrast media
   assert.match(editorial, /layout\?: "standard" \| "media"/);
   assert.match(css, /\.detail-country-cover \.detail-hero-top \.detail-breadcrumbs,[\s\S]*font-weight: 800/);
   assert.match(css, /\.detail-country-cover-foot a\.is-primary/);
+  assert.match(css, /\.detail-country-cover h1,[^}]*margin: 14px 0 24px/);
   assert.match(css, /\.detail-catalog-card\.has-media \.detail-card-media/);
   assert.match(css, /\.public-detail \.detail-catalog-card\.has-media \.detail-card-arrow \{[^}]*color: #fff/);
   assert.match(css, /\.public-detail \.detail-catalog-card\.has-media:is\(:hover, :focus-visible\) \.detail-card-arrow \{ color: #fff; \}/);
@@ -976,7 +979,11 @@ test("city hero combines catalogue counters and catalogue-owned language facts",
   assert.match(css, /\.detail-university-facts-copy \.detail-editorial-intro \{[\s\S]*max-width: none;[\s\S]*columns: 1;/);
   assert.match(css, /\.detail-university-facts-list \{[\s\S]*display: grid;[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(css, /\.detail-university-facts-list > div \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);[\s\S]*min-height: 126px;/);
-  assert.match(css, /\.detail-university \.detail-hero-card \.detail-actions > \* \{[\s\S]*border-radius: 10px;/);
+  assert.match(css, /\.detail-university \.detail-hero-card \.detail-actions > \* \{[\s\S]*border-radius: 999px;/);
+  assert.match(css, /\.detail-program \.detail-hero-card \.detail-actions > \* \{[^}]*border-radius: 999px/);
+  assert.match(css, /\.detail-university \.detail-hero-card \{ border-radius: 18px; \}/);
+  assert.match(css, /\.detail-card-identity img \{[^}]*display: block;[^}]*object-fit: contain;[^}]*padding: 6px;/);
+  assert.match(css, /\.detail-programs-footer-actions > a \{[^}]*border-radius: 999px/);
   assert.match(css, /\.detail-university-facts-grid \{[\s\S]*border-radius: 24px;[\s\S]*linear-gradient/);
   assert.doesNotMatch(css, /\.detail-university-facts-copy::before/);
   assert.match(css, /\.detail-university-facts-list dt \{[\s\S]*flex-direction: column;[\s\S]*text-align: center;/);

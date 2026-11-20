@@ -442,7 +442,7 @@ router.get(
         )
         .where(and(...programConditions)),
       db
-        .selectDistinct({ degree: programsTable.degree })
+        .select({ degree: programsTable.degree, count: sql<number>`count(*)` })
         .from(programsTable)
         .innerJoin(
           universitiesTable,
@@ -452,6 +452,7 @@ router.get(
           ...programConditions,
           sql`${programsTable.degree} IS NOT NULL AND length(trim(${programsTable.degree})) > 0`,
         ))
+        .groupBy(programsTable.degree)
         .orderBy(asc(programsTable.degree)),
       db
         .select({
@@ -568,6 +569,9 @@ router.get(
         degreeLevels: degreeRows
           .map(({ degree }) => degree?.trim())
           .filter((degree): degree is string => Boolean(degree)),
+        degreeLevelCounts: degreeRows
+          .map(({ degree, count }) => ({ degree: degree?.trim() || "", count: Number(count) || 0 }))
+          .filter(({ degree, count }) => Boolean(degree) && count > 0),
         returnedPrograms: deliveredPrograms.length,
         programLinkPolicy: internalLinkMode === "published"
           ? "PUBLISHED_INDEXABLE_ONLY"
