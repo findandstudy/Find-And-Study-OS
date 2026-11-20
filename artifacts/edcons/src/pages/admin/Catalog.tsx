@@ -18,6 +18,7 @@ import { CountryFlag, countryNameToIso } from "@/components/CountryFlag";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ColumnHeader } from "@/components/ui/column-header";
 import { apiFetch } from "@/lib/apiFetch";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { useDocumentTypeCatalog } from "@/lib/programDocTypes";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/hooks/use-i18n";
@@ -1427,6 +1428,7 @@ function UniversitiesTab() {
   const isSuperAdmin = user?.role === "super_admin";
   const canChangeUniversityStatus = ["super_admin", "admin", "manager"].includes(user?.role ?? "");
   const [universityStatusBusy, setUniversityStatusBusy] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [page, setPage] = useState(1);
@@ -1626,15 +1628,51 @@ function UniversitiesTab() {
     return res;
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const dataUrl = ev.target?.result as string;
-      setForm(f => ({ ...f, logoUrl: dataUrl }));
-    };
-    reader.readAsDataURL(file);
+    // Reset immediately so choosing the same file again still fires change.
+    e.target.value = "";
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      toast({ title: t("catalogPage.saveFailed"), description: "Logo must be a PNG, JPG or WebP image.", variant: "destructive" });
+      return;
+    }
+    if (file.size <= 0 || file.size > 5 * 1024 * 1024) {
+      toast({ title: t("catalogPage.saveFailed"), description: "Logo must be smaller than 5 MB.", variant: "destructive" });
+      return;
+    }
+    setLogoUploading(true);
+    try {
+      const upload = await api("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: file.name,
+          size: file.size,
+          contentType: file.type,
+          prefix: "branding/university-logo",
+        }),
+      }) as { uploadURL?: string; objectPath?: string };
+      if (!upload.uploadURL || !upload.objectPath) throw new Error("Upload URL could not be created");
+      const result = await uploadAndFinalizeObject(upload.uploadURL, upload.objectPath, {
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+      if (!result.ok) throw new Error("Logo upload failed");
+      const relativePath = upload.objectPath.replace(/^\/objects\//, "");
+      if (relativePath === upload.objectPath || !relativePath.startsWith("branding/university-logo/")) {
+        throw new Error("Unexpected uploaded logo path");
+      }
+      setForm(f => ({ ...f, logoUrl: `/api/storage/objects/${relativePath}` }));
+    } catch (error: any) {
+      toast({
+        title: t("catalogPage.saveFailed"),
+        description: String(error?.message || error),
+        variant: "destructive",
+      });
+    } finally {
+      setLogoUploading(false);
+    }
   };
 
   const setF = (updates: Partial<University>) => setForm(f => ({ ...f, ...updates } as Partial<University>));
@@ -1802,11 +1840,11 @@ function UniversitiesTab() {
                 <Label className="text-sm font-medium">{t("catalogPage.universityLogo")}</Label>
                 <p className="text-xs text-muted-foreground mt-0.5 mb-2">{t("catalogPage.uploadLogoHint")}</p>
                 <div className="flex gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
-                    <Upload className="h-3.5 w-3.5 mr-1.5" />{t("catalogPage.chooseFile")}
+                  <Button type="button" variant="outline" size="sm" disabled={logoUploading} onClick={() => logoInputRef.current?.click()}>
+                    {logoUploading ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Upload className="h-3.5 w-3.5 mr-1.5" />}{t("catalogPage.chooseFile")}
                   </Button>
                   {form?.logoUrl && (
-                    <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setF({ logoUrl: undefined })}>
+                    <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={logoUploading} onClick={() => setF({ logoUrl: null })}>
                       {t("catalogPage.remove")}
                     </Button>
                   )}
@@ -1815,7 +1853,7 @@ function UniversitiesTab() {
                 <div className="mt-2">
                   <Input placeholder={t("catalogPage.pasteLogoUrl")} className="text-xs h-8"
                     value={form?.logoUrl?.startsWith("data:") ? "" : form?.logoUrl ?? ""}
-                    onChange={e => setF({ logoUrl: e.target.value || undefined })}
+                    onChange={e => setF({ logoUrl: e.target.value || null })}
                   />
                 </div>
               </div>
@@ -2045,9 +2083,9 @@ function UniversitiesTab() {
 
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
-            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.country}>
-              {save.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {save.isPending ? t("common.saving") : t("common.save")}
+            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || logoUploading || !form?.name || !form?.country}>
+              {(save.isPending || logoUploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {logoUploading ? t("common.saving") : save.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

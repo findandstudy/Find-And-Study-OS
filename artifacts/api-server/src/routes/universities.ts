@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Response } from "express";
 import { db, pool, universitiesTable, programsTable, programTranslationsTable, applicationsTable, pipelineStagesTable, programDocumentRequirementsTable } from "@workspace/db";
 import { eq, ilike, sql, and, or, inArray, isNull, getTableColumns } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
@@ -21,8 +21,75 @@ import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderRe
 import { invalidatePublicWebDiscoveryCache } from "../lib/publicWebDiscoveryReadModel";
 import { parseUniversityBulkStatus } from "../lib/universityBulkStatus";
 import { normalizeCatalogSourceMetadata } from "../lib/catalogSourceMetadata";
+import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
+import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
+import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
+import { createHash } from "node:crypto";
 
 const router: IRouter = Router();
+const universityLogoObjectStorage = new ObjectStorageService();
+
+async function prepareUniversityLogoUpload(objectPath: string): Promise<{
+  objectPath: string;
+  bytes: Buffer;
+  contentType: string;
+}> {
+  const objectKey = canonicalizeKey(objectPath);
+  if (!objectKey || !objectKey.startsWith("branding/university-logo/")) {
+    throw new Error("UNIVERSITY_LOGO_UPLOAD_INVALID_PATH");
+  }
+  const file = await universityLogoObjectStorage.getObjectEntityFile(`/objects/${objectKey}`);
+  const [metadata] = await file.getMetadata();
+  const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+  const [bytes] = await file.download();
+  const extensionByMime: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+  };
+  const extension = extensionByMime[contentType];
+  if (!extension) throw new Error("UNIVERSITY_LOGO_UPLOAD_UNSUPPORTED_TYPE");
+  if (bytes.length <= 0 || bytes.length > 5 * 1024 * 1024) {
+    throw new Error("UNIVERSITY_LOGO_UPLOAD_INVALID_SIZE");
+  }
+  if (await validateUploadedFileBuffer(`university-logo.${extension}`, contentType, bytes)) {
+    throw new Error("UNIVERSITY_LOGO_UPLOAD_SIGNATURE_MISMATCH");
+  }
+  return { objectPath, bytes, contentType };
+}
+
+async function resolveUniversityLogoUpload(
+  userId: number,
+  logoUrl: unknown,
+): Promise<Awaited<ReturnType<typeof prepareUniversityLogoUpload>> | null> {
+  if (typeof logoUrl !== "string" || !logoUrl.startsWith("/api/storage/objects/")) return null;
+  if (!(await callerOwnsObject(userId, logoUrl))) throw new Error("UNIVERSITY_LOGO_UPLOAD_NOT_OWNED");
+  try {
+    return await prepareUniversityLogoUpload(logoUrl);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("UNIVERSITY_LOGO_UPLOAD_")) throw error;
+    throw new Error("UNIVERSITY_LOGO_UPLOAD_UNREADABLE");
+  }
+}
+
+function sendUniversityLogoError(res: Response, error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  if (message === "UNIVERSITY_LOGO_UPLOAD_NOT_OWNED") {
+    res.status(403).json({ error: "The uploaded university logo does not belong to this account" });
+    return true;
+  }
+  if (message === "UNIVERSITY_LOGO_UPLOAD_GRANT_NOT_FINALIZED") {
+    res.status(409).json({ error: "Uploaded logo is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+    return true;
+  }
+  if (message.startsWith("UNIVERSITY_LOGO_UPLOAD_")) {
+    res.status(message === "UNIVERSITY_LOGO_UPLOAD_INVALID_SIZE" ? 413 : 400)
+      .json({ error: "Uploaded university logo content is invalid", code: message });
+    return true;
+  }
+  return false;
+}
 
 const UNI_PATCH_FIELDS = [
   "name", "country", "city", "website", "logoUrl", "description", "ranking", "isActive",
@@ -231,15 +298,57 @@ router.get("/universities/:id/logo", async (req, res): Promise<void> => {
 
   const dataUrl = logoUrl.match(/^data:(image\/(?:png|jpe?g|gif|webp|svg\+xml));base64,([A-Za-z0-9+/=\s]+)$/i);
   if (dataUrl) {
+    const bytes = Buffer.from(dataUrl[2].replace(/\s/g, ""), "base64");
+    const etag = `"${createHash("sha256").update(bytes).digest("hex")}"`;
     res.setHeader("Content-Type", dataUrl[1].toLowerCase());
-    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+    res.setHeader("ETag", etag);
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
-    res.send(Buffer.from(dataUrl[2].replace(/\s/g, ""), "base64"));
+    if (req.headers["if-none-match"] === etag) { res.status(304).end(); return; }
+    res.send(bytes);
+    return;
+  }
+
+  const objectKey = canonicalizeKey(logoUrl);
+  if (objectKey && logoUrl.includes("/api/storage/objects/")) {
+    try {
+      const file = await universityLogoObjectStorage.getObjectEntityFile(`/objects/${objectKey}`);
+      const [metadata] = await file.getMetadata();
+      const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+      if (!new Set(["image/jpeg", "image/png", "image/webp"]).has(contentType)) {
+        res.status(415).json({ error: "University logo is not a supported image" });
+        return;
+      }
+      const size = Number(metadata.size);
+      if (!Number.isSafeInteger(size) || size <= 0 || size > 5 * 1024 * 1024) {
+        res.status(413).json({ error: "University logo is too large" });
+        return;
+      }
+      const [bytes] = await file.download();
+      if (bytes.length !== size) { res.status(409).json({ error: "University logo changed while reading" }); return; }
+      const etag = `"${createHash("sha256").update(bytes).digest("hex")}"`;
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Content-Length", String(bytes.length));
+      res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+      res.setHeader("ETag", etag);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+      if (req.headers["if-none-match"] === etag) { res.status(304).end(); return; }
+      res.send(bytes);
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) {
+        res.status(404).json({ error: "University logo not found" });
+        return;
+      }
+      console.error("[university-logo] failed to read stored logo", error);
+      res.status(500).json({ error: "University logo could not be loaded" });
+    }
     return;
   }
 
   if (/^https?:\/\//i.test(logoUrl) || logoUrl.startsWith("/")) {
+    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
     res.redirect(302, logoUrl);
     return;
   }
@@ -282,7 +391,7 @@ router.post("/universities", requireAuth, requireRole(...MANAGER_ROLES), async (
     });
   }
   catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
-  const [uni] = await db.insert(universitiesTable).values({
+  const universityValues = {
     name, country, city: city || null, website: website || null, logoUrl: logoUrl || null,
     description: description || null, ranking: ranking ? Number(ranking) : null, isActive,
     universityType: universityType || null, taxType: taxType || null,
@@ -311,7 +420,26 @@ router.post("/universities", requireAuth, requireRole(...MANAGER_ROLES), async (
     admissionVerifiedAt: normalizedUniversityVerifiedAt,
     admissionValidUntil: normalizedUniversityValidUntil,
     sourceMetadata: normalizedSourceMetadata,
-  }).returning();
+  };
+  let uni: typeof universitiesTable.$inferSelect;
+  try {
+    const preparedLogo = await resolveUniversityLogoUpload(req.user!.id, logoUrl);
+    uni = await db.transaction(async (tx) => {
+      if (preparedLogo && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath: preparedLogo.objectPath,
+        uploadedBy: req.user!.id,
+        bytes: preparedLogo.bytes,
+        contentType: preparedLogo.contentType,
+      })) throw new Error("UNIVERSITY_LOGO_UPLOAD_GRANT_NOT_FINALIZED");
+      const [created] = await tx.insert(universitiesTable).values(universityValues).returning();
+      return created;
+    });
+  } catch (error) {
+    if (sendUniversityLogoError(res, error)) return;
+    console.error("Create university error:", error);
+    res.status(500).json({ error: "Failed to create university" });
+    return;
+  }
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
   invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "create_university", "university", uni.id, { name, country }, req.ip);
@@ -359,6 +487,7 @@ router.patch("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), as
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const updates: Record<string, unknown> = {};
+  let existingUniversity: typeof universitiesTable.$inferSelect | undefined;
   for (const key of UNI_PATCH_FIELDS) {
     if (req.body[key] === undefined) continue;
     if (key === "assignedStaffIds") {
@@ -403,6 +532,7 @@ router.patch("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), as
   if (UNI_PATCH_FIELDS.some(key => updates[key] !== undefined)) {
     const [current] = await db.select().from(universitiesTable).where(eq(universitiesTable.id, id));
     if (!current) { res.status(404).json({ error: "University not found" }); return; }
+    existingUniversity = current;
     const merged = { ...current, ...updates } as typeof current;
     try {
       requireCurrentAdmissionEvidence({
@@ -414,8 +544,27 @@ router.patch("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), as
       });
     } catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
   }
+  if (updates.logoUrl !== undefined && updates.logoUrl === existingUniversity?.logoUrl) delete updates.logoUrl;
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No valid fields" }); return; }
-  const [uni] = await db.update(universitiesTable).set(updates).where(eq(universitiesTable.id, id)).returning();
+  let uni: typeof universitiesTable.$inferSelect | undefined;
+  try {
+    const preparedLogo = await resolveUniversityLogoUpload(req.user!.id, updates.logoUrl);
+    uni = await db.transaction(async (tx) => {
+      if (preparedLogo && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath: preparedLogo.objectPath,
+        uploadedBy: req.user!.id,
+        bytes: preparedLogo.bytes,
+        contentType: preparedLogo.contentType,
+      })) throw new Error("UNIVERSITY_LOGO_UPLOAD_GRANT_NOT_FINALIZED");
+      const [saved] = await tx.update(universitiesTable).set(updates).where(eq(universitiesTable.id, id)).returning();
+      return saved;
+    });
+  } catch (error) {
+    if (sendUniversityLogoError(res, error)) return;
+    console.error("Update university error:", error);
+    res.status(500).json({ error: "Failed to update university" });
+    return;
+  }
   if (!uni || (!req.user && !uni.isActive)) { res.status(404).json({ error: "University not found" }); return; }
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
   invalidatePublicWebDiscoveryCache();
