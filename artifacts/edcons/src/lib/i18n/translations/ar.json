@@ -5236,6 +5236,8 @@
     "exportSelected": "تصدير المحدد ({n})",
     "downloadSelectedProposalPdf": "Download selected PDF ({n})",
     "downloadResultsProposalPdf": "Download results PDF ({n})",
+    "proposalPdfLimitTitle": "Too many programs for one PDF",
+    "proposalPdfLimitDescription": "This filter has {total} programs. Narrow it to {limit} or fewer, or select the programs you need.",
     "bulkDeleteFailed": "تعذّر حذف بعض العناصر",
     "bulkDeleteFailedDesc": "تعذّر حذف {failed} من أصل {total}. قد تكون قيد الاستخدام.",
     "uniTypePublic": "حكومية",

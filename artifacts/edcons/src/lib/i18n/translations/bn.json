@@ -5176,6 +5176,8 @@
     "exportSelected": "রপ্তানি নির্বাচিত ({n})",
     "downloadSelectedProposalPdf": "Download selected PDF ({n})",
     "downloadResultsProposalPdf": "Download results PDF ({n})",
+    "proposalPdfLimitTitle": "Too many programs for one PDF",
+    "proposalPdfLimitDescription": "This filter has {total} programs. Narrow it to {limit} or fewer, or select the programs you need.",
     "bulkDeleteFailed": "কিছু আইটেম মুছে ফেলা যায়নি",
     "bulkDeleteFailedDesc": "{total} এর {failed} মুছে ফেলা যায়নি। তারা ব্যবহার হতে পারে.",
     "uniTypePublic": "পাবলিক",

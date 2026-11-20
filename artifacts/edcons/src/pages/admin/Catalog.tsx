@@ -142,6 +142,8 @@ async function fetchAllRows<T = any>(url: string, pageSize = 100): Promise<T[]> 
   return out;
 }
 
+const MAX_PROPOSAL_PDF_PROGRAMS = 250;
+
 async function fetchAllIds(url: string): Promise<number[]> {
   const rows = await fetchAllRows<{ id?: number }>(url);
   return rows.map(r => r.id).filter((id): id is number => typeof id === "number");
@@ -2338,10 +2340,27 @@ function ProgramsTab() {
     const mode = onlySelected ? "selected" : "results";
     setGeneratingPdf(mode);
     try {
-      const params = programFilterParams();
-      const sourceUrl = `/api/programs${params.size ? `?${params.toString()}` : ""}`;
-      let list = await fetchAllRows<Program>(sourceUrl);
-      if (onlySelected) list = list.filter(program => selected.has(program.id));
+      let list: Program[];
+      if (onlySelected) {
+        list = await Promise.all(
+          Array.from(selected, programId => api(`/api/programs/${programId}`) as Promise<Program>),
+        );
+      } else {
+        if (total > MAX_PROPOSAL_PDF_PROGRAMS) {
+          toast({
+            title: t("catalogPage.proposalPdfLimitTitle"),
+            description: t("catalogPage.proposalPdfLimitDescription", {
+              limit: MAX_PROPOSAL_PDF_PROGRAMS,
+              total,
+            }),
+            variant: "destructive",
+          });
+          return;
+        }
+        const params = programFilterParams();
+        const sourceUrl = `/api/programs${params.size ? `?${params.toString()}` : ""}`;
+        list = await fetchAllRows<Program>(sourceUrl);
+      }
       if (list.length === 0) {
         toast({
           title: t("courseFinderPage.noProgramsSelected"),

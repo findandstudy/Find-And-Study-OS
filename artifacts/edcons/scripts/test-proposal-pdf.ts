@@ -47,6 +47,8 @@ test("catalog programs reuse the proposal PDF flow for selected and filtered res
 
   assert.match(catalogSource, /import\("@\/lib\/generateProposalPdf"\)/);
   assert.match(catalogSource, /fetchAllRows<Program>\(sourceUrl\)/);
+  assert.match(catalogSource, /api\(`\/api\/programs\/\$\{programId\}`\)/);
+  assert.match(catalogSource, /MAX_PROPOSAL_PDF_PROGRAMS/);
   assert.match(catalogSource, /runProposalPdf\(true\)/);
   assert.match(catalogSource, /runProposalPdf\(false\)/);
   assert.match(catalogSource, /loadProposalDocumentRequirements/);

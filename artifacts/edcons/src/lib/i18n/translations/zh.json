@@ -5235,6 +5235,8 @@
     "exportSelected": "导出所选 ({n})",
     "downloadSelectedProposalPdf": "Download selected PDF ({n})",
     "downloadResultsProposalPdf": "Download results PDF ({n})",
+    "proposalPdfLimitTitle": "Too many programs for one PDF",
+    "proposalPdfLimitDescription": "This filter has {total} programs. Narrow it to {limit} or fewer, or select the programs you need.",
     "bulkDeleteFailed": "部分项目无法删除",
     "bulkDeleteFailedDesc": "{total} 项中有 {failed} 项无法删除，可能正在使用中。",
     "uniTypePublic": "公立",

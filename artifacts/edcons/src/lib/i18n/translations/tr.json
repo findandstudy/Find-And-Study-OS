@@ -4922,6 +4922,8 @@
     "exportExcel": "Excel Dışa Aktar",
     "downloadSelectedProposalPdf": "Seçilenleri PDF indir ({n})",
     "downloadResultsProposalPdf": "Sonuçları PDF indir ({n})",
+    "proposalPdfLimitTitle": "Tek PDF için çok fazla program var",
+    "proposalPdfLimitDescription": "Bu filtrede {total} program bulunuyor. Sonucu {limit} veya altına daraltın ya da ihtiyacınız olan programları seçin.",
     "feeType": "Ücret Türü",
     "field": "Alan",
     "fileEmptyInvalid": "Dosya boş veya geçersiz.",

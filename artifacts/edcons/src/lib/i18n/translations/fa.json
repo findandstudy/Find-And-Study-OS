@@ -5236,6 +5236,8 @@
     "exportSelected": "خروجی موارد انتخاب‌شده ({n})",
     "downloadSelectedProposalPdf": "Download selected PDF ({n})",
     "downloadResultsProposalPdf": "Download results PDF ({n})",
+    "proposalPdfLimitTitle": "Too many programs for one PDF",
+    "proposalPdfLimitDescription": "This filter has {total} programs. Narrow it to {limit} or fewer, or select the programs you need.",
     "bulkDeleteFailed": "برخی موارد حذف نشدند",
     "bulkDeleteFailedDesc": "{failed} مورد از {total} حذف نشد. ممکن است در حال استفاده باشند.",
     "uniTypePublic": "دولتی",

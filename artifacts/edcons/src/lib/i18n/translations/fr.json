@@ -5235,6 +5235,8 @@
     "exportSelected": "Exporter la sélection ({n})",
     "downloadSelectedProposalPdf": "Download selected PDF ({n})",
     "downloadResultsProposalPdf": "Download results PDF ({n})",
+    "proposalPdfLimitTitle": "Too many programs for one PDF",
+    "proposalPdfLimitDescription": "This filter has {total} programs. Narrow it to {limit} or fewer, or select the programs you need.",
     "bulkDeleteFailed": "Certains éléments n'ont pas pu être supprimés",
     "bulkDeleteFailedDesc": "{failed} sur {total} n'ont pas pu être supprimés. Ils sont peut-être utilisés.",
     "uniTypePublic": "Publique",

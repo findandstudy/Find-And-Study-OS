@@ -5176,6 +5176,8 @@
     "exportSelected": "Export Selected ({n})",
     "downloadSelectedProposalPdf": "Download selected PDF ({n})",
     "downloadResultsProposalPdf": "Download results PDF ({n})",
+    "proposalPdfLimitTitle": "Too many programs for one PDF",
+    "proposalPdfLimitDescription": "This filter has {total} programs. Narrow it to {limit} or fewer, or select the programs you need.",
     "bulkDeleteFailed": "Өшірілмеген нысандар өшірілмейді",
     "bulkDeleteFailedDesc": "{failed} of {total} could not be deleted. They may be in use.",
     "uniTypePublic": "Ашық",

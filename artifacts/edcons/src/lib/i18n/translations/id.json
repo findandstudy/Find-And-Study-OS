@@ -5237,6 +5237,8 @@
     "exportSelected": "Ekspor Terpilih ({n})",
     "downloadSelectedProposalPdf": "Download selected PDF ({n})",
     "downloadResultsProposalPdf": "Download results PDF ({n})",
+    "proposalPdfLimitTitle": "Too many programs for one PDF",
+    "proposalPdfLimitDescription": "This filter has {total} programs. Narrow it to {limit} or fewer, or select the programs you need.",
     "bulkDeleteFailed": "Beberapa item tidak dapat dihapus",
     "bulkDeleteFailedDesc": "{failed} dari {total} tidak dapat dihapus. Mungkin sedang digunakan.",
     "uniTypePublic": "Negeri",
