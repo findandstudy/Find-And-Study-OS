@@ -966,7 +966,7 @@
   justify-items: center;
   gap: 10px;
   padding: clamp(14px, 1.5vw, 18px);
-  border: 1px solid color-mix(in srgb, var(--detail-accent) 12%, var(--detail-line));
+  border: 0;
 }
 .detail-keylines.detail-university-facts-list dt {
   flex-direction: column;

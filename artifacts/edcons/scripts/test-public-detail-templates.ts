@@ -983,7 +983,7 @@ test("city hero combines catalogue counters and catalogue-owned language facts",
   assert.match(css, /\.detail-university-facts-list dt svg \{[\s\S]*background: transparent;/);
   assert.match(css, /\.detail-university-facts-list dd \{[\s\S]*text-align: center;/);
   assert.match(css, /\.detail-keylines\.detail-university-facts-list \{[\s\S]*border: 0;[\s\S]*padding: 0;[\s\S]*background: transparent;/);
-  assert.match(css, /\.detail-keylines\.detail-university-facts-list > div,[\s\S]*grid-template-columns: minmax\(0, 1fr\);[\s\S]*justify-items: center;/);
+  assert.match(css, /\.detail-keylines\.detail-university-facts-list > div,[\s\S]*grid-template-columns: minmax\(0, 1fr\);[\s\S]*justify-items: center;[\s\S]*border: 0;/);
   assert.match(css, /\.detail-keylines\.detail-university-facts-list dt \{[\s\S]*flex-direction: column;[\s\S]*text-align: center;/);
   assert.match(css, /\.detail-keylines\.detail-university-facts-list dd \{[\s\S]*text-align: center;/);
   assert.match(css, /\.detail-university-facts-list > div:hover \{[\s\S]*translateY\(-1px\)/);
