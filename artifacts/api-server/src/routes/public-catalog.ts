@@ -134,6 +134,7 @@ router.get(
         universityWebsite: universitiesTable.website,
         universityDescription: universitiesTable.description,
         universityAddress: universitiesTable.address,
+        universityLogoVersion: universitiesTable.updatedAt,
         universityQsRanking: universitiesTable.qsRanking,
         universityTimesRanking: universitiesTable.timesRanking,
         universityShanghaiRanking: universitiesTable.shanghaiRanking,
@@ -337,7 +338,9 @@ router.get(
         universityLogoUrl: courseFinderUniversityLogoUrl(
           program.universityId,
           program.universityHasLogo,
+          program.universityLogoVersion,
         ),
+        universityLogoVersion: undefined,
         universityHasLogo: undefined,
         canonicalPath,
         universityPath: publicCatalogPath({
@@ -413,6 +416,7 @@ router.get(
         shanghaiRanking: universitiesTable.shanghaiRanking,
         cwtsLeidenRanking: universitiesTable.cwtsLeidenRanking,
         address: universitiesTable.address,
+        logoVersion: universitiesTable.updatedAt,
         hasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL AND length(trim(${universitiesTable.logoUrl})) > 0`,
       })
       .from(universitiesTable)
@@ -548,7 +552,9 @@ router.get(
         logoUrl: courseFinderUniversityLogoUrl(
           university.id,
           university.hasLogo,
+          university.logoVersion,
         ),
+        logoVersion: undefined,
         canonicalPath,
       },
       programs: deliveredPrograms.map((program) => ({

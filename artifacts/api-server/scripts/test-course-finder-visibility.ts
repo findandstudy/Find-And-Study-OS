@@ -62,4 +62,8 @@ test("course finder rows reference the cached logo endpoint instead of inline da
     "/api/universities/2218/logo",
   );
   assert.equal(courseFinderUniversityLogoUrl(2218, false), null);
+  assert.equal(
+    courseFinderUniversityLogoUrl(2218, true, new Date("2026-11-20T13:00:00.000Z")),
+    "/api/universities/2218/logo?v=mwozl0g0",
+  );
 });

@@ -14,8 +14,13 @@ export type CourseFinderProgramVisibility = {
 export function courseFinderUniversityLogoUrl(
   universityId: number,
   hasLogo: boolean,
+  version?: Date | string | number | null,
 ): string | null {
-  return hasLogo ? `/api/universities/${universityId}/logo` : null;
+  if (!hasLogo) return null;
+  const path = `/api/universities/${universityId}/logo`;
+  if (version === undefined || version === null || version === "") return path;
+  const token = version instanceof Date ? version.getTime().toString(36) : String(version).trim();
+  return token ? `${path}?v=${encodeURIComponent(token)}` : path;
 }
 
 const CONTACT_FIELDS = [
