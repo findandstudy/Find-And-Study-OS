@@ -5233,6 +5233,8 @@
     "clearSelection": "Effacer la sélection",
     "selecting": "Sélection…",
     "exportSelected": "Exporter la sélection ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "Certains éléments n'ont pas pu être supprimés",
     "bulkDeleteFailedDesc": "{failed} sur {total} n'ont pas pu être supprimés. Ils sont peut-être utilisés.",
     "uniTypePublic": "Publique",

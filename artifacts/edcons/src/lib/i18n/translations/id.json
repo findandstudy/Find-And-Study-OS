@@ -5235,6 +5235,8 @@
     "clearSelection": "Hapus pilihan",
     "selecting": "Memilih…",
     "exportSelected": "Ekspor Terpilih ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "Beberapa item tidak dapat dihapus",
     "bulkDeleteFailedDesc": "{failed} dari {total} tidak dapat dihapus. Mungkin sedang digunakan.",
     "uniTypePublic": "Negeri",

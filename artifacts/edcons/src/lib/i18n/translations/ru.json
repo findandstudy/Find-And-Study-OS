@@ -5234,6 +5234,8 @@
     "clearSelection": "Очистить выбор",
     "selecting": "Выбор…",
     "exportSelected": "Экспорт выбранного ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "Некоторые элементы не удалось удалить",
     "bulkDeleteFailedDesc": "Не удалось удалить {failed} из {total}. Возможно, они используются.",
     "uniTypePublic": "Государственный",

@@ -5174,6 +5174,8 @@
     "clearSelection": "선택 지우기",
     "selecting": "선택 중…",
     "exportSelected": "선택 항목 내보내기({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "일부 항목은 다음과 같이 선택됨 삭제할 수 없음",
     "bulkDeleteFailedDesc": "{total} 중 {failed}을(를) 삭제할 수 없습니다. 사용 중일 수 있습니다.",
     "uniTypePublic": "공공",

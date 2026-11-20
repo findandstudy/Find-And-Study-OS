@@ -5174,6 +5174,8 @@
     "clearSelection": "Xóa lựa chọn",
     "selecting": "Đang chọn…",
     "exportSelected": "Xuất mục đã chọn ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "Không thể xóa một số mục",
     "bulkDeleteFailedDesc": "{failed} trong số {total} không thể xóa được. Chúng có thể đang được sử dụng.",
     "uniTypePublic": "Công cộng",

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown, Settings2, Loader2, Check, X, FileText, Save, GripVertical, ArrowUp, ArrowDown, Eye, Languages, RefreshCw } from "lucide-react";
+import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown, Settings2, Loader2, Check, X, FileText, FileDown, Save, GripVertical, ArrowUp, ArrowDown, Eye, Languages, RefreshCw } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -19,12 +19,15 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ColumnHeader } from "@/components/ui/column-header";
 import { apiFetch } from "@/lib/apiFetch";
 import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
-import { useDocumentTypeCatalog } from "@/lib/programDocTypes";
+import { useDocumentTypeCatalog, useResolveDocMeta } from "@/lib/programDocTypes";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeason } from "@/contexts/SeasonContext";
 import { LANGUAGE_META } from "@/lib/i18n";
 import { parseCatalogEntryNavigation, type CatalogSourceTab } from "@/lib/catalogEntryNavigation";
+import { resolveProposalBranding, type ProposalBrandingSettings } from "@/lib/proposalBranding";
+import { collectProposalStudyLevels, loadProposalDocumentRequirements } from "@/lib/proposalDocumentRequirements";
+import type { ProposalProgramData } from "@/lib/generateProposalPdf";
 import {
   chunkBulkImportRows,
   findProgramIdentityCollisions,
@@ -2126,9 +2129,11 @@ function UniversitiesTab() {
 ══════════════════════════════════════════════════════════ */
 function ProgramsTab() {
   const { t } = useI18n();
+  const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { season } = useSeason();
+  const resolveProposalDocMeta = useResolveDocMeta();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState(() => catalogEntry("programs").q);
   const [filterUni, setFilterUni] = useState("all");
@@ -2145,6 +2150,7 @@ function ProgramsTab() {
   const [delAllOpen, setDelAllOpen] = useState(false);
   const [delAllInProgress, setDelAllInProgress] = useState(false);
   const [translationProgram, setTranslationProgram] = useState<Program | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState<"selected" | "results" | null>(null);
 
   const { data: unisData } = useQuery({
     queryKey: ["university-options"],
@@ -2326,6 +2332,99 @@ function ProgramsTab() {
       }));
       await exportToExcel(rows, "Programs", `programs-${new Date().toISOString().slice(0, 10)}.xlsx`);
     } catch {}
+  }
+
+  async function runProposalPdf(onlySelected: boolean) {
+    const mode = onlySelected ? "selected" : "results";
+    setGeneratingPdf(mode);
+    try {
+      const params = programFilterParams();
+      const sourceUrl = `/api/programs${params.size ? `?${params.toString()}` : ""}`;
+      let list = await fetchAllRows<Program>(sourceUrl);
+      if (onlySelected) list = list.filter(program => selected.has(program.id));
+      if (list.length === 0) {
+        toast({
+          title: t("courseFinderPage.noProgramsSelected"),
+          description: onlySelected
+            ? t("courseFinderPage.noProgramsSelectedDesc")
+            : t("catalogPage.noProgramsFound"),
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const programsForProposal: ProposalProgramData[] = list.map(program => ({
+        id: program.id,
+        name: program.name,
+        degree: program.degree,
+        field: program.field,
+        language: program.language,
+        duration: program.duration,
+        tuitionFee: program.tuitionFee,
+        currency: program.currency,
+        scholarship: program.scholarship,
+        intakes: program.intakes,
+        commissionRate: program.commissionRate,
+        applicationFee: program.applicationFee,
+        enrollmentFee: program.enrollmentFee,
+        discountedFee: program.discountedFee,
+        feeType: program.feeType,
+        serviceFeeAmount: program.serviceFeeAmount,
+        universityName: program.universityName ?? uniMap[program.universityId]?.name ?? `#${program.universityId}`,
+        universityStatus: program.isActive ? "Open" : "Inactive",
+      }));
+
+      const studyLevels = collectProposalStudyLevels(programsForProposal);
+      const [{ generateProposalPdf }, settings, documentResult] = await Promise.all([
+        import("@/lib/generateProposalPdf"),
+        api("/api/settings/client") as Promise<ProposalBrandingSettings & {
+          pdfPrimaryColor?: string | null;
+          pdfAccentColor?: string | null;
+          themePrimary?: string | null;
+          themeSecondary?: string | null;
+          themeAccent?: string | null;
+          themeSuccess?: string | null;
+        }>,
+        loadProposalDocumentRequirements({
+          studyLevels,
+          fetchRequirements: async studyLevel => {
+            try {
+              return await api(`/api/degrees/by-value/${encodeURIComponent(studyLevel)}/document-requirements`);
+            } catch {
+              return [];
+            }
+          },
+          resolveLabel: documentType => resolveProposalDocMeta(documentType).label,
+        }),
+      ]);
+      const branding = resolveProposalBranding(user?.role, settings, undefined);
+      await generateProposalPdf({
+        programs: programsForProposal,
+        documentRequirements: documentResult.documentRequirements,
+        logoDataUrl: "/api/settings/branding/logo?variant=pdf",
+        companyName: branding.companyName,
+        companyEmail: branding.companyEmail,
+        companyPhone: branding.companyPhone,
+        companyWebsite: branding.companyWebsite || window.location.origin,
+        showCommission: false,
+        primaryColor: settings.pdfPrimaryColor || settings.themePrimary || undefined,
+        secondaryColor: settings.themeSecondary || settings.themePrimary || undefined,
+        accentColor: settings.pdfAccentColor || settings.themeAccent || undefined,
+        successColor: settings.themeSuccess || undefined,
+      });
+      toast({
+        title: t("courseFinderPage.pdfGenerated"),
+        description: t("courseFinderPage.proposalDownloaded", { n: programsForProposal.length }),
+      });
+    } catch (error) {
+      toast({
+        title: t("courseFinderPage.pdfGenerationFailed"),
+        description: error instanceof Error ? error.message : t("courseFinderPage.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingPdf(null);
+    }
   }
 
   async function handleDeleteAll() {
@@ -2608,11 +2707,25 @@ function ProgramsTab() {
             <Download className="h-4 w-4 mr-2" />{t("catalogPage.exportSelected", { n: selected.size })}
           </Button>
         )}
+        {selected.size > 0 && (
+          <Button variant="outline" size="sm" onClick={() => runProposalPdf(true)} disabled={generatingPdf !== null}>
+            {generatingPdf === "selected"
+              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              : <FileDown className="h-4 w-4 mr-2" />}
+            {t("catalogPage.downloadSelectedProposalPdf", { n: selected.size })}
+          </Button>
+        )}
         <Button variant="destructive" size="sm" className="gap-1.5" onClick={() => setDelAllOpen(true)}>
           <Trash2 className="h-4 w-4" />{t("catalogPage.deleteAll")}
         </Button>
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />{t("catalogPage.importExcel")}</Button>
         <Button variant="outline" onClick={() => runExport(false)}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
+        <Button variant="outline" onClick={() => runProposalPdf(false)} disabled={generatingPdf !== null || total === 0}>
+          {generatingPdf === "results"
+            ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            : <FileDown className="h-4 w-4 mr-2" />}
+          {t("catalogPage.downloadResultsProposalPdf", { n: total })}
+        </Button>
         <Button
           variant="outline"
           onClick={() => retryAllFailed.mutate()}

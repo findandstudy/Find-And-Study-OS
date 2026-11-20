@@ -5234,6 +5234,8 @@
     "clearSelection": "चयन साफ़ करें",
     "selecting": "चयन हो रहा है…",
     "exportSelected": "चयनित निर्यात करें ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "कुछ आइटम हटाए नहीं जा सके",
     "bulkDeleteFailedDesc": "{total} में से {failed} हटाए नहीं जा सके। वे उपयोग में हो सकते हैं।",
     "uniTypePublic": "सरकारी",

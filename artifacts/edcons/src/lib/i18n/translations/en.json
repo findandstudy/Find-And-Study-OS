@@ -4979,6 +4979,8 @@
     "enterNewValue": "Enter new {category}…",
     "exactQsRank": "Exact QS rank",
     "exportExcel": "Export Excel",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "feeType": "Fee Type",
     "field": "Field",
     "fileEmptyInvalid": "The file is empty or invalid.",

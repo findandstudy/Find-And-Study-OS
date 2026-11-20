@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { test } from "node:test";
 import {
@@ -38,6 +38,19 @@ const sampleProgram: ProposalProgramData = {
   universityType: "Private",
   universityStatus: "Open",
 };
+
+test("catalog programs reuse the proposal PDF flow for selected and filtered results", async () => {
+  const catalogSource = await readFile(
+    new URL("../src/pages/admin/Catalog.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(catalogSource, /import\("@\/lib\/generateProposalPdf"\)/);
+  assert.match(catalogSource, /fetchAllRows<Program>\(sourceUrl\)/);
+  assert.match(catalogSource, /runProposalPdf\(true\)/);
+  assert.match(catalogSource, /runProposalPdf\(false\)/);
+  assert.match(catalogSource, /loadProposalDocumentRequirements/);
+});
 
 test("service fee adjustment is PDF-only arithmetic and clamps below zero", () => {
   assert.equal(getProposalServiceFee(sampleProgram, 125, false), 375);

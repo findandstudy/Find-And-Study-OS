@@ -4920,6 +4920,8 @@
     "enterNewValue": "Yeni {category} girin…",
     "exactQsRank": "Tam QS sıralaması",
     "exportExcel": "Excel Dışa Aktar",
+    "downloadSelectedProposalPdf": "Seçilenleri PDF indir ({n})",
+    "downloadResultsProposalPdf": "Sonuçları PDF indir ({n})",
     "feeType": "Ücret Türü",
     "field": "Alan",
     "fileEmptyInvalid": "Dosya boş veya geçersiz.",

@@ -5234,6 +5234,8 @@
     "clearSelection": "مسح التحديد",
     "selecting": "جارٍ التحديد…",
     "exportSelected": "تصدير المحدد ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "تعذّر حذف بعض العناصر",
     "bulkDeleteFailedDesc": "تعذّر حذف {failed} من أصل {total}. قد تكون قيد الاستخدام.",
     "uniTypePublic": "حكومية",

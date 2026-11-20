@@ -5174,6 +5174,8 @@
     "clearSelection": "Очистити вибір",
     "selecting": "Вибір…",
     "exportSelected": "Експортувати вибране ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "Деякі елементи не вдалося видалити",
     "bulkDeleteFailedDesc": "{failed} з {total} не вдалося видалити. Можливо, вони використовуються.",
     "uniTypePublic": "Загальнодоступні",

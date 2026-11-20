@@ -5174,6 +5174,8 @@
     "clearSelection": "Tanlashni bekor qilish",
     "selecting": "Tanlash",
     "exportSelected": "Export Selected ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "Yangi elementlarni olib tashlab boʻlmadi",
     "bulkDeleteFailedDesc": "{failed} of {total} could not be deleted. They may be in use.",
     "uniTypePublic": "Ochiq",

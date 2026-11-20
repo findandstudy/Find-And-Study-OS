@@ -5174,6 +5174,8 @@
     "clearSelection": "Тандоону тазалоо",
     "selecting": "Тандоо...",
     "exportSelected": "Export Selected ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "Өчүрүлгөн элементтерди жоготоюн",
     "bulkDeleteFailedDesc": "{failed} of {total} could not be deleted. They may be in use.",
     "uniTypePublic": "Жалпы",

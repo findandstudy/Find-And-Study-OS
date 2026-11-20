@@ -5174,6 +5174,8 @@
     "clearSelection": "নির্বাচন পরিষ্কার করুন",
     "selecting": "নির্বাচন করা হচ্ছে...",
     "exportSelected": "রপ্তানি নির্বাচিত ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "কিছু আইটেম মুছে ফেলা যায়নি",
     "bulkDeleteFailedDesc": "{total} এর {failed} মুছে ফেলা যায়নি। তারা ব্যবহার হতে পারে.",
     "uniTypePublic": "পাবলিক",

@@ -5174,6 +5174,8 @@
     "clearSelection": "चयन खाली गर्नुहोस्",
     "selecting": "चयन गर्दै...",
     "exportSelected": "निर्यात चयन गरिएको ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "केही वस्तुहरू मेटाउन सकिएन",
     "bulkDeleteFailedDesc": "{total} को {failed} मेटाउन सकिएन। तिनीहरू प्रयोगमा हुन सक्छन्।",
     "uniTypePublic": "सार्वजनिक",

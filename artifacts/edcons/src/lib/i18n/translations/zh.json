@@ -5233,6 +5233,8 @@
     "clearSelection": "清除选择",
     "selecting": "选择中…",
     "exportSelected": "导出所选 ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "部分项目无法删除",
     "bulkDeleteFailedDesc": "{total} 项中有 {failed} 项无法删除，可能正在使用中。",
     "uniTypePublic": "公立",

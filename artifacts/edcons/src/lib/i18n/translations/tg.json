@@ -5174,6 +5174,8 @@
     "clearSelection": "Пок кардани интихоб",
     "selecting": "Интихоб кардан...",
     "exportSelected": "Содироти интихобшуда ({n})",
+    "downloadSelectedProposalPdf": "Download selected PDF ({n})",
+    "downloadResultsProposalPdf": "Download results PDF ({n})",
     "bulkDeleteFailed": "Баъзе объектҳо нест карда нашуданд",
     "bulkDeleteFailedDesc": "{failed} аз {total} нест карда нашуд. Онҳо метавонанд истифода шаванд.",
     "uniTypePublic": "Омма",
