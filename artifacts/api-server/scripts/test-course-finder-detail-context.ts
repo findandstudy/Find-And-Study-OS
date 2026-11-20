@@ -24,7 +24,8 @@ test("detail eligibility precedes count/pagination and scopes every facet, inclu
   assert.match(source, /conditions.push\(eq\(programsTable.universityId, opts.detailScope.universityId\)\)/);
   assert.equal(source.match(/detailScope\?\.key \?\? "default"/g)?.length, 2);
   assert.match(source, /Math.min\(pagination.limit, 64\)/);
-  assert.match(source, /detailScope \? await readPublicCatalogPrices\(rows.map/);
+  assert.match(source, /const publicDetailRequest = detailScope !== null \|\| req.query.scope === "public"/);
+  assert.match(source, /publicDetailRequest \? await readPublicCatalogPrices\(rows.map/);
   assert.match(source, /tuition: projectPublicTuition\(row, detailPrices.get\(row.id\) \?\? \[\]\)/);
 });
 
@@ -42,9 +43,9 @@ test("published eligibility uses tenant-scoped university SQL and fails closed o
 
 test("verified detail prices bypass completed list caches while default and facet caching remain", () => {
   const source = readFileSync(new URL("../src/routes/course-finder.ts", import.meta.url), "utf8");
-  assert.match(source, /const cached = detailScope \? undefined : courseFinderListCache.get\(cacheKey\)/);
-  assert.match(source, /if \(!detailScope\) cacheCourseFinderList\(cacheKey, nextPayload\)/);
-  assert.match(source, /res.setHeader\("Cache-Control", detailScope \? "no-store" : "private, no-cache"\)/);
+  assert.match(source, /const cached = publicDetailRequest \? undefined : courseFinderListCache.get\(cacheKey\)/);
+  assert.match(source, /if \(!publicDetailRequest\) cacheCourseFinderList\(cacheKey, nextPayload\)/);
+  assert.match(source, /res.setHeader\("Cache-Control", publicDetailRequest \? "no-store" : "private, no-cache"\)/);
   assert.match(source, /namespace: "course-finder-list",\s*key: cacheKey,\s*enabled: true/);
   assert.match(source, /const cached = courseFinderFilterCache.get\(cacheKey\)/);
   assert.match(source, /cacheCourseFinderFilters\(cacheKey, payload\)/);

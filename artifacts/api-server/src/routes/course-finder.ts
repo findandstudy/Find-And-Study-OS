@@ -169,6 +169,10 @@ router.get("/course-finder", async (req, res): Promise<void> => {
   }
   const detailScope = await detailReadScope(req.query);
   const { country, city, universityType, universityId, programId, level, language, locale, field, search, intake, feeMin, feeMax, enrollmentFee, sort, page = "1", limit = "24" } = req.query as Record<string, string>;
+  // Country and city detail templates also request scope=public. They need the
+  // same verified/legacy public tuition projection as a university detail,
+  // without inheriting any staff-only fee or contact visibility.
+  const publicDetailRequest = detailScope !== null || req.query.scope === "public";
   const contentLocale = normalizeProgramLocale(locale);
   const localizedProgramName = sql<string>`COALESCE(${programTranslationsTable.name}, ${programsTable.name})`;
   // Cap at 500 (was 1000). Lowering further requires StudentDetail.tsx:319
@@ -248,7 +252,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
       : [universitiesTable.name, localizedProgramName];
 
   const user = (req as any).user;
-  const canSeeContacts = !detailScope && user && ([...STAFF_ROLES, ...AGENT_ROLES] as string[]).includes(user.role);
+  const canSeeContacts = !publicDetailRequest && user && ([...STAFF_ROLES, ...AGENT_ROLES] as string[]).includes(user.role);
   let canSeeInternalFees = !!user && ["super_admin", "agent", "sub_agent"].includes(user.role);
   let canSeeServiceFee = canSeeInternalFees;
   if (user?.role === "agent_staff") {
@@ -261,7 +265,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     canSeeServiceFee = permissions.includes("view_service_fee");
   }
 
-  if (detailScope) { canSeeInternalFees = false; canSeeServiceFee = false; }
+  if (publicDetailRequest) { canSeeInternalFees = false; canSeeServiceFee = false; }
   const policyKey = publicPolicy
     ? `public:${publicCatalogPolicyCacheKey(publicPolicy)}`
     : "internal";
@@ -291,7 +295,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
   const cacheKey = `${getPublicCatalogCacheGeneration()}:${detailScope?.key ?? "default"}:${policyKey}:${visibilityKey}:locale=${contentLocale}:${requestKey}`;
   // Verified detail-card evidence can expire without a catalogue mutation.
   // Keep in-flight coalescing, but never replay its completed price projection.
-  const cached = detailScope ? undefined : courseFinderListCache.get(cacheKey);
+  const cached = publicDetailRequest ? undefined : courseFinderListCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     res.setHeader("Cache-Control", "private, no-cache");
     res.setHeader("X-Course-Finder-List-Cache", "HIT");
@@ -376,7 +380,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
       // The total and current page are independent read-only queries. Running
       // them concurrently removes one full DB round trip from every listing load.
       const [[{ count }], rows] = await Promise.all([countQuery, rowsQuery]);
-      const detailPrices = detailScope ? await readPublicCatalogPrices(rows.map(row => row.id)) : null;
+      const detailPrices = publicDetailRequest ? await readPublicCatalogPrices(rows.map(row => row.id)) : null;
       const sanitizedRows = rows.map(({ universityHasLogo, ...row }) => {
         const sanitized = sanitizeCourseFinderProgram({
           ...row,
@@ -418,11 +422,11 @@ router.get("/course-finder", async (req, res): Promise<void> => {
           totalPages: Math.ceil(Number(count) / limitNum),
         },
       };
-      if (!detailScope) cacheCourseFinderList(cacheKey, nextPayload);
+      if (!publicDetailRequest) cacheCourseFinderList(cacheKey, nextPayload);
       return nextPayload;
     },
   });
-  res.setHeader("Cache-Control", detailScope ? "no-store" : "private, no-cache");
+  res.setHeader("Cache-Control", publicDetailRequest ? "no-store" : "private, no-cache");
   res.setHeader(
     "X-Course-Finder-List-Cache",
     wasCoalesced ? "COALESCED" : "MISS",
