@@ -235,9 +235,10 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
             </div>
             <aside className="detail-hero-card" aria-label={t("catalogDetail.availablePrograms")}>
               <p className="detail-eyebrow">{copy.studyOptions}</p>
+              <p className="detail-program-total"><strong>{new Intl.NumberFormat(lang).format(payload.meta.programCount)}</strong><span>{detailCountLabel(hero?.programCountLabel, copy.programCount)}</span></p>
               {heroDegreeCounts.length > 0 ? <dl className="detail-program-level-counts">
                 {heroDegreeCounts.map(([degree, count]) => <div key={degree}><dt>{new Intl.NumberFormat(lang).format(count)}</dt><dd>{degreeProgramLabel(degree, count, lang, displayTerm(degree), copy.programCount)}</dd></div>)}
-              </dl> : <p className="detail-summary-count"><strong>{new Intl.NumberFormat(lang).format(payload.meta.programCount)}</strong><span>{detailCountLabel(hero?.programCountLabel, copy.programCount)}</span></p>}
+              </dl> : null}
               <div className="detail-actions"><a href={primaryCtaHref} rel="noopener noreferrer" {...(primaryCtaHref.startsWith("https:") ? { target: "_blank" } : {})}>{primaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></a></div>
               <div className="detail-actions"><a className="is-secondary" href={secondaryCtaHref} rel="noopener noreferrer" {...(secondaryCtaHref.startsWith("https:") ? { target: "_blank" } : {})}>{secondaryCtaLabel}{secondaryCtaHref.startsWith("https:") ? <ExternalLink size={16} aria-hidden="true" /> : null}</a></div>
             </aside>
