@@ -35,6 +35,7 @@ import {
   getProposalFeeAdjustmentContext,
   type ProposalFeeAdjustmentContext,
 } from "@/lib/proposalFeeAdjustment";
+import { generateProposalPdf } from "@/lib/generateProposalPdf";
 import { createDocumentRecord, uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { applicationCreationErrorToast } from "@/components/ApplicationCreationErrorToast";
 import { useI18n } from "@/hooks/use-i18n";
@@ -579,22 +580,18 @@ export default function CourseFinder() {
     }
     setGeneratingPdf(true);
     try {
-      const proposalPdfImport = import("@/lib/generateProposalPdf");
       const selected = await loadSelectedPrograms();
       const feeContext = getProposalFeeAdjustmentContext(selected);
       if (pdfMarkup !== 0 && feeContext.hasMultipleCurrencies) {
         throw new Error("PDF fee adjustment requires all selected programs to use the same currency.");
       }
-      const [{ generateProposalPdf }, settings] = await Promise.all([
-        proposalPdfImport,
-        queryClient.fetchQuery<PdfSettings>({
-          queryKey: ["settings-for-pdf"],
-          retry: false,
-          queryFn: () => apiFetch(`${BASE_URL}/api/settings/client`),
-          staleTime: 10 * 60_000,
-          gcTime: 30 * 60_000,
-        }),
-      ]);
+      const settings = await queryClient.fetchQuery<PdfSettings>({
+        queryKey: ["settings-for-pdf"],
+        retry: false,
+        queryFn: () => apiFetch(`${BASE_URL}/api/settings/client`),
+        staleTime: 10 * 60_000,
+        gcTime: 30 * 60_000,
+      });
       const proposalBranding = resolveProposalBranding(user?.role, settings, agentProfile);
       const agencyBrandedProposal =
         user?.role === "agent" || user?.role === "sub_agent" || user?.role === "agent_staff";

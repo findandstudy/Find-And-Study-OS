@@ -27,7 +27,7 @@ import { LANGUAGE_META } from "@/lib/i18n";
 import { parseCatalogEntryNavigation, type CatalogSourceTab } from "@/lib/catalogEntryNavigation";
 import { resolveProposalBranding, type ProposalBrandingSettings } from "@/lib/proposalBranding";
 import { collectProposalStudyLevels, loadProposalDocumentRequirements } from "@/lib/proposalDocumentRequirements";
-import type { ProposalProgramData } from "@/lib/generateProposalPdf";
+import { generateProposalPdf, type ProposalProgramData } from "@/lib/generateProposalPdf";
 import {
   chunkBulkImportRows,
   findProgramIdentityCollisions,
@@ -2394,8 +2394,7 @@ function ProgramsTab() {
       }));
 
       const studyLevels = collectProposalStudyLevels(programsForProposal);
-      const [{ generateProposalPdf }, settings, documentResult] = await Promise.all([
-        import("@/lib/generateProposalPdf"),
+      const [settings, documentResult] = await Promise.all([
         api("/api/settings/client") as Promise<ProposalBrandingSettings & {
           pdfPrimaryColor?: string | null;
           pdfAccentColor?: string | null;

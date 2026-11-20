@@ -40,12 +40,15 @@ const sampleProgram: ProposalProgramData = {
 };
 
 test("catalog programs reuse the proposal PDF flow for selected and filtered results", async () => {
-  const catalogSource = await readFile(
-    new URL("../src/pages/admin/Catalog.tsx", import.meta.url),
-    "utf8",
-  );
+  const [catalogSource, courseFinderSource] = await Promise.all([
+    readFile(new URL("../src/pages/admin/Catalog.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/pages/staff/CourseFinder.tsx", import.meta.url), "utf8"),
+  ]);
 
-  assert.match(catalogSource, /import\("@\/lib\/generateProposalPdf"\)/);
+  assert.match(catalogSource, /import \{ generateProposalPdf, type ProposalProgramData \} from "@\/lib\/generateProposalPdf"/);
+  assert.doesNotMatch(catalogSource, /import\("@\/lib\/generateProposalPdf"\)/);
+  assert.match(courseFinderSource, /import \{ generateProposalPdf \} from "@\/lib\/generateProposalPdf"/);
+  assert.doesNotMatch(courseFinderSource, /import\("@\/lib\/generateProposalPdf"\)/);
   assert.match(catalogSource, /fetchAllRows<Program>\(sourceUrl\)/);
   assert.match(catalogSource, /api\(`\/api\/programs\/\$\{programId\}`\)/);
   assert.match(catalogSource, /MAX_PROPOSAL_PDF_PROGRAMS/);
