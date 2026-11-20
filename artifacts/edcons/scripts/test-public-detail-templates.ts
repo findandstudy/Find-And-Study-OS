@@ -982,6 +982,9 @@ test("city hero combines catalogue counters and catalogue-owned language facts",
   assert.match(css, /\.detail-university \.detail-hero-card \.detail-actions > \* \{[\s\S]*border-radius: 999px;/);
   assert.match(css, /\.detail-program \.detail-hero-card \.detail-actions > \* \{[^}]*border-radius: 999px/);
   assert.match(css, /\.detail-university \.detail-hero-card \{ border-radius: 18px; \}/);
+  assert.match(css, /\.detail-program \.detail-meta-pill,[\s\S]*\.detail-university \.detail-meta-pill \{[\s\S]*border-radius: 999px;/);
+  assert.match(css, /\.detail-program-level-counts dt \{[\s\S]*font-size: 20px;/);
+  assert.match(css, /\.detail-program-level-counts > div:only-child \{ grid-column: 1 \/ -1; \}/);
   assert.match(css, /\.detail-card-identity img \{[^}]*display: block;[^}]*object-fit: contain;[^}]*padding: 6px;/);
   assert.match(css, /\.detail-programs-footer-actions > a \{[^}]*border-radius: 999px/);
   assert.match(css, /\.detail-university-facts-grid \{[\s\S]*border-radius: 24px;[\s\S]*linear-gradient/);
