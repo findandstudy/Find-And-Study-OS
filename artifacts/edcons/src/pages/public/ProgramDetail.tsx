@@ -384,7 +384,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
             <div className="detail-hero-content">
               <div className="detail-identity">
                 <DetailIdentity src={program.universityLogoUrl} name={displayUniversity} />
-                <Link className="detail-hero-link" href={program.universityPath}>{displayUniversity}<ArrowUpRight size={17} aria-hidden="true" /></Link>
+                <Link className="detail-eyebrow detail-hero-link detail-program-institution-slogan" href={program.universityPath}>{displayUniversity}<ArrowUpRight size={17} aria-hidden="true" /></Link>
               </div>
               <p className="detail-eyebrow">{hero?.eyebrow || copy.program}</p>
               <h1>{heroSection?.title || displayName}</h1>

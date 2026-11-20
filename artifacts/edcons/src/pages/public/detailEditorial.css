@@ -438,13 +438,22 @@
   color: #fff !important;
   text-shadow: 0 1px 14px rgba(2,10,24,.78);
 }
-.detail-program .detail-identity { display: inline-flex; max-width: 100%; padding: 7px 12px 7px 7px; border: 1px solid rgba(255,255,255,.22); border-radius: 14px; background: rgba(8,23,39,.36); backdrop-filter: blur(12px); }
+.detail-program .detail-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
 .detail-program .detail-identity .detail-card-identity {
-  width: 52px;
-  height: 52px;
-  padding: 4px;
+  width: 136px;
+  height: 154px;
+  padding: 8px;
   border: 1px solid rgba(255,255,255,.34);
-  border-radius: 12px;
+  border-radius: 18px;
   background: rgba(8,23,39,.34);
   box-shadow: 0 12px 30px rgba(3,12,25,.16);
   backdrop-filter: blur(10px);
@@ -457,6 +466,16 @@
   image-rendering: auto;
 }
 .detail-program .detail-hero-link { min-width: 0; overflow-wrap: anywhere; }
+.detail-program .detail-program-institution-slogan {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 34ch;
+  color: #fff;
+  font-weight: 800;
+  line-height: 1.45;
+  text-shadow: 0 1px 14px rgba(2,10,24,.78);
+}
 .detail-program .detail-meta-pill,
 .detail-university .detail-meta-pill {
   min-height: 38px;
@@ -1205,6 +1224,7 @@
   .detail-hero-main { grid-template-columns: 1fr; gap: 28px; min-height: 0; padding-block: 34px 30px; }
   .detail-university .detail-hero-main { grid-template-columns: minmax(0, 1fr); gap: 28px; min-height: 0; padding-block: 34px 30px; }
   .detail-university .detail-identity .detail-card-identity { width: 104px; height: 118px; padding: 7px; border-radius: 15px; }
+  .detail-program .detail-identity .detail-card-identity { width: 104px; height: 118px; padding: 7px; border-radius: 15px; }
   .detail-city .detail-hero-main { min-height: 0; padding-top: 36px; padding-bottom: 50px; }
   .detail-city .detail-city-factbar { margin-top: -18px; padding-block: 0 18px; }
   .detail-city-coverstrip { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); border-radius: 12px; }
