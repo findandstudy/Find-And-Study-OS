@@ -747,14 +747,15 @@
 .detail-hero-card { padding: 22px; border: 1px solid rgba(255,255,255,.26); box-shadow: var(--detail-shadow); background: rgba(255,255,255,.97); color: var(--detail-ink); align-self: end; }
 .detail-university .detail-hero-card { border-radius: 18px; }
 .detail-university .detail-identity .detail-card-identity {
-  width: 120px;
-  height: 138px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  overflow: visible;
+  width: 136px;
+  height: 154px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.34);
+  border-radius: 18px;
+  background: rgba(8,23,39,.34);
+  box-shadow: 0 12px 30px rgba(3,12,25,.16);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
 }
 .detail-university .detail-identity .detail-card-identity img {
   padding: 0;
@@ -1187,7 +1188,7 @@
   .detail-wrap { width: calc(100% - 36px); }
   .detail-hero-main { grid-template-columns: 1fr; gap: 28px; min-height: 0; padding-block: 34px 30px; }
   .detail-university .detail-hero-main { grid-template-columns: minmax(0, 1fr); gap: 28px; min-height: 0; padding-block: 34px 30px; }
-  .detail-university .detail-identity .detail-card-identity { width: 88px; height: 102px; }
+  .detail-university .detail-identity .detail-card-identity { width: 104px; height: 118px; padding: 7px; border-radius: 15px; }
   .detail-city .detail-hero-main { min-height: 0; padding-top: 36px; padding-bottom: 50px; }
   .detail-city .detail-city-factbar { margin-top: -18px; padding-block: 0 18px; }
   .detail-city-coverstrip { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); border-radius: 12px; }
