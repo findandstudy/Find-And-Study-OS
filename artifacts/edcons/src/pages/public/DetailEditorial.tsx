@@ -2,6 +2,7 @@ import React, { useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ArrowUpRight, BookOpen, Building2, MapPin } from "lucide-react";
 import { localDetailPath, type DetailTuition, detailMoney, detailCopy } from "./detailPresentation";
+import { normalizeDetailSectionTitle } from "../../lib/website/detailContentContract";
 
 /** A missing catalogue photograph leaves no fake campus or empty media frame. */
 export function DetailImage({ src, alt, className = "", priority = false }: { src: string | null | undefined; alt: string; className?: string; priority?: boolean }) {
@@ -27,8 +28,8 @@ export function DetailBreadcrumbs({ items, label }: { items: { label: string; pa
   return <nav className="detail-breadcrumbs" aria-label={label}><ol>{visibleItems.map((item, i) => <li key={`${item.label}-${i}`}>{localDetailPath(item.path) ? <Link href={localDetailPath(item.path)!}>{item.label}</Link> : <span aria-current={i === visibleItems.length - 1 ? "page" : undefined}>{item.label}</span>}</li>)}</ol></nav>;
 }
 
-export function DetailHeading({ number, eyebrow, title, children }: { number: string; eyebrow: string; title: string; children?: ReactNode }) {
-  return <div className="detail-section-heading"><span className="detail-section-number" aria-hidden="true">{number}</span><div><p className="detail-eyebrow">{eyebrow}</p><h2>{title}</h2>{children}</div></div>;
+export function DetailHeading({ number, eyebrow, title, locale = "en", children }: { number: string; eyebrow: string; title: string; locale?: string; children?: ReactNode }) {
+  return <div className="detail-section-heading"><span className="detail-section-number" aria-hidden="true">{number}</span><div><p className="detail-eyebrow">{eyebrow}</p><h2>{normalizeDetailSectionTitle(title, locale)}</h2>{children}</div></div>;
 }
 
 export function DetailFacts({ items }: { items: { label: string; value?: ReactNode; icon?: ReactNode }[] }) {

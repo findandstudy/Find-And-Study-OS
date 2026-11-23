@@ -22,6 +22,7 @@
     "drain-once": "NODE_OPTIONS=--max-old-space-size=512 tsx scripts/drain-once.ts",
     "seed:topkapi-mapping": "tsx scripts/seed-topkapi-mapping.ts",
     "catalog:country-source-sheets": "tsx scripts/apply-country-source-sheets.ts",
+    "website:normalize-detail-section-titles": "tsx scripts/normalize-detail-section-titles.ts",
     "seed:portal-mapped-specs": "tsx scripts/seed-portal-mapped-specs.ts",
     "configure:dormbooking-ai-v2": "tsx scripts/configure-dormbooking-ai-v2.ts",
     "build": "tsx ./build.ts",

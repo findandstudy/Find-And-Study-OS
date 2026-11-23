@@ -8,6 +8,7 @@ import { defaultDetailLayout, detailTemplateSectionsForLocale } from "../src/lib
 import { resolveCmsValue } from "../src/lib/website/cmsTextVariables";
 import { DetailHeroMedia, boundDetailContent, detailContentAddon, detailContentIntro, detailContentLabels, detailContentNavigation, detailContentSections, detailContentSummary, detailContentTitle, detailSectionKicker, isDetailEditorInstruction } from "../src/pages/public/DetailContentSections";
 import { detailTemplateVariableValues } from "../src/pages/public/detailTemplateVariables";
+import { DetailHeading } from "../src/pages/public/DetailEditorial";
 
 const fixture: DetailContent = { version: 1, kind: "program", entityId: 42, locale: "en", sections: [{
   key: "faq", title: "Questions & answers", body: "Published narrative", reviewedOn: "2026-01-01",
@@ -61,6 +62,19 @@ test("compact detail copy remains bound to the requested locale", () => {
   assert.equal(detailSectionKicker("transport", "tr"), "Ulaşım");
   assert.equal(detailSectionKicker("applyGuide", "ru"), "Следующие шаги");
   assert.equal(detailContentSummary(turkish, "housing", "yedek"), "yedek");
+});
+
+test("saved, template and static detail headings share locale-aware sentence casing", () => {
+  const lowerCase: DetailContent = {
+    ...fixture,
+    locale: "tr",
+    sections: [{ ...fixture.sections[0], title: "‘istanbul’da sorular" }],
+    templateSections: [{ key: "overview", title: "genel bakış" }],
+  };
+  const parsed = parseDetailContent(lowerCase)!;
+  assert.equal(detailContentTitle(parsed, "faq", "Yedek"), "‘İstanbul’da sorular");
+  assert.equal(detailContentTitle(parsed, "overview", "Yedek"), "Genel bakış");
+  assert.match(renderToStaticMarkup(React.createElement(DetailHeading, { number: "01", eyebrow: "Şehir", title: "istanbul hakkında", locale: "tr" })), /İstanbul hakkında/);
 });
 
 test("admin hydration instructions never leak into public detail pages", () => {

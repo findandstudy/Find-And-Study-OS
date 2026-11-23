@@ -431,7 +431,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       </nav>
       <section data-detail-section="overview" id="overview" className="detail-section detail-program-overview">
         <div className="detail-wrap">
-          <DetailHeading number="01" eyebrow={copy.program} title={copy.overview} />
+          <DetailHeading number="01" eyebrow={copy.program} title={copy.overview} locale={lang} />
           <div className="detail-split detail-program-overview-grid">
             <div className="detail-program-story">
               {localizedDescription ? <p className="detail-prose detail-snapshot">{localizedDescription}</p> : <DetailFacts items={[
@@ -456,14 +456,14 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       </section>
       {(requirements.length > 0 || hasEditorialRequirements) && <section data-detail-section="requirements" id="requirements" className="detail-section is-sky detail-program-requirements">
         <div className="detail-wrap detail-split detail-program-requirements-grid">
-          <DetailHeading number="02" eyebrow={copy.program} title={t("programs.requirements")} />
+          <DetailHeading number="02" eyebrow={copy.program} title={t("programs.requirements")} locale={lang} />
           {requirements.length > 0 && <ul className="detail-program-points">{requirements.map((item, index) => <li key={index}><FileText size={20} aria-hidden="true" /><span>{item}</span></li>)}</ul>}
           {detailContentAddon(editorial, "requirements", lang, localePath("/contact"))}
         </div>
       </section>}
       {payload.intakes.length > 0 && <section data-detail-section="intakes" id="intakes" className="detail-section is-sand">
         <div className="detail-wrap">
-          <DetailHeading number="03" eyebrow={copy.program} title={detailContentTitle(editorial, "intakes", t("catalogDetail.availableIntakes"))} />
+          <DetailHeading number="03" eyebrow={copy.program} title={detailContentTitle(editorial, "intakes", t("catalogDetail.availableIntakes"))} locale={lang} />
           {detailContentIntro(editorial, "intakes")}
           <div className="detail-grid">{payload.intakes.map(intake => <article key={intake.id} className="detail-intake">
             <p className="detail-eyebrow detail-icon-line"><CalendarDays size={17} aria-hidden="true" />{intake.academicYear}</p><h3>{intake.intakeKey}</h3>
@@ -479,7 +479,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       </section>}
       <section data-detail-section="fees" id="fees" className="detail-section is-sky detail-program-fees">
         <div className="detail-wrap detail-split detail-program-fees-grid">
-          <div><DetailHeading number="04" eyebrow={copy.program} title={detailContentTitle(editorial, "fees", t("courseFinderPage.tuitionFee"))} />{detailContentIntro(editorial, "fees")}{feeItems.some(item => item.verified) && <p className="detail-provenance">{copy.priceBasis}</p>}</div>
+          <div><DetailHeading number="04" eyebrow={copy.program} title={detailContentTitle(editorial, "fees", t("courseFinderPage.tuitionFee"))} locale={lang} />{detailContentIntro(editorial, "fees")}{feeItems.some(item => item.verified) && <p className="detail-provenance">{copy.priceBasis}</p>}</div>
           <div className="detail-fee-panel">
             <dl className="detail-fee-list">{feeItems.map((item, index) => <div key={item.id} className={[index === 0 ? "is-primary" : "", item.isFree ? "is-free" : ""].filter(Boolean).join(" ") || undefined}>
               <dt>{feeComponentLabel(item.componentType, t)}</dt>
@@ -490,13 +490,13 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       </section>
       {localizedRefundProcess?.trim() && <section data-detail-section="refund-process" id="refund-process" className="detail-section is-sand detail-program-refund">
         <div className="detail-wrap detail-split">
-          <DetailHeading number="05" eyebrow={copy.program} title={t("catalogDetail.refundProcess")} />
+          <DetailHeading number="05" eyebrow={copy.program} title={t("catalogDetail.refundProcess")} locale={lang} />
           <div className="detail-prose whitespace-pre-line">{localizedRefundProcess}</div>
         </div>
       </section>}
       {payload.related.length > 0 && <section data-detail-section="related" id="related" className="detail-section">
         <div className="detail-wrap">
-          <DetailHeading number="06" eyebrow={copy.studyOptions} title={t("catalogDetail.relatedPrograms")} />
+          <DetailHeading number="06" eyebrow={copy.studyOptions} title={t("catalogDetail.relatedPrograms")} locale={lang} />
           {detailContentIntro(editorial, "related")}
           <DeferredBelowFold><Suspense fallback={<div className="h-72 animate-pulse rounded-3xl bg-secondary" />}><CityProgramCards key={`${program.id}:${lang}`} programs={payload.related} /></Suspense></DeferredBelowFold>
         </div>

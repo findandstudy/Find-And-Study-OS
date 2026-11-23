@@ -249,14 +249,14 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
       </div></nav>
       <section data-detail-section="overview" id="overview" className="detail-section">
         <div className="detail-wrap detail-university-overview">
-          <DetailHeading number="01" eyebrow={copy.institution} title={t("countryDetail.about", { name: displayUniversity })} />
+          <DetailHeading number="01" eyebrow={copy.institution} title={t("countryDetail.about", { name: displayUniversity })} locale={lang} />
           <div>{university.description ? <p className="detail-prose detail-snapshot">{university.description}</p> : <><p className="detail-prose">{t("countryDetail.exploreOpportunities")}</p><div className="detail-actions"><a href="#programs">{t("catalogDetail.availablePrograms")}<ArrowUpRight size={17} aria-hidden="true" /></a></div></>}</div>
           {detailContentAddon(editorial, "overview", lang, localePath("/contact"))}
         </div>
       </section>
       <section data-detail-section="facts" id="facts" className="detail-section is-sky">
         <div className="detail-wrap detail-university-facts">
-          <DetailHeading number="02" eyebrow={copy.overview} title={detailContentTitle(editorial, "facts", t("countryDetail.quickFacts"))} />
+          <DetailHeading number="02" eyebrow={copy.overview} title={detailContentTitle(editorial, "facts", t("countryDetail.quickFacts"))} locale={lang} />
           <div className={`detail-university-facts-grid${factsIntro ? "" : " is-single"}`}>
             {factsIntro && <div className="detail-university-facts-copy">{factsIntro}</div>}
             <dl className="detail-keylines detail-university-facts-list">
@@ -270,13 +270,13 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
       </section>
       {university.weather && university.city && <section data-detail-section="weather" id="weather" className="detail-section">
         <div className="detail-wrap">
-          <DetailHeading number="03" eyebrow={displayCity} title={detailContentTitle(editorial, "weather", weatherText.campusTitle)} />
+          <DetailHeading number="03" eyebrow={displayCity} title={detailContentTitle(editorial, "weather", weatherText.campusTitle)} locale={lang} />
           <CityWeatherCard cityName={displayCity} locale={lang} weather={university.weather} />
         </div>
       </section>}
       <section data-detail-section="programs" id="programs" className="detail-section is-sand">
         <div className="detail-wrap">
-          <DetailHeading number={university.weather ? "04" : "03"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} />
+          <DetailHeading number={university.weather ? "04" : "03"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} locale={lang} />
           {detailContentIntro(editorial, "programs")}
           <DeferredBelowFold minHeight={520}><Suspense fallback={<div className="h-[32rem] animate-pulse rounded-3xl bg-secondary" />}><UniversityProgramBrowser key={`${university.id}:${lang}`} universityId={university.id} admissionsOpen={university.isActive !== false} /></Suspense></DeferredBelowFold>
           <div className="detail-actions detail-programs-footer-actions"><Link href={`${localePath("/programs")}?universityId=${university.id}`}>{t("countryDetail.viewAllPrograms")} · {payload.meta.programCount}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>

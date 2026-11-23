@@ -58,6 +58,19 @@ export type DetailSeoFacts = { city?: string; country?: string; university?: str
 export type DetailTranslationSource = { locale: "en"; digest: string };
 export type DetailContent = { version: 1; kind: DetailContentKind; entityId: number; locale: string; seo?: DetailSeo; seoMode?: "auto" | "manual"; displayTerms?: Record<string, string>; translationSource?: DetailTranslationSource; sectionOrder?: string[]; sections: DetailContentSection[]; templateSections?: DetailTemplateSectionCopy[] };
 
+/**
+ * Sentence-cases only the first cased character of a section title. This keeps
+ * author wording intact while making persisted AI, template and manual copy
+ * consistent. Locale-aware casing is important for values such as Turkish
+ * `istanbul` -> `İstanbul`; scripts without letter case remain unchanged.
+ */
+export function normalizeDetailSectionTitle(value: string, locale: string): string {
+  return value.replace(/\p{L}/u, (letter) => {
+    try { return letter.toLocaleUpperCase(locale); }
+    catch { return letter.toUpperCase(); }
+  });
+}
+
 /** Uses the reviewed AI display term saved with this locale; never translates at render time. */
 export function detailDisplayTerm(content: DetailContent | null | undefined, source: string | null | undefined, fallback?: string): string {
   const value = source?.trim();
@@ -311,7 +324,7 @@ export function parseDetailContent(value: unknown, today = new Date().toISOStrin
   }
   const normalizedValue = (normalizedSectionOrder ? { ...value, sectionOrder: normalizedSectionOrder } : value) as DetailContent;
   const normalizedSections = normalizedValue.sections.map(section => {
-    if (section.key !== "hero") return section;
+    if (section.key !== "hero") return { ...section, title: normalizeDetailSectionTitle(section.title, normalizedValue.locale) };
     const title = withoutCatalogueWording(section.title) ?? section.title;
     const body = withoutCatalogueWording(section.body);
     if (!section.hero) return { ...section, title, ...(body ? { body } : {}) };
@@ -331,7 +344,8 @@ export function parseDetailContent(value: unknown, today = new Date().toISOStrin
     return { ...withoutHero, title, ...(body ? { body } : {}) };
   });
   const templateSections = normalizedValue.templateSections?.flatMap(section => {
-    const title = withoutCatalogueWording(section.title);
+    const cleanedTitle = withoutCatalogueWording(section.title);
+    const title = cleanedTitle ? normalizeDetailSectionTitle(cleanedTitle, normalizedValue.locale) : cleanedTitle;
     const body = withoutCatalogueWording(section.body);
     return title || body ? [{ key: section.key, ...(title ? { title } : {}), ...(body ? { body } : {}) }] : [];
   });

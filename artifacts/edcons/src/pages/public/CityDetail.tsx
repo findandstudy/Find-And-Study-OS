@@ -211,34 +211,34 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
       {(overviewDescription || hasEditorialOverview) && <section data-detail-section="overview" id="overview" className="detail-section">
         <div className={hasEditorialOverview ? "detail-wrap" : "detail-wrap detail-split"}>
           {hasEditorialOverview ? detailContentAddon(editorial, "overview", lang, localePath("/contact")) : <>
-            <DetailHeading number="01" eyebrow={copy.city} title={t("countryDetail.about", { name: cityName })} />
+            <DetailHeading number="01" eyebrow={copy.city} title={t("countryDetail.about", { name: cityName })} locale={lang} />
             {overviewDescription && <p className="detail-prose detail-snapshot">{overviewDescription}</p>}
           </>}
         </div>
       </section>}
       <section data-detail-section="facts" id="facts" className="detail-section is-sky">
         <div className="detail-wrap">
-          <DetailHeading number="02" eyebrow={cityName} title={detailContentTitle(editorial, "facts", t("countryDetail.quickFacts"))} />
+          <DetailHeading number="02" eyebrow={cityName} title={detailContentTitle(editorial, "facts", t("countryDetail.quickFacts"))} locale={lang} />
           {detailContentIntro(editorial, "facts")}
           <DetailFacts items={[{ label: copy.country, icon: <Globe2 size={19} />, value: countryPath ? <Link href={countryPath}>{countryName}</Link> : countryName }, { label: copy.universityCount, icon: <Building2 size={19} />, value: city.universityCount }, { label: copy.programCount, icon: <GraduationCap size={19} />, value: city.programCount }]} />
         </div>
       </section>
       {city.weather && <section data-detail-section="weather" id="weather" className="detail-section">
         <div className="detail-wrap">
-          <DetailHeading number="03" eyebrow={cityName} title={editorialTitle("weather", weatherText.cityTitle)} />
+          <DetailHeading number="03" eyebrow={cityName} title={editorialTitle("weather", weatherText.cityTitle)} locale={lang} />
           <CityWeatherCard cityName={cityName} locale={lang} weather={city.weather} />
         </div>
       </section>}
       {city.universities.length > 0 && <section data-detail-section="universities" id="universities" className="detail-section is-sand">
         <div className="detail-wrap">
-          <DetailHeading number={city.weather ? "04" : "03"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: cityName }))} />
+          <DetailHeading number={city.weather ? "04" : "03"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: cityName }))} locale={lang} />
           {detailContentIntro(editorial, "universities")}
           <div className="detail-grid">{city.universities.map((university) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={localizedUniversityType(university.universityType, lang)} title={detailDisplayTerm(editorial, university.name)} kind="university" />)}</div>
         </div>
       </section>}
       {city.programCount > 0 && <section data-detail-section="programs" id="programs" className="detail-section">
         <div className="detail-wrap">
-          <DetailHeading number={city.weather ? "05" : "04"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} />
+          <DetailHeading number={city.weather ? "05" : "04"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} locale={lang} />
           {detailContentIntro(editorial, "programs")}
           <DeferredBelowFold minHeight={520}><Suspense fallback={<div className="h-[32rem] animate-pulse rounded-3xl bg-secondary" />}><DetailProgramBrowser key={`${city.id}:${lang}`} scope={{ kind: "city", country: city.filterCountry || city.country, city: city.filterCity || city.name }} admissionsOpen previewPrograms={city.programs.map(program => ({ ...program, universityId: program.universityId ?? 0, universityPath: program.universityPath ?? "" }))} previewTotal={city.programCount} /></Suspense></DeferredBelowFold>
           <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>

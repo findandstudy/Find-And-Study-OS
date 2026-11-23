@@ -1,11 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { DETAIL_CONTENT_LAYOUT_KEYS, detailContentPresentationOverrides, ensureDetailSeo, inheritEnglishDetailStructure, parseDetailContent, preserveDetailSectionDesign, safeDetailContentUrl } from "../src/lib/websiteDetailContentContract";
+import { DETAIL_CONTENT_LAYOUT_KEYS, detailContentPresentationOverrides, ensureDetailSeo, inheritEnglishDetailStructure, normalizeDetailSectionTitle, parseDetailContent, preserveDetailSectionDesign, safeDetailContentUrl } from "../src/lib/websiteDetailContentContract";
 const fixture = () => ({ version: 1, kind: "program", entityId: 7, locale: "en", sections: [{ key: "faq", title: "Questions", questions: [{ question: "How?", answer: "Contact the institution." }], sources: [{ label: "Institution", url: "https://example.org/info" }], reviewedOn: "2026-09-01" }] });
 test("editorial mirrors and valid human-reviewed structured content", () => {
   assert.ok(parseDetailContent(fixture(), "2026-09-19"));
   assert.equal(readFileSync(new URL("../src/lib/websiteDetailContentContract.ts", import.meta.url), "utf8"), readFileSync(new URL("../../edcons/src/lib/website/detailContentContract.ts", import.meta.url), "utf8"));
+});
+test("section titles use locale-aware sentence casing without changing hero identity", () => {
+  assert.equal(normalizeDetailSectionTitle("weather and student life", "en"), "Weather and student life");
+  assert.equal(normalizeDetailSectionTitle("‘istanbul’da ulaşım", "tr"), "‘İstanbul’da ulaşım");
+  assert.equal(normalizeDetailSectionTitle("学生生活", "zh"), "学生生活");
+  const parsed = parseDetailContent({
+    ...fixture(),
+    locale: "tr",
+    sections: [
+      { ...fixture().sections[0], key: "hero", title: "istanbul university" },
+      { ...fixture().sections[0], title: "‘istanbul’da sorular" },
+    ],
+    templateSections: [{ key: "overview", title: "genel bakış" }],
+  }, "2026-09-19");
+  assert.equal(parsed?.sections[0].title, "istanbul university");
+  assert.equal(parsed?.sections[1].title, "‘İstanbul’da sorular");
+  assert.equal(parsed?.templateSections?.[0].title, "Genel bakış");
 });
 test("dynamic SEO is generated from locale-owned content and remains page-owned", () => {
   const content = ensureDetailSeo({ ...fixture(), locale: "tr", sections: [{ ...fixture().sections[0], key: "hero", title: "İstanbul'da Eğitim", body: "İstanbul'daki üniversiteleri, programları ve öğrenci yaşamını ayrıntılı biçimde keşfedin." }] } as any);

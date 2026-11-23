@@ -341,7 +341,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
       </div></nav>
       {(hasOverview || hasEditorialOverview) && <section data-detail-section="overview" id="overview" className="detail-section">
         {hasEditorialOverview ? detailContentAddon(editorial, "overview", lang, localePath("/contact")) : <div className="detail-wrap">
-            <DetailHeading number="01" eyebrow={copy.destination} title={t("countryDetail.about", { name: destinationDisplayName })} />
+            <DetailHeading number="01" eyebrow={copy.destination} title={t("countryDetail.about", { name: destinationDisplayName })} locale={lang} />
             <div className={overviewDescription && (whyPoints.length > 0 || hasOverviewImage) ? "detail-split" : "detail-overview-single"}>
               {overviewDescription && <p className="detail-prose detail-snapshot">{overviewDescription}</p>}
               {whyPoints.length > 0 ? <div>{hasOverviewImage && <DetailImage className="detail-destination-image" src={overviewImage} alt={destinationDisplayName} />}<p className="detail-eyebrow">{t("countryDetail.whyStudy", { name: destinationDisplayName })}</p><ul className="detail-program-points">{whyPoints.map((point, i) => <li key={i}>{point}</li>)}</ul></div> : hasOverviewImage && <DetailImage className="detail-destination-image" src={overviewImage} alt={destinationDisplayName} />}
@@ -350,14 +350,14 @@ export default function CountryDetail({ slug }: { slug: string }) {
       </section>}
       {facts.length > 0 && <section data-detail-section="facts" id="facts" className="detail-section is-sky">
         <div className="detail-wrap detail-split">
-          <DetailHeading number="02" eyebrow={copy.overview} title={detailContentTitle(editorial, "facts", t("countryDetail.quickFacts"))} />
+          <DetailHeading number="02" eyebrow={copy.overview} title={detailContentTitle(editorial, "facts", t("countryDetail.quickFacts"))} locale={lang} />
           {detailContentIntro(editorial, "facts")}
           <dl className="detail-keylines">{facts.map(fact => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>
         </div>
       </section>}
       {cities.length > 0 && <section data-detail-section="cities" id="cities" className="detail-section is-sky">
         <div className="detail-wrap">
-          <DetailHeading number="03" eyebrow={destinationDisplayName} title={detailContentTitle(editorial, "cities", t("countryDetail.popularCities"))} />
+          <DetailHeading number="03" eyebrow={destinationDisplayName} title={detailContentTitle(editorial, "cities", t("countryDetail.popularCities"))} locale={lang} />
           {detailContentIntro(editorial, "cities")}
           <div className="detail-grid">{cities.map((city) => {
             const cityPath = city.canonicalPath;
@@ -370,7 +370,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
       </section>}
       {universities.length > 0 && <section data-detail-section="universities" id="universities" className="detail-section is-sand">
         <div className="detail-wrap">
-          <DetailHeading number="04" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: destinationDisplayName }))} />
+          <DetailHeading number="04" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: destinationDisplayName }))} locale={lang} />
           {detailContentIntro(editorial, "universities")}
           <div className="detail-grid">{universities.map((uni) => <DetailCard key={uni.id} href={uni.canonicalPath} title={detailDisplayTerm(editorial, uni.name)} eyebrow={detailDisplayTerm(editorial, uni.city || dest.name, uni.city || destinationDisplayName)} kind="university" logoUrl={fixStorageUrl(uni.logoUrl)} layout="media" mediaFit="contain">
             <p>{[localizedUniversityType(uni.universityType, lang), catalogueCount(uni.programCount, t("countryDetail.programs"))].filter(Boolean).join(" · ")}</p>
@@ -379,7 +379,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
       </section>}
       {stats.programCount > 0 && <section data-detail-section="programs" id="programs" className="detail-section">
         <div className="detail-wrap">
-          <DetailHeading number="05" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} />
+          <DetailHeading number="05" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} locale={lang} />
           {detailContentIntro(editorial, "programs")}
           <DeferredBelowFold minHeight={520}><Suspense fallback={<div className="h-[32rem] animate-pulse rounded-3xl bg-secondary" />}><DetailProgramBrowser scope={{ kind: "country", country: dest.filterCountry || dest.country }} admissionsOpen previewPrograms={data.programs.map(program => ({ ...program, universityPath: "", universityCountry: dest.country }))} previewTotal={stats.programCount} /></Suspense></DeferredBelowFold>
           <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")} · {stats.programCount}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
