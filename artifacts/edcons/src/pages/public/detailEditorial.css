@@ -725,7 +725,56 @@
 .detail-city .detail-facts { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; border: 0; background: transparent; }
 .detail-city .detail-editorial-cards article,
 .detail-city .detail-grid > *,
-.detail-city .detail-facts > div { grid-column: span 4; min-height: 132px; padding: 19px 20px; border: 1px solid var(--detail-line); background: var(--detail-white); }
+.detail-city .detail-facts > div {
+  grid-column: span 4;
+  min-height: 132px;
+  padding: 19px 20px;
+  border: 1px solid var(--detail-line);
+  border-radius: 18px;
+  background: var(--detail-white);
+  overflow: hidden;
+}
+.detail-city [data-detail-section="facts"] .detail-facts > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: clamp(14px, 1.5vw, 18px);
+  border-color: color-mix(in srgb, var(--detail-accent) 12%, var(--detail-line));
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--detail-white), color-mix(in srgb, var(--detail-sky) 22%, white));
+  box-shadow: 0 8px 22px rgba(11, 18, 32, .045);
+  text-align: center;
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.detail-city [data-detail-section="facts"] .detail-facts > div:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--detail-accent) 24%, var(--detail-line));
+  box-shadow: 0 9px 22px rgba(11, 18, 32, .06);
+}
+.detail-city [data-detail-section="facts"] .detail-facts dt {
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 750;
+  letter-spacing: .035em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.detail-city [data-detail-section="facts"] .detail-fact-icon {
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+}
+.detail-city [data-detail-section="facts"] .detail-facts dd {
+  align-self: center;
+  margin: 0;
+  font-weight: 720;
+  text-align: center;
+}
 .detail-city .detail-editorial-table { margin-inline-start: 76px; }
 .detail-city .detail-editorial-steps,
 .detail-city .detail-editorial-faq { margin-inline-start: 76px; }
@@ -1211,8 +1260,10 @@
   .detail-catalog-card,
   .detail-intake,
   .detail-fee-panel { border-radius: 14px; }
-  .detail-destination .detail-editorial-cards article,
-  .detail-city .detail-editorial-cards article { border-radius: 0; }
+  .detail-destination .detail-editorial-cards article { border-radius: 0; }
+  .detail-city .detail-editorial-cards article,
+  .detail-city .detail-grid > *,
+  .detail-city .detail-facts > div { border-radius: 14px; }
 }
 @media (max-width: 760px) {
   .detail-university-overview > .detail-section-heading + div { width: 100%; margin-inline-start: 0; }

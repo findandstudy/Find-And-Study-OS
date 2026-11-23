@@ -197,6 +197,10 @@ test("detail templates share compact rhythm while city hero facts reuse the prog
   assert.match(css, /\.detail-city \.detail-city-factbar \{[^}]*margin-top: -24px;[^}]*padding-bottom: 24px;[^}]*background: transparent;[^}]*border: 0;/);
   assert.match(css, /\.detail-city-coverstrip \{[^}]*border-radius: 18px;[^}]*box-shadow: 0 18px 55px/);
   assert.match(css, /\.detail-city-coverstrip > div \{[^}]*min-height: 112px;[^}]*padding: 20px 22px;[^}]*background: rgba\(255,255,255,\.97\)/);
+  assert.match(css, /\.detail-city \.detail-editorial-cards article,[\s\S]*\.detail-city \.detail-facts > div \{[\s\S]*border-radius: 18px;/);
+  assert.match(css, /\.detail-city \[data-detail-section="facts"\] \.detail-facts > div \{[\s\S]*justify-items: center;[\s\S]*border-radius: 16px;[\s\S]*text-align: center;/);
+  assert.match(css, /\.detail-city \[data-detail-section="facts"\] \.detail-facts dt \{[\s\S]*flex-direction: column;[\s\S]*text-align: center;/);
+  assert.match(css, /\.detail-city \[data-detail-section="facts"\] \.detail-facts dd \{[\s\S]*text-align: center;/);
   assert.doesNotMatch(css, /:is\(\.detail-destination, \.detail-city, \.detail-university\) :is\(\.detail-section-heading, \.detail-editorial-heading\)/);
   assert.match(css, /@media \(min-width: 761px\)[\s\S]*\.detail-city > \.detail-section \{ padding-block: clamp\(42px, 3\.6vw, 50px\); \}/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-program \.detail-section \{ padding-block: 44px; \}/);
