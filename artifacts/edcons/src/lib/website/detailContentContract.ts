@@ -71,6 +71,18 @@ export function normalizeDetailSectionTitle(value: string, locale: string): stri
   });
 }
 
+/** Applies the same locale-aware sentence-case rule to every visible heading
+ * owned by a section, including nested card and step headings. */
+export function normalizeDetailSectionHeadings(section: DetailContentSection, locale: string): DetailContentSection {
+  if (section.key === "hero") return section;
+  return {
+    ...section,
+    title: normalizeDetailSectionTitle(section.title, locale),
+    cards: section.cards?.map(item => ({ ...item, title: normalizeDetailSectionTitle(item.title, locale) })),
+    steps: section.steps?.map(item => ({ ...item, title: normalizeDetailSectionTitle(item.title, locale) })),
+  };
+}
+
 /** Uses the reviewed AI display term saved with this locale; never translates at render time. */
 export function detailDisplayTerm(content: DetailContent | null | undefined, source: string | null | undefined, fallback?: string): string {
   const value = source?.trim();
@@ -324,7 +336,7 @@ export function parseDetailContent(value: unknown, today = new Date().toISOStrin
   }
   const normalizedValue = (normalizedSectionOrder ? { ...value, sectionOrder: normalizedSectionOrder } : value) as DetailContent;
   const normalizedSections = normalizedValue.sections.map(section => {
-    if (section.key !== "hero") return { ...section, title: normalizeDetailSectionTitle(section.title, normalizedValue.locale) };
+    if (section.key !== "hero") return normalizeDetailSectionHeadings(section, normalizedValue.locale);
     const title = withoutCatalogueWording(section.title) ?? section.title;
     const body = withoutCatalogueWording(section.body);
     if (!section.hero) return { ...section, title, ...(body ? { body } : {}) };

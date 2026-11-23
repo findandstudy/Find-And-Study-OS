@@ -68,12 +68,19 @@ test("saved, template and static detail headings share locale-aware sentence cas
   const lowerCase: DetailContent = {
     ...fixture,
     locale: "tr",
-    sections: [{ ...fixture.sections[0], title: "‘istanbul’da sorular" }],
+    sections: [{
+      ...fixture.sections[0],
+      title: "‘istanbul’da sorular",
+      cards: [{ title: "kampüsü inceleyin", body: "Approved copy" }],
+      steps: [{ title: "başvuruyu hazırlayın", body: "Approved copy" }],
+    }],
     templateSections: [{ key: "overview", title: "genel bakış" }],
   };
   const parsed = parseDetailContent(lowerCase)!;
   assert.equal(detailContentTitle(parsed, "faq", "Yedek"), "‘İstanbul’da sorular");
   assert.equal(detailContentTitle(parsed, "overview", "Yedek"), "Genel bakış");
+  assert.equal(parsed.sections[0].cards?.[0]?.title, "Kampüsü inceleyin");
+  assert.equal(parsed.sections[0].steps?.[0]?.title, "Başvuruyu hazırlayın");
   assert.match(renderToStaticMarkup(React.createElement(DetailHeading, { number: "01", eyebrow: "Şehir", title: "istanbul hakkında", locale: "tr" })), /İstanbul hakkında/);
 });
 

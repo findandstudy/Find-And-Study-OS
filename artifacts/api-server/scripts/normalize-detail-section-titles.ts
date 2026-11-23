@@ -1,5 +1,5 @@
 import { pool } from "@workspace/db";
-import { normalizeDetailSectionTitle } from "../src/lib/websiteDetailContentContract";
+import { normalizeDetailSectionHeadings, normalizeDetailSectionTitle, type DetailContentSection } from "../src/lib/websiteDetailContentContract";
 
 type BlockRow = { id: number; page_id: number; block_type: string; content: unknown };
 type JsonRecord = Record<string, unknown>;
@@ -14,7 +14,7 @@ function normalizeContentBlock(value: unknown): unknown {
   const locale = value.locale;
   const sections = Array.isArray(value.sections) ? value.sections.map((section) => {
     if (!isRecord(section) || section.key === "hero" || typeof section.title !== "string") return section;
-    return { ...section, title: normalizeDetailSectionTitle(section.title, locale) };
+    return normalizeDetailSectionHeadings(section as DetailContentSection, locale);
   }) : value.sections;
   const templateSections = Array.isArray(value.templateSections) ? value.templateSections.map((section) => {
     if (!isRecord(section) || section.key === "hero" || typeof section.title !== "string") return section;

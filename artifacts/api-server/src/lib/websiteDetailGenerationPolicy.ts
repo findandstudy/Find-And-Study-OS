@@ -366,7 +366,7 @@ export function buildDetailGenerationPlan(input: {
       "Do not use model memory or general world knowledge to add named universities or programmes. Use only CATALOG_ENTITIES supplied by the planner.",
       "Write an entity-specific, source-bound value proposition in the hero; do not reduce it to a neutral inventory summary.",
       "Use intent-led editorial headings that reveal the section's value; avoid one-word labels such as Overview or Highlights for generated editorial sections.",
-      "Begin every non-hero section heading with an uppercase letter in the target locale and use sentence case; do not title-case every word.",
+      "Begin every non-hero section heading and every nested card or step heading with an uppercase letter in the target locale and use sentence case; do not title-case every word.",
       "Vary heading and paragraph openings across the page. No more than two editorial headings may begin with the same action verb, and adjacent sections must not use the same sentence pattern.",
       "Preserve useful editorial depth. Do not replace specific context, comparisons or trade-offs with shallow totals or generic summaries.",
       ...(input.kind === "destination" ? [
