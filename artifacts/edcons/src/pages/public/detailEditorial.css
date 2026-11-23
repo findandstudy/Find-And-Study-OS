@@ -671,20 +671,28 @@
 .detail-destination > .detail-section > .detail-wrap { max-width: 1260px; }
 .detail-destination .detail-editorial-cards {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-  gap: 1px;
+  gap: 14px;
   margin-top: 18px;
+  border: 0;
+  background: transparent;
+}
+.detail-destination .detail-editorial-cards article {
+  min-height: 132px;
   border: 1px solid var(--detail-line);
   border-radius: 18px;
-  overflow: hidden;
-  background: var(--detail-line);
   box-shadow: var(--detail-shadow);
 }
-.detail-destination .detail-editorial-cards article { border: 0; min-height: 132px; }
+.detail-destination :is(.detail-snapshot, .detail-keylines, .detail-program-points, .detail-program-card, .detail-intake, .detail-fee-panel) {
+  border-radius: 18px;
+  overflow: hidden;
+}
+.detail-destination .detail-catalog-card { border-radius: 18px; overflow: hidden; }
+.detail-destination .detail-housing-strip article { border-radius: 18px; }
 .detail-destination .detail-editorial-table { margin-inline-start: 76px; border-radius: 18px; overflow: auto; box-shadow: var(--detail-shadow); }
 .detail-destination .detail-editorial-faq { margin-inline-start: 76px; columns: 2; column-gap: 44px; border-top: 0; }
-.detail-destination .detail-editorial-faq details { break-inside: avoid; border-top: 1px solid var(--detail-line); }
-.detail-destination .detail-editorial-steps { grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); margin-inline-start: 76px; border-top: 1px solid var(--detail-line); border-inline-start: 1px solid var(--detail-line); border-radius: 18px; overflow: hidden; box-shadow: var(--detail-shadow); }
-.detail-destination .detail-editorial-steps li { display: block; padding: 22px; border-inline-end: 1px solid var(--detail-line); background: var(--detail-white); }
+.detail-destination .detail-editorial-faq details { break-inside: avoid; margin-bottom: 12px; padding-inline: 18px; overflow: hidden; border: 1px solid var(--detail-line); border-radius: 14px; background: var(--detail-white); box-shadow: var(--detail-shadow); }
+.detail-destination .detail-editorial-steps { grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 12px; margin-inline-start: 76px; border: 0; }
+.detail-destination .detail-editorial-steps li { display: block; padding: 22px; border: 1px solid var(--detail-line); border-radius: 16px; background: var(--detail-white); box-shadow: var(--detail-shadow); }
 .detail-destination .detail-editorial-steps li > span { border: 0; padding: 0; place-items: start; background: transparent; }
 
 /* Editorial climate sections contain a handful of planning notes, not the
@@ -718,7 +726,10 @@
 }
 .detail-destination .detail-service-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+  border: 0;
 }
+.detail-destination .detail-service-grid article { border: 1px solid rgba(255,255,255,.28); border-radius: 18px; background: rgba(255,255,255,.035); }
 
 .detail-city .detail-editorial-cards,
 .detail-city .detail-grid,
@@ -1260,7 +1271,7 @@
   .detail-catalog-card,
   .detail-intake,
   .detail-fee-panel { border-radius: 14px; }
-  .detail-destination .detail-editorial-cards article { border-radius: 0; }
+  .detail-destination .detail-editorial-cards article { border-radius: 18px; }
   .detail-city .detail-editorial-cards article,
   .detail-city .detail-grid > *,
   .detail-city .detail-facts > div { border-radius: 14px; }

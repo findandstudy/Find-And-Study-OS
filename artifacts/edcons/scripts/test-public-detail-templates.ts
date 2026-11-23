@@ -190,6 +190,15 @@ test("country detail hero and catalogue cards use the shared high-contrast media
   assert.match(css, /\.detail-country-cover-foot \{[^}]*padding-top: 0;[^}]*border-top: 0;/);
 });
 
+test("country detail boxes use the shared rounded card language", () => {
+  assert.match(css, /\.detail-destination \.detail-editorial-cards article \{[\s\S]*border-radius: 18px;[\s\S]*box-shadow: var\(--detail-shadow\);/);
+  assert.match(css, /\.detail-destination :is\(\.detail-snapshot, \.detail-keylines, \.detail-program-points, \.detail-program-card, \.detail-intake, \.detail-fee-panel\) \{[\s\S]*border-radius: 18px;[\s\S]*overflow: hidden;/);
+  assert.match(css, /\.detail-destination \.detail-editorial-faq details \{[\s\S]*border-radius: 14px;[\s\S]*box-shadow: var\(--detail-shadow\);/);
+  assert.match(css, /\.detail-destination \.detail-editorial-steps li \{[\s\S]*border-radius: 16px;[\s\S]*box-shadow: var\(--detail-shadow\);/);
+  assert.match(css, /\.detail-destination \.detail-housing-strip article \{ border-radius: 18px; \}/);
+  assert.doesNotMatch(css, /\.detail-destination \.detail-editorial-cards article \{ border-radius: 0; \}/);
+});
+
 test("detail templates share compact rhythm while city hero facts reuse the program fact-card language", () => {
   assert.match(css, /\.detail-section \{ padding-block: 46px;/);
   assert.match(css, /\.detail-program \.detail-section \{ padding-block: 48px;/);
