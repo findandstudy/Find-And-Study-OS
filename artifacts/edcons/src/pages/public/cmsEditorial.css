@@ -372,6 +372,27 @@
   color: var(--cms-ink, #0b1728);
 }
 .home-future-page .cms-editorial-block { position: relative; }
+.public-cms-page.home-future-page [data-cms-block="home_fallback_hero"] {
+  color: var(--cms-ink, #0b1728);
+  border-bottom: 0;
+  background: linear-gradient(118deg, #eef6ff 0%, #dcecff 52%, #b9d7ff 100%);
+}
+.public-cms-page.home-future-page [data-cms-block="home_fallback_hero"]::after { display: none; }
+.public-cms-page.home-future-page [data-cms-block="home_fallback_hero"] > section {
+  width: 100%;
+  min-height: 700px;
+  padding-block: 0;
+}
+.public-cms-page.home-future-page [data-cms-block="home_fallback_hero"] .home-future-hero-copy :is(h1, p) {
+  color: var(--cms-ink, #0b1728) !important;
+}
+.public-cms-page.home-future-page [data-cms-block="home_fallback_hero"] .home-future-hero-copy h1::first-line {
+  color: var(--home-electric) !important;
+}
+.public-cms-page.home-future-page [data-cms-block="home_fallback_hero"] .home-future-hero-copy .cms-action-row a:nth-child(2) {
+  color: var(--home-electric) !important;
+  border-color: rgba(23,74,126,.28);
+}
 .home-future-page .home-motion-ready > .cms-editorial-block {
   opacity: 0;
   transform: translate3d(0, 54px, 0);
