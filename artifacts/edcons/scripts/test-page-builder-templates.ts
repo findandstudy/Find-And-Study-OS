@@ -106,6 +106,7 @@ test("Home destination cards use the public catalogue and its approved hero medi
     flagEmoji: "🇹🇷",
   }]);
   const catalogue = hydrated.find(block => block.blockType === "catalog_grid");
+  const hero = hydrated.find(block => block.blockType === "home_fallback_hero");
   assert.deepEqual(catalogue?.content.items, [{
     id: 1,
     title: "Türkiye",
@@ -114,6 +115,14 @@ test("Home destination cards use the public catalogue and its approved hero medi
     imageUrl: "/api/storage/turkey.webp",
     flagEmoji: "🇹🇷",
   }]);
+  assert.deepEqual(hero?.content.heroVisuals, [{
+    title: "Türkiye",
+    imageUrl: "/api/storage/turkey.webp",
+    canonicalPath: "/en/countries/turkey",
+    flagEmoji: "🇹🇷",
+  }]);
+  assert.match(source("pages/public/PublicPage.tsx"), /home-hero-photo-stage/);
+  assert.match(source("pages/public/cmsEditorial.css"), /\.home-hero-visual\.has-live-images/);
 });
 
 test("managed editor previews collection-backed blocks with the same data contract as public pages", () => {

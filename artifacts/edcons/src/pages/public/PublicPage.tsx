@@ -233,6 +233,12 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
       const secondaryHref = safeUrl(content.secondaryUrl);
       const signals = items(content.signals, 5);
       const journeySignals = signals.length ? signals : [{ label: "Explore", detail: "Destinations and programs" }, { label: "Prepare", detail: "Requirements and documents" }, { label: "Progress", detail: "Milestones and next actions" }];
+      const heroVisuals = items(content.heroVisuals, 3).map(visual => ({
+        title: text(visual.title, 120),
+        imageUrl: safeImageUrl(visual.imageUrl),
+        canonicalPath: safeUrl(visual.canonicalPath),
+        flagEmoji: text(visual.flagEmoji, 16),
+      })).filter(visual => visual.imageUrl);
       return (
         <section className="home-future-hero relative overflow-hidden">
           <div className="home-future-aurora" aria-hidden="true" />
@@ -246,7 +252,17 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
               {secondaryHref && content.secondaryLabel ? <Button size="lg" variant="outline" className="rounded-full border-white/25 bg-white/5 px-8 h-14 text-base text-white backdrop-blur hover:bg-white/10 hover:text-white transition-all duration-300" asChild><Link href={secondaryHref}>{text(content.secondaryLabel, 200)}</Link></Button> : null}
               </div>
             </div>
-            <aside className="home-journey-console" aria-label={text(content.signalTitle, 300) || "Student journey"}>
+            <aside className={`home-hero-visual${heroVisuals.length ? " has-live-images" : ""}`} aria-label={text(content.signalTitle, 300) || "Student journey"}>
+              {heroVisuals.length ? <div className="home-hero-photo-stage">
+                {heroVisuals.map((visual, visualIndex) => {
+                  const image = <><img src={visual.imageUrl!} alt="" loading={visualIndex === 0 ? "eager" : "lazy"} /><span>{visual.flagEmoji ? <i>{visual.flagEmoji}</i> : null}{visual.title}</span></>;
+                  return visual.canonicalPath
+                    ? <a href={visual.canonicalPath} className={`home-hero-photo home-hero-photo-${visualIndex + 1}`} key={`${visual.title}-${visualIndex}`}>{image}</a>
+                    : <div className={`home-hero-photo home-hero-photo-${visualIndex + 1}`} key={`${visual.title}-${visualIndex}`}>{image}</div>;
+                })}
+                <div className="home-hero-map-dots" aria-hidden="true"><i /><i /><i /><i /></div>
+              </div> : null}
+              <div className="home-journey-console">
               <div className="home-console-orbit" aria-hidden="true"><span /><span /><span /></div>
               <div className="home-console-map" aria-hidden="true"><i /><i /><i /><i /><i /></div>
               <div className="home-console-head"><div className="home-console-mark"><Compass className="h-5 w-5" /></div><div><p>{text(content.signalTitle, 300)}</p>{content.signalSubtitle ? <span>{text(content.signalSubtitle, 500)}</span> : null}</div></div>
@@ -254,6 +270,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
                 {journeySignals.map((signal, signalIndex) => <article key={signalIndex}><span>{String(signalIndex + 1).padStart(2, "0")}</span><div><strong>{text(signal.label, 120)}</strong><p>{text(signal.detail, 240)}</p></div>{signalIndex < journeySignals.length - 1 ? <i aria-hidden="true" /> : null}</article>)}
               </div>
               <p className="home-console-foot"><span aria-hidden="true" /> Human guidance, connected to one clear view</p>
+              </div>
             </aside>
           </div>
         </section>

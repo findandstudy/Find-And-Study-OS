@@ -22,7 +22,17 @@ export function hydrateManagedHomeDestinations(blocks: PageBlock[], destinations
     flagEmoji: destination.flagEmoji || null,
   }));
   if (!items.length) return blocks;
-  return blocks.map(block => block.blockType === "catalog_grid" && block.content.source === "destinations"
-    ? { ...block, content: { ...block.content, items } }
-    : block);
+  const heroVisuals = items
+    .filter(item => item.imageUrl)
+    .slice(0, 3)
+    .map(item => ({ title: item.title, imageUrl: item.imageUrl, canonicalPath: item.canonicalPath, flagEmoji: item.flagEmoji }));
+  return blocks.map(block => {
+    if (block.blockType === "catalog_grid" && block.content.source === "destinations") {
+      return { ...block, content: { ...block.content, items } };
+    }
+    if (block.blockType === "home_fallback_hero" && heroVisuals.length) {
+      return { ...block, content: { ...block.content, heroVisuals } };
+    }
+    return block;
+  });
 }
