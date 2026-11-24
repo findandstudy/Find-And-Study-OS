@@ -195,6 +195,8 @@ test("city and country university sections share the same logo-led media cards",
     assert.match(source, /kind="university"[\s\S]*logoUrl=\{[^}]+\}[\s\S]*layout="media" mediaFit="contain"/);
   }
   assert.match(city, /logoUrl: string \| null/);
+  assert.match(css, /\.detail-catalog-card\.has-media \{[^}]*border-radius: 24px;/);
+  assert.match(css, /\.detail-catalog-card:not\(\.has-media\),/);
 });
 
 test("country detail boxes use the shared rounded card language", () => {
