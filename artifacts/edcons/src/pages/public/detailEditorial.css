@@ -792,7 +792,7 @@
 
 @media (max-width: 1050px) {
   .detail-city .detail-editorial-cards article,
-  .detail-city .detail-grid > :not(.has-media),
+  .detail-city .detail-grid > *,
   .detail-city .detail-facts > div { grid-column: span 6; }
   .detail-destination .detail-editorial-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -1273,7 +1273,7 @@
   .detail-fee-panel { border-radius: 14px; }
   .detail-destination .detail-editorial-cards article { border-radius: 18px; }
   .detail-city .detail-editorial-cards article,
-  .detail-city .detail-grid > *,
+  .detail-city .detail-grid > :not(.has-media),
   .detail-city .detail-facts > div { border-radius: 14px; }
 }
 @media (max-width: 760px) {
