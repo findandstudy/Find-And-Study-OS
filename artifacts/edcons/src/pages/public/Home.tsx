@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
@@ -6,6 +8,7 @@ import { CmsBlock, CmsPageCanvas } from "./PublicPage";
 import type { PageBlock } from "@/lib/website/blockTypes";
 import { useJsonLd, SITE_URL, SITE_NAME, ORG_SCHEMA } from "@/hooks/use-json-ld";
 import { enrichManagedHomePageBlocks, managedHomePageBlocks } from "@/lib/website/managedPageStarters";
+import { hydrateManagedHomeDestinations, type HomeDestination } from "@/lib/website/homeDestinationCards";
 
 function HomeBlocks({ blocks, version, pageTitle, locale }: { blocks: PageBlock[]; version?: number; pageTitle: string; locale: string }) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -39,6 +42,12 @@ function HomeBlocks({ blocks, version, pageTitle, locale }: { blocks: PageBlock[
 export default function Home() {
   const { t, lang, localePath } = useI18n();
   const page = useTemplatePage("home", lang);
+  const destinationQuery = useQuery<HomeDestination[]>({
+    queryKey: ["home-featured-destinations", lang],
+    queryFn: () => customFetch(`/api/public/destinations?locale=${encodeURIComponent(lang)}`),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
   useSeo({ title: page?.meta.title || t("seo.homeTitle"), description: page?.meta.description || t("seo.homeDesc"), lang,
     noindex: page ? !page.meta.indexable : false, alternates: page?.meta.alternatePaths,
     canonical: typeof page?.data.seo?.canonicalUrl === "string" && page.data.seo.canonicalUrl ? page.data.seo.canonicalUrl : undefined });
@@ -64,9 +73,12 @@ export default function Home() {
     },
   ]);
 
-  if (page) return <HomeBlocks blocks={enrichManagedHomePageBlocks(page.data.blocks, localePath("/programs"), {
-    completeSystemFallback: page.data.id === 0 && page.data.versionNumber === 0,
-  })} version={page.data.versionNumber} pageTitle={page.data.title} locale={lang} />;
+  if (page) {
+    const blocks = enrichManagedHomePageBlocks(page.data.blocks, localePath("/programs"), {
+      completeSystemFallback: page.data.id === 0 && page.data.versionNumber === 0,
+    });
+    return <HomeBlocks blocks={hydrateManagedHomeDestinations(blocks, destinationQuery.data || [])} version={page.data.versionNumber} pageTitle={page.data.title} locale={lang} />;
+  }
 
   const fallbackBlocks = managedHomePageBlocks({
     badge: t("hero.badge"),
@@ -88,5 +100,5 @@ export default function Home() {
     visaDescription: t("features.visaDesc"),
   }, localePath("/programs"));
 
-  return <HomeBlocks blocks={fallbackBlocks} pageTitle={t("seo.homeTitle")} locale={lang} />;
+  return <HomeBlocks blocks={hydrateManagedHomeDestinations(fallbackBlocks, destinationQuery.data || [])} pageTitle={t("seo.homeTitle")} locale={lang} />;
 }

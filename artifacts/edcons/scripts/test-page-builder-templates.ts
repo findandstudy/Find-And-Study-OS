@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { catalogLimit, catalogLayoutClass, catalogParameters } from "../src/lib/website/catalogPresentation";
 import { enrichManagedHomePageBlocks, enrichManagedPageBlocks } from "../src/lib/website/managedPageStarters";
+import { hydrateManagedHomeDestinations } from "../src/lib/website/homeDestinationCards";
 import { pageEditorPreviewGeometry, samePageEditorPreviewGeometry } from "../src/pages/admin/website/pageEditorPreviewGeometry";
 const source = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
 
@@ -89,6 +90,30 @@ test("the explicit system Home fallback is completed without reviving custom one
   ]);
   assert.equal(completed[0].content.title, "Fallback hero");
   assert.deepEqual(enrichManagedHomePageBlocks(singleton, "/en/programs"), singleton);
+});
+
+test("Home destination cards use the public catalogue and its approved hero media", () => {
+  const blocks = enrichManagedHomePageBlocks([
+    { blockType: "home_fallback_hero", content: { title: "Fallback hero" }, settings: {}, sortOrder: 0, isVisible: true },
+  ], "/en/programs", { completeSystemFallback: true });
+  const hydrated = hydrateManagedHomeDestinations(blocks, [{
+    id: 1,
+    name: "Türkiye",
+    country: "Türkiye",
+    shortDescription: "A live destination summary",
+    canonicalPath: "/en/countries/turkey",
+    cardHeroImageUrl: "/api/storage/turkey.webp",
+    flagEmoji: "🇹🇷",
+  }]);
+  const catalogue = hydrated.find(block => block.blockType === "catalog_grid");
+  assert.deepEqual(catalogue?.content.items, [{
+    id: 1,
+    title: "Türkiye",
+    description: "A live destination summary",
+    canonicalPath: "/en/countries/turkey",
+    imageUrl: "/api/storage/turkey.webp",
+    flagEmoji: "🇹🇷",
+  }]);
 });
 
 test("managed editor previews collection-backed blocks with the same data contract as public pages", () => {
