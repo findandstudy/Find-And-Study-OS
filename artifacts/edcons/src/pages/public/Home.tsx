@@ -8,7 +8,9 @@ import { CmsBlock, CmsPageCanvas } from "./PublicPage";
 import type { PageBlock } from "@/lib/website/blockTypes";
 import { useJsonLd, SITE_URL, SITE_NAME, ORG_SCHEMA } from "@/hooks/use-json-ld";
 import { enrichManagedHomePageBlocks, managedHomePageBlocks } from "@/lib/website/managedPageStarters";
-import { hydrateManagedHomeDestinations, type HomeDestination } from "@/lib/website/homeDestinationCards";
+import { hydrateManagedHomeDestinations, hydrateManagedHomeUniversities, type HomeDestination, type HomeUniversity } from "@/lib/website/homeDestinationCards";
+
+type HomeUniversityResponse = { data: HomeUniversity[] };
 
 function HomeBlocks({ blocks, version, pageTitle, locale }: { blocks: PageBlock[]; version?: number; pageTitle: string; locale: string }) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -48,6 +50,12 @@ export default function Home() {
     staleTime: 5 * 60_000,
     retry: false,
   });
+  const universityQuery = useQuery<HomeUniversityResponse>({
+    queryKey: ["home-featured-universities"],
+    queryFn: () => customFetch("/api/universities?limit=100&offset=0"),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
   useSeo({ title: page?.meta.title || t("seo.homeTitle"), description: page?.meta.description || t("seo.homeDesc"), lang,
     noindex: page ? !page.meta.indexable : false, alternates: page?.meta.alternatePaths,
     canonical: typeof page?.data.seo?.canonicalUrl === "string" && page.data.seo.canonicalUrl ? page.data.seo.canonicalUrl : undefined });
@@ -77,7 +85,11 @@ export default function Home() {
     const blocks = enrichManagedHomePageBlocks(page.data.blocks, localePath("/programs"), {
       completeSystemFallback: page.data.id === 0 && page.data.versionNumber === 0,
     });
-    return <HomeBlocks blocks={hydrateManagedHomeDestinations(blocks, destinationQuery.data || [])} version={page.data.versionNumber} pageTitle={page.data.title} locale={lang} />;
+    const hydrated = hydrateManagedHomeUniversities(
+      hydrateManagedHomeDestinations(blocks, destinationQuery.data || []),
+      universityQuery.data?.data || [],
+    );
+    return <HomeBlocks blocks={hydrated} version={page.data.versionNumber} pageTitle={page.data.title} locale={lang} />;
   }
 
   const fallbackBlocks = managedHomePageBlocks({
@@ -100,5 +112,9 @@ export default function Home() {
     visaDescription: t("features.visaDesc"),
   }, localePath("/programs"));
 
-  return <HomeBlocks blocks={hydrateManagedHomeDestinations(fallbackBlocks, destinationQuery.data || [])} pageTitle={t("seo.homeTitle")} locale={lang} />;
+  const hydrated = hydrateManagedHomeUniversities(
+    hydrateManagedHomeDestinations(fallbackBlocks, destinationQuery.data || []),
+    universityQuery.data?.data || [],
+  );
+  return <HomeBlocks blocks={hydrated} pageTitle={t("seo.homeTitle")} locale={lang} />;
 }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { catalogLimit, catalogLayoutClass, catalogParameters } from "../src/lib/website/catalogPresentation";
 import { enrichManagedHomePageBlocks, enrichManagedPageBlocks } from "../src/lib/website/managedPageStarters";
-import { hydrateManagedHomeDestinations } from "../src/lib/website/homeDestinationCards";
+import { hydrateManagedHomeDestinations, hydrateManagedHomeUniversities } from "../src/lib/website/homeDestinationCards";
 import { pageEditorPreviewGeometry, samePageEditorPreviewGeometry } from "../src/pages/admin/website/pageEditorPreviewGeometry";
 const source = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
 
@@ -85,8 +85,9 @@ test("the explicit system Home fallback is completed without reviving custom one
   const singleton = [{ blockType: "home_fallback_hero", content: { title: "Fallback hero" }, settings: {}, sortOrder: 0, isVisible: true }];
   const completed = enrichManagedHomePageBlocks(singleton, "/en/programs", { completeSystemFallback: true });
   assert.deepEqual(completed.map(block => block.blockType), [
-    "home_fallback_hero", "home_fallback_stats", "home_fallback_features", "catalog_grid",
-    "process_steps", "feature_cards", "faq", "cta_banner",
+    "home_fallback_hero", "home_fallback_stats", "home_fallback_features", "counter_grid",
+    "process_steps", "icon_cards", "catalog_grid", "feature_cards", "team_grid", "faq",
+    "logo_grid", "grid_box", "cta_banner",
   ]);
   assert.equal(completed[0].content.title, "Fallback hero");
   assert.deepEqual(enrichManagedHomePageBlocks(singleton, "/en/programs"), singleton);
@@ -123,6 +124,20 @@ test("Home destination cards use the public catalogue and its approved hero medi
   }]);
   assert.match(source("pages/public/PublicPage.tsx"), /home-hero-photo-stage/);
   assert.match(source("pages/public/cmsEditorial.css"), /\.home-hero-visual\.has-live-images/);
+});
+
+test("Home uses live university logos without fabricating institution cards", () => {
+  const blocks = enrichManagedHomePageBlocks([
+    { blockType: "home_fallback_hero", content: { title: "Fallback hero" }, settings: {}, sortOrder: 0, isVisible: true },
+  ], "/en/programs", { completeSystemFallback: true });
+  const hydrated = hydrateManagedHomeUniversities(blocks, [
+    { id: 1, name: "Example University", country: "Exampleland", logoUrl: "/api/universities/1/logo" },
+    { id: 2, name: "Duplicate logo", country: "Exampleland", logoUrl: "/api/universities/1/logo" },
+  ]);
+  const wall = hydrated.find(block => block.blockType === "logo_grid");
+  assert.deepEqual(wall?.content.logos, [{ name: "Example University", country: "Exampleland", imageUrl: "/api/universities/1/logo" }]);
+  assert.match(source("pages/public/Home.tsx"), /home-featured-universities/);
+  assert.match(source("pages/public/cmsEditorial.css"), /\.home-university-wall/);
 });
 
 test("managed editor previews collection-backed blocks with the same data contract as public pages", () => {

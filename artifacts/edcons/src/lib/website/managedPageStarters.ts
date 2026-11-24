@@ -33,6 +33,13 @@ export const MANAGED_HOME_BLOCK_TYPES = new Set([
   "feature_cards",
   "faq",
   "cta_banner",
+  "media_text",
+  "counter_grid",
+  "icon_cards",
+  "testimonials",
+  "team_grid",
+  "logo_grid",
+  "grid_box",
 ]);
 
 function block(blockType: string, content: Record<string, unknown>): PageBlock {
@@ -89,6 +96,9 @@ export function managedHomePageBlocks(
       ],
     }),
     block("home_fallback_stats", {
+      eyebrow: "About Find & Study",
+      title: "A trusted partner for global education decisions",
+      subtitle: "We connect live catalogue research, practical preparation and human guidance in one clearer student journey.",
       stats: [
         { value: "98%", label: copy.visaRate },
         { value: "500+", label: copy.universities },
@@ -97,12 +107,48 @@ export function managedHomePageBlocks(
       ],
     }),
     block("home_fallback_features", {
+      eyebrow: "Our services",
       title: copy.featuresTitle,
       subtitle: copy.featuresSubtitle,
       cards: [
         { icon: "Globe2", title: copy.universityTitle, description: copy.universityDescription },
         { icon: "FileText", title: copy.applicationTitle, description: copy.applicationDescription },
         { icon: "ShieldCheck", title: copy.visaTitle, description: copy.visaDescription },
+      ],
+    }),
+    block("counter_grid", {
+      variant: "home-offer",
+      eyebrow: "What we offer",
+      title: "Build your study plan around the decisions that matter",
+      subtitle: "Compare destinations, understand the application path and keep every next step visible before you commit.",
+      ctaUrl: contactPath,
+      columns: "3",
+      items: [
+        { value: "01", label: "Destination context", description: "Compare country, city and student-life information alongside current study options." },
+        { value: "02", label: "Application readiness", description: "Bring requirements, documents and open questions together before submission." },
+        { value: "03", label: "Connected progress", description: "Follow requests, milestones and ownership without losing the context behind a decision." },
+      ],
+    }),
+    block("process_steps", {
+      variant: "home-process",
+      title: "A simpler route from research to your next step",
+      subtitle: "Move through one connected journey with live catalogue context and clear preparation at each stage.",
+      steps: [
+        { number: "01", title: "Choose your study direction", description: "Compare destinations, universities and programs around your academic goals, timing and practical priorities." },
+        { number: "02", title: "Plan and prepare with context", description: "Review current requirements, assemble the right information and resolve open questions before submission." },
+        { number: "03", title: "Follow every milestone", description: "Keep document requests, application progress and the next action visible throughout the journey." },
+      ],
+    }),
+    block("icon_cards", {
+      variant: "home-why",
+      eyebrow: "Why Find & Study",
+      title: "A clearer, connected way to plan international education",
+      subtitle: "The platform keeps catalogue facts, preparation and human support in the same decision trail.",
+      cards: [
+        { icon: "Search", title: "Live catalogue context", description: "Start from current destinations, institutions and programs instead of a generic shortlist." },
+        { icon: "ShieldCheck", title: "Preparation before action", description: "Review requirements, documents and uncertainties before an application moves forward." },
+        { icon: "FileText", title: "Visible next actions", description: "Keep outstanding requests, ownership and progress understandable throughout the journey." },
+        { icon: "MessageCircle", title: "Human guidance when needed", description: "Bring a shortlist, budget or unresolved decision to an adviser without starting the research again." },
       ],
     }),
     block("catalog_grid", {
@@ -120,23 +166,30 @@ export function managedHomePageBlocks(
         { id: "advice", title: "Adviser support", description: "Bring your shortlist and questions together for a more practical next step.", canonicalPath: contactPath },
       ],
     }),
-    block("process_steps", {
-      title: "From first idea to a clear next step",
-      subtitle: "A connected journey that helps you research, prepare and move forward without losing the context behind each decision.",
-      steps: [
-        { number: "01", title: "Explore with context", description: "Compare destinations, universities and programs around your goals, preferred location and study plans." },
-        { number: "02", title: "Prepare with confidence", description: "Bring your information, documents and questions together before an application is submitted." },
-        { number: "03", title: "Follow every milestone", description: "Keep application progress, document requests and the next action visible throughout your journey." },
-      ],
-    }),
     block("feature_cards", {
-      title: "Start with the decision in front of you",
-      subtitle: "Use the route that matches where you are today. You can explore independently and ask for guidance when you need it.",
+      variant: "home-proof",
+      eyebrow: "Student-first support",
+      title: "What you can expect from a connected journey",
+      subtitle: "A practical support model designed around transparency, preparation and the decision in front of you.",
       columns: "3",
       cards: [
-        { icon: "Map", title: "Choose a destination", description: "Understand countries and cities before narrowing your university and program options.", linkUrl: countriesPath, linkLabel: "Compare destinations" },
-        { icon: "Search", title: "Find a program", description: "Browse the current catalogue and focus your search around the study options that fit your plans.", linkUrl: programsPath, linkLabel: "Browse programs" },
-        { icon: "MessageCircle", title: "Speak with an adviser", description: "Turn a shortlist, budget or unanswered question into a more practical study plan.", linkUrl: contactPath, linkLabel: "Contact an adviser" },
+        { icon: "Map", title: "Choices with context", description: "Compare destination and study options with the practical details behind each route.", linkUrl: countriesPath, linkLabel: "Compare destinations" },
+        { icon: "Search", title: "Preparation you can see", description: "Understand what is known, what must be verified and which action comes next.", linkUrl: programsPath, linkLabel: "Browse programs" },
+        { icon: "MessageCircle", title: "Guidance that keeps your brief", description: "Discuss your shortlist without losing the goals, constraints and questions that shaped it.", linkUrl: contactPath, linkLabel: "Contact an adviser" },
+        { icon: "FileText", title: "Progress that stays visible", description: "Keep requirements, open questions and the next milestone connected to the decision that created them.", linkUrl: programsPath, linkLabel: "Review the journey" },
+      ],
+    }),
+    block("team_grid", {
+      variant: "home-support-team",
+      eyebrow: "Your support network",
+      title: "Specialist support across the student journey",
+      subtitle: "The right role joins the journey when its expertise is needed.",
+      ctaUrl: contactPath,
+      members: [
+        { name: "Education adviser", role: "Shortlist and decision support", bio: "Connects your academic goals, location preferences and practical constraints." },
+        { name: "Application specialist", role: "Requirements and preparation", bio: "Helps organise current requirements, documents and unresolved questions." },
+        { name: "Student journey team", role: "Milestones and next actions", bio: "Keeps progress, requests and ownership visible after the shortlist stage." },
+        { name: "Destination support", role: "Pre-arrival context", bio: "Helps turn destination research into a more practical arrival plan." },
       ],
     }),
     block("faq", {
@@ -148,6 +201,25 @@ export function managedHomePageBlocks(
         { question: "Can I compare different study options?", answer: "Yes. Use the destination and program pages to compare location, institution and study details, then keep the strongest options on your shortlist." },
         { question: "What happens after I choose a program?", answer: "The next step is to confirm the current entry requirements, intake details and required documents before an application is prepared." },
         { question: "Can I follow my application progress?", answer: "Signed-in students can use the portal to follow application milestones, document requests and the next action assigned to their journey." },
+      ],
+    }),
+    block("logo_grid", {
+      variant: "home-universities",
+      eyebrow: "Explore institutions",
+      title: "Universities in the live catalogue",
+      subtitle: "Institution names and logos are loaded from the current Find & Study catalogue.",
+      logos: [],
+    }),
+    block("grid_box", {
+      variant: "home-journal",
+      eyebrow: "Guides and insights",
+      title: "Research the next decision before you make it",
+      subtitle: "Use practical guidance alongside live catalogue information when building your study plan.",
+      columns: "3",
+      cards: [
+        { title: "Choosing a destination", description: "Compare academic fit, budget, city context and the route ahead before narrowing your options.", linkLabel: "Explore destinations", linkUrl: countriesPath },
+        { title: "Preparing an application", description: "Understand the current information and documents that should be ready before submission.", linkLabel: "Browse programs", linkUrl: programsPath },
+        { title: "Planning the student journey", description: "Keep timing, ownership and the next action visible from research through preparation.", linkLabel: "Read guidance", linkUrl: `${localeRoot}/blog` },
       ],
     }),
     block("cta_banner", {
@@ -179,9 +251,10 @@ export function enrichManagedHomePageBlocks(
   const systemFallbackTypes = ["home_fallback_hero"];
   const legacyTypes = ["home_fallback_hero", "home_fallback_stats", "home_fallback_features"];
   const previousTypes = ["home_fallback_hero", "home_fallback_stats", "home_fallback_features", "process_steps", "feature_cards", "faq", "cta_banner"];
+  const currentTypes = ["home_fallback_hero", "home_fallback_stats", "home_fallback_features", "catalog_grid", "process_steps", "feature_cards", "faq", "cta_banner"];
   const matches = (types: string[]) => blocks.length === types.length && types.every((type, index) => visibleTypes[index] === type);
   const isSystemFallback = options.completeSystemFallback === true && matches(systemFallbackTypes);
-  if (!isSystemFallback && !matches(legacyTypes) && !matches(previousTypes)) return blocks.map((entry, index) => ({ ...entry, isVisible: entry.isVisible ?? true, sortOrder: index }));
+  if (!isSystemFallback && !matches(legacyTypes) && !matches(previousTypes) && !matches(currentTypes)) return blocks.map((entry, index) => ({ ...entry, isVisible: entry.isVisible ?? true, sortOrder: index }));
   const current = new Map(blocks.map(entry => [entry.blockType, { ...entry, isVisible: entry.isVisible ?? true }]));
   return managedHomePageBlocks(DEFAULT_HOME_COPY, programsPath).map((starter, index) => ({
     ...(current.get(starter.blockType) || starter),

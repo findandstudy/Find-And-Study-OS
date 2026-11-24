@@ -1,7 +1,7 @@
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
-import { ArrowLeft, ArrowRight, Compass, FileText, Globe2, Map, MessageCircle, Search, ShieldCheck, Sparkles, Star } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Building2, Compass, FileText, Globe2, GraduationCap, Map, MessageCircle, Plane, Search, ShieldCheck, Sparkles, Star, Users } from "lucide-react";
 import { Link } from "wouter";
 
 import { Button } from "@/components/ui/button";
@@ -290,29 +290,42 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
       );
     }
     case "home_fallback_stats":
-      return (
-        <section className="home-proof-rail">
-          <div className="home-proof-grid max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="cms-responsive-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 text-center">
-              {items(content.stats, 12).map((stat, statIndex) => (
-                <div key={statIndex} className="home-proof-item">
-                  <span>{String(statIndex + 1).padStart(2, "0")}</span>
-                  <h3>{text(stat.value, 100)}</h3>
-                  <p>{text(stat.label, 200)}</p>
+      {
+        const image = safeImageUrl(content.imageUrl);
+        const secondaryImage = safeImageUrl(content.secondaryImageUrl);
+        return (
+          <section className="home-proof-rail">
+            <div className="home-about-layout">
+              <div className="home-about-visual" aria-hidden="true">
+                {image ? <img className="home-about-image-primary" src={image} alt="" loading="lazy" /> : null}
+                {secondaryImage ? <img className="home-about-image-secondary" src={secondaryImage} alt="" loading="lazy" /> : null}
+                <div className="home-about-experience"><strong>10+</strong><span>years of education guidance</span></div>
+              </div>
+              <div className="home-about-copy">
+                <p className="home-section-kicker">{text(content.eyebrow, 200)}</p>
+                <h2>{text(content.title, 500)}</h2>
+                <p className="home-about-lead">{text(content.subtitle, 2_000)}</p>
+                <div className="cms-responsive-grid home-about-stats">
+                  {items(content.stats, 12).map((stat, statIndex) => (
+                    <div key={statIndex} className="home-proof-item">
+                      <span>{String(statIndex + 1).padStart(2, "0")}</span>
+                      <h3>{text(stat.value, 100)}</h3>
+                      <p>{text(stat.label, 200)}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
-            <div className="home-proof-mosaic" aria-hidden="true"><span /><span /><span /><span /></div>
-          </div>
-        </section>
-      );
+          </section>
+        );
+      }
     case "home_fallback_features": {
       const iconByName = { Globe2, FileText, ShieldCheck } as const;
       return (
         <section className="home-bento-section">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="home-section-intro mx-auto mb-14 max-w-3xl text-center">
-              <p className="home-section-kicker">Built around your next decision</p>
+              <p className="home-section-kicker">{text(content.eyebrow, 200) || "Built around your next decision"}</p>
               <h2 className="text-3xl md:text-4xl font-bold font-display mb-4">{text(content.title, 500)}</h2>
               {content.subtitle ? <p className="text-lg text-muted-foreground">{text(content.subtitle)}</p> : null}
             </div>
@@ -321,7 +334,8 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
                 const iconName = text(card.icon, 32) as keyof typeof iconByName;
                 const Icon = iconByName[iconName] || Globe2;
                 const href = safeUrl(card.linkUrl);
-                const body = <><div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 group-hover:bg-primary transition-colors duration-300"><Icon className="w-7 h-7 text-primary group-hover:text-white transition-colors duration-300" /></div><h3 className="text-xl font-bold font-display mb-3">{text(card.title, 300)}</h3><p className="text-muted-foreground leading-relaxed">{text(card.description)}</p></>;
+                const image = safeImageUrl(card.imageUrl);
+                const body = <><div className="home-service-card-head"><div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center"><Icon className="w-7 h-7 text-primary transition-colors duration-300" /></div><h3 className="text-xl font-bold font-display">{text(card.title, 300)}</h3></div><p className="text-muted-foreground leading-relaxed">{text(card.description)}</p>{image ? <div className="home-service-card-media"><img src={image} alt="" loading="lazy" /></div> : null}<span className="home-service-card-link">Explore support <ArrowRight aria-hidden="true" /></span></>;
                 return <article key={cardIndex} className="home-bento-card group">{href ? <a className="block h-full" href={href}>{body}</a> : body}</article>;
               })}
             </div>
@@ -398,8 +412,14 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
     case "icon_cards":
       {
       const featureIcons = { Map, Search, MessageCircle, Globe2, FileText, ShieldCheck, Star } as const;
+      if (content.variant === "home-why") {
+        const visual = safeImageUrl(content.imageUrl);
+        return <section className="home-why-section"><div className="home-why-inner"><div className="home-why-visual">{visual ? <img src={visual} alt="" loading="lazy" /> : null}<div className="home-why-orbit" aria-hidden="true" /><span>Find &amp; Study</span></div><div className="home-why-copy"><p className="home-section-kicker">{text(content.eyebrow, 200)}</p><h2>{text(content.title, 500)}</h2><p className="home-why-lead">{text(content.subtitle, 2_000)}</p><div className="home-why-list">{items(content.cards).map((card, cardIndex) => { const Icon = featureIcons[text(card.icon, 32) as keyof typeof featureIcons] || Star; return <details key={cardIndex} open={cardIndex === 0}><summary><span>{String(cardIndex + 1).padStart(2, "0")}</span><Icon aria-hidden="true" /><strong>{text(card.title, 300)}</strong><i>+</i></summary><p>{text(card.description, 2_000)}</p></details>; })}</div></div></div></section>;
+      }
+      const featureClass = content.variant === "home-proof" ? "home-pathways home-proof-stories" : "home-pathways";
       return (
-        <section className="home-pathways mx-auto max-w-6xl px-4 py-14">
+        <section className={`${featureClass} mx-auto max-w-6xl px-4 py-14`}>
+          {content.eyebrow ? <p className="home-section-kicker text-center">{text(content.eyebrow, 200)}</p> : null}
           <h2 className="text-center font-display text-3xl font-bold">{text(content.title, 500)}</h2>
           {content.subtitle ? <p className="mt-3 text-center text-muted-foreground">{text(content.subtitle)}</p> : null}
           <div className="cms-responsive-grid mt-8 grid gap-5 md:grid-cols-3">
@@ -426,7 +446,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
       return <section className="mx-auto max-w-6xl px-4 py-16"><div className="max-w-3xl"><h2 className="font-display text-3xl font-bold md:text-4xl">{text(content.title, 500)}</h2>{content.subtitle ? <p className="mt-3 text-lg text-muted-foreground">{text(content.subtitle)}</p> : null}</div><div className={`cms-responsive-grid mt-8 grid gap-5 ${columnClass}`}>{items(content.images, 24).map((item, galleryIndex) => { const image = safeImageUrl(item.imageUrl); const href = safeUrl(item.linkUrl); const visual = <figure className="group overflow-hidden rounded-2xl border bg-card"><div className="aspect-[4/3] overflow-hidden bg-secondary/60">{image ? <img src={image} alt={text(item.altText, 300)} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" /> : null}</div>{item.caption ? <figcaption className="p-4 text-sm font-medium">{text(item.caption, 300)}</figcaption> : null}</figure>; return href ? <a key={galleryIndex} href={href}>{visual}</a> : <div key={galleryIndex}>{visual}</div>; })}</div></section>;
     }
     case "process_steps":
-      return <section className="home-timeline px-4 py-20"><div className="mx-auto max-w-6xl"><div className="max-w-3xl"><p className="home-section-kicker">A clearer way forward</p><h2 className="font-display text-3xl font-bold md:text-5xl">{text(content.title, 500)}</h2>{content.subtitle ? <p className="mt-4 text-lg leading-8 text-muted-foreground">{text(content.subtitle)}</p> : null}</div><ol className="cms-responsive-grid mt-12 grid gap-5 md:grid-cols-3">{items(content.steps, 12).map((step, stepIndex) => <li key={stepIndex} className="home-timeline-step"><span>{text(step.number, 32) || String(stepIndex + 1).padStart(2, "0")}</span><i aria-hidden="true" /><h3>{text(step.title, 300)}</h3><p>{text(step.description, 2_000)}</p></li>)}</ol></div></section>;
+      return <section className="home-timeline px-4 py-20"><div className="mx-auto max-w-6xl"><div className="home-process-intro"><div className="home-process-emblem"><Plane aria-hidden="true" /><FileText aria-hidden="true" /></div><div><p className="home-section-kicker">How it works</p><h2 className="font-display text-3xl font-bold md:text-5xl">{text(content.title, 500)}</h2>{content.subtitle ? <p className="mt-4 text-lg leading-8 text-muted-foreground">{text(content.subtitle)}</p> : null}</div></div><ol className="cms-responsive-grid mt-12 grid gap-5 md:grid-cols-3">{items(content.steps, 12).map((step, stepIndex) => <li key={stepIndex} className="home-timeline-step"><div className="home-step-icon">{stepIndex === 0 ? <Globe2 /> : stepIndex === 1 ? <FileText /> : <Plane />}</div><span>{text(step.number, 32) || String(stepIndex + 1).padStart(2, "0")}</span><i aria-hidden="true" /><h3>{text(step.title, 300)}</h3><p>{text(step.description, 2_000)}</p></li>)}</ol></div></section>;
     case "quote_banner": {
       const portrait = safeImageUrl(content.imageUrl);
       return <section className="mx-auto max-w-6xl px-4 py-16"><blockquote className="relative overflow-hidden rounded-[2rem] bg-slate-950 px-8 py-12 text-white md:px-14"><div className="absolute -end-8 -top-16 text-[14rem] font-serif leading-none text-white/5" aria-hidden="true">“</div><div className="relative flex flex-col gap-8 md:flex-row md:items-center">{portrait ? <img src={portrait} alt="" className="h-20 w-20 shrink-0 rounded-full object-cover ring-4 ring-white/10" loading="lazy" /> : null}<div><p className="max-w-4xl font-display text-2xl font-semibold leading-relaxed md:text-4xl">“{text(content.quote, 4_000)}”</p>{content.author || content.role ? <footer className="mt-6 text-sm text-white/70"><strong className="text-white">{text(content.author, 200)}</strong>{content.role ? ` · ${text(content.role, 300)}` : ""}</footer> : null}</div></div></blockquote></section>;
@@ -438,7 +458,8 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
     case "team_grid": {
       const members = items(content.members);
       if (!members.length) return null;
-      return <section className="mx-auto max-w-6xl px-4 py-14"><h2 className="text-center text-3xl font-bold">{text(content.title, 500)}</h2><div className="cms-responsive-grid mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">{members.map((member, index) => { const photo = safeImageUrl(member.photo); return <article key={index} className="rounded-2xl border p-5 text-center">{photo ? <img src={photo} alt={text(member.name, 200)} className="mx-auto h-24 w-24 rounded-full object-cover" loading="lazy" /> : null}<h3 className="mt-4 font-semibold">{text(member.name, 200)}</h3><p className="text-sm text-primary">{text(member.role, 200)}</p><p className="mt-2 text-sm text-muted-foreground">{text(member.bio)}</p></article>; })}</div></section>;
+      const supportIcons = [GraduationCap, FileText, Users, Compass];
+      return <section className={content.variant === "home-support-team" ? "home-support-team" : "mx-auto max-w-6xl px-4 py-14"}><div className="home-support-team-inner"><div className="home-support-team-intro">{content.eyebrow ? <p className="home-section-kicker">{text(content.eyebrow, 200)}</p> : null}<h2>{text(content.title, 500)}</h2>{content.subtitle ? <p>{text(content.subtitle, 2_000)}</p> : null}<a href={safeUrl(content.ctaUrl) || "/en/contact"}>Meet your next step <ArrowRight /></a></div><div className="cms-responsive-grid home-support-team-grid">{members.map((member, index) => { const photo = safeImageUrl(member.photo); const Icon = supportIcons[index % supportIcons.length] || Users; return <article key={index}>{photo ? <img src={photo} alt={text(member.name, 200)} loading="lazy" /> : <div className="home-support-avatar"><Icon aria-hidden="true" /></div>}<div><h3>{text(member.name, 200)}</h3><p>{text(member.role, 200)}</p><small>{text(member.bio)}</small></div></article>; })}</div></div></section>;
     }
     case "office_list": {
       const offices = items(content.offices);
@@ -448,7 +469,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
     case "logo_grid": {
       const logos = items(content.logos, 40);
       if (!logos.length) return null;
-      return <section className="mx-auto max-w-6xl px-4 py-14"><h2 className="text-center text-3xl font-bold">{text(content.title, 500)}</h2><div className="mt-8 flex flex-wrap items-center justify-center gap-8">{logos.map((logo, index) => { const image = safeImageUrl(logo.imageUrl); const href = safeUrl(logo.linkUrl); const visual = image ? <img src={image} alt={text(logo.name, 200)} className="h-16 w-32 object-contain" loading="lazy" /> : <span>{text(logo.name, 200)}</span>; return href ? <a key={index} href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined}>{visual}</a> : <div key={index}>{visual}</div>; })}</div></section>;
+      return <section className={content.variant === "home-universities" ? "home-university-wall" : "mx-auto max-w-6xl px-4 py-14"}>{content.eyebrow ? <p className="home-section-kicker text-center">{text(content.eyebrow, 200)}</p> : null}<h2 className="text-center text-3xl font-bold">{text(content.title, 500)}</h2>{content.subtitle ? <p className="home-university-wall-subtitle">{text(content.subtitle, 2_000)}</p> : null}<div className="home-university-grid">{logos.map((logo, index) => { const image = safeImageUrl(logo.imageUrl); const href = safeUrl(logo.linkUrl); const visual = <>{image ? <img src={image} alt={text(logo.name, 200)} loading="lazy" /> : <Building2 aria-hidden="true" />}<strong>{text(logo.name, 200)}</strong>{logo.country ? <span>{text(logo.country, 120)}</span> : null}</>; return href ? <a key={index} href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined}>{visual}</a> : <div key={index}>{visual}</div>; })}</div></section>;
     }
     case "testimonials": {
       const testimonials = items(content.items);
@@ -456,7 +477,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
       return <section className="mx-auto max-w-6xl px-4 py-14"><h2 className="text-center text-3xl font-bold">{text(content.title, 500)}</h2><div className="cms-responsive-grid mt-8 grid gap-5 md:grid-cols-2">{testimonials.map((item, index) => <blockquote key={index} className="rounded-2xl border bg-card p-6"><p className="text-lg">“{text(item.content, 4_000)}”</p><footer className="mt-4 text-sm text-muted-foreground">{text(item.name, 200)}{item.role ? ` · ${text(item.role, 200)}` : ""}</footer></blockquote>)}</div></section>;
     }
     case "grid_box":
-      return <section className="cms-layout-section"><div className="cms-section-heading">{content.eyebrow ? <p className="cms-section-eyebrow">{text(content.eyebrow, 200)}</p> : null}<h2>{text(content.title, 500)}</h2>{content.subtitle ? <p>{text(content.subtitle)}</p> : null}</div><div className={`cms-responsive-grid cms-grid-box-grid ${responsiveColumns(content.columns)}`}>{items(content.cards, 24).map((card, cardIndex) => { const image = safeImageUrl(card.imageUrl); const href = safeUrl(card.linkUrl); const body = <><div className="cms-grid-box-media">{image ? <img src={image} alt="" loading="lazy" /> : <span aria-hidden="true">{String(cardIndex + 1).padStart(2, "0")}</span>}</div><div className="cms-grid-box-copy"><h3>{text(card.title, 300)}</h3>{card.description ? <p>{text(card.description, 2_000)}</p> : null}{href && card.linkLabel ? <span className="cms-inline-link">{text(card.linkLabel, 200)} <ArrowRight className="h-4 w-4" aria-hidden="true" /></span> : null}</div></>; return <article key={cardIndex} className="cms-grid-box-card">{href ? <a href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined}>{body}</a> : body}</article>; })}</div></section>;
+      return <section className={`cms-layout-section${content.variant === "home-journal" ? " home-journal-section" : ""}`}><div className="cms-section-heading">{content.eyebrow ? <p className="cms-section-eyebrow">{text(content.eyebrow, 200)}</p> : null}<h2>{text(content.title, 500)}</h2>{content.subtitle ? <p>{text(content.subtitle)}</p> : null}</div><div className={`cms-responsive-grid cms-grid-box-grid ${responsiveColumns(content.columns)}`}>{items(content.cards, 24).map((card, cardIndex) => { const image = safeImageUrl(card.imageUrl); const href = safeUrl(card.linkUrl); const body = <><div className="cms-grid-box-media">{image ? <img src={image} alt="" loading="lazy" /> : <span aria-hidden="true">{String(cardIndex + 1).padStart(2, "0")}</span>}</div><div className="cms-grid-box-copy"><span className="home-card-index">{String(cardIndex + 1).padStart(2, "0")}</span><h3>{text(card.title, 300)}</h3>{card.description ? <p>{text(card.description, 2_000)}</p> : null}{href && card.linkLabel ? <span className="cms-inline-link">{text(card.linkLabel, 200)} <ArrowRight className="h-4 w-4" aria-hidden="true" /></span> : null}</div></>; return <article key={cardIndex} className="cms-grid-box-card">{href ? <a href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined}>{body}</a> : body}</article>; })}</div></section>;
     case "scroll_box": {
       const cardSize = ["compact", "wide"].includes(text(content.cardSize, 16)) ? text(content.cardSize, 16) : "standard";
       return <section className="cms-layout-section cms-scroll-section"><div className="cms-section-heading"><h2>{text(content.title, 500)}</h2>{content.subtitle ? <p>{text(content.subtitle)}</p> : null}</div><div className="cms-horizontal-scroll" data-card-size={cardSize} tabIndex={0} aria-label={text(content.title, 500) || "Scrollable content"}>{items(content.items, 30).map((item, itemIndex) => { const image = safeImageUrl(item.imageUrl); const href = safeUrl(item.linkUrl); const body = <>{image ? <img src={image} alt="" loading="lazy" /> : null}<div><span>{String(itemIndex + 1).padStart(2, "0")}</span><h3>{text(item.title, 300)}</h3>{item.description ? <p>{text(item.description, 2_000)}</p> : null}{href && item.linkLabel ? <strong className="cms-inline-link">{text(item.linkLabel, 200)} <ArrowRight className="h-4 w-4" aria-hidden="true" /></strong> : null}</div></>; return <article key={itemIndex} className="cms-scroll-card">{href ? <a href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined}>{body}</a> : body}</article>; })}</div></section>;
@@ -467,8 +488,14 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
       return <section className="cms-layout-section"><div className="cms-section-heading"><h2>{text(content.title, 500)}</h2>{content.subtitle ? <p>{text(content.subtitle)}</p> : null}</div><div className={`cms-responsive-grid cms-column-layout-grid ${responsiveColumns(content.columns)}`}>{items(content.items, 16).map((item, itemIndex) => { const href = safeUrl(item.linkUrl); return <article key={itemIndex}><span className="cms-column-number">{String(itemIndex + 1).padStart(2, "0")}</span>{item.eyebrow ? <p className="cms-section-eyebrow">{text(item.eyebrow, 200)}</p> : null}<h3>{text(item.title, 300)}</h3>{item.body ? <p>{text(item.body, 3_000)}</p> : null}{href && item.linkLabel ? <a className="cms-inline-link" href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined}>{text(item.linkLabel, 200)} <ArrowRight className="h-4 w-4" aria-hidden="true" /></a> : null}</article>; })}</div></section>;
     case "progress_bars":
       return <section className="cms-layout-section cms-progress-section"><div className="cms-section-heading"><h2>{text(content.title, 500)}</h2>{content.subtitle ? <p>{text(content.subtitle)}</p> : null}</div><div className="cms-progress-list">{items(content.items, 20).map((item, itemIndex) => { const value = progressValue(item.value); return <div key={itemIndex} className="cms-progress-item"><div className="cms-progress-label"><div><strong>{text(item.label, 300)}</strong>{item.note ? <small>{text(item.note, 500)}</small> : null}</div><span>{value}%</span></div><progress max={100} value={value} aria-label={text(item.label, 300)}>{value}%</progress></div>; })}</div></section>;
-    case "counter_grid":
+    case "counter_grid": {
+      if (content.variant === "home-offer") {
+        const image = safeImageUrl(content.imageUrl);
+        const secondaryImage = safeImageUrl(content.secondaryImageUrl);
+        return <section className="home-offer-section"><div className="home-offer-inner"><div className="home-offer-copy"><p className="home-section-kicker">{text(content.eyebrow, 200)}</p><h2>{text(content.title, 500)}</h2><p>{text(content.subtitle, 2_000)}</p><div className="home-offer-metrics">{items(content.items, 16).map((item, itemIndex) => <article key={itemIndex}><strong>{text(item.value, 80)}</strong><div><h3>{text(item.label, 300)}</h3><p>{text(item.description, 1_000)}</p></div></article>)}</div><a href={safeUrl(content.ctaUrl) || "/en/contact"}>Start your journey <ArrowRight /></a></div><div className="home-offer-visual">{image ? <img src={image} alt="" loading="lazy" /> : null}<div className="home-offer-highlight"><strong>One connected plan</strong><span>Research, preparation and progress</span></div>{secondaryImage ? <img src={secondaryImage} alt="" loading="lazy" /> : null}</div></div></section>;
+      }
       return <section className="cms-layout-section cms-counter-section"><div className="cms-section-heading"><h2>{text(content.title, 500)}</h2>{content.subtitle ? <p>{text(content.subtitle)}</p> : null}</div><div className={`cms-responsive-grid cms-counter-grid ${responsiveColumns(content.columns)}`}>{items(content.items, 16).map((item, itemIndex) => <article key={itemIndex}><p className="cms-counter-value"><span>{text(item.prefix, 40)}</span>{text(item.value, 80)}<span>{text(item.suffix, 40)}</span></p><h3>{text(item.label, 300)}</h3>{item.description ? <p>{text(item.description, 1_000)}</p> : null}</article>)}</div></section>;
+    }
     case "logo_marquee": {
       const logos = items(content.items, 40);
       if (!logos.length) return null;
