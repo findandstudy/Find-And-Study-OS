@@ -739,8 +739,10 @@
 .home-future-page [data-cms-block="faq"] summary { font-size: 17px; }
 
 .home-future-page [data-cms-block="cta_banner"] { padding: 72px 20px 100px; background: #fff; }
-.home-future-page .home-future-cta { max-width: 1180px; margin: 0 auto; border-radius: 30px; padding-block: 74px; background: linear-gradient(116deg,#10213e,#1a3766 58%,#276de6); }
-.home-future-page .home-future-cta h2 { max-width: 18ch; margin-inline: auto; }
+.public-cms-page.home-future-page [data-cms-block="cta_banner"] > .home-future-cta { max-width: 1180px; margin: 0 auto; border-radius: 30px; padding-block: 74px; color: #fff; background: linear-gradient(116deg,#10213e,#1a3766 58%,#276de6); }
+.public-cms-page.home-future-page [data-cms-block="cta_banner"] > .home-future-cta h2 { max-width: 18ch; margin-inline: auto; color: #fff; }
+.public-cms-page.home-future-page [data-cms-block="cta_banner"] > .home-future-cta > p { color: rgba(255,255,255,.78) !important; }
+.public-cms-page.home-future-page [data-cms-block="cta_banner"] > .home-future-cta .cms-action-row a { border-radius: 999px; }
 
 @media (max-width: 1024px) {
   .public-home-utility-note { display: none; }

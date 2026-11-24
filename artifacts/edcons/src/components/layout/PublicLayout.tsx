@@ -106,16 +106,17 @@ export function PublicLayout({ children }: { children: ReactNode }) {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-[100] focus:rounded focus:bg-background focus:p-3 focus:text-foreground focus:ring-2">
         {t("a11y.skipToContent")}
       </a>
-      {isPublicHome && (settings.companyEmail || settings.companyPhone || settings.workingHours || settings.companyCity) ? (
+      {isPublicHome ? (
         <div className="public-home-utility-bar" aria-label="Contact information">
           <div className="public-home-utility-inner">
             <div className="public-home-utility-links">
+              <Link href={localePath("/contact")}><Mail aria-hidden="true" />{t("nav.contact")}</Link>
               {settings.companyPhone ? <a href={`tel:${settings.companyPhone.replace(/\s/g, "")}`}><Phone aria-hidden="true" />{settings.companyPhone}</a> : null}
               {settings.companyEmail ? <a href={`mailto:${settings.companyEmail}`}><Mail aria-hidden="true" />{settings.companyEmail}</a> : null}
               {settings.workingHours ? <span><Clock3 aria-hidden="true" />{settings.workingHours}</span> : null}
               {settings.companyCity ? <span><MapPin aria-hidden="true" />{[settings.companyCity, settings.companyCountry].filter(Boolean).join(", ")}</span> : null}
             </div>
-            <span className="public-home-utility-note">Global education guidance, connected end to end</span>
+            <span className="public-home-utility-note">{t("seo.homeDesc")}</span>
           </div>
         </div>
       ) : null}
