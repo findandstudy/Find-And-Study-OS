@@ -310,6 +310,8 @@ type PublicCatalogBlockItem = {
   title: string;
   description: string;
   canonicalPath: string;
+  imageUrl?: string | null;
+  flagEmoji?: string | null;
 };
 
 /**
@@ -408,6 +410,9 @@ export async function readPublicCatalogBlockItems(
         slug: destinationsTable.slug,
         description: destinationsTable.shortDescription,
         country: destinationsTable.country,
+        heroImageUrl: destinationsTable.heroImageUrl,
+        thumbnailUrl: destinationsTable.thumbnailUrl,
+        flagEmoji: destinationsTable.flagEmoji,
       })
       .from(destinationsTable)
       .where(and(...conditions))
@@ -423,6 +428,8 @@ export async function readPublicCatalogBlockItems(
         locale,
         slug: row.slug,
       }),
+      imageUrl: row.thumbnailUrl || row.heroImageUrl,
+      flagEmoji: row.flagEmoji,
     }));
   }
 

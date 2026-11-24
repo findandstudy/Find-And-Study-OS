@@ -248,6 +248,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
             </div>
             <aside className="home-journey-console" aria-label={text(content.signalTitle, 300) || "Student journey"}>
               <div className="home-console-orbit" aria-hidden="true"><span /><span /><span /></div>
+              <div className="home-console-map" aria-hidden="true"><i /><i /><i /><i /><i /></div>
               <div className="home-console-head"><div className="home-console-mark"><Compass className="h-5 w-5" /></div><div><p>{text(content.signalTitle, 300)}</p>{content.signalSubtitle ? <span>{text(content.signalSubtitle, 500)}</span> : null}</div></div>
               <div className="home-console-flow">
                 {journeySignals.map((signal, signalIndex) => <article key={signalIndex}><span>{String(signalIndex + 1).padStart(2, "0")}</span><div><strong>{text(signal.label, 120)}</strong><p>{text(signal.detail, 240)}</p></div>{signalIndex < journeySignals.length - 1 ? <i aria-hidden="true" /> : null}</article>)}
@@ -351,8 +352,9 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
             <div className={`cms-responsive-grid mt-8 ${catalogLayoutClass(content)}`} tabIndex={content.layout === "carousel" ? 0 : undefined} aria-label={text(content.title, 500)}>
               {cards.map((item, index) => {
                 const href = safeUrl(item.canonicalPath);
-                const card = <><h3 className="text-xl font-semibold">{text(item.title, 500)}</h3>{item.description ? <p className="mt-2 text-muted-foreground">{text(item.description)}</p> : null}</>;
-                return <article key={text(item.id, 64) || index} className="home-catalog-card rounded-2xl border bg-card p-6 shadow-sm"><span className="home-card-index">{String(index + 1).padStart(2, "0")}</span>{href ? <a href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{card}<ArrowRight className="mt-6 h-5 w-5" aria-hidden="true" /></a> : card}</article>;
+                const image = safeImageUrl(item.imageUrl);
+                const card = <>{image ? <div className="home-catalog-media"><img src={image} alt="" loading="lazy" /><span>{text(item.flagEmoji, 12)}</span></div> : null}<div className="home-catalog-copy"><span className="home-card-index">{String(index + 1).padStart(2, "0")}</span><h3 className="text-xl font-semibold">{text(item.title, 500)}</h3>{item.description ? <p className="mt-2 text-muted-foreground">{text(item.description)}</p> : null}<ArrowRight className="mt-6 h-5 w-5" aria-hidden="true" /></div></>;
+                return <article key={text(item.id, 64) || index} className="home-catalog-card rounded-2xl border bg-card shadow-sm">{href ? <a href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{card}</a> : card}</article>;
               })}
             </div>
           ) : (

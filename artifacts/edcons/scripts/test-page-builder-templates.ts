@@ -51,6 +51,9 @@ test("Home and About reuse published blocks while preserving static fallbacks an
   assert.match(home, /managedHomePageBlocks/);
   assert.match(home, /<CmsBlock/);
   assert.match(home, /<CmsPageCanvas className="home-future-page">/);
+  assert.match(home, /IntersectionObserver/);
+  assert.match(home, /prefers-reduced-motion: reduce/);
+  assert.match(home, /home-reveal-visible/);
   assert.match(publicPage, /safeHeroTextColor/);
   assert.match(publicPage, /safeSurfaceTextColor/);
   assert.match(publicPage, /cta_banner[\s\S]*--cms-section-bg[\s\S]*linear-gradient\(125deg/);
@@ -59,6 +62,10 @@ test("Home and About reuse published blocks while preserving static fallbacks an
   assert.match(editorialCss, /--home-night: var\(--cms-secondary/);
   assert.match(editorialCss, /--home-electric: var\(--cms-blue/);
   assert.match(editorialCss, /--home-paper: var\(--cms-paper/);
+  assert.match(editorialCss, /@keyframes home-card-arrive/);
+  assert.match(editorialCss, /@keyframes home-orbit-drift/);
+  assert.match(editorialCss, /prefers-reduced-motion: reduce[\s\S]*animation-duration: \.01ms/);
+  assert.match(editorialCss, /\.home-catalog-media img/);
   assert.match(editorialCss, /cta_banner[^}]*\.home-future-cta[^}]*a:not\(:first-child\)[\s\S]*--cms-section-text/);
   assert.match(editorialCss, /@media \(min-width: 761px\) and \(max-width: 1024px\)[\s\S]*\.home-future-page \.home-bento-card:first-child \{ grid-column: 1 \/ -1; \}/);
   assert.match(editorialCss, /cms-preview-viewport\[data-preview-size="tablet"\] \.home-bento-card:first-child \{ grid-column: 1 \/ -1; \}/);

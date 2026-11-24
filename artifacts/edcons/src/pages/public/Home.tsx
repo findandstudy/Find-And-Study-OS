@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
@@ -7,7 +8,31 @@ import { useJsonLd, SITE_URL, SITE_NAME, ORG_SCHEMA } from "@/hooks/use-json-ld"
 import { enrichManagedHomePageBlocks, managedHomePageBlocks } from "@/lib/website/managedPageStarters";
 
 function HomeBlocks({ blocks, version, pageTitle, locale }: { blocks: PageBlock[]; version?: number; pageTitle: string; locale: string }) {
-  const content = <div data-public-page-version={version}>{blocks.map((block, index) => <CmsBlock block={block} index={index} variables={{ siteName: SITE_NAME, pageTitle, pageSlug: "home", pageLocale: locale }} key={`${block.blockType}-${index}`} />)}</div>;
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return;
+    const blocks = Array.from(root.querySelectorAll<HTMLElement>(":scope > .cms-editorial-block"));
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    root.classList.add("home-motion-ready");
+    blocks.forEach((block, index) => block.style.setProperty("--home-reveal-order", String(Math.min(index, 8))));
+    if (reducedMotion || !("IntersectionObserver" in window)) {
+      blocks.forEach(block => block.classList.add("home-reveal-visible"));
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        (entry.target as HTMLElement).classList.add("home-reveal-visible");
+        observer.unobserve(entry.target);
+      });
+    }, { rootMargin: "0px 0px -10%", threshold: .08 });
+    blocks.forEach((block, index) => index === 0 ? block.classList.add("home-reveal-visible") : observer.observe(block));
+    return () => observer.disconnect();
+  }, [blocks, locale, version]);
+
+  const content = <div ref={contentRef} data-public-page-version={version}>{blocks.map((block, index) => <CmsBlock block={block} index={index} variables={{ siteName: SITE_NAME, pageTitle, pageSlug: "home", pageLocale: locale }} key={`${block.blockType}-${index}`} />)}</div>;
   return <CmsPageCanvas className="home-future-page">{content}</CmsPageCanvas>;
 }
 
