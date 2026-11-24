@@ -17,6 +17,8 @@ test("city cards project only safe bounded public facts with canonical tuition a
   assert.match(city, /tuition: projectPublicTuition\(program, cityProgramPrices.get\(program.id\) \?\? \[\]\)/);
   assert.match(city, /requirements: publicCatalogRequirements\(program.requirements, \{ canonicalPath: programPath, id: program.id \}\)/);
   assert.match(city, /universityLogoUrl: courseFinderUniversityLogoUrl/);
+  assert.match(city, /hasLogo: sql<boolean>`\$\{universitiesTable\.logoUrl\} IS NOT NULL/);
+  assert.match(city, /logoUrl: courseFinderUniversityLogoUrl\(university\.id, university\.hasLogo\)/);
   assert.match(city, /!parsed.username && !parsed.password/);
   const output = city.slice(city.indexOf("const programs = deliveredProgramRows"));
   for (const field of ["universityId", "universityPath", "universityType", "universityCity", "universityCountry", "universityIsActive", "isActive", "language", "duration", "description"]) assert.ok(output.includes(`${field}:`));

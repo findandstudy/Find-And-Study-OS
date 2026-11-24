@@ -6,6 +6,7 @@ import { normalizeProgramLocale } from "./programTranslationContract";
 import { addPublicCatalogConditions, getPublicCatalogPolicy } from "./publicCatalogQueryPolicy";
 import { readPublishedLocalizedEntity } from "./publicWebDiscoveryReadModel";
 import { readPublishedDetailContent, readPublishedDetailContentEntityIds } from "./websiteDetailContent";
+import { courseFinderUniversityLogoUrl } from "./courseFinderVisibility";
 
 type Country = { id: number; name: string; code: string; isActive: boolean };
 type Destination = { id: number; country: string; slug: string; isActive: boolean };
@@ -140,7 +141,9 @@ export async function readCatalogCountryFallback(localeInput: unknown, slug: str
   addPublicCatalogConditions(conditions, await getPublicCatalogPolicy());
   const [universities, cities, cityUniversityCountRows] = await Promise.all([
     db.select({ id: universitiesTable.id, name: universitiesTable.name, city: universitiesTable.city,
-      universityType: universitiesTable.universityType }).from(universitiesTable).where(and(...conditions)).orderBy(asc(universitiesTable.name)).limit(24),
+      universityType: universitiesTable.universityType,
+      hasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL AND length(trim(${universitiesTable.logoUrl})) > 0` })
+      .from(universitiesTable).where(and(...conditions)).orderBy(asc(universitiesTable.name)).limit(24),
     db.select({ id: citiesTable.id, name: citiesTable.name }).from(citiesTable)
       .where(and(eq(citiesTable.countryId, entry.country.id), eq(citiesTable.isActive, true))).orderBy(asc(citiesTable.name)).limit(24),
     db.select({
@@ -177,7 +180,10 @@ export async function readCatalogCountryFallback(localeInput: unknown, slug: str
       shortDescription: null, description: null, whyStudyHere: null, livingCost: null, climate: null,
       language: null, currency: null, visaInfo: null, workPermit: null, imageUrl: null,
       popularCities: cityLinks.map(city => city.name).join(", "), isFeatured: false },
-    universities: universities.map(university => ({ ...university, programCount: countsByUniversity.get(university.id) ?? 0, canonicalPath: publicCatalogPath({ locale: directory.locale, entityType: "university", id: university.id, name: university.name }) })),
+    universities: universities.map(({ hasLogo, ...university }) => ({ ...university,
+      logoUrl: courseFinderUniversityLogoUrl(university.id, hasLogo),
+      programCount: countsByUniversity.get(university.id) ?? 0,
+      canonicalPath: publicCatalogPath({ locale: directory.locale, entityType: "university", id: university.id, name: university.name }) })),
     programs: [], cities: cityLinks,
     stats: { universityCount: entry.universityCount, programCount: entry.programCount },
     meta: { locale: directory.locale, indexable: false, canonicalPath: entry.canonicalPath, alternatePaths: {},

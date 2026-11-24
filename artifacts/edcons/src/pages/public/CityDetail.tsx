@@ -49,6 +49,7 @@ type CityPayload = {
       id: number;
       name: string;
       universityType: string | null;
+      logoUrl: string | null;
       canonicalPath: string;
     }>;
     programs: CityProgramCardData[];
@@ -233,7 +234,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
         <div className="detail-wrap">
           <DetailHeading number={city.weather ? "04" : "03"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: cityName }))} locale={lang} />
           {detailContentIntro(editorial, "universities")}
-          <div className="detail-grid">{city.universities.map((university) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={localizedUniversityType(university.universityType, lang)} title={detailDisplayTerm(editorial, university.name)} kind="university" />)}</div>
+          <div className="detail-grid">{city.universities.map((university) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={localizedUniversityType(university.universityType, lang)} title={detailDisplayTerm(editorial, university.name)} kind="university" logoUrl={university.logoUrl} layout="media" mediaFit="contain" />)}</div>
         </div>
       </section>}
       {city.programCount > 0 && <section data-detail-section="programs" id="programs" className="detail-section">

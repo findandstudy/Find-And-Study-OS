@@ -556,6 +556,7 @@ test("city detail emits governed city structured data and bounded related links"
         id: 7,
         name: "Example University",
         universityType: "Private",
+        logoUrl: "/api/universities/7/logo",
         canonicalPath: "/en/universities/example-university-7",
       }],
       programs: [{
@@ -580,6 +581,8 @@ test("city detail emits governed city structured data and bounded related links"
   assert.match(html, /"@type":"WebPage"/);
   assert.match(html, /"@type":"BreadcrumbList"/);
   assert.match(html, /href="\/en\/universities\/example-university-7"/);
+  assert.match(html, /class="detail-catalog-card is-university has-media"/);
+  assert.match(html, /src="\/api\/universities\/7\/logo"/);
   assert.match(html, /href="\/en\/programs\/computer-science-42"/);
   assert.match(html, /hreflang="x-default"/);
   assert.match(html, /One two three four five six seven eight nine ten eleven twelve thirteen fourteen/);

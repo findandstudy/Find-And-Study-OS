@@ -329,6 +329,7 @@ type PublicCatalogRenderModelData =
           id: number;
           name: string;
           universityType: string | null;
+          logoUrl: string | null;
           canonicalPath: string;
         }>;
         programs: Array<{
@@ -1076,11 +1077,16 @@ function renderCityDetail(model: Extract<PublicCatalogRenderModel, { kind: "city
     city.externalFacts?.housingSummary ? [cityFactCopy.housing, city.externalFacts.housingSummary] : null,
   ].filter((item): item is [string, string] => Boolean(item));
   const heroFacts = sourceFacts.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
-  const universities = city.universities.map((university) => `
-      <article class="rounded-2xl border border-border bg-card p-5">
-        <h2 class="text-lg font-bold"><a href="${escapeHtml(university.canonicalPath)}">${escapeHtml(ssrInstitutionName(university.name, city.country, model.locale))}</a></h2>
-        <p class="mt-2 text-muted-foreground">${escapeHtml(ssrUniversityType(university.universityType, model.locale) || cityName)}</p>
-      </article>`).join("");
+  const universities = city.universities.map((university) => {
+    const universityName = ssrInstitutionName(university.name, city.country, model.locale);
+    const identity = university.logoUrl
+      ? `<img src="${escapeHtml(university.logoUrl)}" alt="" class="detail-card-media-image" loading="lazy" decoding="async">`
+      : `<span class="detail-card-identity is-university" aria-hidden="true"></span>`;
+    return `<a href="${escapeHtml(university.canonicalPath)}" class="detail-catalog-card is-university has-media">
+        <div class="detail-card-media is-contain">${identity}<span class="detail-card-arrow" aria-hidden="true">↗</span></div>
+        <div class="detail-card-content"><p class="detail-eyebrow">${escapeHtml(ssrUniversityType(university.universityType, model.locale) || cityName)}</p><h3>${escapeHtml(universityName)}</h3></div>
+      </a>`;
+  }).join("");
   const programs = city.programs.map((program) => `
       <article class="rounded-2xl border border-border bg-card p-5">
         <p class="text-sm text-primary">${escapeHtml(ssrInstitutionName(program.universityName, city.country, model.locale))}</p>

@@ -190,6 +190,13 @@ test("country detail hero and catalogue cards use the shared high-contrast media
   assert.match(css, /\.detail-country-cover-foot \{[^}]*padding-top: 0;[^}]*border-top: 0;/);
 });
 
+test("city and country university sections share the same logo-led media cards", () => {
+  for (const source of [country, city]) {
+    assert.match(source, /kind="university"[\s\S]*logoUrl=\{[^}]+\}[\s\S]*layout="media" mediaFit="contain"/);
+  }
+  assert.match(city, /logoUrl: string \| null/);
+});
+
 test("country detail boxes use the shared rounded card language", () => {
   assert.match(css, /\.detail-destination \.detail-editorial-cards article \{[\s\S]*border-radius: 18px;[\s\S]*box-shadow: var\(--detail-shadow\);/);
   assert.match(css, /\.detail-destination :is\(\.detail-snapshot, \.detail-keylines, \.detail-program-points, \.detail-program-card, \.detail-intake, \.detail-fee-panel\) \{[\s\S]*border-radius: 18px;[\s\S]*overflow: hidden;/);

@@ -1343,6 +1343,7 @@ async function readCityDetail(
       country: universitiesTable.country,
       city: universitiesTable.city,
       universityType: universitiesTable.universityType,
+      hasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL AND length(trim(${universitiesTable.logoUrl})) > 0`,
     })
       .from(universitiesTable)
       .where(and(...universityConditions))
@@ -1440,6 +1441,7 @@ async function readCityDetail(
           id: university.id,
           name: localized.name,
           universityType: localized.universityType,
+          logoUrl: courseFinderUniversityLogoUrl(university.id, university.hasLogo),
           canonicalPath: publicCatalogPath({
             locale: route.locale,
             entityType: "university",
