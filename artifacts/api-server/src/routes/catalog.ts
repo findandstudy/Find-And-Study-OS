@@ -1,5 +1,5 @@
 import { Router, type IRouter, json } from "express";
-import { db, countriesTable, citiesTable, cityExternalFactsTable, cityWeatherSnapshotsTable, universitiesTable, programsTable, catalogOptionsTable, programDocumentRequirementsTable, degreeDocumentRequirementsTable, integrationsTable, auditLogsTable, settingsTable } from "@workspace/db";
+import { db, countriesTable, citiesTable, cityExternalFactsTable, cityWeatherSnapshotsTable, universitiesTable, programsTable, universityApplicationPeriodsTable, catalogOptionsTable, programDocumentRequirementsTable, degreeDocumentRequirementsTable, integrationsTable, auditLogsTable, settingsTable } from "@workspace/db";
 import { eq, ilike, sql, and, or, asc, inArray, notInArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, MANAGER_ROLES } from "../lib/roles";
@@ -928,7 +928,11 @@ const PROGRAM_TEMPLATE_FIXED_COLUMNS = [
   "universityId", "universityName", "country", "name", "description", "degree", "field", "language",
   "duration", "tuitionFee", "currency", "scholarship", "intakes",
   "requirements", "refundProcess", "commissionRate", "applicationFee", "enrollmentFee", "advancedFee",
-  "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
+  "adaptationFee", "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
+  "priceValidFrom", "priceValidUntil", "financeNotes", "universityApplicationPeriodId",
+  "applicationPeriodTermName", "applicationPeriodAcademicYear", "applicationPeriodCampusName",
+  "applicationsOpenAt", "applicationDeadlineAt", "applicationPeriodTimezone", "applicationPeriodSourceUrl",
+  "applicationsOpenOverrideAt", "applicationDeadlineOverrideAt", "classesStartOverrideOn", "classesEndOverrideOn",
   "feeType", "minGpa", "minLanguageScore", "quota", "isActive",
   "sourceMetadataJson",
 ] as const;
@@ -966,9 +970,14 @@ router.get("/programs/import-template", requireAuth, requireRole(...MANAGER_ROLE
       { Column: "country", Required: "No", Notes: "Used when auto-creating a missing university (for example, Turkey)." },
       { Column: "description", Required: "No", Notes: "Canonical English description. The system automatically queues all configured target translations." },
       { Column: "degree / field / language / duration", Required: "No", Notes: "Free text." },
-      { Column: "tuitionFee / scholarship / applicationFee / enrollmentFee / advancedFee / depositFee / serviceFeeAmount / discountedFee / languageFee", Required: "No", Notes: "Numeric (no currency symbol)." },
+      { Column: "tuitionFee / scholarship / applicationFee / enrollmentFee / adaptationFee / advancedFee / depositFee / serviceFeeAmount / discountedFee / languageFee", Required: "No", Notes: "Numeric (no currency symbol). Blank is not zero." },
       { Column: "refundProcess", Required: "No", Notes: "Canonical English refund conditions and procedure. Paragraphs and line breaks are preserved." },
-      { Column: "currency", Required: "No", Notes: "ISO code: USD, EUR, TRY, GBP. Defaults to USD." },
+      { Column: "currency", Required: "When any fee is present", Notes: "ISO 4217 code such as PLN, USD, EUR, TRY or GBP. Blank is never converted to USD." },
+      { Column: "priceValidFrom / priceValidUntil", Required: "No", Notes: "Price-list validity in YYYY-MM-DD format." },
+      { Column: "applicationPeriodTermName / applicationPeriodAcademicYear / applicationPeriodCampusName", Required: "No", Notes: "School application-period identity. Teaching dates are not inferred from these fields." },
+      { Column: "applicationsOpenAt / applicationDeadlineAt", Required: "No", Notes: "Verified application dates in YYYY-MM-DD; leave unknown dates blank." },
+      { Column: "applicationPeriodTimezone / applicationPeriodSourceUrl", Required: "With application period", Notes: "IANA timezone and public HTTPS evidence URL." },
+      { Column: "financeNotes", Required: "No", Notes: "Internal-only finance and commission note." },
       { Column: "intakes", Required: "No", Notes: "Comma-separated: 'Fall, Spring, Summer'." },
       { Column: "commissionRate / minGpa / minLanguageScore / quota", Required: "No", Notes: "Numeric." },
       { Column: "feeType", Required: "No", Notes: "Free text: 'per year', 'per semester', 'one-time'." },
@@ -1000,6 +1009,98 @@ router.get("/programs/import-template", requireAuth, requireRole(...MANAGER_ROLE
   }
 });
 
+router.post("/programs/bulk/preview", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const inputRows = Array.isArray(req.body) ? req.body : [];
+  if (inputRows.length === 0) {
+    res.status(400).json({ error: "Expected non-empty array" });
+    return;
+  }
+
+  const rows = normalizeProgramImportRows(inputRows) as Record<string, unknown>[];
+  const universities = await db.select({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable);
+  const universityById = new Map(universities.map((item) => [item.id, item]));
+  const universityByName = new Map(universities.map((item) => [item.name.trim().toLowerCase(), item]));
+  const existingPrograms = await db.select({
+    id: programsTable.id,
+    universityId: programsTable.universityId,
+    name: programsTable.name,
+    degree: programsTable.degree,
+    language: programsTable.language,
+  }).from(programsTable);
+  const existingKeys = new Set(existingPrograms.map((program) =>
+    `${program.universityId}|${program.name.trim().toLowerCase()}|${(program.degree || "").trim().toLowerCase()}|${(program.language || "").trim().toLowerCase()}`,
+  ));
+
+  const seenKeys = new Set<string>();
+  const preview = rows.map((row, index) => {
+    const errors: string[] = [];
+    const name = String(row.name || "").trim();
+    const rawUniversityId = row.universityId === "" || row.universityId == null ? null : Number(row.universityId);
+    const universityName = String(row.universityName || "").trim();
+    const university = rawUniversityId
+      ? universityById.get(rawUniversityId)
+      : universityByName.get(universityName.toLowerCase());
+    const wouldCreateUniversity = !university && !!universityName;
+    const syntheticUniversityKey = university?.id ?? `new:${universityName.toLowerCase()}`;
+    const key = `${syntheticUniversityKey}|${name.toLowerCase()}|${String(row.degree || "").trim().toLowerCase()}|${String(row.language || "").trim().toLowerCase()}`;
+
+    if (!name) errors.push("Program name is required");
+    if (!university && !universityName) errors.push("University or universityId is required");
+    if (rawUniversityId && !university) errors.push(`University id ${rawUniversityId} was not found`);
+    if (seenKeys.has(key)) errors.push("Duplicate row in this file");
+    seenKeys.add(key);
+
+    const feeColumns = ["tuitionFee", "scholarship", "applicationFee", "enrollmentFee", "adaptationFee", "advancedFee", "depositFee", "serviceFeeAmount", "discountedFee", "languageFee"];
+    const hasFee = feeColumns.some((column) => row[column] !== undefined && row[column] !== null && row[column] !== "");
+    const currency = String(row.currency || "").trim().toUpperCase();
+    if (hasFee && !/^[A-Z]{3}$/.test(currency)) errors.push("A three-letter ISO currency is required when a fee is supplied");
+    for (const column of feeColumns) {
+      const value = row[column];
+      if (value !== undefined && value !== null && value !== "" && !Number.isFinite(Number(value))) errors.push(`${column} must be numeric`);
+    }
+    const validFrom = String(row.priceValidFrom || "").trim();
+    const validUntil = String(row.priceValidUntil || "").trim();
+    if (validFrom && validUntil && validUntil < validFrom) errors.push("priceValidUntil cannot be earlier than priceValidFrom");
+    const overrideOpen = String(row.applicationsOpenOverrideAt || "");
+    const overrideDeadline = String(row.applicationDeadlineOverrideAt || "");
+    if (overrideOpen && overrideDeadline && overrideDeadline < overrideOpen) errors.push("Program application deadline override cannot be earlier than opening");
+    const classStart = String(row.classesStartOverrideOn || "");
+    const classEnd = String(row.classesEndOverrideOn || "");
+    if (classStart && classEnd && classEnd < classStart) errors.push("Program class end override cannot be earlier than class start");
+    const periodName = String(row.applicationPeriodTermName || "").trim();
+    if (periodName) {
+      const year = Number(row.applicationPeriodAcademicYear);
+      if (!Number.isInteger(year) || year < 2000 || year > 2200) errors.push("A valid applicationPeriodAcademicYear is required");
+      if (!String(row.applicationPeriodTimezone || "").trim()) errors.push("applicationPeriodTimezone is required");
+      if (!/^https:\/\//i.test(String(row.applicationPeriodSourceUrl || ""))) errors.push("A public HTTPS applicationPeriodSourceUrl is required");
+      const opens = String(row.applicationsOpenAt || "");
+      const deadline = String(row.applicationDeadlineAt || "");
+      if (opens && deadline && deadline < opens) errors.push("Application deadline cannot be earlier than applications open");
+    }
+
+    const action = errors.length > 0
+      ? "error"
+      : university && existingKeys.has(`${university.id}|${name.toLowerCase()}|${String(row.degree || "").trim().toLowerCase()}|${String(row.language || "").trim().toLowerCase()}`)
+        ? "update"
+        : "add";
+    return {
+      row: index + 2,
+      action,
+      program: name || "—",
+      university: university?.name || universityName || "—",
+      currency: currency || null,
+      wouldCreateUniversity,
+      errors,
+    };
+  });
+
+  const summary = preview.reduce((acc, item) => {
+    acc[item.action as "add" | "update" | "error"] += 1;
+    return acc;
+  }, { add: 0, update: 0, error: 0 });
+  res.json({ rows: preview, summary, canImport: summary.error === 0 });
+});
+
 router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   try {
   const rows: ({
@@ -1007,9 +1108,13 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     degree?: string; field?: string; language?: string;
     duration?: string; tuitionFee?: number; currency?: string;
     scholarship?: number; intakes?: string; requirements?: string; refundProcess?: string;
-    commissionRate?: number; applicationFee?: number; enrollmentFee?: number; advancedFee?: number;
+    commissionRate?: number; applicationFee?: number; enrollmentFee?: number; adaptationFee?: number; advancedFee?: number;
     depositFee?: number; serviceFeeAmount?: number; discountedFee?: number;
     languageFee?: number; feeType?: string; minGpa?: number; minLanguageScore?: number;
+    priceValidFrom?: string; priceValidUntil?: string; financeNotes?: string; universityApplicationPeriodId?: number;
+    applicationPeriodTermName?: string; applicationPeriodAcademicYear?: number; applicationPeriodCampusName?: string;
+    applicationsOpenAt?: string; applicationDeadlineAt?: string; applicationPeriodTimezone?: string; applicationPeriodSourceUrl?: string;
+    applicationsOpenOverrideAt?: string; applicationDeadlineOverrideAt?: string; classesStartOverrideOn?: string; classesEndOverrideOn?: string;
     quota?: number; isActive?: string | boolean; sourceMetadata?: unknown; sourceMetadataJson?: unknown;
   } & Record<string, any>)[] = req.body;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
@@ -1018,6 +1123,36 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
   // headers (`Program`, `University`, `Fee Type`, …). Remap friendly headers
   // to internal keys before any validation.
   const normalizedRows = normalizeProgramImportRows(rows) as typeof rows;
+  for (const [index, row] of normalizedRows.entries()) {
+    const feeColumns = ["tuitionFee", "scholarship", "applicationFee", "enrollmentFee", "adaptationFee", "advancedFee", "depositFee", "serviceFeeAmount", "discountedFee", "languageFee"] as const;
+    const hasFee = feeColumns.some(column => { const value: unknown = row[column]; return value !== undefined && value !== null && value !== ""; });
+    const normalizedCurrency = String(row.currency || "").trim().toUpperCase();
+    if (hasFee && !/^[A-Z]{3}$/.test(normalizedCurrency)) {
+      res.status(400).json({ error: `row ${index + 2}: a three-letter ISO currency is required when a fee is supplied` }); return;
+    }
+    for (const column of feeColumns) {
+      const value: unknown = row[column];
+      if (value !== undefined && value !== null && value !== "" && !Number.isFinite(Number(value))) {
+        res.status(400).json({ error: `row ${index + 2}: ${column} must be numeric` }); return;
+      }
+    }
+    if (row.applicationsOpenOverrideAt && row.applicationDeadlineOverrideAt && row.applicationDeadlineOverrideAt < row.applicationsOpenOverrideAt) {
+      res.status(400).json({ error: `row ${index + 2}: program application deadline override cannot be before opening` }); return;
+    }
+    if (row.classesStartOverrideOn && row.classesEndOverrideOn && row.classesEndOverrideOn < row.classesStartOverrideOn) {
+      res.status(400).json({ error: `row ${index + 2}: program class end override cannot be before class start` }); return;
+    }
+    if (!row.applicationPeriodTermName) continue;
+    if (!Number.isInteger(Number(row.applicationPeriodAcademicYear)) || Number(row.applicationPeriodAcademicYear) < 2000 || Number(row.applicationPeriodAcademicYear) > 2200) {
+      res.status(400).json({ error: `row ${index + 2}: applicationPeriodAcademicYear is required and must be valid` }); return;
+    }
+    if (!row.applicationPeriodTimezone || !row.applicationPeriodSourceUrl || !/^https:\/\//i.test(row.applicationPeriodSourceUrl)) {
+      res.status(400).json({ error: `row ${index + 2}: application period requires an IANA timezone and public HTTPS source URL` }); return;
+    }
+    if (row.applicationsOpenAt && row.applicationDeadlineAt && row.applicationDeadlineAt < row.applicationsOpenAt) {
+      res.status(400).json({ error: `row ${index + 2}: application deadline cannot be before applications open` }); return;
+    }
+  }
 
   // Belge sütun anahtarlarını canlı katalogtan oku (5dk cache, in-flight
   // dedupe, fail→eski cache). Anahtarları sabit bir sıraya (alfabetik)
@@ -1066,6 +1201,52 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     }
   }
 
+  const periodByIdentity = new Map<string, number>();
+  const existingPeriods = await db.select().from(universityApplicationPeriodsTable);
+  for (const period of existingPeriods) {
+    periodByIdentity.set(`${period.universityId}|${period.termName.trim().toLowerCase()}|${period.academicYear}|${(period.campusName || "").trim().toLowerCase()}`, period.id);
+  }
+  const synchronizedPeriodIdentities = new Set<string>();
+  for (const row of normalizedRows) {
+    if (!row.applicationPeriodTermName) continue;
+    const rawName = typeof row.universityName === "string" ? row.universityName.trim().toLowerCase() : "";
+    const universityId = Number(row.universityId || uniNameMap[rawName]);
+    if (!universityId) continue;
+    const termName = String(row.applicationPeriodTermName).trim();
+    const academicYear = Number(row.applicationPeriodAcademicYear);
+    const campusName = String(row.applicationPeriodCampusName || "").trim() || null;
+    const identity = `${universityId}|${termName.toLowerCase()}|${academicYear}|${(campusName || "").toLowerCase()}`;
+    let periodId = periodByIdentity.get(identity);
+    if (!periodId) {
+      const [created] = await db.insert(universityApplicationPeriodsTable).values({
+        universityId, termName, academicYear, campusName,
+        applicationsOpenAt: row.applicationsOpenAt || null,
+        applicationDeadlineAt: row.applicationDeadlineAt || null,
+        classesStartOn: null,
+        classesEndOn: null,
+        sourceTimezone: String(row.applicationPeriodTimezone),
+        sourceUrl: String(row.applicationPeriodSourceUrl),
+        verifiedAt: new Date(),
+        createdById: req.user!.id,
+        updatedById: req.user!.id,
+      }).returning({ id: universityApplicationPeriodsTable.id });
+      periodId = created.id;
+      periodByIdentity.set(identity, periodId);
+    } else if (!synchronizedPeriodIdentities.has(identity)) {
+      await db.update(universityApplicationPeriodsTable).set({
+        applicationsOpenAt: row.applicationsOpenAt || null,
+        applicationDeadlineAt: row.applicationDeadlineAt || null,
+        sourceTimezone: String(row.applicationPeriodTimezone),
+        sourceUrl: String(row.applicationPeriodSourceUrl),
+        verifiedAt: new Date(),
+        updatedById: req.user!.id,
+        updatedAt: new Date(),
+      }).where(eq(universityApplicationPeriodsTable.id, periodId));
+    }
+    synchronizedPeriodIdentities.add(identity);
+    row.universityApplicationPeriodId = periodId;
+  }
+
   // Set of column header names from the incoming payload that we tried to
   // match against the catalog but didn't recognise. Reported back so the
   // admin sees "you imported a column called `xyz_form` that isn't in the
@@ -1077,9 +1258,13 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
   const NON_DOC_COLUMNS = new Set<string>([
     "universityId", "universityName", "name", "description", "degree", "field", "language",
     "duration", "tuitionFee", "currency", "scholarship", "intakes",
-    "requirements", "refundProcess", "commissionRate", "applicationFee", "enrollmentFee", "advancedFee",
+    "requirements", "refundProcess", "commissionRate", "applicationFee", "enrollmentFee", "adaptationFee", "advancedFee",
     "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
-    "feeType", "minGpa", "minLanguageScore", "quota", "isActive", "country", "sourceMetadata", "sourceMetadataJson",
+    "feeType", "priceValidFrom", "priceValidUntil", "financeNotes", "universityApplicationPeriodId",
+    "applicationPeriodTermName", "applicationPeriodAcademicYear", "applicationPeriodCampusName",
+    "applicationsOpenAt", "applicationDeadlineAt", "applicationPeriodTimezone", "applicationPeriodSourceUrl",
+    "applicationsOpenOverrideAt", "applicationDeadlineOverrideAt", "classesStartOverrideOn", "classesEndOverrideOn",
+    "minGpa", "minLanguageScore", "quota", "isActive", "country", "sourceMetadata", "sourceMetadataJson",
   ]);
 
   const docColsByRowIdx = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined>();
@@ -1141,23 +1326,40 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     }
     if (sawAnyDocCol) docColsByRowIdx.set(rowIdx, docList ?? []);
     rowIdxByParsedIdx.push(rowIdx);
+    const numeric = (value: unknown) => value === undefined || value === null || value === "" ? null : Number(value);
+    const currency = typeof r.currency === "string" ? r.currency.trim().toUpperCase() : "";
+    const hasAnyFee = ([r.tuitionFee, r.scholarship, r.applicationFee, r.enrollmentFee, r.adaptationFee, r.advancedFee, r.depositFee, r.serviceFeeAmount, r.discountedFee, r.languageFee] as unknown[])
+      .some(value => value !== undefined && value !== null && value !== "");
+    if (hasAnyFee && !/^[A-Z]{3}$/.test(currency)) {
+      skipReasons.push({ row: rowIdx + 2, reason: "currency is required for fee rows and must be a three-letter ISO code (for example PLN)" });
+      return null;
+    }
     return {
       universityId: uid, name: r.name, description: r.description ?? null, degree: r.degree ?? null,
       field: r.field ?? null, language: r.language ?? null,
       duration: r.duration ?? null,
-      tuitionFee: r.tuitionFee ? Number(r.tuitionFee) : null,
-      currency: r.currency ?? "USD",
-      scholarship: r.scholarship ? Number(r.scholarship) : null,
+      tuitionFee: numeric(r.tuitionFee),
+      currency: currency || null,
+      scholarship: numeric(r.scholarship),
       intakes: r.intakes ?? null, requirements: r.requirements ?? null, refundProcess: r.refundProcess ?? null,
-      commissionRate: r.commissionRate ? Number(r.commissionRate) : null,
-      applicationFee: r.applicationFee ? Number(r.applicationFee) : null,
-      enrollmentFee: r.enrollmentFee == null ? null : Number(r.enrollmentFee),
-      advancedFee: r.advancedFee ? Number(r.advancedFee) : null,
-      depositFee: r.depositFee ? Number(r.depositFee) : null,
-      serviceFeeAmount: r.serviceFeeAmount ? Number(r.serviceFeeAmount) : null,
-      discountedFee: r.discountedFee ? Number(r.discountedFee) : null,
-      languageFee: r.languageFee ? Number(r.languageFee) : null,
+      commissionRate: numeric(r.commissionRate),
+      applicationFee: numeric(r.applicationFee),
+      enrollmentFee: numeric(r.enrollmentFee),
+      adaptationFee: numeric(r.adaptationFee),
+      advancedFee: numeric(r.advancedFee),
+      depositFee: numeric(r.depositFee),
+      serviceFeeAmount: numeric(r.serviceFeeAmount),
+      discountedFee: numeric(r.discountedFee),
+      languageFee: numeric(r.languageFee),
       feeType: r.feeType ?? null,
+      priceValidFrom: r.priceValidFrom || null,
+      priceValidUntil: r.priceValidUntil || null,
+      financeNotes: r.financeNotes || null,
+      universityApplicationPeriodId: numeric(r.universityApplicationPeriodId),
+      applicationsOpenOverrideAt: r.applicationsOpenOverrideAt || null,
+      applicationDeadlineOverrideAt: r.applicationDeadlineOverrideAt || null,
+      classesStartOverrideOn: r.classesStartOverrideOn || null,
+      classesEndOverrideOn: r.classesEndOverrideOn || null,
       minGpa: r.minGpa ? Number(r.minGpa) : null,
       minLanguageScore: r.minLanguageScore ? Number(r.minLanguageScore) : null,
       quota: r.quota ? (isNaN(Number(r.quota)) || Math.round(Number(r.quota)) < 1 ? null : Math.round(Number(r.quota))) : null,

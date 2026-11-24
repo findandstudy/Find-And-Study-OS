@@ -332,7 +332,7 @@ export const priceComponentsTable = pgTable(
     check("price_components_id_v7_chk", uuidV7(table.id)),
     check(
       "price_components_type_chk",
-      sql`${table.componentType} IN ('TUITION', 'APPLICATION', 'DEPOSIT', 'LANGUAGE', 'INSURANCE', 'OTHER')`,
+      sql`${table.componentType} IN ('TUITION', 'APPLICATION', 'ENROLLMENT', 'ADAPTATION', 'DEPOSIT', 'SERVICE', 'LANGUAGE', 'INSURANCE', 'OTHER')`,
     ),
     check(
       "price_components_amount_chk",
@@ -344,7 +344,7 @@ export const priceComponentsTable = pgTable(
     ),
     check(
       "price_components_frequency_chk",
-      sql`${table.frequency} IN ('ONE_TIME', 'PER_YEAR', 'PER_TERM', 'PER_CREDIT', 'PER_MONTH')`,
+      sql`${table.frequency} IN ('ONE_TIME', 'PER_PROGRAM', 'PER_YEAR', 'PER_TERM', 'PER_WEEK', 'PER_CREDIT', 'PER_MONTH')`,
     ),
     check(
       "price_components_status_chk",

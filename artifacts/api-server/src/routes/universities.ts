@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Response } from "express";
-import { db, pool, universitiesTable, programsTable, programTranslationsTable, applicationsTable, pipelineStagesTable, programDocumentRequirementsTable } from "@workspace/db";
-import { eq, ilike, sql, and, or, inArray, isNull, getTableColumns } from "drizzle-orm";
+import { db, pool, universitiesTable, programsTable, programTranslationsTable, applicationsTable, pipelineStagesTable, programDocumentRequirementsTable, universityApplicationPeriodsTable } from "@workspace/db";
+import { eq, ilike, sql, and, or, inArray, isNull, getTableColumns, asc } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getCurrentSeason } from "../lib/season";
@@ -26,6 +26,7 @@ import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
 import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import { createHash } from "node:crypto";
+import { buildSyntheticDeadlinePreview, reminderScheduleFingerprint } from "../lib/deadlineReminderPreview";
 
 const router: IRouter = Router();
 const universityLogoObjectStorage = new ObjectStorageService();
@@ -127,12 +128,84 @@ const PROG_PATCH_FIELDS = [
   "universityId", "name", "description", "degree", "field", "language", "duration",
   "tuitionFee", "currency", "scholarship", "intakes", "requirements",
   "commissionRate", "applicationFee", "advancedFee", "depositFee",
-  "enrollmentFee", "serviceFeeAmount", "discountedFee", "languageFee", "feeType", "refundProcess",
+  "enrollmentFee", "adaptationFee", "serviceFeeAmount", "discountedFee", "languageFee", "feeType", "refundProcess",
+  "priceValidFrom", "priceValidUntil", "financeNotes",
   "minGpa", "minLanguageScore", "quota", "isActive", "requiredEducationLevel",
   "minGradeValue", "gradeScale", "languageRequirements", "conditionalAdmission",
   "admissionSourceUrl", "admissionVerifiedAt", "admissionValidUntil",
+  "universityApplicationPeriodId", "applicationsOpenOverrideAt", "applicationDeadlineOverrideAt",
+  "classesStartOverrideOn", "classesEndOverrideOn",
   "sourceMetadata",
 ];
+
+type UniversityApplicationPeriodInput = {
+  id?: number;
+  termName?: unknown;
+  academicYear?: unknown;
+  campusName?: unknown;
+  applicationsOpenAt?: unknown;
+  applicationDeadlineAt?: unknown;
+  classesStartOn?: unknown;
+  classesEndOn?: unknown;
+  sourceTimezone?: unknown;
+  sourceUrl?: unknown;
+  verifiedAt?: unknown;
+  isActive?: unknown;
+};
+
+function optionalDate(value: unknown, field: string): Date | null {
+  if (value == null || value === "") return null;
+  const parsed = new Date(String(value));
+  if (!Number.isFinite(parsed.getTime())) throw new Error(`${field} must be a valid date`);
+  return parsed;
+}
+
+function optionalDateOnly(value: unknown, field: string): string | null {
+  if (value == null || value === "") return null;
+  const raw = String(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || !Number.isFinite(new Date(`${raw}T00:00:00.000Z`).getTime())) {
+    throw new Error(`${field} must use YYYY-MM-DD`);
+  }
+  return raw;
+}
+
+function normalizeApplicationPeriod(row: UniversityApplicationPeriodInput, userId: number) {
+  const termName = String(row.termName ?? "").trim();
+  const academicYear = Number(row.academicYear);
+  const sourceTimezone = String(row.sourceTimezone ?? "").trim();
+  const sourceUrl = String(row.sourceUrl ?? "").trim();
+  if (!termName || termName.length > 160) throw new Error("termName is required and must be at most 160 characters");
+  if (!Number.isInteger(academicYear) || academicYear < 2000 || academicYear > 2200) throw new Error("academicYear must be between 2000 and 2200");
+  try { new Intl.DateTimeFormat("en", { timeZone: sourceTimezone }).format(); }
+  catch { throw new Error("sourceTimezone must be a valid IANA timezone"); }
+  let parsedUrl: URL;
+  try { parsedUrl = new URL(sourceUrl); } catch { throw new Error("sourceUrl must be a valid HTTPS URL"); }
+  if (parsedUrl.protocol !== "https:" || parsedUrl.username || parsedUrl.password) throw new Error("sourceUrl must be a valid HTTPS URL");
+  const applicationsOpenAt = optionalDateOnly(row.applicationsOpenAt, "applicationsOpenAt");
+  const applicationDeadlineAt = optionalDateOnly(row.applicationDeadlineAt, "applicationDeadlineAt");
+  if (applicationsOpenAt && applicationDeadlineAt && applicationDeadlineAt < applicationsOpenAt) throw new Error("application deadline cannot be before applications open");
+  const classesStartOn = optionalDateOnly(row.classesStartOn, "classesStartOn");
+  const classesEndOn = optionalDateOnly(row.classesEndOn, "classesEndOn");
+  if (classesStartOn && classesEndOn && classesEndOn < classesStartOn) throw new Error("class end cannot be before class start");
+  const verifiedAt = optionalDate(row.verifiedAt, "verifiedAt");
+  if (!verifiedAt) throw new Error("verifiedAt is required; unknown dates must remain blank rather than estimated");
+  return {
+    termName,
+    academicYear,
+    campusName: String(row.campusName ?? "").trim() || null,
+    applicationsOpenAt,
+    applicationDeadlineAt,
+    classesStartOn,
+    classesEndOn,
+    sourceTimezone,
+    sourceUrl: parsedUrl.toString(),
+    verifiedAt,
+    isActive: row.isActive !== false,
+    createdById: userId,
+    updatedById: userId,
+    updatedAt: new Date(),
+  };
+}
 
 function normalizeAdmissionUrl(value: unknown): string | null {
   if (value == null || value === "") return null;
@@ -183,6 +256,24 @@ function normalizeLanguageRequirements(value: unknown) {
     }
     return { test, overall };
   });
+}
+
+function normalizeCurrency(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  const currency = String(value).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) throw new Error("currency must be a three-letter ISO 4217 code");
+  return currency;
+}
+
+async function requireProgramPeriodScope(universityId: number, periodId: unknown) {
+  if (periodId == null || periodId === "") return null;
+  const id = Number(periodId);
+  if (!Number.isSafeInteger(id) || id < 1) throw new Error("universityApplicationPeriodId must be a positive integer");
+  const [period] = await db.select({ id: universityApplicationPeriodsTable.id })
+    .from(universityApplicationPeriodsTable)
+    .where(and(eq(universityApplicationPeriodsTable.id, id), eq(universityApplicationPeriodsTable.universityId, universityId), eq(universityApplicationPeriodsTable.isActive, true)));
+  if (!period) throw new Error("Selected application period does not belong to the program university");
+  return id;
 }
 
 /* ─── UNIVERSITIES ───────────────────────────────────────────── */
@@ -471,6 +562,89 @@ router.get("/universities/:id", async (req, res): Promise<void> => {
   res.json(maskContacts(uni as any, userRole));
 });
 
+router.get("/universities/:id/application-periods", requireAuth, async (req, res): Promise<void> => {
+  const universityId = Number(req.params.id);
+  if (!Number.isSafeInteger(universityId) || universityId < 1) { res.status(400).json({ error: "Invalid university id" }); return; }
+  const rows = await db.select().from(universityApplicationPeriodsTable)
+    .where(eq(universityApplicationPeriodsTable.universityId, universityId))
+    .orderBy(asc(universityApplicationPeriodsTable.academicYear), asc(universityApplicationPeriodsTable.applicationDeadlineAt), asc(universityApplicationPeriodsTable.id));
+  res.json({ data: rows });
+});
+
+router.put("/universities/:id/application-periods", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const universityId = Number(req.params.id);
+  if (!Number.isSafeInteger(universityId) || universityId < 1) { res.status(400).json({ error: "Invalid university id" }); return; }
+  if (!Array.isArray(req.body?.periods) || req.body.periods.length > 100) {
+    res.status(400).json({ error: "periods must be an array with at most 100 rows" }); return;
+  }
+  let normalized: ReturnType<typeof normalizeApplicationPeriod>[];
+  try { normalized = req.body.periods.map((row: UniversityApplicationPeriodInput) => normalizeApplicationPeriod(row, req.user!.id)); }
+  catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+  const providedIds = req.body.periods.map((row: UniversityApplicationPeriodInput) => Number(row.id)).filter((id: number) => Number.isSafeInteger(id) && id > 0);
+  try {
+    const saved = await db.transaction(async tx => {
+      const existing = await tx.select({ id: universityApplicationPeriodsTable.id })
+        .from(universityApplicationPeriodsTable)
+        .where(eq(universityApplicationPeriodsTable.universityId, universityId));
+      const existingIds = new Set(existing.map(row => row.id));
+      if (providedIds.some((id: number) => !existingIds.has(id))) throw new Error("Application period does not belong to this university");
+      const output = [];
+      for (let index = 0; index < normalized.length; index++) {
+        const id = Number(req.body.periods[index]?.id);
+        if (Number.isSafeInteger(id) && id > 0) {
+          const [row] = await tx.update(universityApplicationPeriodsTable)
+            .set(normalized[index])
+            .where(and(eq(universityApplicationPeriodsTable.id, id), eq(universityApplicationPeriodsTable.universityId, universityId)))
+            .returning();
+          if (row) output.push(row);
+        } else {
+          const [row] = await tx.insert(universityApplicationPeriodsTable)
+            .values({ ...normalized[index], universityId })
+            .returning();
+          output.push(row);
+        }
+      }
+      const retained = new Set(providedIds);
+      for (const row of existing) {
+        if (!retained.has(row.id)) {
+          await tx.update(universityApplicationPeriodsTable)
+            .set({ isActive: false, updatedById: req.user!.id, updatedAt: new Date() })
+            .where(eq(universityApplicationPeriodsTable.id, row.id));
+        }
+      }
+      return output;
+    });
+    await logAudit(req.user!.id, "replace_university_application_periods", "university", universityId, { rows: saved.length }, req.ip);
+    res.json({ data: saved });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Application calendar could not be saved" });
+  }
+});
+
+router.get("/universities/:id/application-periods/:periodId/reminder-preview", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const universityId = Number(req.params.id);
+  const periodId = Number(req.params.periodId);
+  const daysBefore = Number(req.query.daysBefore ?? 30) === 7 ? 7 : 30;
+  const [period] = await db.select().from(universityApplicationPeriodsTable)
+    .where(and(eq(universityApplicationPeriodsTable.id, periodId), eq(universityApplicationPeriodsTable.universityId, universityId)));
+  if (!period) { res.status(404).json({ error: "Application period not found" }); return; }
+  const rows = buildSyntheticDeadlinePreview();
+  res.json({
+    mode: "synthetic",
+    deliveryEnabled: false,
+    period,
+    daysBefore,
+    scheduleFingerprint: reminderScheduleFingerprint({
+      periodId,
+      deadline: period.applicationDeadlineAt ?? null,
+      timezone: period.sourceTimezone,
+      daysBefore,
+    }),
+    summary: { eligible: rows.filter(row => row.eligible).length, excluded: rows.filter(row => !row.eligible).length },
+    data: rows,
+  });
+});
+
 // Protected read of internal per-university assigned staff IDs.
 // Public /universities responses mask this field, so admin UIs use
 // this endpoint to prefill the assignment editor.
@@ -722,11 +896,13 @@ router.get("/programs", async (req, res): Promise<void> => {
 router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const {
     universityId, name, description, degree, field, language, duration,
-    tuitionFee, currency = "USD", scholarship, intakes, requirements, commissionRate,
-    applicationFee, enrollmentFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee,
-    feeType, refundProcess, minGpa, minLanguageScore, quota, isActive = true,
+    tuitionFee, currency, scholarship, intakes, requirements, commissionRate,
+    applicationFee, enrollmentFee, adaptationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee,
+    feeType, priceValidFrom, priceValidUntil, financeNotes, refundProcess, minGpa, minLanguageScore, quota, isActive = true,
     requiredEducationLevel, minGradeValue, gradeScale, languageRequirements,
     conditionalAdmission, admissionSourceUrl, admissionVerifiedAt, admissionValidUntil, sourceMetadata,
+    universityApplicationPeriodId, applicationsOpenOverrideAt, applicationDeadlineOverrideAt,
+    classesStartOverrideOn, classesEndOverrideOn,
   } = req.body;
   if (!universityId || !name) { res.status(400).json({ error: "universityId and name are required" }); return; }
   const n = (v: any) => (v !== undefined && v !== "" && v !== null ? Number(v) : null);
@@ -741,12 +917,22 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
   let normalizedProgramVerifiedAt: Date | null;
   let normalizedProgramValidUntil: Date | null;
   let normalizedSourceMetadata;
+  let normalizedCurrency: string | null;
+  let normalizedPeriodId: number | null;
   try {
     normalizedProgramLanguages = normalizeLanguageRequirements(languageRequirements);
     normalizedProgramSource = normalizeAdmissionUrl(admissionSourceUrl);
     normalizedProgramVerifiedAt = normalizeAdmissionDate(admissionVerifiedAt);
     normalizedProgramValidUntil = normalizeAdmissionDate(admissionValidUntil, "admissionValidUntil");
     normalizedSourceMetadata = normalizeCatalogSourceMetadata("program", sourceMetadata);
+    normalizedCurrency = normalizeCurrency(currency);
+    normalizedPeriodId = await requireProgramPeriodScope(Number(universityId), universityApplicationPeriodId);
+    const hasAnyFee = [tuitionFee, scholarship, applicationFee, enrollmentFee, adaptationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee]
+      .some(value => value !== undefined && value !== null && value !== "");
+    if (hasAnyFee && !normalizedCurrency) throw new Error("currency is required when a fee is provided");
+    if (priceValidFrom && priceValidUntil && String(priceValidUntil) < String(priceValidFrom)) throw new Error("priceValidUntil cannot be before priceValidFrom");
+    if (applicationsOpenOverrideAt && applicationDeadlineOverrideAt && String(applicationDeadlineOverrideAt) < String(applicationsOpenOverrideAt)) throw new Error("program application deadline override cannot be before opening");
+    if (classesStartOverrideOn && classesEndOverrideOn && String(classesEndOverrideOn) < String(classesStartOverrideOn)) throw new Error("program class end override cannot be before class start");
     requireCurrentAdmissionEvidence({
       source: normalizedProgramSource,
       verifiedAt: normalizedProgramVerifiedAt,
@@ -757,18 +943,22 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
   const [prog] = await db.insert(programsTable).values({
     universityId: Number(universityId), name, description: description || null, degree: degree || null, field: field || null,
     language: language || null, duration: duration || null,
-    tuitionFee: n(tuitionFee), currency,
+    tuitionFee: n(tuitionFee), currency: normalizedCurrency,
     scholarship: n(scholarship),
     intakes: intakes || null, requirements: requirements || null,
     commissionRate: n(commissionRate),
     applicationFee: n(applicationFee),
     enrollmentFee: n(enrollmentFee),
+    adaptationFee: n(adaptationFee),
     advancedFee: n(advancedFee),
     depositFee: n(depositFee),
     serviceFeeAmount: n(serviceFeeAmount),
     discountedFee: n(discountedFee),
     languageFee: n(languageFee),
     feeType: feeType || null,
+    priceValidFrom: priceValidFrom || null,
+    priceValidUntil: priceValidUntil || null,
+    financeNotes: financeNotes || null,
     refundProcess: refundProcess || null,
     minGpa: n(minGpa),
     minLanguageScore: n(minLanguageScore),
@@ -780,6 +970,11 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     admissionSourceUrl: normalizedProgramSource,
     admissionVerifiedAt: normalizedProgramVerifiedAt,
     admissionValidUntil: normalizedProgramValidUntil,
+    universityApplicationPeriodId: normalizedPeriodId,
+    applicationsOpenOverrideAt: optionalDateOnly(applicationsOpenOverrideAt, "applicationsOpenOverrideAt"),
+    applicationDeadlineOverrideAt: optionalDateOnly(applicationDeadlineOverrideAt, "applicationDeadlineOverrideAt"),
+    classesStartOverrideOn: optionalDateOnly(classesStartOverrideOn, "classesStartOverrideOn"),
+    classesEndOverrideOn: optionalDateOnly(classesEndOverrideOn, "classesEndOverrideOn"),
     sourceMetadata: normalizedSourceMetadata,
     quota: quotaVal,
     isActive,
@@ -890,6 +1085,33 @@ router.get("/programs/:id", async (req, res): Promise<void> => {
   const reqs = await db.select().from(programDocumentRequirementsTable)
     .where(eq(programDocumentRequirementsTable.programId, id))
     .orderBy(programDocumentRequirementsTable.sortOrder);
+  const [schoolPeriod] = prog.universityApplicationPeriodId
+    ? await db.select().from(universityApplicationPeriodsTable)
+      .where(and(
+        eq(universityApplicationPeriodsTable.id, prog.universityApplicationPeriodId),
+        eq(universityApplicationPeriodsTable.universityId, prog.universityId),
+        eq(universityApplicationPeriodsTable.isActive, true),
+      ))
+    : [];
+  const effectiveApplicationPeriod = schoolPeriod ? {
+    id: schoolPeriod.id,
+    termName: schoolPeriod.termName,
+    academicYear: schoolPeriod.academicYear,
+    campusName: schoolPeriod.campusName,
+    sourceTimezone: schoolPeriod.sourceTimezone,
+    sourceUrl: schoolPeriod.sourceUrl,
+    verifiedAt: schoolPeriod.verifiedAt,
+    applicationsOpenAt: prog.applicationsOpenOverrideAt ?? schoolPeriod.applicationsOpenAt,
+    applicationDeadlineAt: prog.applicationDeadlineOverrideAt ?? schoolPeriod.applicationDeadlineAt,
+    classesStartOn: prog.classesStartOverrideOn ?? schoolPeriod.classesStartOn,
+    classesEndOn: prog.classesEndOverrideOn ?? schoolPeriod.classesEndOn,
+    overrides: {
+      applicationsOpenAt: prog.applicationsOpenOverrideAt != null,
+      applicationDeadlineAt: prog.applicationDeadlineOverrideAt != null,
+      classesStartOn: prog.classesStartOverrideOn != null,
+      classesEndOn: prog.classesEndOverrideOn != null,
+    },
+  } : null;
   const visibleProgram = sanitizeCourseFinderProgram(
     prog,
     programResponseVisibility(req.user),
@@ -899,6 +1121,7 @@ router.get("/programs/:id", async (req, res): Promise<void> => {
     contentLocale: prog.translatedLocale || "en",
     fallbackUsed: locale !== "en" && !prog.translatedLocale,
     translatedLocale: undefined,
+    effectiveApplicationPeriod,
     documentRequirements: reqs.map(r => ({ documentType: r.documentType, mandatory: r.mandatory, sortOrder: r.sortOrder })),
   });
 });
@@ -1020,6 +1243,13 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
     if (updates.admissionVerifiedAt !== undefined) updates.admissionVerifiedAt = normalizeAdmissionDate(updates.admissionVerifiedAt);
     if (updates.admissionValidUntil !== undefined) updates.admissionValidUntil = normalizeAdmissionDate(updates.admissionValidUntil, "admissionValidUntil");
     if (updates.sourceMetadata !== undefined) updates.sourceMetadata = normalizeCatalogSourceMetadata("program", updates.sourceMetadata);
+    if (updates.currency !== undefined) updates.currency = normalizeCurrency(updates.currency);
+    for (const key of ["applicationsOpenOverrideAt", "applicationDeadlineOverrideAt"] as const) {
+      if (updates[key] !== undefined) updates[key] = optionalDateOnly(updates[key], key);
+    }
+    for (const key of ["classesStartOverrideOn", "classesEndOverrideOn", "priceValidFrom", "priceValidUntil"] as const) {
+      if (updates[key] !== undefined) updates[key] = optionalDateOnly(updates[key], key);
+    }
   } catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
   if (updates.quota !== undefined) {
     if (updates.quota === null || updates.quota === "") {
@@ -1034,6 +1264,16 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
   if (!currentProgram) { res.status(404).json({ error: "Program not found" }); return; }
   const mergedProgram = { ...currentProgram, ...updates } as typeof currentProgram;
   try {
+    updates.universityApplicationPeriodId = await requireProgramPeriodScope(
+      Number(updates.universityId ?? currentProgram.universityId),
+      updates.universityApplicationPeriodId ?? currentProgram.universityApplicationPeriodId,
+    );
+    const hasAnyFee = [mergedProgram.tuitionFee, mergedProgram.scholarship, mergedProgram.applicationFee, mergedProgram.enrollmentFee, mergedProgram.adaptationFee, mergedProgram.advancedFee, mergedProgram.depositFee, mergedProgram.serviceFeeAmount, mergedProgram.discountedFee, mergedProgram.languageFee]
+      .some(value => value != null);
+    if (hasAnyFee && !mergedProgram.currency) throw new Error("currency is required when a fee is provided");
+    if (mergedProgram.priceValidFrom && mergedProgram.priceValidUntil && mergedProgram.priceValidUntil < mergedProgram.priceValidFrom) throw new Error("priceValidUntil cannot be before priceValidFrom");
+    if (mergedProgram.applicationsOpenOverrideAt && mergedProgram.applicationDeadlineOverrideAt && mergedProgram.applicationDeadlineOverrideAt < mergedProgram.applicationsOpenOverrideAt) throw new Error("program application deadline override cannot be before opening");
+    if (mergedProgram.classesStartOverrideOn && mergedProgram.classesEndOverrideOn && mergedProgram.classesEndOverrideOn < mergedProgram.classesStartOverrideOn) throw new Error("program class end override cannot be before class start");
     requireCurrentAdmissionEvidence({
       source: mergedProgram.admissionSourceUrl,
       verifiedAt: mergedProgram.admissionVerifiedAt,

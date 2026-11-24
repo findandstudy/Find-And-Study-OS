@@ -37,6 +37,7 @@ describe("normalizeProgramImportRow — export round-trip (PI-1)", () => {
       Intakes: "Sep",
       "Application Fee": "0",
       "Enrolment Fee": "250",
+      "Adaptation Fee": "400",
       "Advance Fee": "0",
       "Deposit Fee": "1000",
       "Service Fee": "0",
@@ -48,6 +49,14 @@ describe("normalizeProgramImportRow — export round-trip (PI-1)", () => {
       Active: "Yes",
       Requirements: "High school diploma",
       "Refund Process": "Refund requests must be submitted in writing.",
+      "Price Valid From": "2026-09-01",
+      "Price Valid Until": "2027-03-11",
+      "Finance Notes": "Temporary partner commission: 11%.",
+      "School Period ID": "17",
+      "Applications Open Override": "2026-09-02",
+      "Application Deadline Override": "2027-03-10",
+      "Classes Start Override": "2027-03-20",
+      "Classes End Override": "2028-03-19",
     };
     const out = normalizeProgramImportRow(exportRow);
     assert.equal(out.name, "Computer Engineering");
@@ -60,6 +69,7 @@ describe("normalizeProgramImportRow — export round-trip (PI-1)", () => {
     assert.equal(out.feeType, "Per Year");
     assert.equal(out.tuitionFee, "3500");
     assert.equal(out.enrollmentFee, "250");
+    assert.equal(out.adaptationFee, "400");
     assert.equal(out.refundProcess, "Refund requests must be submitted in writing.");
     assert.equal(out.currency, "USD");
     assert.equal(out.commissionRate, "10");
@@ -76,6 +86,14 @@ describe("normalizeProgramImportRow — export round-trip (PI-1)", () => {
     assert.equal(out.quota, "50");
     assert.equal(out.isActive, "Yes");
     assert.equal(out.requirements, "High school diploma");
+    assert.equal(out.priceValidFrom, "2026-09-01");
+    assert.equal(out.priceValidUntil, "2027-03-11");
+    assert.equal(out.financeNotes, "Temporary partner commission: 11%.");
+    assert.equal(out.universityApplicationPeriodId, "17");
+    assert.equal(out.applicationsOpenOverrideAt, "2026-09-02");
+    assert.equal(out.applicationDeadlineOverrideAt, "2027-03-10");
+    assert.equal(out.classesStartOverrideOn, "2027-03-20");
+    assert.equal(out.classesEndOverrideOn, "2028-03-19");
     // no leftover friendly headers
     assert.equal(out["Program"], undefined);
     assert.equal(out["University"], undefined);

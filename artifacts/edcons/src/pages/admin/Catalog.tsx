@@ -22,6 +22,7 @@ import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { useDocumentTypeCatalog, useResolveDocMeta } from "@/lib/programDocTypes";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/hooks/use-i18n";
+import { parsePartnerProgramWorkbook } from "@/lib/programPriceWorkbook";
 import { useSeason } from "@/contexts/SeasonContext";
 import { LANGUAGE_META } from "@/lib/i18n";
 import { parseCatalogEntryNavigation, type CatalogSourceTab } from "@/lib/catalogEntryNavigation";
@@ -174,10 +175,11 @@ async function downloadExcelTemplate(
   XLSX.writeFile(wb, filename);
 }
 
-async function parseExcel(file: File): Promise<Record<string, string>[]> {
+async function parseExcel(file: File, partnerProgramWorkbook = false): Promise<Record<string, string>[]> {
   const XLSX = await import("xlsx");
   const data = await file.arrayBuffer();
   const wb = XLSX.read(data, { type: "array" });
+  if (partnerProgramWorkbook) return parsePartnerProgramWorkbook(XLSX, wb);
   const ws = wb.Sheets[wb.SheetNames[0]];
   if (!ws) return [];
   const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: "" });
@@ -215,6 +217,20 @@ type CityWeatherAdminState = {
   sync: null | { lastAttemptAt: string; lastErrorCode: string | null; consecutiveFailures: number };
   integration: { provider: string; keyConfigured: boolean; liveIntegrationsAllowed: boolean; automaticSyncEnabled: boolean; automaticSyncRequested: boolean; refreshIntervalHours: number };
 };
+type ApplicationPeriod = {
+  id?: number;
+  termName: string;
+  academicYear: number;
+  campusName?: string | null;
+  applicationsOpenAt?: string | null;
+  applicationDeadlineAt?: string | null;
+  classesStartOn?: string | null;
+  classesEndOn?: string | null;
+  sourceTimezone: string;
+  sourceUrl: string;
+  verifiedAt: string;
+  isActive?: boolean;
+};
 type University = {
   id: number; name: string; country: string; city?: string | null; website?: string | null;
   description?: string | null; ranking?: number | null; logoUrl?: string | null; isActive: boolean;
@@ -229,11 +245,12 @@ type University = {
   defaultLanguageRequirements?: Array<{ test: string; overall: number }>; defaultConditionalAdmission?: boolean;
   admissionSourceUrl?: string | null; admissionVerifiedAt?: string | null; admissionValidUntil?: string | null;
   sourceMetadata?: CatalogSourceMetadata;
+  applicationPeriods?: ApplicationPeriod[];
   status: string;
 };
 type UniversityOption = Pick<University, "id" | "name">;
 type ProgramTranslationSummary = { total: number; published: number; pending: number; failed: number; manual: number; target: number };
-type Program = { id: number; universityId: number; universityName?: string | null; name: string; description?: string | null; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; refundProcess?: string | null; commissionRate?: number | null; applicationFee?: number | null; enrollmentFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; quota?: number | null; isActive: boolean; requiredEducationLevel?: string | null; minGradeValue?: number | null; gradeScale?: string | null; languageRequirements?: Array<{ test: string; overall: number }> | null; conditionalAdmission?: boolean | null; admissionSourceUrl?: string | null; admissionVerifiedAt?: string | null; admissionValidUntil?: string | null; sourceMetadata?: CatalogSourceMetadata; translationSummary?: ProgramTranslationSummary };
+type Program = { id: number; universityId: number; universityName?: string | null; name: string; description?: string | null; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; refundProcess?: string | null; commissionRate?: number | null; applicationFee?: number | null; enrollmentFee?: number | null; adaptationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; priceValidFrom?: string | null; priceValidUntil?: string | null; financeNotes?: string | null; universityApplicationPeriodId?: number | null; applicationsOpenOverrideAt?: string | null; applicationDeadlineOverrideAt?: string | null; classesStartOverrideOn?: string | null; classesEndOverrideOn?: string | null; minGpa?: number | null; minLanguageScore?: number | null; quota?: number | null; isActive: boolean; requiredEducationLevel?: string | null; minGradeValue?: number | null; gradeScale?: string | null; languageRequirements?: Array<{ test: string; overall: number }> | null; conditionalAdmission?: boolean | null; admissionSourceUrl?: string | null; admissionVerifiedAt?: string | null; admissionValidUntil?: string | null; sourceMetadata?: CatalogSourceMetadata; translationSummary?: ProgramTranslationSummary };
 
 type SourceFieldOption = readonly [key: string, label: string, group: string];
 
@@ -435,10 +452,18 @@ async function importRowsInChunks(
   };
 }
 
-function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImport }: {
+type BulkPreviewResult = {
+  rows: Array<{ row: number; action: "add" | "update" | "error"; program: string; university: string; currency?: string | null; wouldCreateUniversity?: boolean; errors: string[] }>;
+  summary: { add: number; update: number; error: number };
+  canImport: boolean;
+};
+
+function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImport, onPreview, partnerProgramWorkbook = false }: {
   open: boolean; onClose: () => void; title: string;
   templateRows: Record<string, any>[];
   notesRows?: Record<string, any>[];
+  onPreview?: (rows: Record<string, string>[]) => Promise<BulkPreviewResult>;
+  partnerProgramWorkbook?: boolean;
   onImport: (
     rows: Record<string, string>[],
     onProgress: (progress: BulkImportProgress) => void,
@@ -449,6 +474,8 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<BulkImportProgress | null>(null);
+  const [pendingRows, setPendingRows] = useState<Record<string, string>[] | null>(null);
+  const [preview, setPreview] = useState<BulkPreviewResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -460,8 +487,16 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
       setResult(null);
       setError("");
       setProgress(null);
-      const rows = await parseExcel(file);
+      setPendingRows(null);
+      setPreview(null);
+      const rows = await parseExcel(file, partnerProgramWorkbook);
       if (rows.length === 0) { setError(t("catalogPage.fileEmptyInvalid")); return; }
+      if (onPreview) {
+        const nextPreview = await onPreview(rows);
+        setPendingRows(rows);
+        setPreview(nextPreview);
+        return;
+      }
       const res = await onImport(rows, (nextProgress) => {
         progressSnapshot.current = nextProgress;
         setProgress(nextProgress);
@@ -495,7 +530,24 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
     finally { setLoading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
 
-  const reset = () => { setResult(null); setError(""); setProgress(null); onClose(); };
+  const confirmImport = async () => {
+    if (!pendingRows || !preview?.canImport) return;
+    try {
+      setLoading(true);
+      setError("");
+      const res = await onImport(pendingRows, setProgress);
+      setResult(res);
+      setPendingRows(null);
+      setPreview(null);
+    } catch (err) {
+      const msg = err instanceof Error && err.message ? err.message : t("catalogPage.unknownError");
+      setError(t("catalogPage.importFailedDetail", { msg }));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const reset = () => { setResult(null); setError(""); setProgress(null); setPendingRows(null); setPreview(null); onClose(); };
 
   return (
     <>
@@ -517,6 +569,30 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
             </p>
           )}
           {error && <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle className="h-4 w-4" />{error}</p>}
+          {preview && (
+            <div className="rounded-xl border bg-muted/20 p-3 space-y-3">
+              <div className="flex flex-wrap gap-2 text-xs font-medium">
+                <Badge className="bg-emerald-600">Eklenecek: {preview.summary.add}</Badge>
+                <Badge className="bg-blue-600">Güncellenecek: {preview.summary.update}</Badge>
+                <Badge variant={preview.summary.error ? "destructive" : "secondary"}>Hata: {preview.summary.error}</Badge>
+              </div>
+              <div className="max-h-56 overflow-auto rounded-lg border bg-background">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-muted"><tr><th className="p-2 text-left">Satır</th><th className="p-2 text-left">İşlem</th><th className="p-2 text-left">Okul / Program</th><th className="p-2 text-left">Sonuç</th></tr></thead>
+                  <tbody>{preview.rows.map(item => (
+                    <tr key={item.row} className="border-t align-top">
+                      <td className="p-2">{item.row}</td>
+                      <td className="p-2 font-medium">{item.action === "add" ? "Ekle" : item.action === "update" ? "Güncelle" : "Hata"}</td>
+                      <td className="p-2"><div>{item.university}</div><div className="text-muted-foreground">{item.program}</div>{item.currency && <div className="text-muted-foreground">{item.currency}</div>}</td>
+                      <td className="p-2 text-destructive">{item.errors.join("; ") || (item.wouldCreateUniversity ? "Okul da oluşturulacak" : "Hazır")}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+              <p className="text-xs text-muted-foreground">Bu adım henüz veritabanında değişiklik yapmaz. Aynı okul + program + derece + dil kimliği yeniden yüklendiğinde yeni kayıt yerine güncelleme yapılır.</p>
+              <Button onClick={confirmImport} disabled={!preview.canImport || loading} className="w-full">Onayla ve içe aktar</Button>
+            </div>
+          )}
           {result && (
             <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm space-y-1">
               <p className="font-medium text-green-700">{t("catalogPage.importCompleted")}</p>
@@ -1448,6 +1524,8 @@ function UniversitiesTab() {
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
+  const [reminderPreview, setReminderPreview] = useState<any | null>(null);
+  const [reminderPreviewLoading, setReminderPreviewLoading] = useState(false);
 
   // Column filters
   const [fName, setFName] = useState("");
@@ -1608,9 +1686,18 @@ function UniversitiesTab() {
   }, [allCountries, form?.country, selCountryId]);
 
   const save = useMutation({
-    mutationFn: async (f: Partial<University>) => f.id
-      ? api(`/api/universities/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) })
-      : api("/api/universities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) }),
+    mutationFn: async (f: Partial<University>) => {
+      const { applicationPeriods = [], ...universityPayload } = f;
+      const university = f.id
+        ? await api(`/api/universities/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(universityPayload) })
+        : await api("/api/universities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(universityPayload) });
+      await api(`/api/universities/${university.id}/application-periods`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ periods: applicationPeriods }),
+      });
+      return university;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["universities"] });
       setForm(null);
@@ -1682,10 +1769,28 @@ function UniversitiesTab() {
 
   const setF = (updates: Partial<University>) => setForm(f => ({ ...f, ...updates } as Partial<University>));
 
+  const setApplicationPeriod = (index: number, patch: Partial<ApplicationPeriod>) => setForm(current => ({
+    ...current,
+    applicationPeriods: (current?.applicationPeriods ?? []).map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row),
+  }));
+
+  const openReminderPreview = async (period: ApplicationPeriod, daysBefore: 30 | 7) => {
+    if (!form?.id || !period.id) return;
+    setReminderPreviewLoading(true);
+    try {
+      setReminderPreview(await api(`/api/universities/${form.id}/application-periods/${period.id}/reminder-preview?daysBefore=${daysBefore}`));
+    } catch (error) {
+      toast({ title: t("common.error"), description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+    } finally { setReminderPreviewLoading(false); }
+  };
+
   const openEditUniversity = async (id: number) => {
     try {
-      const university = await api(`/api/universities/${id}`);
-      setForm(university);
+      const [university, periods] = await Promise.all([
+        api(`/api/universities/${id}`),
+        api(`/api/universities/${id}/application-periods`),
+      ]);
+      setForm({ ...university, applicationPeriods: periods.data ?? [] });
       setSelCountryId(findCatalogCountry(allCountries, university.country)?.id ?? null);
     } catch (error: any) {
       toast({
@@ -1727,7 +1832,7 @@ function UniversitiesTab() {
         )}
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />{t("catalogPage.importExcel")}</Button>
         <Button variant="outline" onClick={() => runExport(false)}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
-        <Button onClick={() => { setForm({ isActive: true, status: "open" }); setSelCountryId(null); }}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addUniversity")}</Button>
+        <Button onClick={() => { setForm({ isActive: true, status: "open", applicationPeriods: [] }); setSelCountryId(null); }}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addUniversity")}</Button>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -2021,6 +2126,46 @@ function UniversitiesTab() {
               </div>
             </div>
 
+            {/* Institution calendar: application windows and teaching dates
+                are intentionally separate; unknown values stay blank. */}
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wider">Başvuru Takvimi</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Doğrulanmış okul dönemleri programlara varsayılan olarak yansır. Bilinmeyen tarihlere tahmin girmeyin; ders başlangıç/bitişi başvuru tarihinden ayrıdır.</p>
+                </div>
+                <Button type="button" size="sm" variant="outline" onClick={() => setF({ applicationPeriods: [
+                  ...(form?.applicationPeriods ?? []),
+                  { termName: "", academicYear: new Date().getFullYear(), campusName: "", applicationsOpenAt: "", applicationDeadlineAt: "", classesStartOn: "", classesEndOn: "", sourceTimezone: "Europe/Istanbul", sourceUrl: "", verifiedAt: new Date().toISOString().slice(0, 10), isActive: true },
+                ] })}><Plus className="h-3.5 w-3.5 mr-1" />Dönem ekle</Button>
+              </div>
+              {(form?.applicationPeriods ?? []).length === 0 && <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">Henüz doğrulanmış bir dönem eklenmedi.</p>}
+              {(form?.applicationPeriods ?? []).map((period, index) => <div key={period.id ?? `new-${index}`} className="rounded-lg border bg-background p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold">Dönem {index + 1}{period.id ? ` · #${period.id}` : " · yeni"}</p>
+                  <Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setF({ applicationPeriods: (form?.applicationPeriods ?? []).filter((_, rowIndex) => rowIndex !== index) })}><Trash2 className="h-3.5 w-3.5" /></Button>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div><Label className="text-xs">Dönem adı *</Label><Input className="mt-1" value={period.termName} onChange={e => setApplicationPeriod(index, { termName: e.target.value })} placeholder="Mart dönemi" /></div>
+                  <div><Label className="text-xs">Akademik yıl *</Label><Input className="mt-1" type="number" min="2000" max="2200" value={period.academicYear} onChange={e => setApplicationPeriod(index, { academicYear: Number(e.target.value) })} /></div>
+                  <div><Label className="text-xs">Kampüs (varsa)</Label><Input className="mt-1" value={period.campusName ?? ""} onChange={e => setApplicationPeriod(index, { campusName: e.target.value })} placeholder="Gdańsk" /></div>
+                  <div><Label className="text-xs">Okul saat dilimi *</Label><Input className="mt-1" value={period.sourceTimezone} onChange={e => setApplicationPeriod(index, { sourceTimezone: e.target.value })} placeholder="Europe/Warsaw" /></div>
+                  <div><Label className="text-xs">Başvurular açılır</Label><Input className="mt-1" type="date" value={period.applicationsOpenAt?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { applicationsOpenAt: e.target.value })} /></div>
+                  <div><Label className="text-xs">Son başvuru</Label><Input className="mt-1" type="date" value={period.applicationDeadlineAt?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { applicationDeadlineAt: e.target.value })} /></div>
+                  <div><Label className="text-xs">Ders başlangıcı (ayrı)</Label><Input className="mt-1" type="date" value={period.classesStartOn?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { classesStartOn: e.target.value })} /></div>
+                  <div><Label className="text-xs">Ders bitişi (ayrı)</Label><Input className="mt-1" type="date" value={period.classesEndOn?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { classesEndOn: e.target.value })} /></div>
+                  <div className="xl:col-span-3"><Label className="text-xs">Kaynak URL *</Label><Input className="mt-1" type="url" value={period.sourceUrl} onChange={e => setApplicationPeriod(index, { sourceUrl: e.target.value })} placeholder="https://…" /></div>
+                  <div><Label className="text-xs">Doğrulama tarihi *</Label><Input className="mt-1" type="date" value={period.verifiedAt?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { verifiedAt: e.target.value })} /></div>
+                </div>
+                {period.id && <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                  <span className="text-xs text-muted-foreground">Sentetik bildirim önizlemesi:</span>
+                  <Button type="button" size="sm" variant="outline" disabled={reminderPreviewLoading || !period.applicationDeadlineAt} onClick={() => void openReminderPreview(period, 30)}>30 gün</Button>
+                  <Button type="button" size="sm" variant="outline" disabled={reminderPreviewLoading || !period.applicationDeadlineAt} onClick={() => void openReminderPreview(period, 7)}>7 gün</Button>
+                  <Badge variant="outline">Gerçek gönderim kapalı</Badge>
+                </div>}
+              </div>)}
+            </div>
+
             <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4 space-y-3">
               <div>
                 <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Student matching eligibility</p>
@@ -2096,6 +2241,27 @@ function UniversitiesTab() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={reminderPreview !== null} onOpenChange={open => !open && setReminderPreview(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Son tarih bildirim önizlemesi · {reminderPreview?.daysBefore} gün</DialogTitle></DialogHeader>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+            <p className="font-medium text-amber-900">Sentetik güvenlik testi — gerçek gönderim kapalı</p>
+            <p className="mt-1 text-xs text-amber-800">Tamamlanan başvurular, izni olmayanlar, listeden çıkanlar ve yakın zamanda aynı hatırlatmayı alanlar otomatik dışlanır. Tarih değişirse bekleyen eski niyetler iptal edilir.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Uygun</p><p className="text-2xl font-bold text-emerald-700">{reminderPreview?.summary?.eligible ?? 0}</p></div>
+            <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Dışlanan</p><p className="text-2xl font-bold text-amber-700">{reminderPreview?.summary?.excluded ?? 0}</p></div>
+          </div>
+          <div className="rounded-lg border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50"><tr><th className="px-3 py-2 text-left">Sentetik kayıt</th><th className="px-3 py-2 text-left">Kanal</th><th className="px-3 py-2 text-left">Sonuç</th><th className="px-3 py-2 text-left">Neden</th></tr></thead>
+              <tbody className="divide-y">{(reminderPreview?.data ?? []).map((row: any) => <tr key={row.reference}><td className="px-3 py-2 font-mono text-xs">{row.reference}</td><td className="px-3 py-2">{row.channel ?? "—"}</td><td className="px-3 py-2"><Badge variant="outline" className={row.eligible ? "border-emerald-300 text-emerald-700" : "border-amber-300 text-amber-700"}>{row.eligible ? "Uygun" : "Dışlandı"}</Badge></td><td className="px-3 py-2 text-xs text-muted-foreground">{row.reason}</td></tr>)}</tbody>
+            </table>
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => setReminderPreview(null)}>Kapat</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>{t("catalogPage.deleteUniversity")}</DialogTitle></DialogHeader>
@@ -2160,6 +2326,12 @@ function ProgramsTab() {
   });
   const universities: UniversityOption[] = unisData?.data ?? [];
   const uniMap: Record<number, UniversityOption> = Object.fromEntries(universities.map(u => [u.id, u]));
+  const { data: programPeriodsResp } = useQuery({
+    queryKey: ["university-application-periods", form?.universityId],
+    queryFn: () => api(`/api/universities/${form!.universityId}/application-periods`),
+    enabled: Boolean(form?.universityId),
+  });
+  const programPeriods: ApplicationPeriod[] = (programPeriodsResp?.data ?? []).filter((period: ApplicationPeriod) => period.isActive !== false);
 
   const { data: catOptsResp } = useQuery({ queryKey: ["catalog-options"], queryFn: () => api("/api/catalog-options") });
   const catOpts: Record<string, CatalogOption[]> = (catOptsResp as any)?.grouped || {};
@@ -2322,11 +2494,13 @@ function ProgramsTab() {
         Duration: p.duration ?? "", "Fee Type": p.feeType ?? "",
         "Tuition Fee": p.tuitionFee ?? "", Currency: p.currency ?? "",
         "Commission %": p.commissionRate ?? "", "Scholarship": p.scholarship ?? "",
-        Intakes: p.intakes ?? "", "Application Fee": p.applicationFee ?? "", "Enrolment Fee": p.enrollmentFee ?? "", "Refund Process": p.refundProcess ?? "",
+        Intakes: p.intakes ?? "", "Application Fee": p.applicationFee ?? "", "Enrolment Fee": p.enrollmentFee ?? "", "Adaptation Fee": p.adaptationFee ?? "", "Refund Process": p.refundProcess ?? "",
         "Advance Fee": p.advancedFee ?? "", "Deposit Fee": p.depositFee ?? "",
         "Service Fee": p.serviceFeeAmount ?? "", "Discounted Fee": p.discountedFee ?? "",
         "Language Fee": p.languageFee ?? "", "Min GPA": p.minGpa ?? "",
         "Min Language Score": p.minLanguageScore ?? "", "Quota": p.quota ?? "",
+        "Price Valid From": p.priceValidFrom ?? "", "Price Valid Until": p.priceValidUntil ?? "", "Finance Notes": p.financeNotes ?? "",
+        "School Period ID": p.universityApplicationPeriodId ?? "", "Applications Open Override": p.applicationsOpenOverrideAt?.slice(0, 10) ?? "", "Application Deadline Override": p.applicationDeadlineOverrideAt?.slice(0, 10) ?? "", "Classes Start Override": p.classesStartOverrideOn ?? "", "Classes End Override": p.classesEndOverrideOn ?? "",
         Active: p.isActive ? "Yes" : "No",
         Requirements: p.requirements ?? "",
         "Source Metadata JSON": JSON.stringify(p.sourceMetadata ?? {}),
@@ -2538,6 +2712,14 @@ function ProgramsTab() {
     return res;
   };
 
+  const handleBulkPreview = async (rows: Record<string, string>[]): Promise<BulkPreviewResult> => {
+    return api("/api/programs/bulk/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rows),
+    });
+  };
+
   const docColumnsAll = (val: string) =>
     Object.fromEntries(PROGRAM_DOC_TYPE_KEYS.map(k => [k, val])) as Record<string, string>;
 
@@ -2554,9 +2736,10 @@ function ProgramsTab() {
       description: "A practice-focused associate programme in professional cookery.",
       degree: "Associate", field: "Business", language: "Turkish", duration: "24 Months",
       tuitionFee: 5200, currency: "USD", scholarship: 2860, intakes: "Sep",
-      requirements: "High school diploma", commissionRate: 13, applicationFee: 0,
+      requirements: "High school diploma", refundProcess: "", commissionRate: 13, applicationFee: 0, enrollmentFee: "", adaptationFee: "",
       advancedFee: 0, depositFee: 1000, serviceFeeAmount: 0, discountedFee: 2340,
       languageFee: 0, feeType: "Per Year", minGpa: 0, minLanguageScore: 0, quota: "",
+      priceValidFrom: "", priceValidUntil: "", financeNotes: "", applicationPeriodTermName: "", applicationPeriodAcademicYear: "", applicationPeriodCampusName: "", applicationsOpenAt: "", applicationDeadlineAt: "", applicationPeriodTimezone: "", applicationPeriodSourceUrl: "",
       isActive: "Yes", sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.program),
       ...docColumnsAll(""),
       passport: "mandatory", high_school_diploma_translation: "mandatory",
@@ -2568,9 +2751,9 @@ function ProgramsTab() {
       degree: "Bachelor", field: "Medicine", language: "Turkish", duration: "60 Months",
       tuitionFee: 14000, currency: "USD", scholarship: 2100, intakes: "Sep",
       requirements: "High school diploma, TR-YOS or equivalent",
-      commissionRate: 9, applicationFee: 0, advancedFee: 0, depositFee: 2000,
+      refundProcess: "", commissionRate: 9, applicationFee: 0, enrollmentFee: "", adaptationFee: "", advancedFee: 0, depositFee: 2000,
       serviceFeeAmount: 0, discountedFee: 11900, languageFee: 0, feeType: "Per Year",
-      minGpa: 0, minLanguageScore: 0, quota: "", isActive: "Yes",
+      priceValidFrom: "", priceValidUntil: "", financeNotes: "", applicationPeriodTermName: "", applicationPeriodAcademicYear: "", applicationPeriodCampusName: "", applicationsOpenAt: "", applicationDeadlineAt: "", applicationPeriodTimezone: "", applicationPeriodSourceUrl: "", minGpa: 0, minLanguageScore: 0, quota: "", isActive: "Yes",
       sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.program),
       ...docColumnsAll(""),
       passport: "mandatory", high_school_diploma_translation: "mandatory",
@@ -2583,9 +2766,9 @@ function ProgramsTab() {
       degree: "Master", field: "Business", language: "English", duration: "12 Months",
       tuitionFee: 5400, currency: "USD", scholarship: 810, intakes: "Feb, Sep",
       requirements: "Bachelor's degree, English proficiency",
-      commissionRate: 13, applicationFee: 0, advancedFee: 0, depositFee: 1000,
+      refundProcess: "", commissionRate: 13, applicationFee: 0, enrollmentFee: "", adaptationFee: "", advancedFee: 0, depositFee: 1000,
       serviceFeeAmount: 0, discountedFee: 4590, languageFee: 0, feeType: "Per Year",
-      minGpa: 0, minLanguageScore: 0, quota: "", isActive: "Yes",
+      priceValidFrom: "", priceValidUntil: "", financeNotes: "", applicationPeriodTermName: "", applicationPeriodAcademicYear: "", applicationPeriodCampusName: "", applicationsOpenAt: "", applicationDeadlineAt: "", applicationPeriodTimezone: "", applicationPeriodSourceUrl: "", minGpa: 0, minLanguageScore: 0, quota: "", isActive: "Yes",
       sourceMetadataJson: "{}", ...catalogSourceColumns(undefined, SOURCE_FIELDS.program),
       ...docColumnsAll(""),
       passport: "mandatory", bachelors_certificate: "mandatory",
@@ -2604,12 +2787,17 @@ function ProgramsTab() {
     { Column: "language", Required: "No", Notes: "Language of instruction (English, Turkish, ...)." },
     { Column: "duration", Required: "No", Notes: "Free text: '4 years', '2 years', '18 months'." },
     { Column: "tuitionFee", Required: "No", Notes: "Numeric value only (no currency symbol)." },
-    { Column: "currency", Required: "No", Notes: "ISO code: USD, EUR, TRY, GBP. Defaults to USD." },
+    { Column: "currency", Required: "When any fee is present", Notes: "ISO 4217 code such as PLN, USD, EUR, TRY or GBP. Blank is never converted to USD." },
     { Column: "scholarship", Required: "No", Notes: "Numeric — scholarship amount in the chosen currency." },
     { Column: "intakes", Required: "No", Notes: "Comma-separated: 'Fall, Spring, Summer'." },
     { Column: "requirements", Required: "No", Notes: "Free text shown to students." },
     { Column: "commissionRate", Required: "No", Notes: "Agent commission percent (numeric, e.g. 10)." },
-    { Column: "applicationFee / enrollmentFee / advancedFee / depositFee / serviceFeeAmount / discountedFee / languageFee", Required: "No", Notes: "All numeric (no currency symbol). Leave blank if not applicable." },
+    { Column: "applicationFee / enrollmentFee / adaptationFee / advancedFee / depositFee / serviceFeeAmount / discountedFee / languageFee", Required: "No", Notes: "All numeric (no currency symbol). Blank means unknown/not supplied; zero is an explicit zero." },
+    { Column: "priceValidFrom / priceValidUntil", Required: "No", Notes: "Price-list validity in YYYY-MM-DD format." },
+    { Column: "applicationPeriodTermName / applicationPeriodAcademicYear / applicationPeriodCampusName", Required: "No", Notes: "Institution period identity. Unknown dates must remain blank; class dates are managed separately." },
+    { Column: "applicationsOpenAt / applicationDeadlineAt", Required: "No", Notes: "Verified YYYY-MM-DD application dates." },
+    { Column: "applicationPeriodTimezone / applicationPeriodSourceUrl", Required: "With application period", Notes: "IANA timezone and public HTTPS source URL." },
+    { Column: "financeNotes", Required: "No", Notes: "Internal-only commission/payment notes; never student-facing." },
     { Column: "refundProcess", Required: "No", Notes: "Refund conditions and procedure. Line breaks and paragraphs are preserved." },
     { Column: "feeType", Required: "No", Notes: "Free text: 'per year', 'per semester', 'one-time'." },
     { Column: "minGpa", Required: "No", Notes: "Numeric on a 4.0 scale (e.g. 2.5, 3.0)." },
@@ -2924,7 +3112,7 @@ function ProgramsTab() {
                 <Select value={form?.currency ?? "USD"} onValueChange={v => setForm(f => ({ ...f, currency: v }))}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {(activeOpts("currency").length > 0 ? activeOpts("currency") : ["USD", "EUR", "GBP", "TRY", "AED"]).map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    {[...new Set([...(activeOpts("currency").length > 0 ? activeOpts("currency") : ["USD", "EUR", "GBP", "TRY", "AED"]), "PLN"])].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -3017,6 +3205,10 @@ function ProgramsTab() {
                   <Input className="mt-1" type="number" min="0" placeholder={t("catalogPage.zeroNone")} value={form?.enrollmentFee ?? ""} onChange={e => setForm(f => ({ ...f, enrollmentFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
+                  <Label className="text-xs">Adaptasyon Ücreti</Label>
+                  <Input className="mt-1" type="number" min="0" placeholder="Boş = bilinmiyor / uygulanmıyor değil" value={form?.adaptationFee ?? ""} onChange={e => setForm(f => ({ ...f, adaptationFee: e.target.value === "" ? null : Number(e.target.value) }))} />
+                </div>
+                <div>
                   <Label className="text-xs">{t("catalogPage.advancedFee")}</Label>
                   <Input className="mt-1" type="number" placeholder={t("catalogPage.zeroNone")} value={form?.advancedFee ?? ""} onChange={e => setForm(f => ({ ...f, advancedFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
@@ -3036,7 +3228,10 @@ function ProgramsTab() {
                   <Label className="text-xs">{t("catalogPage.languageFee")}</Label>
                   <Input className="mt-1" type="number" placeholder={t("catalogPage.zeroNone")} value={form?.languageFee ?? ""} onChange={e => setForm(f => ({ ...f, languageFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
+                <div><Label className="text-xs">Fiyat yürürlük başlangıcı</Label><Input className="mt-1" type="date" value={form?.priceValidFrom ?? ""} onChange={e => setForm(f => ({ ...f, priceValidFrom: e.target.value || null }))} /></div>
+                <div><Label className="text-xs">Fiyat yürürlük bitişi</Label><Input className="mt-1" type="date" value={form?.priceValidUntil ?? ""} onChange={e => setForm(f => ({ ...f, priceValidUntil: e.target.value || null }))} /></div>
               </div>
+              <div><Label className="text-xs">Finans notları (yalnız iç kullanım)</Label><Textarea className="mt-1" rows={2} value={form?.financeNotes ?? ""} onChange={e => setForm(f => ({ ...f, financeNotes: e.target.value || null }))} placeholder="Komisyon koşulları, ödeme yöntemi veya partner notu…" /></div>
             </div>
 
             <div>
@@ -3058,6 +3253,19 @@ function ProgramsTab() {
                   );
                 })}
               </div>
+            </div>
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 space-y-3">
+              <div><p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Doğrulanmış okul dönemi</p><p className="mt-1 text-[11px] text-muted-foreground">Program seçilen okul dönemini varsayılan olarak kullanır. Yalnız program gerçekten farklıysa aşağıdaki override alanlarını doldurun.</p></div>
+              <Select value={form?.universityApplicationPeriodId ? String(form.universityApplicationPeriodId) : "none"} onValueChange={value => setForm(current => ({ ...current, universityApplicationPeriodId: value === "none" ? null : Number(value) }))}>
+                <SelectTrigger><SelectValue placeholder="Okul dönemi seçin" /></SelectTrigger>
+                <SelectContent><SelectItem value="none">Bağlı doğrulanmış dönem yok</SelectItem>{programPeriods.map(period => <SelectItem key={period.id} value={String(period.id)}>{period.termName} · {period.academicYear}{period.campusName ? ` · ${period.campusName}` : ""}</SelectItem>)}</SelectContent>
+              </Select>
+              {form?.universityApplicationPeriodId && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div><Label className="text-xs">Başvuru açılış override</Label><Input className="mt-1" type="date" value={form.applicationsOpenOverrideAt?.slice(0, 10) ?? ""} onChange={e => setForm(current => ({ ...current, applicationsOpenOverrideAt: e.target.value || null }))} /></div>
+                <div><Label className="text-xs">Son başvuru override</Label><Input className="mt-1" type="date" value={form.applicationDeadlineOverrideAt?.slice(0, 10) ?? ""} onChange={e => setForm(current => ({ ...current, applicationDeadlineOverrideAt: e.target.value || null }))} /></div>
+                <div><Label className="text-xs">Ders başlangıç override</Label><Input className="mt-1" type="date" value={form.classesStartOverrideOn ?? ""} onChange={e => setForm(current => ({ ...current, classesStartOverrideOn: e.target.value || null }))} /></div>
+                <div><Label className="text-xs">Ders bitiş override</Label><Input className="mt-1" type="date" value={form.classesEndOverrideOn ?? ""} onChange={e => setForm(current => ({ ...current, classesEndOverrideOn: e.target.value || null }))} /></div>
+              </div>}
             </div>
             <div><Label>{t("catalogPage.requirements")}</Label><Textarea className="mt-1" rows={2} placeholder={t("catalogPage.requirementsPlaceholder")} value={form?.requirements ?? ""} onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))} /></div>
             <div><Label>{t("catalogPage.refundProcess")}</Label><Textarea className="mt-1" rows={5} placeholder={t("catalogPage.refundProcessPlaceholder")} value={form?.refundProcess ?? ""} onChange={e => setForm(f => ({ ...f, refundProcess: e.target.value }))} /></div>
@@ -3231,7 +3439,7 @@ function ProgramsTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("adminCatalog.tabPrograms")} templateRows={templateRows} notesRows={notesRows} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("adminCatalog.tabPrograms")} templateRows={templateRows} notesRows={notesRows} onImport={handleBulkImport} onPreview={handleBulkPreview} partnerProgramWorkbook />
 
       <Dialog open={delAllOpen} onOpenChange={o => !o && setDelAllOpen(false)}>
         <DialogContent className="max-w-sm">

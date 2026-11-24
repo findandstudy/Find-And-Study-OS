@@ -38,7 +38,7 @@ import {
   Trash2, Pencil, ChevronLeft, ChevronRight, TrendingUp, Filter,
   User, X, Check, GraduationCap, BookOpen, FileCheck, Send,
   Eye, Stamp, CheckCircle, XCircle, Trophy, MessageSquare, Mail,
-  UserPlus, UserCheck2, Download, Building2, MapPin, Award, ExternalLink, Globe, DollarSign,
+  UserPlus, UserCheck2, Download, Building2, MapPin, Award, ExternalLink, Globe, DollarSign, CalendarDays,
 } from "lucide-react";
 import { StageBadgeWithDocs } from "@/components/StageBadgeWithDocs";
 import { useToast } from "@/hooks/use-toast";
@@ -380,6 +380,12 @@ function UniversityInfoPopup({ universityId, onClose }: { universityId: number; 
     queryFn: () => apiFetch(`${BASE_URL}/api/universities/${universityId}`),
     enabled: !!universityId,
   });
+  const { data: periodResponse } = useQuery<{ data: any[] }>({
+    queryKey: ["university-application-periods", universityId],
+    queryFn: () => apiFetch(`${BASE_URL}/api/universities/${universityId}/application-periods`),
+    enabled: !!universityId,
+  });
+  const periods = periodResponse?.data ?? [];
 
   return (
     <>
@@ -431,6 +437,25 @@ function UniversityInfoPopup({ universityId, onClose }: { universityId: number; 
                   </div>
                 </div>
               )}
+              {periods.filter(period => period.verifiedAt && period.isActive !== false).length > 0 && (
+                <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                  <h4 className="text-sm font-semibold flex items-center gap-2"><CalendarDays className="w-4 h-4 text-primary" /> Application Calendar</h4>
+                  <div className="space-y-2">
+                    {periods.filter(period => period.verifiedAt && period.isActive !== false).map(period => (
+                      <div key={period.id} className="rounded-lg border bg-background p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{period.termName} {period.academicYear}</p>{period.campusName && <Badge variant="outline">{period.campusName}</Badge>}</div>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                          <div><span className="text-muted-foreground">Applications open</span><p className="font-medium">{period.applicationsOpenAt}</p></div>
+                          <div><span className="text-muted-foreground">Deadline</span><p className="font-medium">{period.applicationDeadlineAt}</p></div>
+                          {period.classesStartOn && <div><span className="text-muted-foreground">Classes start</span><p className="font-medium">{period.classesStartOn}</p></div>}
+                          {period.classesEndOn && <div><span className="text-muted-foreground">Classes end</span><p className="font-medium">{period.classesEndOn}</p></div>}
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">{period.timezone} · Verified source: {period.sourceName || period.sourceUrl}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {(uni.contactName || uni.contactEmail || uni.contactPhone) && (
                 <div className="bg-muted/30 rounded-xl p-4 space-y-3">
                   <h4 className="text-sm font-semibold flex items-center gap-2"><User className="w-4 h-4 text-primary" /> Contact</h4>
@@ -463,9 +488,14 @@ function ProgramInfoPopup({ programId, onClose, canSeeCommission }: { programId:
     queryFn: () => apiFetch(`${BASE_URL}/api/course-finder?programId=${programId}&limit=1`),
     enabled: !!programId,
   });
+  const { data: programCalendar } = useQuery<any>({
+    queryKey: ["program-calendar", programId],
+    queryFn: () => apiFetch(`${BASE_URL}/api/programs/${programId}`),
+    enabled: !!programId,
+  });
   const p = Array.isArray(data?.data) ? data.data[0] : Array.isArray(data) ? data[0] : null;
 
-  const fmtCur = (v: any, cur = "USD") => v != null && v !== "" ? `$${Number(v).toLocaleString()}` : null;
+  const fmtCur = (v: any, cur = p?.currency || "USD") => v != null && v !== "" ? new Intl.NumberFormat(undefined, { style: "currency", currency: cur }).format(Number(v)) : null;
 
   return (
     <>
@@ -510,6 +540,18 @@ function ProgramInfoPopup({ programId, onClose, canSeeCommission }: { programId:
                   {p.field && <div><span className="text-muted-foreground text-xs">Field of Study</span><p className="font-medium">{p.field}</p></div>}
                 </div>
               </div>
+              {programCalendar?.effectiveApplicationPeriod?.verifiedAt && (
+                <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                  <h4 className="text-sm font-semibold flex items-center gap-2"><CalendarDays className="w-4 h-4 text-primary" /> Application Calendar</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div><span className="text-muted-foreground text-xs">Term</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.termName} {programCalendar.effectiveApplicationPeriod.academicYear}</p></div>
+                    {programCalendar.effectiveApplicationPeriod.campusName && <div><span className="text-muted-foreground text-xs">Campus</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.campusName}</p></div>}
+                    <div><span className="text-muted-foreground text-xs">Applications open</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.applicationsOpenAt}</p></div>
+                    <div><span className="text-muted-foreground text-xs">Deadline</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.applicationDeadlineAt}</p></div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{programCalendar.effectiveApplicationPeriod.sourceTimezone}{Object.values(programCalendar.effectiveApplicationPeriod.overrides || {}).some(Boolean) ? " · Program-specific override" : " · University default"}</p>
+                </div>
+              )}
               <div className="bg-muted/30 rounded-xl p-4 space-y-3">
                 <h4 className="text-sm font-semibold flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" /> University</h4>
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -526,10 +568,13 @@ function ProgramInfoPopup({ programId, onClose, canSeeCommission }: { programId:
                   {p.feeType && <div><span className="text-muted-foreground text-xs">Fee Type</span><p className="font-medium">{p.feeType}</p></div>}
                   {fmtCur(p.applicationFee) && <div><span className="text-muted-foreground text-xs">Application Fee</span><p className="font-medium">{fmtCur(p.applicationFee)}</p></div>}
                   {fmtCur(p.enrollmentFee) && <div><span className="text-muted-foreground text-xs">Enrolment Fee</span><p className="font-medium">{fmtCur(p.enrollmentFee)}</p></div>}
+                  {fmtCur(programCalendar?.adaptationFee ?? p.adaptationFee) && <div><span className="text-muted-foreground text-xs">Adaptation Fee</span><p className="font-medium">{fmtCur(programCalendar?.adaptationFee ?? p.adaptationFee)}</p></div>}
                   {fmtCur(p.depositFee) && <div><span className="text-muted-foreground text-xs">Deposit Fee</span><p className="font-medium">{fmtCur(p.depositFee)}</p></div>}
                   {fmtCur(p.serviceFeeAmount) && <div><span className="text-muted-foreground text-xs">Service Fee</span><p className="font-medium">{fmtCur(p.serviceFeeAmount)}</p></div>}
                   {canSeeCommission && fmtCur(p.commissionAmount) && <div><span className="text-muted-foreground text-xs">Commission</span><p className="font-medium text-emerald-600">{fmtCur(p.commissionAmount)}</p></div>}
                 </div>
+                {programCalendar?.requirements && <div className="pt-2 border-t"><span className="text-muted-foreground text-xs">Requirements</span><p className="text-sm whitespace-pre-wrap">{programCalendar.requirements}</p></div>}
+                {programCalendar?.refundProcess && <div className="pt-2 border-t"><span className="text-muted-foreground text-xs">Refund Process</span><p className="text-sm whitespace-pre-wrap">{programCalendar.refundProcess}</p></div>}
               </div>
             </div>
           </>

@@ -1,4 +1,5 @@
-import { pgTable, text, serial, timestamp, integer, boolean, real, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, real, jsonb, index, date, unique, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import type { CatalogSourceMetadata } from "./catalog";
@@ -85,12 +86,16 @@ export const programsTable = pgTable("programs", {
   commissionRate: real("commission_rate"),
   applicationFee: real("application_fee"),
   enrollmentFee: real("enrollment_fee"),
+  adaptationFee: real("adaptation_fee"),
   advancedFee: real("advanced_fee"),
   depositFee: real("deposit_fee"),
   serviceFeeAmount: real("service_fee_amount"),
   discountedFee: real("discounted_fee"),
   languageFee: real("language_fee"),
   feeType: text("fee_type"),
+  priceValidFrom: date("price_valid_from"),
+  priceValidUntil: date("price_valid_until"),
+  financeNotes: text("finance_notes"),
   refundProcess: text("refund_process"),
   minGpa: real("min_gpa"),
   minLanguageScore: real("min_language_score"),
@@ -107,6 +112,11 @@ export const programsTable = pgTable("programs", {
   admissionSourceUrl: text("admission_source_url"),
   admissionVerifiedAt: timestamp("admission_verified_at", { withTimezone: true }),
   admissionValidUntil: timestamp("admission_valid_until", { withTimezone: true }),
+  universityApplicationPeriodId: integer("university_application_period_id"),
+  applicationsOpenOverrideAt: date("applications_open_override_at"),
+  applicationDeadlineOverrideAt: date("application_deadline_override_at"),
+  classesStartOverrideOn: date("classes_start_override_on"),
+  classesEndOverrideOn: date("classes_end_override_on"),
   quota: integer("quota"),
   sourceMetadata: jsonb("source_metadata").notNull().default({}).$type<CatalogSourceMetadata>(),
   isActive: boolean("is_active").notNull().default(true),
@@ -117,6 +127,63 @@ export const programsTable = pgTable("programs", {
   index("programs_degree_idx").on(table.degree),
   index("programs_field_idx").on(table.field),
   index("programs_is_active_idx").on(table.isActive),
+]);
+
+/**
+ * Verified institution-level application calendar. Teaching dates are kept
+ * separate from the application window and may remain null when unknown.
+ * Programs link to a row and inherit it unless an explicit override is set.
+ */
+export const universityApplicationPeriodsTable = pgTable("university_application_periods", {
+  id: serial("id").primaryKey(),
+  universityId: integer("university_id").notNull().references(() => universitiesTable.id, { onDelete: "cascade" }),
+  termName: text("term_name").notNull(),
+  academicYear: integer("academic_year").notNull(),
+  campusName: text("campus_name"),
+  applicationsOpenAt: date("applications_open_at"),
+  applicationDeadlineAt: date("application_deadline_at"),
+  classesStartOn: date("classes_start_on"),
+  classesEndOn: date("classes_end_on"),
+  sourceTimezone: text("source_timezone").notNull(),
+  sourceUrl: text("source_url").notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdById: integer("created_by_id"),
+  updatedById: integer("updated_by_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (table) => [
+  unique("university_application_periods_identity_uq").on(table.universityId, table.termName, table.academicYear, table.campusName),
+  index("university_application_periods_lookup_idx").on(table.universityId, table.isActive, table.applicationDeadlineAt),
+  check("university_application_periods_year_chk", sql`${table.academicYear} BETWEEN 2000 AND 2200`),
+  check("university_application_periods_window_chk", sql`${table.applicationDeadlineAt} IS NULL OR ${table.applicationsOpenAt} IS NULL OR ${table.applicationDeadlineAt} >= ${table.applicationsOpenAt}`),
+  check("university_application_periods_teaching_window_chk", sql`${table.classesEndOn} IS NULL OR ${table.classesStartOn} IS NULL OR ${table.classesEndOn} >= ${table.classesStartOn}`),
+  check("university_application_periods_timezone_chk", sql`length(trim(${table.sourceTimezone})) BETWEEN 1 AND 64`),
+  check("university_application_periods_source_chk", sql`${table.sourceUrl} ~ '^https://'`),
+]);
+
+export const applicationDeadlineReminderIntentsTable = pgTable("application_deadline_reminder_intents", {
+  id: serial("id").primaryKey(),
+  universityApplicationPeriodId: integer("university_application_period_id").notNull().references(() => universityApplicationPeriodsTable.id, { onDelete: "cascade" }),
+  subjectType: text("subject_type").notNull(),
+  subjectId: integer("subject_id").notNull(),
+  channel: text("channel").notNull(),
+  daysBefore: integer("days_before").notNull(),
+  scheduleFingerprint: text("schedule_fingerprint").notNull(),
+  status: text("status").notNull().default("PREVIEW_ONLY"),
+  reasonCode: text("reason_code").notNull(),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  cancelReason: text("cancel_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (table) => [
+  unique("application_deadline_reminder_intents_identity_uq").on(table.universityApplicationPeriodId, table.subjectType, table.subjectId, table.channel, table.daysBefore, table.scheduleFingerprint),
+  index("application_deadline_reminder_intents_period_status_idx").on(table.universityApplicationPeriodId, table.status, table.daysBefore),
+  check("application_deadline_reminder_intents_subject_chk", sql`${table.subjectType} IN ('LEAD', 'APPLICATION')`),
+  check("application_deadline_reminder_intents_channel_chk", sql`${table.channel} IN ('EMAIL', 'WHATSAPP')`),
+  check("application_deadline_reminder_intents_days_chk", sql`${table.daysBefore} IN (30, 7)`),
+  check("application_deadline_reminder_intents_status_chk", sql`${table.status} IN ('PREVIEW_ONLY', 'PENDING', 'CANCELLED', 'SENT', 'SUPPRESSED')`),
+  check("application_deadline_reminder_intents_hash_chk", sql`${table.scheduleFingerprint} ~ '^[0-9a-f]{64}$'`),
 ]);
 
 export const insertUniversitySchema = createInsertSchema(universitiesTable).omit({ id: true, createdAt: true, updatedAt: true });

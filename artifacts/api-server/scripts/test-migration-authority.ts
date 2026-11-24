@@ -266,6 +266,9 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0138_city_weather_daily_refresh",
       "0139_website_translation_queue",
       "0140_catalog_university_type_options",
+      "0141_website_seo_technical_policy",
+      "0142_program_enrolment_fee_refund_process",
+      "0143_university_application_calendar_price_lists",
     ],
   );
 
