@@ -431,7 +431,7 @@ test("public header reserves stable brand space and prioritizes the visible tena
 });
 
 test("public language menu stays above the sticky detail section navigation", () => {
-  assert.match(publicLayout, /<header className="sticky top-0 z-\[100\]/);
+  assert.match(publicLayout, /<header className=\{`sticky top-0 z-\[100\]/);
   assert.match(publicLayout, /min-w-\[200px\] z-\[110\]/);
   assert.match(css, /\.detail-nav\s*\{[^}]*top:\s*80px;[^}]*z-index:\s*40;/);
 });
