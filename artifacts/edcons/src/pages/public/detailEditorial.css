@@ -923,8 +923,9 @@
 .detail-meta-pill svg { color: #fff; }
 
 .detail-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
-.detail-actions > a, .detail-actions > button, .detail-action { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 12px 19px; background: var(--detail-navy); color: #fff; font-size: 13.5px; font-weight: 800; border: 1px solid transparent; line-height: 1.5; text-align: center; }
-.detail-actions > a:hover, .detail-action:hover { box-shadow: 0 4px 12px #2354d628; filter: brightness(.96); }
+.detail-actions > a, .detail-actions > button, .detail-action { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 12px 19px; border: 1px solid transparent; border-radius: 999px; background: var(--detail-navy); color: #fff; font-size: 13.5px; font-weight: 800; line-height: 1.5; text-align: center; transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease, background-color .2s ease, color .2s ease; }
+.detail-actions > a:hover, .detail-actions > button:not(:disabled):hover, .detail-action:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(3,12,25,.14); filter: brightness(.96); }
+.detail-actions > a:focus-visible, .detail-actions > button:focus-visible, .detail-action:focus-visible { outline: 3px solid color-mix(in srgb, var(--detail-accent) 42%, transparent); outline-offset: 3px; }
 .detail-actions > .is-secondary { background: var(--detail-white); color: var(--detail-ink); border-color: var(--detail-line); }
 .detail-actions > .is-secondary:hover { border-color: var(--detail-accent); color: var(--detail-accent); }
 .detail-programs-footer-actions > a { border-radius: 999px; transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }

@@ -242,7 +242,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
           <DetailHeading number={city.weather ? "05" : "04"} eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} locale={lang} />
           {detailContentIntro(editorial, "programs")}
           <DeferredBelowFold minHeight={520}><Suspense fallback={<div className="h-[32rem] animate-pulse rounded-3xl bg-secondary" />}><DetailProgramBrowser key={`${city.id}:${lang}`} scope={{ kind: "city", country: city.filterCountry || city.country, city: city.filterCity || city.name }} admissionsOpen previewPrograms={city.programs.map(program => ({ ...program, universityId: program.universityId ?? 0, universityPath: program.universityPath ?? "" }))} previewTotal={city.programCount} /></Suspense></DeferredBelowFold>
-          <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
+          <div className="detail-actions detail-programs-footer-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
         </div>
       </section>}
       {detailContentSections(editorial, lang, localePath("/contact"), ["hero", "overview"])}

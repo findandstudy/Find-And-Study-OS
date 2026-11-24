@@ -382,7 +382,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
           <DetailHeading number="05" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} locale={lang} />
           {detailContentIntro(editorial, "programs")}
           <DeferredBelowFold minHeight={520}><Suspense fallback={<div className="h-[32rem] animate-pulse rounded-3xl bg-secondary" />}><DetailProgramBrowser scope={{ kind: "country", country: dest.filterCountry || dest.country }} admissionsOpen previewPrograms={data.programs.map(program => ({ ...program, universityPath: "", universityCountry: dest.country }))} previewTotal={stats.programCount} /></Suspense></DeferredBelowFold>
-          <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")} · {stats.programCount}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
+          <div className="detail-actions detail-programs-footer-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")} · {stats.programCount}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
         </div>
       </section>}
       {detailContentSections(editorial, lang, localePath("/contact"), ["hero", "overview"])}

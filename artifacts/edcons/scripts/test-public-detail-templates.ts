@@ -203,6 +203,14 @@ test("city and country university sections share the same logo-led media cards",
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-city \[data-detail-section="universities"\] \.detail-grid > \* \{ grid-column: 1 \/ -1; \}/);
 });
 
+test("detail programme footer actions share the rounded CTA contract", () => {
+  assert.match(city, /className="detail-actions detail-programs-footer-actions"/);
+  assert.match(country, /className="detail-actions detail-programs-footer-actions"/);
+  assert.match(university, /className="detail-actions detail-programs-footer-actions"/);
+  assert.match(css, /\.detail-actions > a, \.detail-actions > button, \.detail-action \{[^}]*border-radius: 999px;[^}]*transition:/);
+  assert.match(css, /\.detail-actions > a:hover, \.detail-actions > button:not\(:disabled\):hover, \.detail-action:hover \{[^}]*transform: translateY\(-2px\);/);
+});
+
 test("country detail boxes use the shared rounded card language", () => {
   assert.match(css, /\.detail-destination \.detail-editorial-cards article \{[\s\S]*border-radius: 18px;[\s\S]*box-shadow: var\(--detail-shadow\);/);
   assert.match(css, /\.detail-destination :is\(\.detail-snapshot, \.detail-keylines, \.detail-program-points, \.detail-program-card, \.detail-intake, \.detail-fee-panel\) \{[\s\S]*border-radius: 18px;[\s\S]*overflow: hidden;/);
