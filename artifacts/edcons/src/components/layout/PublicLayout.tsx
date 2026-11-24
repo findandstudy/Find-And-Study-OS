@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useI18n } from "@/hooks/use-i18n";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
-import { GraduationCap, Menu, X, ChevronDown, Mail, Phone, MapPin, LoaderCircle } from "lucide-react";
+import { GraduationCap, Menu, X, ChevronDown, Mail, Phone, MapPin, LoaderCircle, Clock3 } from "lucide-react";
 import { SUPPORTED_LANGUAGES, LANGUAGE_META, LANGUAGE_COUNTRY_CODES, type Language } from "@/lib/i18n/index";
 import { loadCriticalPublicLanguage } from "@/lib/i18n/context";
 import { prefetchPublicDetailForLanguage } from "@/pages/public/publicDetailQuery";
@@ -34,6 +34,8 @@ export function PublicLayout({ children }: { children: ReactNode }) {
     ? `${BASE_URL}/api/settings/branding/logo?variant=square`
     : logoUrl;
   const companyName = settings.companyName || "Find And Study OS";
+  const publicPath = (location || window.location.pathname).split(/[?#]/)[0];
+  const isPublicHome = /^\/[a-z]{2}\/?$/.test(publicPath);
 
   useEffect(() => {
     setHeaderLogoFailed(false);
@@ -104,7 +106,20 @@ export function PublicLayout({ children }: { children: ReactNode }) {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-[100] focus:rounded focus:bg-background focus:p-3 focus:text-foreground focus:ring-2">
         {t("a11y.skipToContent")}
       </a>
-      <header className="sticky top-0 z-[100] w-full glass border-b">
+      {isPublicHome && (settings.companyEmail || settings.companyPhone || settings.workingHours || settings.companyCity) ? (
+        <div className="public-home-utility-bar" aria-label="Contact information">
+          <div className="public-home-utility-inner">
+            <div className="public-home-utility-links">
+              {settings.companyPhone ? <a href={`tel:${settings.companyPhone.replace(/\s/g, "")}`}><Phone aria-hidden="true" />{settings.companyPhone}</a> : null}
+              {settings.companyEmail ? <a href={`mailto:${settings.companyEmail}`}><Mail aria-hidden="true" />{settings.companyEmail}</a> : null}
+              {settings.workingHours ? <span><Clock3 aria-hidden="true" />{settings.workingHours}</span> : null}
+              {settings.companyCity ? <span><MapPin aria-hidden="true" />{[settings.companyCity, settings.companyCountry].filter(Boolean).join(", ")}</span> : null}
+            </div>
+            <span className="public-home-utility-note">Global education guidance, connected end to end</span>
+          </div>
+        </div>
+      ) : null}
+      <header className={`sticky top-0 z-[100] w-full glass border-b public-site-header${isPublicHome ? " public-site-header--home" : ""}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <Link href={localePath("/")} className="group relative flex h-12 w-11 min-w-0 items-center gap-2 sm:w-[220px]">
             <div className={`flex min-w-0 items-center gap-2 ${logoUrl && !headerLogoFailed ? "invisible" : ""}`} aria-hidden={Boolean(logoUrl && !headerLogoFailed)}>

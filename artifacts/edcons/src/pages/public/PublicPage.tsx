@@ -273,13 +273,26 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
               </div>
             </aside>
           </div>
+          <div className="home-hero-service-strip relative z-20 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            {journeySignals.map((signal, signalIndex) => (
+              <article key={`${text(signal.label, 120)}-${signalIndex}`}>
+                <span>{String(signalIndex + 1).padStart(2, "0")}</span>
+                <div><strong>{text(signal.label, 120)}</strong><p>{text(signal.detail, 240)}</p></div>
+                <ArrowRight aria-hidden="true" />
+              </article>
+            ))}
+            <article className="home-hero-service-proof">
+              <span><Star aria-hidden="true" /></span>
+              <div><strong>{text(content.signalTitle, 300)}</strong><p>{text(content.signalSubtitle, 500)}</p></div>
+            </article>
+          </div>
         </section>
       );
     }
     case "home_fallback_stats":
       return (
         <section className="home-proof-rail">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="home-proof-grid max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="cms-responsive-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 text-center">
               {items(content.stats, 12).map((stat, statIndex) => (
                 <div key={statIndex} className="home-proof-item">
@@ -289,6 +302,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
                 </div>
               ))}
             </div>
+            <div className="home-proof-mosaic" aria-hidden="true"><span /><span /><span /><span /></div>
           </div>
         </section>
       );
