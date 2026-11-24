@@ -198,6 +198,9 @@ test("city and country university sections share the same logo-led media cards",
   assert.match(css, /\.detail-catalog-card\.has-media \{[^}]*border-radius: 24px;/);
   assert.match(css, /\.detail-catalog-card:not\(\.has-media\),/);
   assert.match(css, /\.detail-city \.detail-grid > :not\(\.has-media\),/);
+  assert.match(css, /\.detail-city \[data-detail-section="universities"\] \.detail-grid > \* \{ grid-column: span 3; \}/);
+  assert.match(css, /@media \(max-width: 1050px\)[\s\S]*\.detail-city \[data-detail-section="universities"\] \.detail-grid > \* \{ grid-column: span 6; \}/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-city \[data-detail-section="universities"\] \.detail-grid > \* \{ grid-column: 1 \/ -1; \}/);
 });
 
 test("country detail boxes use the shared rounded card language", () => {
