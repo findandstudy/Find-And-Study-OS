@@ -77,7 +77,7 @@ try {
   const workspace = await dependency("@workspace/db");
   const { db, usersTable, agentsTable, contractTemplatesTable, signingSessionsTable, signedContractsTable } = workspace;
   pool = workspace.pool;
-  const identity = (await pool.query("select current_database() as name, inet_server_addr()::text as address, inet_server_port() as port")).rows[0];
+  const identity = (await pool.query("select current_database() as name, host(inet_server_addr()) as address, inet_server_port() as port")).rows[0];
   assert.equal(identity.name, databaseName);
   assert.equal(identity.address, "127.0.0.1");
   assert.equal(identity.port, 5432);
