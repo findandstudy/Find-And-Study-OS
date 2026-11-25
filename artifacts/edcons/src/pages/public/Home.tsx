@@ -37,6 +37,45 @@ function HomeBlocks({ blocks, version, pageTitle, locale }: { blocks: PageBlock[
     return () => observer.disconnect();
   }, [blocks, locale, version]);
 
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return;
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const coarsePointer = window.matchMedia("(pointer: coarse)");
+    if (reducedMotion.matches || coarsePointer.matches) return;
+
+    let animationFrame = 0;
+    const resetPointer = () => {
+      root.style.setProperty("--home-pointer-x", "0px");
+      root.style.setProperty("--home-pointer-y", "0px");
+      root.style.setProperty("--home-pointer-px", "72%");
+      root.style.setProperty("--home-pointer-py", "30%");
+    };
+    const updatePointer = (event: PointerEvent) => {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        const viewportWidth = Math.max(window.innerWidth, 1);
+        const viewportHeight = Math.max(window.innerHeight, 1);
+        const normalizedX = Math.min(1, Math.max(0, event.clientX / viewportWidth));
+        const normalizedY = Math.min(1, Math.max(0, event.clientY / viewportHeight));
+        root.style.setProperty("--home-pointer-x", `${((normalizedX - 0.5) * 18).toFixed(2)}px`);
+        root.style.setProperty("--home-pointer-y", `${((normalizedY - 0.5) * 12).toFixed(2)}px`);
+        root.style.setProperty("--home-pointer-px", `${(normalizedX * 100).toFixed(2)}%`);
+        root.style.setProperty("--home-pointer-py", `${(normalizedY * 100).toFixed(2)}%`);
+      });
+    };
+
+    resetPointer();
+    root.addEventListener("pointermove", updatePointer, { passive: true });
+    root.addEventListener("pointerleave", resetPointer);
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      root.removeEventListener("pointermove", updatePointer);
+      root.removeEventListener("pointerleave", resetPointer);
+    };
+  }, [blocks, locale, version]);
+
   const content = <div ref={contentRef} data-public-page-version={version}>{blocks.map((block, index) => <CmsBlock block={block} index={index} variables={{ siteName: SITE_NAME, pageTitle, pageSlug: "home", pageLocale: locale }} key={`${block.blockType}-${index}`} />)}</div>;
   return <CmsPageCanvas className="home-future-page">{content}</CmsPageCanvas>;
 }

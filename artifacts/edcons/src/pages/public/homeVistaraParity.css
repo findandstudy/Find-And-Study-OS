@@ -1,11 +1,15 @@
 /* Loaded after the shared CMS stylesheet so the managed homepage has one
    stable, reference-led composition in the editor and on the public site. */
 .home-future-page {
-  --vistara-navy: #112746;
-  --vistara-blue: #2169e8;
-  --vistara-sky: #eaf4ff;
-  --vistara-ink: #10233f;
-  --vistara-muted: #63728a;
+  --vistara-navy: #0f172a;
+  --vistara-blue: #2563eb;
+  --vistara-sky: #f1f5f9;
+  --vistara-ink: #0f172a;
+  --vistara-muted: #64748b;
+  --home-pointer-x: 0px;
+  --home-pointer-y: 0px;
+  --home-pointer-px: 72%;
+  --home-pointer-py: 30%;
   background: #fff;
   color: var(--vistara-ink);
 }
@@ -389,6 +393,280 @@
   }
 }
 
+/* Vistara parity pass ---------------------------------------------------
+ * These rules intentionally mirror the reference's interaction grammar:
+ * exact colour tokens, skew-wipe buttons, image light sweeps, active blue
+ * accordions and pointer-responsive hero depth. They stay scoped to Home so
+ * shared CMS blocks used by managed and detail pages are not affected.
+ */
+body:has(.home-future-page) .public-home-utility-bar {
+  min-height: 44px;
+  padding-inline: clamp(18px, 3.5vw, 54px);
+  color: #fff;
+  background: var(--vistara-navy, #0f172a);
+}
+body:has(.home-future-page) .public-home-utility-bar a,
+body:has(.home-future-page) .public-home-utility-bar p,
+body:has(.home-future-page) .public-home-utility-bar span { color: #fff !important; }
+body:has(.home-future-page) .public-site-header--home {
+  border-color: rgba(15, 23, 42, .08) !important;
+  background: rgba(255,255,255,.97) !important;
+  box-shadow: 0 8px 28px rgba(15,23,42,.055);
+  backdrop-filter: blur(18px);
+}
+body:has(.home-future-page) .public-site-header--home nav a {
+  color: #0f172a !important;
+  font-weight: 600;
+  transition: color .3s ease, transform .3s ease;
+}
+body:has(.home-future-page) .public-site-header--home nav a:hover {
+  color: #2563eb !important;
+  transform: translateY(-1px);
+}
+body:has(.home-future-page) .public-site-header--home a[href*="/login"] {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: #2563eb !important;
+  color: #fff !important;
+  background: #2563eb !important;
+  box-shadow: 0 16px 32px rgba(37,99,235,.2) !important;
+}
+body:has(.home-future-page) .public-site-header--home a[href*="/login"]::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  bottom: -2px;
+  width: 0;
+  height: 106%;
+  background: #fff;
+  transform: skew(30deg);
+  transition: width .3s ease-in-out, left .3s ease-in-out, transform .3s ease-in-out;
+}
+body:has(.home-future-page) .public-site-header--home a[href*="/login"]:hover { color: #2563eb !important; }
+body:has(.home-future-page) .public-site-header--home a[href*="/login"]:hover::after {
+  left: -5px;
+  width: 106%;
+  transform: skew(0deg);
+}
+
+.home-future-page .home-future-hero {
+  background:
+    radial-gradient(circle at var(--home-pointer-px) var(--home-pointer-py), rgba(255,255,255,.78), transparent 19%),
+    linear-gradient(170deg, rgba(37,99,235,.18) 0%, #f1f5f9 100%);
+}
+.home-future-page .home-future-hero::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  opacity: .36;
+  background: radial-gradient(circle at var(--home-pointer-px) var(--home-pointer-py), rgba(37,99,235,.28) 0 2px, transparent 3px) 0 0/34px 34px;
+  mask-image: linear-gradient(90deg, #000 0 18%, transparent 58%);
+  transition: background-position .16s linear;
+}
+.home-future-page .home-future-hero-grid { width: min(100% - 30px, 1400px); max-width: 1400px !important; }
+.home-future-page .home-future-hero-copy { width: min(64%, 860px); }
+.home-future-page .home-future-hero-copy h1 {
+  max-width: 850px;
+  font-size: clamp(54px, 5.45vw, 78px) !important;
+  line-height: 1.035 !important;
+  letter-spacing: -.052em !important;
+  font-weight: 800;
+}
+.home-future-page .home-future-hero-copy > p { color: #64748b !important; }
+.home-future-page .home-hero-visual { right: -2.5%; width: 55%; }
+.home-future-page .home-hero-photo-1 {
+  transform: translate3d(var(--home-pointer-x), var(--home-pointer-y), 0) scale(1.025);
+  transition: transform .28s cubic-bezier(.22,1,.36,1);
+}
+.home-future-page .home-hero-photo-1::before,
+.home-future-page :is(.home-service-card-media,.home-catalog-media,.home-journal-section .cms-grid-box-card)::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  width: 200%;
+  height: 0;
+  pointer-events: none;
+  background: rgba(255,255,255,.5);
+  transform: translate(-50%,-50%) rotate(-45deg);
+}
+.home-future-page .home-hero-photo-1:hover::before,
+.home-future-page :is(.home-bento-card,.home-catalog-card,.home-journal-section .cms-grid-box-card):hover :is(.home-service-card-media,.home-catalog-media)::after,
+.home-future-page .home-journal-section .cms-grid-box-card:hover::after {
+  height: 250%;
+  background: transparent;
+  transition: height .6s linear, background .6s linear;
+}
+
+.home-future-page .home-future-hero-copy .cms-action-row a {
+  min-height: 50px;
+  border-radius: 50px !important;
+  font-weight: 700;
+  box-shadow: 0 16px 32px rgba(37,99,235,.2) !important;
+}
+.home-future-page .home-future-hero-copy .cms-action-row a:last-child {
+  color: #2563eb !important;
+  background: #fff !important;
+  border-color: #fff !important;
+}
+.home-future-page .home-future-hero-copy .cms-action-row a::after,
+.home-future-page :is(.home-offer-copy > a,.home-future-cta a)::after {
+  inset: auto auto -2px 50%;
+  width: 0;
+  height: 106%;
+  aspect-ratio: auto;
+  border-radius: 0;
+  background: #fff;
+  transform: skew(30deg);
+  transition: width .3s ease-in-out, left .3s ease-in-out, transform .3s ease-in-out;
+}
+.home-future-page .home-future-hero-copy .cms-action-row a:hover { color: #2563eb !important; }
+.home-future-page .home-future-hero-copy .cms-action-row a:last-child::after { background: #2563eb; }
+.home-future-page .home-future-hero-copy .cms-action-row a:last-child:hover { color: #fff !important; border-color: #2563eb !important; }
+.home-future-page .home-future-hero-copy .cms-action-row a:hover::after,
+.home-future-page :is(.home-offer-copy > a,.home-future-cta a):hover::after {
+  left: -5px;
+  width: 106%;
+  transform: skew(0deg);
+}
+.home-future-page .home-future-hero-copy .cms-action-row a svg,
+.home-future-page :is(.home-offer-copy > a,.home-future-cta a) svg {
+  transform: rotate(-45deg);
+  transition: transform .6s ease, color .3s ease;
+}
+.home-future-page .home-future-hero-copy .cms-action-row a:hover svg,
+.home-future-page :is(.home-offer-copy > a,.home-future-cta a):hover svg { transform: rotate(0deg); }
+
+.home-future-page .home-proof-rail,
+.home-future-page .home-timeline { background: #fff !important; }
+.home-future-page .home-offer-section,
+.home-future-page .home-proof-stories,
+.home-future-page [data-cms-block="faq"],
+.home-future-page .home-journal-section { background: #f1f5f9 !important; }
+.home-future-page :is(.home-about-copy,.home-section-intro,.home-offer-copy,.home-process-intro,.home-why-copy) h2 {
+  color: #0f172a;
+  font-weight: 800;
+}
+.home-future-page :is(.home-about-copy,.home-section-intro,.home-offer-copy,.home-process-intro) > p:not(.home-section-kicker) { color: #64748b; }
+.home-future-page .home-bento-section,
+.home-future-page .home-why-section,
+.home-future-page .home-support-team,
+.home-future-page .home-university-wall { background: #0f172a !important; }
+.home-future-page :is(.home-bento-section,.home-why-section,.home-support-team,.home-university-wall) h2 { color: #fff !important; }
+.home-future-page :is(.home-bento-section,.home-why-section,.home-support-team,.home-university-wall) > * p,
+.home-future-page :is(.home-bento-section,.home-why-section,.home-support-team,.home-university-wall) .home-section-intro > p:last-child { color: rgba(255,255,255,.66); }
+
+.home-future-page .home-section-kicker,
+.home-future-page .home-future-badge {
+  min-height: 34px;
+  padding: 7px 15px !important;
+  border: 1px solid rgba(37,99,235,.18) !important;
+  border-radius: 50px !important;
+  color: #2563eb !important;
+  background: #fff !important;
+  box-shadow: 0 8px 22px rgba(15,23,42,.06);
+  letter-spacing: .04em;
+}
+
+.home-future-page .home-bento-card {
+  border: 1px solid rgba(15,23,42,.08) !important;
+  border-radius: 12px !important;
+}
+.home-future-page .home-bento-card:hover {
+  background: #2563eb;
+  color: #fff;
+}
+.home-future-page .home-bento-card:hover :is(h3,p,a,strong,span) { color: #fff !important; }
+.home-future-page .home-bento-card:hover .home-service-card-media { transform: scale(1.01); }
+
+.home-future-page .home-live-catalog .cms-responsive-grid {
+  grid-template-columns: repeat(6,minmax(0,1fr)) !important;
+  gap: 0 !important;
+  border-block: 1px solid rgba(15,23,42,.1);
+}
+.home-future-page .home-live-catalog .home-catalog-card {
+  min-height: 220px;
+  border-right: 1px solid rgba(15,23,42,.1) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.home-future-page .home-live-catalog .home-catalog-card:last-child { border-right: 0 !important; }
+.home-future-page .home-live-catalog .home-catalog-media {
+  width: 92px;
+  height: 92px;
+  margin: 22px auto 8px;
+  border-radius: 50% !important;
+}
+.home-future-page .home-live-catalog .home-catalog-card:hover {
+  z-index: 2;
+  color: #fff;
+  background: #2563eb;
+  transform: translateY(-6px);
+  box-shadow: 0 20px 42px rgba(37,99,235,.24) !important;
+}
+.home-future-page .home-live-catalog .home-catalog-card:hover :is(h3,p,span,a) { color: #fff !important; }
+
+.home-future-page [data-cms-block="faq"] details {
+  overflow: hidden;
+  border: 1px solid rgba(15,23,42,.1) !important;
+  border-radius: 12px !important;
+  background: #fff;
+}
+.home-future-page [data-cms-block="faq"] details[open] {
+  border-color: #2563eb !important;
+  color: #fff;
+  background: #2563eb;
+  box-shadow: 0 18px 38px rgba(37,99,235,.2);
+}
+.home-future-page [data-cms-block="faq"] details[open] :is(summary,p,div,span) { color: #fff !important; }
+.home-future-page [data-cms-block="faq"] details[open] summary::after { color: #fff !important; }
+
+.home-future-page .home-support-team-grid article {
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.06) !important;
+  border-radius: 12px !important;
+  background: linear-gradient(145deg,#15233a,#0b1323) !important;
+}
+.home-future-page .home-support-team-grid article::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 0;
+  background: linear-gradient(180deg,transparent,#2563eb);
+  transition: height .6s ease;
+}
+.home-future-page .home-support-team-grid article:hover::before { height: 100%; }
+.home-future-page .home-support-team-grid article > * { position: relative; z-index: 1; }
+
+.home-future-page .home-journal-section .cms-grid-box-card {
+  overflow: hidden;
+  border: 1px solid rgba(15,23,42,.1) !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+}
+.home-future-page .home-journal-section .cms-grid-box-card:hover :is(h3,a) { color: #2563eb !important; }
+
+@media (max-width: 1100px) {
+  .home-future-page .home-future-hero-copy { width: 62%; }
+  .home-future-page .home-hero-visual { right: -11%; width: 62%; }
+  .home-future-page .home-live-catalog .cms-responsive-grid { grid-template-columns: repeat(3,minmax(0,1fr)) !important; }
+}
+
+@media (max-width: 760px) {
+  body:has(.home-future-page) .public-home-utility-bar { min-height: 36px; }
+  .home-future-page .home-future-hero-copy { width: 100%; }
+  .home-future-page .home-future-hero-copy h1 { font-size: clamp(42px,12vw,58px) !important; }
+  .home-future-page .home-hero-visual { right: auto; width: calc(100% + 36px); }
+  .home-future-page .home-hero-photo-1 { transform: none; }
+  .home-future-page .home-live-catalog .cms-responsive-grid { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .home-future-page .home-live-catalog .home-catalog-card { min-height: 190px; }
+}
+
 /* Vistara-inspired interaction language ---------------------------------
  * Motion is deliberately progressive: content is always readable before
  * IntersectionObserver runs, while visible scenes gain the layered reveal,
@@ -570,6 +848,7 @@
   transform: scale(1.08) rotate(-5deg);
   box-shadow: 0 14px 30px rgba(10,45,91,.24);
 }
+.home-future-page .home-hero-service-strip article:hover > span svg { color: var(--vistara-blue) !important; }
 .home-future-page .home-hero-service-strip article:hover > svg { transform: translateX(5px); }
 
 /* About collage and metric surfaces. */
