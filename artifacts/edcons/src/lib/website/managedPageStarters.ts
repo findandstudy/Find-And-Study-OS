@@ -87,12 +87,16 @@ export function managedHomePageBlocks(
       ctaUrl: programsPath,
       secondaryLabel: copy.secondaryLabel,
       secondaryUrl: programsPath,
+      reviewScore: "4.9/5",
+      reviewLabel: "Excellent student reviews",
+      reviewProof: "Trusted guidance across the student journey",
       signalTitle: "One connected journey",
       signalSubtitle: "Research, preparation and progress stay in context from your first search onward.",
       signals: [
-        { label: "Explore", detail: "Destinations and programs" },
-        { label: "Prepare", detail: "Requirements and documents" },
-        { label: "Progress", detail: "Milestones and next actions" },
+        { label: "University admissions", detail: "Program and institution guidance" },
+        { label: "Student visa assistance", detail: "Documentation and preparation" },
+        { label: "Scholarship guidance", detail: "Funding and eligibility context" },
+        { label: "Pre-departure support", detail: "Arrival and accommodation planning" },
       ],
     }),
     block("home_fallback_stats", {
@@ -114,6 +118,7 @@ export function managedHomePageBlocks(
         { icon: "Globe2", title: copy.universityTitle, description: copy.universityDescription },
         { icon: "FileText", title: copy.applicationTitle, description: copy.applicationDescription },
         { icon: "ShieldCheck", title: copy.visaTitle, description: copy.visaDescription },
+        { icon: "Compass", title: "Pre-departure support", description: "Prepare accommodation, arrival and the practical steps that follow an admission decision." },
       ],
     }),
     block("counter_grid", {

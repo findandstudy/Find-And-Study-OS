@@ -13,6 +13,7 @@ import { sanitizePublicHtmlContent, sanitizePublicRichText } from "@/lib/publicH
 import { catalogLayoutClass } from "@/lib/website/catalogPresentation";
 import { resolveCmsValue, type CmsTextVariableValues } from "@/lib/website/cmsTextVariables";
 import "./cmsEditorial.css";
+import "./homeVistaraParity.css";
 
 export type PageBlock = {
   blockType: string;
@@ -232,7 +233,17 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
       const primaryHref = safeUrl(content.ctaUrl);
       const secondaryHref = safeUrl(content.secondaryUrl);
       const signals = items(content.signals, 5);
-      const journeySignals = signals.length ? signals : [{ label: "Explore", detail: "Destinations and programs" }, { label: "Prepare", detail: "Requirements and documents" }, { label: "Progress", detail: "Milestones and next actions" }];
+      const journeySignals = signals.length ? signals : [
+        { label: "University admissions", detail: "Program and institution guidance" },
+        { label: "Student visa assistance", detail: "Documentation and preparation" },
+        { label: "Scholarship guidance", detail: "Funding and eligibility context" },
+        { label: "Pre-departure support", detail: "Arrival and accommodation planning" },
+      ];
+      const serviceIcons = [GraduationCap, Plane, Star, Compass];
+      const heroTitle = text(content.title, 500);
+      const titleWords = heroTitle.split(/\s+/).filter(Boolean);
+      const titleAccent = text(content.titleAccent, 240) || titleWords.slice(0, Math.min(3, titleWords.length)).join(" ");
+      const titleRemainder = text(content.titleRemainder, 320) || titleWords.slice(Math.min(3, titleWords.length)).join(" ");
       const heroVisuals = items(content.heroVisuals, 3).map(visual => ({
         title: text(visual.title, 120),
         imageUrl: safeImageUrl(visual.imageUrl),
@@ -245,7 +256,9 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
           <div className="home-future-hero-grid relative z-10 mx-auto grid max-w-7xl items-center gap-14 px-4 py-20 sm:px-6 lg:grid-cols-[1.08fr_.92fr] lg:px-8 lg:py-28">
             <div className="home-future-hero-copy">
               {content.badge ? <div className="home-future-badge"><Sparkles className="h-4 w-4" />{text(content.badge, 200)}</div> : null}
-              <h1 className="font-display text-5xl font-bold leading-[1.02] tracking-[-.055em] sm:text-6xl lg:text-7xl">{text(content.title, 500)}</h1>
+              <h1 className="font-display text-5xl font-bold leading-[1.02] tracking-[-.055em] sm:text-6xl lg:text-7xl">
+                <span>{titleAccent}</span>{titleRemainder ? <> {titleRemainder}</> : null}
+              </h1>
               {content.subtitle ? <p className="mt-7 max-w-2xl text-lg leading-8 text-white/70 sm:text-xl">{text(content.subtitle)}</p> : null}
               <div className="cms-action-row mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
               {primaryHref && content.ctaLabel ? <Button size="lg" className="rounded-full px-8 h-14 text-base shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300" asChild><Link href={primaryHref}>{text(content.ctaLabel, 200)} <ArrowRight className="ms-2 w-5 h-5" /></Link></Button> : null}
@@ -261,6 +274,11 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
                     : <div className={`home-hero-photo home-hero-photo-${visualIndex + 1}`} key={`${visual.title}-${visualIndex}`}>{image}</div>;
                 })}
                 <div className="home-hero-map-dots" aria-hidden="true"><i /><i /><i /><i /></div>
+                <div className="home-hero-review-card">
+                  <strong>{text(content.reviewScore, 24) || "4.9/5"}</strong>
+                  <span>{text(content.reviewLabel, 120) || "Excellent student reviews"}</span>
+                  <small>{text(content.reviewProof, 160) || "Trusted guidance across the student journey"}</small>
+                </div>
               </div> : null}
               <div className="home-journey-console">
               <div className="home-console-orbit" aria-hidden="true"><span /><span /><span /></div>
@@ -274,17 +292,16 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
             </aside>
           </div>
           <div className="home-hero-service-strip relative z-20 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            {journeySignals.map((signal, signalIndex) => (
+            {journeySignals.slice(0, 4).map((signal, signalIndex) => {
+              const ServiceIcon = serviceIcons[signalIndex % serviceIcons.length] || GraduationCap;
+              return (
               <article key={`${text(signal.label, 120)}-${signalIndex}`}>
-                <span>{String(signalIndex + 1).padStart(2, "0")}</span>
+                <span><ServiceIcon aria-hidden="true" /></span>
                 <div><strong>{text(signal.label, 120)}</strong><p>{text(signal.detail, 240)}</p></div>
                 <ArrowRight aria-hidden="true" />
               </article>
-            ))}
-            <article className="home-hero-service-proof">
-              <span><Star aria-hidden="true" /></span>
-              <div><strong>{text(content.signalTitle, 300)}</strong><p>{text(content.signalSubtitle, 500)}</p></div>
-            </article>
+              );
+            })}
           </div>
         </section>
       );
@@ -320,7 +337,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
         );
       }
     case "home_fallback_features": {
-      const iconByName = { Globe2, FileText, ShieldCheck } as const;
+      const iconByName = { Globe2, FileText, ShieldCheck, Compass } as const;
       return (
         <section className="home-bento-section">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

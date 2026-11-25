@@ -44,6 +44,7 @@ test("Home and About reuse published blocks while preserving static fallbacks an
   const about = source("pages/public/About.tsx");
   const publicPage = source("pages/public/PublicPage.tsx");
   const editorialCss = source("pages/public/cmsEditorial.css");
+  const homeParityCss = source("pages/public/homeVistaraParity.css");
   for (const code of [home, about]) {
     assert.match(code, /useTemplatePage\(/);
     assert.match(code, /useTemplatePageSeo\(page\)/);
@@ -60,6 +61,10 @@ test("Home and About reuse published blocks while preserving static fallbacks an
   assert.match(publicPage, /cta_banner[\s\S]*--cms-section-bg[\s\S]*linear-gradient\(125deg/);
   assert.doesNotMatch(publicPage, /home-future-cta[^\n]*text-white/);
   assert.match(publicPage, /queryKey: \["public-cms-theme"\]/);
+  assert.match(publicPage, /import "\.\/homeVistaraParity\.css"/);
+  assert.match(homeParityCss, /grid-template-columns: repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(homeParityCss, /@media \(max-width: 760px\)[\s\S]*grid-template-columns: repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(homeParityCss, /prefers-reduced-motion: reduce/);
   assert.match(editorialCss, /--home-night: var\(--cms-secondary/);
   assert.match(editorialCss, /--home-electric: var\(--cms-blue/);
   assert.match(editorialCss, /--home-paper: var\(--cms-paper/);
@@ -90,6 +95,7 @@ test("the explicit system Home fallback is completed without reviving custom one
     "logo_grid", "grid_box", "cta_banner",
   ]);
   assert.equal(completed[0].content.title, "Fallback hero");
+  assert.match(source("lib/website/managedPageStarters.ts"), /University admissions[\s\S]*Student visa assistance[\s\S]*Scholarship guidance[\s\S]*Pre-departure support/);
   assert.deepEqual(enrichManagedHomePageBlocks(singleton, "/en/programs"), singleton);
 });
 
