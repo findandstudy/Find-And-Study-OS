@@ -2,8 +2,10 @@ import { contractBrandProfilesTable, contractTemplatesTable, db } from "@workspa
 import { and, eq } from "drizzle-orm";
 import {
   sanitizeContractBranding,
+  mergeContractBranding,
   type ContractBrandingConfig,
 } from "./contractBranding";
+import { captureContractLogoSnapshot } from "./contractPdfAssets";
 
 /**
  * Resolves the immutable branding snapshot used by a signing session.
@@ -15,6 +17,7 @@ import {
  */
 export async function resolveContractTemplateBranding(
   template: typeof contractTemplatesTable.$inferSelect,
+  options: { captureLogo?: boolean } = {},
 ): Promise<ContractBrandingConfig | null> {
   let profileConfig: ContractBrandingConfig | null = null;
 
@@ -29,9 +32,15 @@ export async function resolveContractTemplateBranding(
     profileConfig = sanitizeContractBranding(profile?.config);
   }
 
-  const templateConfig = sanitizeContractBranding(template.signingPageConfig);
-  return sanitizeContractBranding({
-    ...(profileConfig || {}),
-    ...(templateConfig || {}),
-  });
+  const config = mergeContractBranding(profileConfig, template.signingPageConfig);
+  if (!config) return null;
+  // A template/profile is editable configuration, not an image snapshot.
+  // Only NEW session creation opts in. Listing, policy checks and final PDF
+  // reads never initiate an outbound logo request or refresh historical data.
+  delete config.logoSnapshot;
+  if (options.captureLogo && config.logoUrl) {
+    const logoSnapshot = await captureContractLogoSnapshot(config.logoUrl);
+    if (logoSnapshot) config.logoSnapshot = logoSnapshot;
+  }
+  return config;
 }

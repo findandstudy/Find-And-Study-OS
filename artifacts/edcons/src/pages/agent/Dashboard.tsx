@@ -5,6 +5,7 @@ import { QuickLinkLogo } from "@/components/QuickLinkLogo";
 import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
+import { agentContractCopy } from "./agentContractCopy";
 import { formatTimeAgo } from "@/lib/i18n";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -124,6 +125,8 @@ export default function AgentDashboard() {
   const parentAgent = agentProfile?.parentAgent;
   const contactPerson = user?.role === "sub_agent" ? parentAgent : assignedStaff;
   const commercialAccess = agentProfile?.accessTier === "full";
+  const signedPendingApproval = agentProfile?.signedContract?.status === "signed";
+  const contractCopy = agentContractCopy(lang);
 
   return (
     <>
@@ -143,8 +146,8 @@ export default function AgentDashboard() {
             <div className="flex items-start gap-3">
               <Shield className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
               <div>
-                <p className="font-display font-bold text-foreground">{t("agentDash.provisionalAccess.title")}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{t("agentDash.provisionalAccess.body")}</p>
+                <p className="font-display font-bold text-foreground">{signedPendingApproval ? contractCopy.approvalTitle : t("agentDash.provisionalAccess.title")}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{signedPendingApproval ? contractCopy.approvalBody : t("agentDash.provisionalAccess.body")}</p>
               </div>
             </div>
           </Card>

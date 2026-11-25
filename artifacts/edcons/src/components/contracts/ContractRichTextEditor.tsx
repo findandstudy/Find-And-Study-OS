@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Bold, Braces, Heading1, Heading2, Italic, List, ListOrdered, Pilcrow, Redo2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import DOMPurify from "isomorphic-dompurify";
+import { requiresContractHtmlEditing } from "./contractEditorMode";
 
 const CONTRACT_EDITOR_SANITIZE_CONFIG = {
   FORBID_TAGS: [
@@ -37,18 +38,26 @@ type Props = {
 };
 
 export function ContractRichTextEditor({ value, onChange, disabled = false }: Props) {
-  const [mode, setMode] = useState<"visual" | "html">("visual");
+  const requiresHtml = requiresContractHtmlEditing(value);
+  const [mode, setMode] = useState<"visual" | "html">(() => requiresHtml ? "html" : "visual");
+  const visualMode = mode === "visual" && !requiresHtml;
   const editorRef = useRef<HTMLDivElement>(null);
+  const designNoteId = useId();
 
   useEffect(() => {
+    if (requiresHtml) setMode("html");
+  }, [requiresHtml]);
+
+  useEffect(() => {
+    if (!visualMode || !editorRef.current) return;
     const safeValue = sanitizeEditorHtml(value);
-    if (mode === "visual" && editorRef.current && editorRef.current.innerHTML !== safeValue) {
+    if (editorRef.current.innerHTML !== safeValue) {
       editorRef.current.innerHTML = safeValue;
     }
-  }, [mode, value]);
+  }, [visualMode, value]);
 
   function run(command: string, argument?: string) {
-    if (disabled) return;
+    if (disabled || !visualMode) return;
     editorRef.current?.focus();
     document.execCommand(command, false, argument);
     onChange(sanitizeEditorHtml(editorRef.current?.innerHTML || ""));
@@ -75,16 +84,16 @@ export function ContractRichTextEditor({ value, onChange, disabled = false }: Pr
     <div className="rounded-lg border bg-background overflow-hidden">
       <div className="flex flex-wrap items-center gap-1 border-b bg-muted/30 p-2">
         <div className="flex rounded-md border bg-background p-0.5 mr-1">
-          <Button type="button" size="sm" variant={mode === "visual" ? "secondary" : "ghost"} className="h-7 px-2" onClick={() => setMode("visual")}>Visual</Button>
-          <Button type="button" size="sm" variant={mode === "html" ? "secondary" : "ghost"} className="h-7 px-2" onClick={() => setMode("html")}><Braces className="h-3.5 w-3.5 mr-1" /> HTML</Button>
+          <Button type="button" size="sm" variant={visualMode ? "secondary" : "ghost"} className="h-7 px-2" disabled={requiresHtml} aria-describedby={requiresHtml ? designNoteId : undefined} onClick={() => setMode("visual")}>Visual</Button>
+          <Button type="button" size="sm" variant={!visualMode ? "secondary" : "ghost"} className="h-7 px-2" onClick={() => setMode("html")}><Braces className="h-3.5 w-3.5 mr-1" /> HTML</Button>
         </div>
-        {mode === "visual" && tools.map(({ label, icon: Icon, command, argument }) => (
+        {visualMode && tools.map(({ label, icon: Icon, command, argument }) => (
           <Button key={label} type="button" size="icon" variant="ghost" className="h-8 w-8" title={label} disabled={disabled} onMouseDown={event => event.preventDefault()} onClick={() => run(command, argument)}>
             <Icon className="h-4 w-4" />
           </Button>
         ))}
         <div className="ml-auto min-w-[190px]">
-          <Select onValueChange={insertPlaceholder} disabled={disabled || mode !== "visual"}>
+          <Select onValueChange={insertPlaceholder} disabled={disabled || !visualMode}>
             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Insert field…" /></SelectTrigger>
             <SelectContent>
               {COMMON_PLACEHOLDERS.map(([label, placeholder]) => <SelectItem key={placeholder} value={placeholder}>{label}</SelectItem>)}
@@ -92,7 +101,8 @@ export function ContractRichTextEditor({ value, onChange, disabled = false }: Pr
           </Select>
         </div>
       </div>
-      {mode === "visual" ? (
+      {requiresHtml && <p id={designNoteId} className="border-b bg-muted/20 px-3 py-2 text-xs text-muted-foreground">This template includes a page layout or custom styles. Edit its HTML to preserve the design. Visual editing is available for simple text templates.</p>}
+      {visualMode ? (
         <div
           ref={editorRef}
           contentEditable={!disabled}
@@ -101,7 +111,7 @@ export function ContractRichTextEditor({ value, onChange, disabled = false }: Pr
           className="contract-editor min-h-[360px] max-h-[55vh] overflow-y-auto p-6 text-sm leading-7 outline-none prose prose-sm dark:prose-invert max-w-none [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6"
         />
       ) : (
-        <Textarea value={value} onChange={event => onChange(event.target.value)} disabled={disabled} rows={20} className="rounded-none border-0 font-mono text-xs focus-visible:ring-0" />
+        <Textarea value={value} onChange={event => onChange(event.target.value)} disabled={disabled} aria-label="Contract HTML" aria-describedby={requiresHtml ? designNoteId : undefined} rows={20} className="rounded-none border-0 font-mono text-xs focus-visible:ring-0" />
       )}
     </div>
   );

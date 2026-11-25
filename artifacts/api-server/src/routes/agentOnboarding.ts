@@ -2,7 +2,7 @@ import express, { Router, type IRouter, type Request, type Response, type NextFu
 import { getRateLimitIp, getClientIp } from "../lib/clientIp";
 import crypto from "crypto";
 import { db, agentsTable, usersTable, signingSessionsTable, signedContractsTable, contractTemplatesTable, settingsTable, emailVerificationCodesTable, agentApplicationsTable } from "@workspace/db";
-import { and, eq, gt, desc, ilike, or } from "drizzle-orm";
+import { and, eq, gt, desc, ilike, or, isNull } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { writeAudit } from "../lib/auditLog";
@@ -11,6 +11,7 @@ import { createSigningToken } from "../lib/signingTokens";
 import { hasContractCompanySignature } from "../lib/contractBranding";
 import { resolveContractTemplateBranding } from "../lib/contractTemplateBranding";
 import { finalizeSign, loadNewestSignedContractForAgent } from "../lib/signContract";
+import { reconcileAgentApplicationRestriction } from "../lib/agentApplicationLifecycle";
 import { agentIntakeDefaults, signedContractFilename } from "../lib/contractRenderer";
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { pool } from "@workspace/db";
@@ -120,7 +121,7 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
     return;
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
-  const agent = await loadAgentForUser(req.user!.id, req.user!.role);
+  let agent = await loadAgentForUser(req.user!.id, req.user!.role);
   if (!agent) {
     res.json({
       requiresOnboarding: !user?.emailVerified,
@@ -138,13 +139,22 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
     try { await syncAdminContracts(agent); } catch (err) { console.error("[onboarding-status] admin contract sync:", err); }
   }
 
-  const [application] = await db.select().from(agentApplicationsTable)
+  let [application] = await db.select().from(agentApplicationsTable)
     .where(or(
       eq(agentApplicationsTable.provisionalAgentId, agent.id),
       eq(agentApplicationsTable.approvedAgentId, agent.id),
     ))
     .orderBy(desc(agentApplicationsTable.createdAt))
     .limit(1);
+
+  if (agent.accessTier !== "full" && application) {
+    const current = await reconcileAgentApplicationRestriction(application.id, agent.id);
+    if (current) {
+      agent = current.agent;
+      application = current.application;
+      session = current.session || null;
+    }
+  }
 
   // Authoritative signed detection. An agent counts as signed whenever they
   // have ANY signing_sessions row with status='signed', resolved to the
@@ -169,31 +179,8 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
     else contractStatus = "pending";
   }
   const provisionalPortal = agent.accessTier !== "full";
-  let portalAccessStatus = application?.portalAccessStatus ?? agent.accessTier ?? "full";
-  let accessRestrictionReason = application?.accessRestrictionReason ?? null;
-  if (provisionalPortal && application) {
-    const rejected = application.status === "rejected";
-    const contractExpired = contractStatus === "expired"
-      || (!!application.contractDeadlineAt && application.contractDeadlineAt.getTime() < Date.now() && contractStatus !== "signed");
-    if (rejected || contractExpired || agent.accessTier === "restricted") {
-      const reason = rejected ? "application_rejected" : (accessRestrictionReason || "contract_expired");
-      const now = new Date();
-      portalAccessStatus = "restricted";
-      accessRestrictionReason = reason;
-      if (application.portalAccessStatus !== "restricted" || agent.accessTier !== "restricted") {
-        await db.transaction(async (tx) => {
-          await tx.update(agentApplicationsTable).set({
-            portalAccessStatus: "restricted",
-            accessRestrictedAt: application.accessRestrictedAt ?? now,
-            accessRestrictionReason: reason,
-            updatedAt: now,
-          }).where(eq(agentApplicationsTable.id, application.id));
-          await tx.update(agentsTable).set({ accessTier: "restricted", status: "provisional", updatedAt: now })
-            .where(eq(agentsTable.id, agent.id));
-        });
-      }
-    }
-  }
+  const portalAccessStatus = application?.portalAccessStatus ?? agent.accessTier ?? "full";
+  const accessRestrictionReason = application?.accessRestrictionReason ?? null;
   const passwordSet = !!user?.passwordHash;
   res.json({
     requiresOnboarding: provisionalPortal || !user?.emailVerified || !passwordSet || (contractStatus !== "signed" && contractStatus !== "none"),
@@ -684,7 +671,8 @@ router.get("/contracts/me/pdf", requireAuth, async (req: Request, res: Response)
       // off the request path (no Chromium here — synchronous render was the
       // autoscale OOM root cause). Tell the client to retry shortly.
       res.setHeader("Retry-After", "30");
-      res.status(202).json({ status: "pending", message: "PDF is being generated. Please try again in a moment.", retryAfter: 30 });
+      res.setHeader("Cache-Control", "private, no-store");
+      res.status(202).json({ status: "pending", message: "The signature is recorded, but the PDF is not ready. If this persists, contact support.", retryAfter: 30 });
       return;
     }
     const { ObjectStorageService } = await import("../lib/objectStorage");
@@ -949,18 +937,32 @@ router.post("/contracts/agent/:agentId/resend-onboarding", requireAuth, requireR
   if (!templateId && agent.assignedContractTemplateId) templateId = agent.assignedContractTemplateId;
   let template: typeof contractTemplatesTable.$inferSelect | undefined;
   if (templateId) {
-    [template] = await db.select().from(contractTemplatesTable).where(eq(contractTemplatesTable.id, templateId));
+    [template] = await db.select().from(contractTemplatesTable).where(and(
+      eq(contractTemplatesTable.id, templateId),
+      eq(contractTemplatesTable.isActive, true),
+      eq(contractTemplatesTable.publicationStatus, "published"),
+      isNull(contractTemplatesTable.deletedAt),
+    ));
+    // An explicitly selected/assigned template must not silently turn into a
+    // different agreement when the selected version is no longer available.
+    if (!template) { res.status(404).json({ error: "Selected contract template is unavailable or unpublished" }); return; }
   }
   if (!template) {
     const lang = agent.preferredContractLanguage || "en";
     const entityType = agent.entityType === "individual" ? "individual" : "company";
     [template] = await db.select().from(contractTemplatesTable)
-      .where(and(eq(contractTemplatesTable.language, lang), eq(contractTemplatesTable.entityType, entityType), eq(contractTemplatesTable.isActive, true)))
+      .where(and(
+        eq(contractTemplatesTable.language, lang),
+        eq(contractTemplatesTable.entityType, entityType),
+        eq(contractTemplatesTable.isActive, true),
+        eq(contractTemplatesTable.publicationStatus, "published"),
+        isNull(contractTemplatesTable.deletedAt),
+      ))
       .orderBy(desc(contractTemplatesTable.version)).limit(1);
   }
   if (!template) { res.status(404).json({ error: "No matching contract template found" }); return; }
 
-  const templateBrandingSnapshot = await resolveContractTemplateBranding(template);
+  const templateBrandingSnapshot = await resolveContractTemplateBranding(template, { captureLogo: true });
   if (!hasContractCompanySignature(templateBrandingSnapshot)) {
     res.status(409).json({
       error: "Selected contract template has no official company signature. Configure one in Contract Brand Profiles before resending.",

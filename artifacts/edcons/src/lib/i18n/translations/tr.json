@@ -2566,7 +2566,7 @@
     "titleReview": "Sözleşmeyi inceleyin",
     "titleSign": "İmzanızı ekleyin",
     "signed": "İmzalandı",
-    "signedBody": "İmzalı PDF kopyası e-posta adresinize gönderildi. Bu pencereyi kapatabilirsiniz.",
+    "signedBody": "İmzanız kaydedildi. PDF hazırlama ve e-posta teslimi ayrı adımlardır; bu ekran e-postanın gönderildiğini doğrulamaz.",
     "expired": "Bağlantı süresi doldu",
     "expiredBody": "Bu imza bağlantısının süresi dolmuş. Lütfen yeni bir bağlantı talep edin.",
     "revoked": "Bağlantı iptal edildi",
@@ -5442,11 +5442,11 @@
     "selectedAgents": "{count} acente seçildi"
   },
   "signedContract": {
-    "pdfPending": "PDF hazırlanıyor. Yaklaşık 30 saniye sonra tekrar deneyin.",
+    "pdfPending": "İmzalı PDF henüz hazır değil. Daha sonra tekrar deneyin; sorun sürerse destek ekibine başvurun.",
     "pdfDownloadError": "PDF indirilemedi.",
     "download": "PDF indir",
-    "regenerate": "PDF'i yeniden oluştur",
-    "regenerateQueued": "PDF yeniden oluşturuluyor; yaklaşık 30 saniye içinde indirmeye hazır olacak.",
+    "regenerate": "Eksik PDF için yeniden dene",
+    "regenerateQueued": "Eksik PDF arka planda işlenmeyi bekliyor. Mevcut imzalı dosyalar korunur.",
     "regenerateError": "Yeniden oluşturma başlatılamadı."
   },
   "apiTokens": {

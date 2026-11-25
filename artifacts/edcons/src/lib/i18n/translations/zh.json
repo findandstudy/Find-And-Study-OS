@@ -4495,7 +4495,7 @@
     "titleReview": "核对合同",
     "titleSign": "Add your signature",
     "signed": "已签署",
-    "signedBody": "已签署的 PDF 副本已发送至您的邮箱。您可以关闭此窗口。",
+    "signedBody": "您的签名已记录。PDF 准备和电子邮件送达是独立步骤；此页面不代表邮件已发送。",
     "expired": "链接已过期",
     "expiredBody": "此签署链接已过期。请重新申请一个。",
     "revoked": "链接已撤销",
@@ -5442,11 +5442,11 @@
     "submitButton": "设置密码"
   },
   "signedContract": {
-    "pdfPending": "PDF 正在生成中。请在约 30 秒后重试。",
+    "pdfPending": "已签署的 PDF 尚未就绪。请稍后重试；如问题持续，请联系支持人员。",
     "pdfDownloadError": "PDF 下载失败。",
     "download": "下载 PDF",
-    "regenerate": "重新生成 PDF",
-    "regenerateQueued": "正在重新生成 PDF，大约 30 秒后即可下载。",
+    "regenerate": "重试缺失的 PDF",
+    "regenerateQueued": "缺失的 PDF 正在等待后台处理。现有已签署文件将保留。",
     "regenerateError": "无法启动重新生成。"
   },
   "apiTokens": {

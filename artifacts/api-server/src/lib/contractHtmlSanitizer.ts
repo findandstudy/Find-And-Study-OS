@@ -9,11 +9,25 @@ const DROP_ELEMENTS = new Set([
 const URL_ATTRIBUTES = new Set(["href", "src", "poster", "background"]);
 
 function sanitizeCss(css: string): string {
-  return css
-    .replace(/@import\s+[^;]+;?/gi, "")
+  const clean = css
+    .replace(/@import\b[^;]*(?:;|$)/gi, "")
     .replace(/url\s*\([^)]*\)/gi, "none")
+    .replace(/(?:-webkit-)?image-set\s*\([^)]*\)/gi, "none")
+    .replace(/\bsrc\s*\([^)]*\)/gi, "none")
     .replace(/expression\s*\([^)]*\)/gi, "")
     .replace(/(?:behavior|-moz-binding)\s*:[^;]+;?/gi, "");
+  // Inspect escaped/comment-split tokens without serializing the decoded text:
+  // decoding it into HTML could turn a harmless CSS escape into markup.
+  const inspected = clean
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\\([0-9a-f]{1,6})\s?|\\([^\r\n])/gi, (_match, hex, character) => {
+      const codePoint = hex ? Number.parseInt(hex, 16) : 0;
+      return hex ? String.fromCodePoint(codePoint > 0 && codePoint <= 0x10ffff ? codePoint : 0xfffd) : character;
+    });
+  if (/@import\b|(?:url|expression|(?:-webkit-)?image-set|src)\s*\(|(?:behavior|-moz-binding)\s*:/i.test(inspected)) {
+    return "";
+  }
+  return clean;
 }
 
 function isSafeUrlAttribute(name: string, rawValue: string): boolean {
@@ -80,6 +94,11 @@ export function sanitizeContractTemplateHtml(rawHtml: string): string {
     }
   }
 
-  if (fullDocument) return `<!doctype html>${document.documentElement.outerHTML}`;
-  return document.body.innerHTML;
+  // HTML document parsing places a fragment's leading <style> in <head>.
+  // Include those already-sanitized styles before the body on every round trip.
+  const output = fullDocument
+    ? `<!doctype html>${document.documentElement.outerHTML}`
+    : Array.from(document.head.querySelectorAll("style"), (style) => style.outerHTML).join("") + document.body.innerHTML;
+  dom.window.close();
+  return output;
 }
