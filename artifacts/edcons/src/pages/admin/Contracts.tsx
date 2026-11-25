@@ -96,10 +96,9 @@ export default function ContractsPage() {
     }
   }
 
-  // Force a re-render of an already-generated PDF (e.g. to pick up the
-  // main-agency seal added after the contract was first signed). The backend
-  // clears the render cache and a background worker rebuilds the PDF off the
-  // request path; the new file is downloadable within ~30s.
+  // Retry only a missing PDF through the existing background worker. The
+  // backend preserves finalized artifacts and rejects active leases or an
+  // unavailable worker; no completion time is promised.
   async function regeneratePdf(id: number) {
     setRegeneratingId(id);
     try {

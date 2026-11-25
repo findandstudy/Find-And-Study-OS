@@ -181,9 +181,8 @@ export async function deliverPendingSignedContracts(effects: SignedContractDeliv
           .where(eq(contractTemplatesTable.id, row.templateId));
         const templateName = template?.name || "Contract";
 
-        // Populate start/end dates on the agent row (date fields only — no PDF
-        // needed here). agents.contractUrl is set lazily inside
-        // ensureSignedContractPdf() on the first download request.
+        // Populate start/end dates on the agent row. The background PDF renderer
+        // handles agents.contractUrl; download requests never launch Chromium.
         if (row.agentId) {
           const startDate = row.signedAt ?? new Date();
           const endDate = new Date(startDate);

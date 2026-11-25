@@ -68,12 +68,22 @@ Mevcut kirli Public-Detail-Release çalışma ağacına dokunulmadı.
 - API/Edcons TypeScript, API build, Vite build, 23 locale parity ve public bundle
   bütçesi PASS. İlk yerel kurulumdaki eksik paket cache'i temiz, lockfile ile doğrulanmış
   ayrı pnpm deposundan giderildi; kaynak/lockfile/dependency sürümü değişmedi.
-- UI browser sonucu ve exact release-base build kanıtı aşağıdaki son ekle kaydedilecek.
+- Gerçek build üzerinde sentetik UI: EN 1440px, TR 390px, AR 390px **3/3 PASS**.
+  İmzalı/bekleyen kart, yenileme, byte-eşit PDF indirme, 202 sonrası tekrar indirme,
+  son onay dashboard'u, dürüst imza başarı metni ve final PDF için regeneration
+  kontrolünün bulunmaması doğrulandı. Dış istekler engelli, business mutation yok.
 - Normal legacy route ve writer denetimleri genel olarak **FAIL**: başlangıçta da
   aynı 38 legacy hata ve aynı 7 sınıflandırılmamış writer var; bu yama yeni hata eklemedi.
   Bunlar yeşil veya production readiness kanıtı olarak sunulmaz.
 
 ## Apply ve staging'e taşıma sınırları
+
+Yama dalı `codex/agency-contract-delivery-20261125`, mevcut staging'in exact
+`977868897cc9301c7eccd47b7d6647f641827cfb` tabanına oturtuldu. İlk çalışma
+tabanındaki iki yeni Home düzenlemesi dışarıda bırakıldı. Bu tabanda tam Edcons
+build, mevcut frontend testleri (183/183), i18n/sitemap/bundle bütçeleri yeniden PASS.
+API build ve API/Edcons TypeScript PASS. Yerel paket hazır; uzak dağıtım ve
+canonical şablon/logo aktarımı erişim engeli nedeniyle henüz yapılmadı.
 
 - Staging public health: HTTP 200, DB bağlı, release
   `staging-20261125T085440Z-977868897cc9`.

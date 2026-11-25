@@ -131,6 +131,9 @@ try {
     if (output) await page.screenshot({ path: path.join(output, `signed-success-pdf-pending-${lang}.png`) });
 
     adminMode = true;
+    // Switch the synthetic actor as a fresh session. The real app persists
+    // its previously authenticated agent for reloads; it must not be reused.
+    await page.evaluate(() => localStorage.removeItem("edcons_auth_v2"));
     await page.goto(`${base}/admin/contracts`);
     try { await page.getByRole("button", { name: `${locale.contracts.tabSigned} (2)`, exact: true }).click({ timeout: 10000 }); }
     catch (error) {
