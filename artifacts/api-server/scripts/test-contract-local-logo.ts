@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { after, afterEach, before, beforeEach, mock, test } from "node:test";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
+import fsPromises from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import net from "node:net";
@@ -19,6 +22,7 @@ const filename = (hash: string) => `contract-logo-${hash}.png`;
 const logoUrl = (hash: string) => `${origin}/api/storage/public-branding/embed-widget/${filename(hash)}`;
 const logoFile = (hash: string) => path.join(root, "branding", "embed-widget", filename(hash));
 const allow = (url: string) => { process.env.CONTRACT_PDF_TRUSTED_LOGO_URLS = JSON.stringify([url]); };
+const linuxOffline = { skip: process.platform !== "linux" ? "Offline logo capture requires Linux descriptor-path verification" : false };
 
 before(async () => {
   png = await sharp({ create: { width: 40, height: 16, channels: 4, background: "#173b92" } }).png().toBuffer();
@@ -39,6 +43,7 @@ afterEach(async () => {
   assert.ok(path.basename(root).startsWith("fas-contract-logo-"));
   await fs.rm(root, { recursive: true, force: true });
   mock.restoreAll();
+  syncBuiltinESMExports();
 });
 after(() => {
   for (const key of keys) {
@@ -47,7 +52,7 @@ after(() => {
   }
 });
 
-test("exact approved public local PNG becomes a frozen snapshot with integrations disabled", async () => {
+test("exact approved public local PNG becomes a frozen snapshot with integrations disabled", linuxOffline, async () => {
   const url = logoUrl(digest(png)); allow(url);
   await fs.writeFile(logoFile(digest(png)), png);
   await fs.writeFile(`${logoFile(digest(png))}.ct`, "image/png");
@@ -87,7 +92,7 @@ test("canonical aliases, query tokens and traversal cannot match the approved UR
   assert.equal(open.mock.callCount(), 0);
 });
 
-test("missing storage object and changed bytes fail closed without leaking paths", async () => {
+test("missing storage object and changed bytes fail closed without leaking paths", linuxOffline, async () => {
   const hash = digest(png), url = logoUrl(hash); allow(url);
   await assert.rejects(captureContractLogoSnapshot(url), /^Error: contract_logo_capture_failed$/);
   const changed = await sharp({ create: { width: 40, height: 16, channels: 4, background: "#ff0000" } }).png().toBuffer();
@@ -95,7 +100,7 @@ test("missing storage object and changed bytes fail closed without leaking paths
   await assert.rejects(captureContractLogoSnapshot(url), /^Error: contract_logo_capture_failed$/);
 });
 
-test("PNG extension and sidecar cannot authorize HTML, JPEG, corrupt images or excessive bytes", async () => {
+test("PNG extension and sidecar cannot authorize HTML, JPEG, corrupt images or excessive bytes", linuxOffline, async () => {
   const jpeg = await sharp(png).jpeg().toBuffer();
   for (const bytes of [Buffer.from("TEST only non-image payload"), jpeg, png.subarray(0, 40), Buffer.alloc(MAX_CONTRACT_LOGO_BYTES + 1)]) {
     const hash = digest(bytes); allow(logoUrl(hash));
@@ -105,21 +110,21 @@ test("PNG extension and sidecar cannot authorize HTML, JPEG, corrupt images or e
   }
 });
 
-test("content-addressed images still obey decompression pixel ceiling", async () => {
+test("content-addressed images still obey decompression pixel ceiling", linuxOffline, async () => {
   const bytes = await sharp({ create: { width: 2001, height: 2000, channels: 3, background: "white" } }).png().toBuffer();
   assert.ok(bytes.length < MAX_CONTRACT_LOGO_BYTES);
   const hash = digest(bytes); allow(logoUrl(hash)); await fs.writeFile(logoFile(hash), bytes);
   await assert.rejects(captureContractLogoSnapshot(logoUrl(hash)), /^Error: contract_logo_capture_failed$/);
 });
 
-test("hard links into a private object cannot be captured through the public namespace", async () => {
+test("hard links into a private object cannot be captured through the public namespace", linuxOffline, async () => {
   const hash = digest(png); allow(logoUrl(hash));
   const privateFile = path.join(root, "TEST-private-image.png");
   await fs.writeFile(privateFile, png); await fs.link(privateFile, logoFile(hash));
   await assert.rejects(captureContractLogoSnapshot(logoUrl(hash)), /^Error: contract_logo_capture_failed$/);
 });
 
-test("symlink aliases into private storage cannot be captured", async context => {
+test("symlink aliases into private storage cannot be captured", linuxOffline, async context => {
   const hash = digest(png); allow(logoUrl(hash));
   const privateFile = path.join(root, "TEST-private-image.png"); await fs.writeFile(privateFile, png);
   try { await fs.symlink(privateFile, logoFile(hash)); }
@@ -135,9 +140,80 @@ test("different storage driver or absent application origin does not enable offl
   assert.equal(await captureContractLogoSnapshot(url), undefined);
 });
 
-test("historical snapshots remain independent of today's storage and trust configuration", async () => {
+test("historical snapshots remain independent of today's storage and trust configuration", linuxOffline, async () => {
   const hash = digest(png), url = logoUrl(hash); allow(url); await fs.writeFile(logoFile(hash), png);
   const snapshot = await captureContractLogoSnapshot(url); assert.ok(snapshot);
   await fs.unlink(logoFile(hash)); process.env.CONTRACT_PDF_TRUSTED_LOGO_URLS = "[]";
   assert.deepEqual(validateContractLogoSnapshot(snapshot, url), snapshot);
+});
+
+test("unsupported platforms fail before opening any offline storage", { skip: process.platform === "linux" }, async () => {
+  const url = logoUrl(digest(png)); allow(url);
+  const open = mock.method(ObjectStorageService.prototype, "getObjectEntityFile", async () => { throw new Error("STORAGE_MUST_NOT_BE_OPENED"); });
+  await assert.rejects(captureContractLogoSnapshot(url), /^Error: contract_logo_capture_failed$/);
+  assert.equal(open.mock.callCount(), 0);
+});
+
+function observeFileReads() {
+  const originalOpen = fsPromises.open;
+  let reads = 0;
+  mock.method(fsPromises, "open", async (...args: Parameters<typeof fsPromises.open>) => {
+    const flags = Number(args[1]);
+    assert.equal(flags & fsConstants.O_NOFOLLOW, fsConstants.O_NOFOLLOW);
+    assert.equal(flags & fsConstants.O_NONBLOCK, fsConstants.O_NONBLOCK);
+    const handle = await originalOpen(...args);
+    const originalStream = handle.createReadStream.bind(handle);
+    mock.method(handle, "createReadStream", (...streamArgs: Parameters<typeof handle.createReadStream>) => {
+      reads++;
+      return originalStream(...streamArgs);
+    });
+    return handle;
+  });
+  syncBuiltinESMExports();
+  return () => reads;
+}
+
+test("a parent directory replaced after resolution cannot expose a private PNG even with the approved hash", linuxOffline, async () => {
+  const hash = digest(png), url = logoUrl(hash); allow(url);
+  await fs.writeFile(logoFile(hash), png);
+  const privateDir = path.join(root, "TEST-private"); await fs.mkdir(privateDir);
+  await fs.writeFile(path.join(privateDir, filename(hash)), png);
+  const publicDir = path.dirname(logoFile(hash));
+  const resolve = ObjectStorageService.prototype.getObjectEntityFile;
+  mock.method(ObjectStorageService.prototype, "getObjectEntityFile", async function (objectPath, options) {
+    const file = await resolve.call(this, objectPath, options);
+    await fs.rename(publicDir, `${publicDir}-original`);
+    await fs.symlink(privateDir, publicDir, "dir");
+    return file;
+  });
+  const reads = observeFileReads();
+  await assert.rejects(captureContractLogoSnapshot(url), /^Error: contract_logo_capture_failed$/);
+  assert.equal(reads(), 0, "descriptor identity must be checked before any private bytes are read");
+});
+
+test("a leaf replaced with a symlink after lstat is rejected by the open flags", linuxOffline, async () => {
+  const hash = digest(png), url = logoUrl(hash); allow(url);
+  const publicFile = logoFile(hash), privateFile = path.join(root, "TEST-private.png");
+  await fs.writeFile(publicFile, png); await fs.writeFile(privateFile, png);
+  const originalOpen = fsPromises.open;
+  mock.method(fsPromises, "open", async (...args: Parameters<typeof fsPromises.open>) => {
+    assert.equal(Number(args[1]) & fsConstants.O_NOFOLLOW, fsConstants.O_NOFOLLOW);
+    await fs.unlink(publicFile);
+    await fs.symlink(privateFile, publicFile);
+    return originalOpen(...args);
+  });
+  syncBuiltinESMExports();
+  await assert.rejects(captureContractLogoSnapshot(url), /^Error: contract_logo_capture_failed$/);
+});
+
+test("unavailable descriptor identity fails closed before reading a public logo", linuxOffline, async () => {
+  const hash = digest(png), url = logoUrl(hash); allow(url); await fs.writeFile(logoFile(hash), png);
+  const originalRealpath = fsPromises.realpath;
+  mock.method(fsPromises, "realpath", async (...args: Parameters<typeof fsPromises.realpath>) => {
+    if (String(args[0]).startsWith("/proc/self/fd/")) throw new Error("TEST_PROC_UNAVAILABLE");
+    return originalRealpath(...args);
+  });
+  const reads = observeFileReads();
+  await assert.rejects(captureContractLogoSnapshot(url), /^Error: contract_logo_capture_failed$/);
+  assert.equal(reads(), 0);
 });

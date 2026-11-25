@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
 import sharp from "sharp";
 import { parseSafeOutboundUrl, safeOutboundRequest } from "./safeOutboundRequest";
 import { readBoundedDocumentStream } from "./documentByteLimits";
@@ -104,6 +105,10 @@ async function readManagedPublicLogo(
   asset: { objectPath: string; sha256: string },
   signal: AbortSignal,
 ): Promise<Buffer> {
+  // Node has no portable API for resolving the path of an opened descriptor.
+  // This offline path requires Linux /proc; another OS must not fall back to
+  // a pathname check that can race with a parent-directory/symlink replacement.
+  if (process.platform !== "linux") throw new Error();
   const [{ ObjectStorageService }, fs, path] = await Promise.all([
     import("./objectStorage"), import("node:fs/promises"), import("node:path"),
   ]);
@@ -115,11 +120,16 @@ async function readManagedPublicLogo(
   if (!("localPath" in file) || file.localPath !== expected) throw new Error();
   const stat = await untilAborted(fs.lstat(expected), signal);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size < 8 || stat.size > MAX_CONTRACT_LOGO_BYTES) throw new Error();
-  const handle = await fs.open(expected, "r");
+  // A replaced leaf must neither follow a symlink nor block opening a FIFO.
+  const handle = await fs.open(expected, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
   try {
     const opened = await handle.stat();
     if (signal.aborted || !opened.isFile() || opened.nlink !== 1 || opened.dev !== stat.dev
       || opened.ino !== stat.ino || opened.size !== stat.size) throw new Error();
+    // Bind the opened object, not the path resolved before open. A directory
+    // swapped for an alias into private storage can otherwise pass lstat/fstat.
+    const openedPath = await untilAborted(fs.realpath(`/proc/self/fd/${handle.fd}`), signal);
+    if (openedPath !== expected || signal.aborted) throw new Error();
     const stream = handle.createReadStream({ start: 0, end: MAX_CONTRACT_LOGO_BYTES, autoClose: true });
     const abortRead = () => { stream.destroy(new Error("contract_logo_capture_failed")); };
     signal.addEventListener("abort", abortRead, { once: true });
