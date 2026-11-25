@@ -109,7 +109,21 @@ and before installation. Typechecks, selected fake-provider/unit tests and
 both builds run with BuildKit `--network=none` as UID/GID10000. Only package
 installation may use the network; no live credentials are present. Its
 `exported-release` target exports `/release`, `/evidence/runtime-packages.txt`
-and `/tooling/pnpm` to a new local output directory, without starting the app.
+plus `/evidence/builder-packages.txt` and `/tooling/pnpm` to a new local output
+directory, without starting the app. Git, Python, compiler and pkg-config are
+installed only in the builder; their resolved versions are recorded. CA
+certificates are present in the runtime for the existing HTTPS integrations.
+After source-content verification, only the ten paths already marked `100755`
+in the attested Git base regain executable permission; no deployment or migration
+script is executed. API build copies its two existing DejaVu TTF files to
+`dist/assets/fonts`; that output is included in the build evidence.
+
+The public frontend build explicitly preserves the observed compiled default
+`BASE_URL=https://findandstudy.com` and root `BASE_PATH=/`. This does not change
+the actual Apply runtime `BASE_URL`/`APP_BASE_URL=https://apply.findandstudy.com`
+or its empty `BASE_PATH`. Native dependency compatibility still requires the
+actual Node22 Linux install/build and final-image smoke; it is not inferred from
+the local Windows build.
 
 Operator command shape (replace placeholders with verified values; not an
 instruction to execute against production):
@@ -160,7 +174,7 @@ Observed Apply launch (allowlisted inspection, no secrets):
   observed root/storage/signed-contracts directories are `0700`, UID/GID10000 and
   not symlinks.
 
-Planned deliberate runtime changes: new pinned image with Chromium/fonts,
+Planned deliberate runtime changes: new pinned image with Chromium/fonts and CA certificates,
 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium`, **`init: true`** to reap
 Chromium children, and the explicit contract-worker safety flags. Preserve the
 rest of the actual inspected launch and env. Do not introduce resource caps,

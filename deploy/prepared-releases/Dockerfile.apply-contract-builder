@@ -7,6 +7,11 @@ ARG PNPM_TARBALL_SHA256
 ARG SOURCE_RECEIPT_SHA256
 USER root
 WORKDIR /candidate
+RUN set -eu; apt-get update; \
+    apt-get install -y --no-install-recommends git python3 build-essential pkg-config; \
+    dpkg-query -W -f='${Package}=${Version}\n' | sort > /usr/local/share/apply-contract-builder-packages.txt; \
+    rm -rf /var/lib/apt/lists/*
+ENV npm_config_python=/usr/bin/python3 npm_config_nodedir=/usr/local
 COPY tooling/pnpm-10.33.2.tgz /tmp/pnpm-10.33.2.tgz
 RUN set -eu; \
     test "$(node --version)" = "v22.23.4"; \
@@ -47,7 +52,13 @@ NODE
 ENV ALLOW_LIVE_INTEGRATIONS=false EMAIL_DELIVERY_DISABLED=true \
     SIGNED_CONTRACT_DELIVERY_ENABLED=false SIGNED_CONTRACT_PDF_WORKER_ENABLED=false \
     SIGNED_CONTRACT_DURABLE_DELIVERY_MODE=off BACKGROUND_JOBS_ENABLED=false
-RUN test -f .apply-candidate-receipt.json && pnpm install --frozen-lockfile && chown -R 10000:10000 /candidate
+RUN set -eu; test -f .apply-candidate-receipt.json; \
+    chmod 0755 artifacts/portal-automation-worker/scripts/build.sh \
+      deploy/build-production.sh deploy/deploy.sh deploy/install-nginx-failover.sh \
+      deploy/nginx-preflight.cjs deploy/verify-playwright-browser.cjs \
+      scripts/build.sh scripts/db-migrate.sh scripts/deploy.sh start-portal-worker.sh; \
+    pnpm install --frozen-lockfile; \
+    chown -R 10000:10000 /candidate
 USER 10000:10000
 RUN --network=none pnpm run typecheck:libs && \
     pnpm --filter @workspace/api-server exec tsc --noEmit && \
@@ -55,7 +66,7 @@ RUN --network=none pnpm run typecheck:libs && \
 RUN --network=none NODE_ENV=test pnpm --filter @workspace/api-server exec tsx --test \
     scripts/test-contract47-recovery.ts scripts/test-contract-local-logo.ts \
     scripts/test-contract-durable-enrollment.ts scripts/test-contract-smtp-adapter.ts
-RUN --network=none cd artifacts/edcons && BASE_PATH=/ PORT=3000 NODE_ENV=production pnpm run build
+RUN --network=none cd artifacts/edcons && BASE_URL=https://findandstudy.com BASE_PATH=/ PORT=3000 NODE_ENV=production pnpm run build
 RUN --network=none cd artifacts/api-server && NODE_ENV=production pnpm run build
 RUN --network=none node --input-type=module <<'NODE'
 import { createHash } from 'node:crypto';
@@ -75,7 +86,8 @@ await walk('artifacts/api-server/dist/assets/fonts');
 const artifacts = [];
 for (const file of files.sort()) { const bytes = await readFile(file); artifacts.push({ path: file, bytes: bytes.length, sha256: hash(bytes) }); }
 const receipt = JSON.parse(await readFile('.apply-candidate-receipt.json', 'utf8'));
-await writeFile('.apply-build-evidence.json', `${JSON.stringify({ schemaVersion: 1, node: process.version, pnpm: '10.33.2',
+await writeFile('.apply-build-evidence.json', `${JSON.stringify({ schemaVersion: 1, node: process.version, platform: process.platform, architecture: process.arch, pnpm: '10.33.2',
+  publicBuild: { baseUrl: 'https://findandstudy.com', basePath: '/' },
   sourceTreeSha256: receipt.sourceTreeSha256, patchCommit: receipt.patchCommit, artifacts,
   tests: 'typechecks + recovery/local-logo/enrollment/SMTP-adapter; no real SMTP or database',
   remaining: ['isolated full-prefix database tests', 'exact runtime init/readonly Chromium smoke', 'visual PDF review'] }, null, 2)}\n`, { flag: 'wx' });
@@ -84,4 +96,5 @@ NODE
 FROM scratch AS exported-release
 COPY --from=builder /candidate /release
 COPY --from=builder /usr/local/share/apply-contract-runtime-packages.txt /evidence/runtime-packages.txt
+COPY --from=builder /usr/local/share/apply-contract-builder-packages.txt /evidence/builder-packages.txt
 COPY --from=builder /opt/apply-pnpm /tooling/pnpm

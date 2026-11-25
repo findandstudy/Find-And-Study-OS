@@ -18,7 +18,8 @@ RUN set -eu; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
       "chromium=${CHROMIUM_VERSION}" "chromium-common=${CHROMIUM_VERSION}" "chromium-sandbox=${CHROMIUM_VERSION}" \
-      "fonts-dejavu-core=${DEJAVU_VERSION}" "fonts-liberation=${LIBERATION_VERSION}" "fonts-noto-core=${NOTO_VERSION}"; \
+      "fonts-dejavu-core=${DEJAVU_VERSION}" "fonts-liberation=${LIBERATION_VERSION}" "fonts-noto-core=${NOTO_VERSION}" \
+      ca-certificates; \
     dpkg-query -W -f='${Package}=${Version}\n' | sort > /usr/local/share/apply-contract-runtime-packages.txt; \
     chromium --version; \
     rm -rf /var/lib/apt/lists/*
