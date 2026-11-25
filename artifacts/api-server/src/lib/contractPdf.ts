@@ -1,7 +1,8 @@
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, StandardFonts, degrees, rgb } from "pdf-lib";
 import crypto from "crypto";
 import { execSync } from "child_process";
 import { documentShell } from "./contractRenderer";
+import { MAX_PREVIEW_HTML_BYTES, UNSIGNED_PREVIEW_LABEL } from "./contractUnsignedPreview";
 
 interface BuildPdfParams {
   templateName: string;
@@ -190,6 +191,34 @@ function renderWithTimeout<T>(p: Promise<T>, ms: number, label: string): Promise
       (e) => { clearTimeout(timer); reject(e); },
     );
   });
+}
+
+/** Caller holds the shared render lock. No evidence page, storage or signing records. */
+export async function buildUnsignedPreviewPdf(html: string): Promise<Uint8Array> {
+  if (Buffer.byteLength(html, "utf8") > MAX_PREVIEW_HTML_BYTES) throw new Error("preview_html_too_large");
+  const { chromium } = await import("playwright-core");
+  let browser: any;
+  const deadline = Date.now() + RENDER_TIMEOUT_MS;
+  try {
+    browser = await chromium.launch({ executablePath: resolveChromiumPath(), args: CHROMIUM_LAUNCH_ARGS, timeout: RENDER_TIMEOUT_MS });
+    const bytes = await renderWithTimeout(renderContractHtmlToPdf(browser, html), Math.max(1, deadline - Date.now()), "Unsigned contract preview");
+    if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("preview_pdf_too_large");
+    const pdf = await PDFDocument.load(bytes);
+    if (pdf.getPageCount() > 30) throw new Error("preview_pdf_too_many_pages");
+    const font = await pdf.embedFont(StandardFonts.HelveticaBold);
+    for (const page of pdf.getPages()) {
+      const { width, height } = page.getSize();
+      // Added after HTML rendering, so template CSS cannot hide this label.
+      page.drawRectangle({ x: 0, y: height - 19, width, height: 19, color: rgb(1, 0.97, 0.93) });
+      page.drawText(UNSIGNED_PREVIEW_LABEL, { x: 12, y: height - 13, size: Math.min(9, (width - 24) / 34), font, color: rgb(0.6, 0.18, 0.05) });
+      page.drawText("UNSIGNED TEST PREVIEW", { x: width * 0.12, y: height * 0.33, size: Math.min(32, width / 19), font, color: rgb(0.65, 0.1, 0.1), opacity: 0.16, rotate: degrees(35) });
+    }
+    pdf.setTitle("Unsigned contract TEST preview");
+    pdf.setSubject("Synthetic layout preview only. No signature or signing evidence.");
+    const result = await pdf.save();
+    if (result.byteLength > 10 * 1024 * 1024) throw new Error("preview_pdf_too_large");
+    return result;
+  } finally { if (browser) await browser.close().catch(() => {}); }
 }
 
 export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfResult> {

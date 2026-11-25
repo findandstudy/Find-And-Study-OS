@@ -73,6 +73,8 @@ export function validateContractLogoSnapshot(value: unknown, logoUrl: unknown): 
 
 export type ContractLogoCaptureOptions = {
   trustedLogoUrls?: readonly string[];
+  /** Unsigned admin previews may read the approved public local asset only. */
+  localOnly?: boolean;
   /** Synthetic transport only; explicitly rejected outside NODE_ENV=test. */
   request?: typeof safeOutboundRequest;
 };
@@ -163,6 +165,7 @@ export async function captureContractLogoSnapshot(
   const sourceUrl = canonicalLogoUrl(logoUrl);
   if (!sourceUrl || !trustedUrls.includes(sourceUrl)) return;
   const localLogo = managedPublicLogo(sourceUrl);
+  if (options.localOnly && !localLogo) return;
   if (!localLogo && !options.request && process.env.ALLOW_LIVE_INTEGRATIONS !== "true") return;
 
   const controller = new AbortController();

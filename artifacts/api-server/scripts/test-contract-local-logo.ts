@@ -12,9 +12,10 @@ import net from "node:net";
 import sharp from "sharp";
 import { captureContractLogoSnapshot, validateContractLogoSnapshot, MAX_CONTRACT_LOGO_BYTES } from "../src/lib/contractPdfAssets";
 import { ObjectStorageService } from "../src/lib/objectStorage";
+import { buildUnsignedContractPreview } from "../src/lib/contractUnsignedPreview";
 
 const origin = "https://staging.example.test";
-const keys = ["STORAGE_DRIVER", "STORAGE_LOCAL_DIR", "APP_BASE_URL", "ALLOW_LIVE_INTEGRATIONS", "CONTRACT_PDF_TRUSTED_LOGO_URLS"] as const;
+const keys = ["NODE_ENV", "STORAGE_DRIVER", "STORAGE_LOCAL_DIR", "APP_BASE_URL", "ALLOW_LIVE_INTEGRATIONS", "CONTRACT_PDF_TRUSTED_LOGO_URLS"] as const;
 const saved = Object.fromEntries(keys.map(key => [key, process.env[key]]));
 let root: string, png: Buffer;
 const digest = (value: Buffer) => createHash("sha256").update(value).digest("hex");
@@ -28,6 +29,7 @@ before(async () => {
   png = await sharp({ create: { width: 40, height: 16, channels: 4, background: "#173b92" } }).png().toBuffer();
 });
 beforeEach(async () => {
+  process.env.NODE_ENV = "test";
   mock.method(net.Socket.prototype, "connect", () => { throw new Error("NETWORK_FORBIDDEN"); });
   mock.method(globalThis, "fetch", () => { throw new Error("PROVIDER_FORBIDDEN"); });
   root = await fs.mkdtemp(path.join(tmpdir(), "fas-contract-logo-"));
@@ -63,6 +65,26 @@ test("exact approved public local PNG becomes a frozen snapshot with integration
   const bytes = Buffer.from(snapshot.dataUrl.split(",")[1], "base64");
   assert.equal((await sharp(bytes).metadata()).format, "png");
   assert.equal(snapshot.sha256, digest(bytes));
+});
+
+test("unsigned preview keeps only the approved local logo and never the inline or configured signature", linuxOffline, async () => {
+  const url = logoUrl(digest(png)); allow(url);
+  await fs.writeFile(logoFile(digest(png)), png);
+  const signature = `data:image/png;base64,${(await sharp({ create: { width: 42, height: 17, channels: 4, background: "#cc0000" } }).png().toBuffer()).toString("base64")}`;
+  const html = await buildUnsignedContractPreview(`<style>.box{color:#143591}</style><img src="${url}"><img src="${signature}"><img src="{{main_agency_signature}}">`, "en", { logoUrl: url, companySignatureDataUrl: signature });
+  assert.match(html, /data:image\/png;base64/);
+  assert.match(html, /UNSIGNED TEST PREVIEW/);
+  assert.doesNotMatch(html, new RegExp(signature.split(",")[1].replace(/[+]/g, "\\+")));
+  assert.match(html, /\.box\{color:#143591\}/);
+  assert.equal(process.env.ALLOW_LIVE_INTEGRATIONS, "false");
+});
+
+test("local-only preview refuses even allowlisted remote logos when integrations are enabled", async () => {
+  const url = "https://trusted.example.test/logo.png"; allow(url);
+  process.env.ALLOW_LIVE_INTEGRATIONS = "true";
+  let requests = 0;
+  assert.equal(await captureContractLogoSnapshot(url, { localOnly: true, request: async () => { requests++; throw new Error("REMOTE_FORBIDDEN"); } }), undefined);
+  assert.equal(requests, 0);
 });
 
 test("empty trust set, another origin, private/signature namespaces and non-addressed paths never open storage", async () => {

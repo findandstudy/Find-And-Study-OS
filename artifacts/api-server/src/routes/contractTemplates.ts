@@ -1,7 +1,8 @@
 import express, { Router, type IRouter } from "express";
+import rateLimit from "express-rate-limit";
 import { db, contractTemplatesTable } from "@workspace/db";
 import { and, desc, eq, isNull } from "drizzle-orm";
-import { requireAuth, requirePermission } from "../lib/auth";
+import { requireAuth, requirePermission, requireRole } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import {
   contractRequiresEmailVerification,
@@ -11,9 +12,61 @@ import {
 } from "../lib/contractBranding";
 import { resolveContractTemplateBranding } from "../lib/contractTemplateBranding";
 import { sanitizeContractTemplateHtml } from "../lib/contractHtmlSanitizer";
+import { buildUnsignedContractPreview, MAX_PREVIEW_TEMPLATE_BYTES } from "../lib/contractUnsignedPreview";
+import { buildUnsignedPreviewPdf } from "../lib/contractPdf";
+import { tryWithRenderLock } from "../lib/renderLock";
 
 const router: IRouter = Router();
 router.use("/contract-templates", express.json({ limit: "3mb" }));
+
+// One bounded process-local bucket, independent of DB and operator identity.
+// The shared renderer lock below also refuses queued/concurrent PDF requests.
+const unsignedPreviewLimiter = rateLimit({
+  windowMs: 60_000, limit: 10, keyGenerator: () => "unsigned-contract-preview",
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: "Too many previews. Please retry in a minute." },
+});
+
+router.post("/contract-templates/:id/unsigned-preview", requireAuth, requireRole("admin", "super_admin"), requirePermission("contract_templates.view"), unsignedPreviewLimiter, async (req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  const idText = String(req.params.id);
+  const id = Number(idText);
+  if (!/^[1-9]\d{0,9}$/.test(idText) || !Number.isSafeInteger(id) || id > 2_147_483_647) { res.status(400).json({ error: "Invalid template id" }); return; }
+  const body = req.body;
+  if (!body || Array.isArray(body) || typeof body !== "object" || Object.keys(body).length !== 1
+    || !["html", "pdf"].includes(body.format)) {
+    res.status(400).json({ error: "Choose html or pdf. Preview accepts no personal data or agent reference." }); return;
+  }
+  try {
+    const pending = tryWithRenderLock(async () => {
+      const [row] = await db.select().from(contractTemplatesTable)
+        .where(and(eq(contractTemplatesTable.id, id), isNull(contractTemplatesTable.deletedAt)));
+      if (!row) return { kind: "error" as const, status: 404, error: "Template not found" };
+      if (Buffer.byteLength(row.bodyHtml, "utf8") > MAX_PREVIEW_TEMPLATE_BYTES) return { kind: "error" as const, status: 413, error: "Template is too large for preview" };
+      const branding = await resolveContractTemplateBranding(row);
+      const html = await buildUnsignedContractPreview(row.bodyHtml, row.language, branding);
+      if (body.format === "pdf") return { kind: "pdf" as const, bytes: await buildUnsignedPreviewPdf(html) };
+      return { kind: "html" as const, data: { html, templateName: row.name, version: row.version, language: row.language, unsignedTestPreview: true } };
+    });
+    if (!pending) { res.setHeader("Retry-After", "5"); res.status(429).json({ error: "The contract renderer is busy. Please retry shortly." }); return; }
+    const result = await pending;
+    if (result.kind === "error") { res.status(result.status).json({ error: result.error }); return; }
+    if (result.kind === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="UNSIGNED-TEST-template-${id}.pdf"`);
+      res.send(Buffer.from(result.bytes));
+    } else res.json({ data: result.data });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    if (/^preview_.*(?:too_large|too_complex|too_many_pages)$/.test(code)) {
+      res.status(413).json({ error: "This template exceeds the preview size or complexity limit." });
+    } else {
+      console.error("[contract-templates] unsigned preview failed");
+      res.status(503).json({ error: "The unsigned preview could not be generated. Please retry shortly." });
+    }
+  }
+});
 
 router.get("/contract-templates", requireAuth, requirePermission("contract_templates.view"), async (req, res): Promise<void> => {
   try {
