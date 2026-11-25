@@ -75,12 +75,14 @@ export function ContractUnsignedPreview({ template, onClose }: {
       if (preparedUrl.current) URL.revokeObjectURL(preparedUrl.current);
       preparedUrl.current = objectUrl;
       const filename = `UNSIGNED-TEST-template-${template.id}.pdf`;
-      setPreparedPdf({ url: objectUrl, filename });
+      setPreparedPdf({ url: `${BASE_URL}/api/contract-templates/${template.id}/unsigned-preview.pdf`, filename });
       const link = document.createElement("a");
       link.href = objectUrl; link.download = filename;
       document.body.appendChild(link); link.click(); link.remove();
-      // A native Save As prompt or blocked automatic download can outlive this
-      // click. The explicit link keeps exactly one PDF until close/template change.
+      // Keep the automatic download's blob alive through native Save As prompts.
+      // The visible fallback uses an authenticated attachment URL, so it also
+      // works for clients/tools that cannot save blob URLs. It renders afresh
+      // through the same bounded server handler; no signed record is created.
     } catch (failure) {
       if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : words.error);
     } finally { if (!controller.signal.aborted) setDownloading(false); }
@@ -98,7 +100,7 @@ export function ContractUnsignedPreview({ template, onClose }: {
       {!loading && html && <iframe key={`${template?.id}-${attempt}`} title={words.frame} sandbox="" referrerPolicy="no-referrer" src={`${BASE_URL}/api/contract-templates/${template?.id}/unsigned-preview.html`} className="min-h-0 flex-1 w-full rounded border bg-slate-100" />}
       {preparedPdf && <div role="status" aria-live="polite" className="shrink-0 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950 flex flex-wrap items-center gap-2">
         <span className="flex-1 min-w-0">{words.ready}</span>
-        <Button asChild variant="outline" size="sm"><a href={preparedPdf.url} download={preparedPdf.filename}>{words.save}</a></Button>
+        <Button asChild variant="outline" size="sm"><a href={preparedPdf.url} target="_blank" rel="noopener noreferrer">{words.save}</a></Button>
       </div>}
       <DialogFooter className="mt-auto shrink-0">
         <Button variant="outline" onClick={onClose}>{words.close}</Button>

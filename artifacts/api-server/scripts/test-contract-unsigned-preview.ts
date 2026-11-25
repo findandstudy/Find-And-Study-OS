@@ -87,10 +87,10 @@ const limiter = route.stack[3].handle;
 beforeEach(() => { current = template(); reads = 0; failure = null; closed = 0; lastHtml = ""; limiter.resetKey("unsigned-contract-preview"); });
 after(async () => { await new Promise<void>(resolve => server.close(() => resolve())); await pool.end(); mock.restoreAll(); });
 
-function request(body: unknown = { format: "html" }, role = "super_admin", extraHeaders: Record<string, string> = {}, id = "18", method = "POST") {
+function request(body: unknown = { format: "html" }, role = "super_admin", extraHeaders: Record<string, string> = {}, id = "18", method = "POST", documentFormat = "html") {
   return new Promise<{ status: number; headers: http.IncomingHttpHeaders; bytes: Buffer; json: any }>((resolve, reject) => {
     const payload = method === "GET" ? "" : JSON.stringify(body);
-    const req = http.request({ host: "127.0.0.1", port, path: `/api/contract-templates/${id}/unsigned-preview${method === "GET" ? ".html" : ""}`, method, headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload), Cookie: "csrf_token=SYNTHETIC-TEST-CSRF", "x-csrf-token": "SYNTHETIC-TEST-CSRF", ...(role ? { "x-test-role": role } : {}), ...extraHeaders } }, res => {
+    const req = http.request({ host: "127.0.0.1", port, path: `/api/contract-templates/${id}/unsigned-preview${method === "GET" ? `.${documentFormat}` : ""}`, method, headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload), Cookie: "csrf_token=SYNTHETIC-TEST-CSRF", "x-csrf-token": "SYNTHETIC-TEST-CSRF", ...(role ? { "x-test-role": role } : {}), ...extraHeaders } }, res => {
       const chunks: Buffer[] = [];
       res.on("data", chunk => chunks.push(chunk));
       res.on("end", () => { const bytes = Buffer.concat(chunks); resolve({ status: res.statusCode!, headers: res.headers, bytes, json: res.headers["content-type"]?.includes("json") ? JSON.parse(bytes.toString()) : undefined }); });
@@ -152,6 +152,47 @@ test("preview refuses caller data, non-exact IDs and unsupported formats without
   for (const body of [{ format: "html", agentId: 123 }, { format: "pdf", signerEmail: "real@example.invalid" }, { format: "signed" }, {}, [], { format: "html", intakeData: {} }]) assert.equal((await request(body)).status, 400);
   for (const id of ["18junk", "0", "-1"]) assert.equal((await request({ format: "html" }, "super_admin", {}, id)).status, 400);
   assert.equal(reads, 0);
+});
+
+test("direct PDF attachment repeats authorization and uses the same unsigned bounded renderer", async () => {
+  for (const [role, headers, status] of [["", {}, 401], ["agent", {}, 403], ["staff", {}, 403], ["admin", { "x-test-inactive": "true" }, 403], ["admin", { "x-test-denied": "true" }, 403]] as const) {
+    assert.equal((await request({}, role, headers, "18", "GET", "pdf")).status, status);
+  }
+  assert.equal(reads, 0); assert.equal(closed, 0);
+  const response = await request({}, "admin", { "x-csrf-token": "" }, "18", "GET", "pdf");
+  assert.equal(response.status, 200);
+  assert.match(String(response.headers["content-type"]), /^application\/pdf/);
+  assert.equal(response.headers["content-disposition"], 'attachment; filename="UNSIGNED-TEST-template-18.pdf"');
+  assert.equal(response.headers["cache-control"], "private, no-store");
+  assert.equal(response.headers["x-content-type-options"], "nosniff");
+  assert.match(String(response.headers["content-security-policy"]), /style-src 'self'/, "PDF attachment does not relax global CSP");
+  assert.equal(response.bytes.subarray(0, 5).toString(), "%PDF-");
+  const pdf = await PDFDocument.load(response.bytes);
+  assert.equal(pdf.getTitle(), "Unsigned contract TEST preview"); assert.equal(pdf.getPageCount(), 1);
+  assert.match(lastHtml, /UNSIGNED TEST PREVIEW/);
+  assert.doesNotMatch(lastHtml, /Evidence hash|Delil Sayfası|UFJJVkFURVNJR05BVFVSRQ/);
+  assert.equal(reads, 1); assert.equal(closed, 1);
+});
+
+test("direct PDF shares size, deleted, exact-ID, busy and cross-endpoint rate limits", async () => {
+  assert.equal((await request({}, "admin", {}, "18junk", "GET", "pdf")).status, 400);
+  current.deletedAt = new Date();
+  assert.equal((await request({}, "admin", {}, "18", "GET", "pdf")).status, 404);
+  current = template(); current.bodyHtml = "x".repeat(MAX_PREVIEW_TEMPLATE_BYTES + 1);
+  assert.equal((await request({}, "admin", {}, "18", "GET", "pdf")).status, 413);
+  assert.equal(closed, 0);
+  current = template(); reads = 0;
+  let release!: () => void;
+  const held = withRenderLock(() => new Promise<void>(resolve => { release = resolve; }));
+  await Promise.resolve();
+  try {
+    const response = await request({}, "admin", {}, "18", "GET", "pdf");
+    assert.equal(response.status, 429); assert.equal(response.headers["retry-after"], "5"); assert.equal(reads, 0);
+  } finally { release(); await held; }
+  assert.equal((await request({}, "admin", {}, "18", "GET", "pdf")).status, 200);
+  for (let i = 0; i < 5; i++) assert.equal((await request({}, "admin")).status, 400);
+  assert.equal((await request({}, "admin", {}, "18", "GET", "pdf")).status, 429);
+  assert.equal(closed, 1);
 });
 
 test("deleted template and oversized template are rejected without rendering", async () => {

@@ -34,7 +34,8 @@ async function handleUnsignedPreview(req: Request, res: Response): Promise<void>
   const id = Number(idText);
   if (!/^[1-9]\d{0,9}$/.test(idText) || !Number.isSafeInteger(id) || id > 2_147_483_647) { res.status(400).json({ error: "Invalid template id" }); return; }
   const documentRequest = req.method === "GET";
-  const body = documentRequest ? { format: "html" } : req.body;
+  // Format is selected by an authenticated registered route, never GET input.
+  const body = documentRequest ? { format: req.route.path === "/contract-templates/:id/unsigned-preview.pdf" ? "pdf" : "html" } : req.body;
   if (!body || Array.isArray(body) || typeof body !== "object" || Object.keys(body).length !== 1
     || !["html", "pdf"].includes(body.format)) {
     res.status(400).json({ error: "Choose html or pdf. Preview accepts no personal data or agent reference." }); return;
@@ -78,6 +79,7 @@ async function handleUnsignedPreview(req: Request, res: Response): Promise<void>
 
 router.post("/contract-templates/:id/unsigned-preview", requireAuth, requireRole("admin", "super_admin"), requirePermission("contract_templates.view"), unsignedPreviewLimiter, handleUnsignedPreview);
 router.get("/contract-templates/:id/unsigned-preview.html", requireAuth, requireRole("admin", "super_admin"), requirePermission("contract_templates.view"), unsignedPreviewLimiter, handleUnsignedPreview);
+router.get("/contract-templates/:id/unsigned-preview.pdf", requireAuth, requireRole("admin", "super_admin"), requirePermission("contract_templates.view"), unsignedPreviewLimiter, handleUnsignedPreview);
 
 router.get("/contract-templates", requireAuth, requirePermission("contract_templates.view"), async (req, res): Promise<void> => {
   try {

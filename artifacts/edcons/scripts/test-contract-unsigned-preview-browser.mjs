@@ -23,11 +23,15 @@ const previewCsp = "sandbox; default-src 'none'; style-src 'unsafe-inline'; scri
 const server = createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
-    if (realHttpDownload && pathname === "/api/contract-templates/18/unsigned-preview" && req.method === "POST") {
-      const chunks = []; let bytes = 0;
-      for await (const chunk of req) { bytes += chunk.length; assert.ok(bytes < 1024); chunks.push(chunk); }
-      assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), { format: "pdf" });
-      assert.equal(req.headers["x-csrf-token"], "SYNTHETIC-TEST-CSRF");
+    if (realHttpDownload && ((pathname === "/api/contract-templates/18/unsigned-preview" && req.method === "POST")
+      || (pathname === "/api/contract-templates/18/unsigned-preview.pdf" && req.method === "GET"))) {
+      if (req.method === "POST") {
+        const chunks = []; let bytes = 0;
+        for await (const chunk of req) { bytes += chunk.length; assert.ok(bytes < 1024); chunks.push(chunk); }
+        assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), { format: "pdf" });
+        assert.equal(req.headers["x-csrf-token"], "SYNTHETIC-TEST-CSRF");
+      }
+      assert.match(req.headers.cookie || "", /csrf_token=SYNTHETIC-TEST-CSRF/, "same-origin authenticated navigation carries cookies");
       await new Promise(resolve => setTimeout(resolve, 1250));
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", 'attachment; filename="UNSIGNED-TEST-template-18.pdf"');
@@ -54,7 +58,7 @@ try {
     await page.clock.install();
     await page.context().addCookies([{ name: "csrf_token", value: "SYNTHETIC-TEST-CSRF", url: base }]);
     const errors = [], mutations = [];
-    let htmlCalls = 0, documentCalls = 0, pdfCalls = 0, downloads = 0;
+    let htmlCalls = 0, documentCalls = 0, pdfCalls = 0, directPdfCalls = 0, downloads = 0;
     page.on("pageerror", error => errors.push(error.message)); page.on("download", () => downloads++);
     await page.addInitScript(locale => {
       if (window.top !== window) return;
@@ -64,7 +68,7 @@ try {
       URL.createObjectURL = value => { const url = create(value); window.__unsignedPreviewTestUrls.created.push(url); return url; };
       URL.revokeObjectURL = url => { window.__unsignedPreviewTestUrls.revoked.push(url); revoke(url); };
     }, lang);
-    await page.route("**/*", async route => {
+    await page.context().route("**/*", async route => {
       const url = new URL(route.request().url());
       if (url.origin !== base) { await route.abort(); return; }
       if (!url.pathname.startsWith("/api/")) { await route.continue(); return; }
@@ -77,6 +81,11 @@ try {
       else if (url.pathname === "/api/contract-templates/18/unsigned-preview.html") {
         assert.equal(method, "GET"); documentCalls++;
         await route.fulfill({ status: 200, contentType: "text/html", headers: { "Content-Security-Policy": previewCsp, "Cache-Control": "private, no-store" }, body: `<!doctype html><html ${lang === "ar" ? 'dir="rtl"' : ''}><head><style>.hero{background:#143591;color:white;padding:24px;border-radius:12px}body{margin:20px}</style></head><body><div style="background:#fff7ed;font-weight:bold">UNSIGNED TEST PREVIEW</div><section class="hero"><h1>TEST AGENCY</h1><p class="inline" style="color:#112233">Not a signed contract</p></section></body></html>` }); return;
+      }
+      else if (url.pathname === "/api/contract-templates/18/unsigned-preview.pdf") {
+        assert.equal(method, "GET"); directPdfCalls++;
+        if (realHttpDownload) { await route.continue(); return; }
+        await route.fulfill({ status: 200, contentType: "application/pdf", headers: { "Content-Disposition": 'attachment; filename="UNSIGNED-TEST-template-18.pdf"', "Cache-Control": "private, no-store", "Content-Security-Policy": parentCsp }, body: pdfBytes }); return;
       }
       else if (url.pathname === "/api/contract-templates/18/unsigned-preview") {
         assert.equal(route.request().headers()["x-csrf-token"], "SYNTHETIC-TEST-CSRF", "real cookie-protected POST must use the existing CSRF adapter");
@@ -131,25 +140,30 @@ try {
     assert.deepEqual(await readFile(await download.path()), pdfBytes);
     assert.equal(downloads, 1);
     const saveLink = dialog.getByRole("link", { name: words.save, exact: true });
-    const preparedUrl = await saveLink.getAttribute("href");
-    assert.match(preparedUrl, /^blob:/);
+    const directUrl = await saveLink.getAttribute("href");
+    assert.equal(directUrl, "/api/contract-templates/18/unsigned-preview.pdf");
+    assert.equal(await saveLink.getAttribute("target"), "_blank");
+    assert.equal(await saveLink.getAttribute("rel"), "noopener noreferrer");
+    assert.equal(await saveLink.getAttribute("download"), null, "error JSON must not be forced into a PDF filename");
     await page.clock.fastForward(65_000);
     const manualDownloadEvent = page.waitForEvent("download"); await saveLink.click();
     const manualDownload = await manualDownloadEvent;
     assert.equal(manualDownload.suggestedFilename(), "UNSIGNED-TEST-template-18.pdf");
     assert.deepEqual(await readFile(await manualDownload.path()), pdfBytes);
-    assert.equal(pdfCalls, 2, "manual link reuses the successful request after the earlier simulated error");
+    assert.equal(pdfCalls, 2, "manual link does not repeat a fetch/POST or depend on a blob URL");
+    assert.equal(directPdfCalls, 1, "explicit save uses one bounded authenticated GET attachment request");
     assert.equal(downloads, 2);
     const beforeClose = await page.evaluate(() => window.__unsignedPreviewTestUrls);
-    assert.equal(beforeClose.created.filter(url => url === preparedUrl).length, 1);
-    assert.ok(!beforeClose.revoked.includes(preparedUrl), "visible link must not expire after sixty seconds");
+    assert.equal(beforeClose.created.length, 1);
+    const preparedUrl = beforeClose.created[0];
+    assert.ok(!beforeClose.revoked.includes(preparedUrl), "automatic Save As may remain open after sixty seconds");
     await dialog.getByRole("button", { name: words.close, exact: true }).first().click();
     await dialog.waitFor({ state: "hidden" });
     assert.ok(await page.evaluate(url => window.__unsignedPreviewTestUrls.revoked.includes(url), preparedUrl), "closing dialog releases prepared PDF");
     assert.deepEqual(errors, []);
     assert.equal(mutations.filter(value => !/^POST \/api\/(?:contract-templates\/18\/unsigned-preview|activity|notifications\/section\/)/.test(value)).length, 0, "no business mutation, signing or email API");
-    console.log(`PASS ${lang}/${width}: draft preview, busy retry, CSS sandbox, PDF auto/manual save with one response${realHttpDownload ? " via real HTTP" : ""}, blob lifecycle, no mutation`);
+    console.log(`PASS ${lang}/${width}: draft preview, busy retry, CSS sandbox, PDF auto save and direct GET fallback${realHttpDownload ? " via real HTTP" : ""}, blob cleanup, no mutation`);
     await page.close();
   }
-  if (realHttpDownload) assert.equal(actualPdfResponses, 3);
+  if (realHttpDownload) assert.equal(actualPdfResponses, 6);
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
