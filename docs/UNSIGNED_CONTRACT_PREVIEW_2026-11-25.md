@@ -44,6 +44,10 @@ Sentetik görsel/PDF kanıtları yerel `uat-evidence/2026-11-25/unsigned-preview
 
 `99928f64` staging UAT'sinde CSS çalıştı; EN v6 şablonunun gövdesine gömülü public logo ise profil logosuyla aynı mekanizmadan gelmediği için kaldırılıyordu. Salt-okunur incelemede bu PNG'nin hash'i zaten izin verilmiş managed-public nesnesiyle eşleşti. Yukarıdaki exact hash + mevcut yerel nesne doğrulaması eklendi; taslak HTML veya imzalı kayıt değiştirilmedi. `test-contract-local-logo.ts` içine inline-only/embedded-hash/iki logo/dedup/diğer origin/özel görsel/sınır testleri eklendi. Linux descriptor doğrulaması Windows'ta atlanır; Linux pozitif testleri ve gerçek staging logo/PDF görünümü ayrı geçiş kanıtıdır.
 
+### Native Chrome indirme incelemesi
+
+Gerçek staging sekmesinde başarılı PDF HTTP yanıtına rağmen dosya/kaydet penceresinin gözlenememesi ayrıca araştırıldı. `test-contract-unsigned-preview-browser.mjs` için `CONTRACT_PREVIEW_HTTP_DOWNLOAD=true`, `CONTRACT_PREVIEW_HEADED=true` ve `CONTRACT_PREVIEW_REAL_PDF_PATH` seçenekleri eklendi. Ayrı geçici Chrome profilinde gerçek derlenmiş modal, strict üst sayfa CSP'si, 1,25 saniye sonra gerçek loopback HTTP POST yanıtıyla gelen önceden üretilmiş imzasız PDF kullanıldı. EN/TR/AR'da dosya adı, birebir PDF byte'ları ve tek indirme **PASS**. Kimlik/katalog API'leri sentetik fixture kaldı; gerçek kullanıcı profilinin Save As veya otomatik indirme politikası bu testle doğrulanmaz (`acceptDownloads` test context'inde açıktır). Genel CSP/Radix modal/link hatası yeniden üretilemediği için bu incelemede ürün indirme kodu veya tarayıcı izinleri değiştirilmedi.
+
 ## Geri dönüş
 
 Bu ek commit geri alındığında yalnız önizleme düğmesi/endpoint ve yardımcıları kaldırılır. Migration, template publication, imza/evidence veya storage yazısı olmadığı için DB geri yükleme gerektirmez. Önceden imzalanmış sözleşmeler bu akıştan etkilenmez.

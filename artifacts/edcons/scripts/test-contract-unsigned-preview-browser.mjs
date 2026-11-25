@@ -9,7 +9,11 @@ const requireApi = createRequire(new URL("../../api-server/package.json", import
 const { chromium } = requireApi("playwright-core");
 const { PDFDocument } = requireApi("pdf-lib");
 const fixture = await PDFDocument.create(); fixture.addPage().drawText("UNSIGNED TEST PREVIEW");
-const pdfBytes = Buffer.from(await fixture.save());
+const pdfBytes = process.env.CONTRACT_PREVIEW_REAL_PDF_PATH
+  ? await readFile(process.env.CONTRACT_PREVIEW_REAL_PDF_PATH) : Buffer.from(await fixture.save());
+assert.equal(pdfBytes.subarray(0, 5).toString(), "%PDF-");
+const realHttpDownload = process.env.CONTRACT_PREVIEW_HTTP_DOWNLOAD === "true";
+let actualPdfResponses = 0;
 const root = fileURLToPath(new URL("../dist/public/", import.meta.url));
 const output = process.env.CONTRACT_UNSIGNED_PREVIEW_OUTPUT;
 if (output) await mkdir(output, { recursive: true });
@@ -19,6 +23,18 @@ const previewCsp = "sandbox; default-src 'none'; style-src 'unsafe-inline'; scri
 const server = createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
+    if (realHttpDownload && pathname === "/api/contract-templates/18/unsigned-preview" && req.method === "POST") {
+      const chunks = []; let bytes = 0;
+      for await (const chunk of req) { bytes += chunk.length; assert.ok(bytes < 1024); chunks.push(chunk); }
+      assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), { format: "pdf" });
+      assert.equal(req.headers["x-csrf-token"], "SYNTHETIC-TEST-CSRF");
+      await new Promise(resolve => setTimeout(resolve, 1250));
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", 'attachment; filename="UNSIGNED-TEST-template-18.pdf"');
+      res.setHeader("Content-Security-Policy", parentCsp); res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("Content-Length", pdfBytes.length);
+      actualPdfResponses++; res.end(pdfBytes); return;
+    }
     if (pathname.startsWith("/api/")) throw new Error("API must be intercepted");
     const target = path.resolve(root, path.extname(pathname) ? pathname.slice(1) : "index.html");
     if (!target.startsWith(path.resolve(root) + path.sep)) { res.writeHead(404).end(); return; }
@@ -28,7 +44,7 @@ const server = createServer(async (req, res) => {
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : { channel: "chrome" }) });
+const browser = await chromium.launch({ headless: process.env.CONTRACT_PREVIEW_HEADED !== "true", ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : { channel: "chrome" }) });
 try {
   for (const [lang, width] of [["en", 1440], ["tr", 390], ["ar", 390]]) {
     const words = lang === "tr" ? { preview: "İmzasız test önizlemesi", retry: "Yeniden dene", download: "İmzasız test PDF’ini indir", close: "Kapat" }
@@ -65,6 +81,7 @@ try {
         } else {
           assert.equal(payload.format, "pdf"); pdfCalls++;
           if (pdfCalls === 1) { await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "TEST unavailable" }) }); return; }
+          if (realHttpDownload) { await route.continue(); return; }
           await route.fulfill({ status: 200, contentType: "application/pdf", body: pdfBytes }); return;
         }
       }
@@ -109,7 +126,8 @@ try {
     await dialog.waitFor({ state: "hidden" });
     assert.deepEqual(errors, []);
     assert.equal(mutations.filter(value => !/^POST \/api\/(?:contract-templates\/18\/unsigned-preview|activity|notifications\/section\/)/.test(value)).length, 0, "no business mutation, signing or email API");
-    console.log(`PASS ${lang}/${width}: draft preview, busy retry, CSS iframe sandbox, mobile modal, PDF error/retry/download, no mutation`);
+    console.log(`PASS ${lang}/${width}: draft preview, busy retry, CSS iframe sandbox, mobile modal, PDF error/retry/download${realHttpDownload ? " via real HTTP" : ""}, no mutation`);
     await page.close();
   }
+  if (realHttpDownload) assert.equal(actualPdfResponses, 3);
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
