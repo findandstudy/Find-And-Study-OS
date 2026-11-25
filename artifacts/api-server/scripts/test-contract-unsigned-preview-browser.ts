@@ -17,7 +17,12 @@ test("real unsigned EN/TR/AR preview and PDF retain layout without signatures, e
   for (const lang of ["en", "tr", "ar"]) {
     const title = lang === "ar" ? "معاينة عقد تجريبي" : lang === "tr" ? "TEST sözleşme tasarımı" : "TEST agreement design";
     const html = await buildUnsignedContractPreview(`<!doctype html><html lang="${lang}" ${lang === "ar" ? 'dir="rtl"' : ""}><head><style>.hero{background:#143591;color:white;border-radius:14px;padding:24px}.cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}.card{border:1px solid #94a3b8;border-radius:8px;padding:16px}h2{color:#143591}</style></head><body><header class="hero"><h1>${title}</h1><p>{{contract_number}}</p></header><div class="cards"><section class="card"><h2>TEST company</h2><p>{{agency_name}}</p></section><section class="card"><h2>TEST person</h2><p>{{contract.signerName}}</p></section></div><img src="{{signature}}"><img src="https://remote.invalid/signature.png"></body></html>`, lang, { brandName: "TEST BRAND", pdfFooterText: "TEST layout only" });
-    const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
+    // The screenshot probe runs beside the production renderer under the same
+    // container PID/memory limits. Do not start Chromium's default process tree.
+    const browser = await chromium.launch({
+      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+      args: ["--single-process", "--no-zygote", "--disable-gpu"],
+    });
     try {
       const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
       let remoteRequests = 0;

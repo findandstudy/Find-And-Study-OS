@@ -31,6 +31,10 @@ Yeni `POST /api/contract-templates/:id/unsigned-preview` yalnız aktif `admin`/`
 
 Sentetik görsel/PDF kanıtları yerel `uat-evidence/2026-11-25/unsigned-preview` klasöründedir; binary kanıtlar commit'e dahil edilmez. Gerçek staging oturumu ve aktarılan şablonlarla panel UAT'si ayrı yürütülür.
 
+### Kısıtlı Linux konteyneri için test düzeltmesi
+
+`3b06bf8f` ürün adayı Linux'ta gerçek PDF üretimini geçerken, ayrı screenshot test tarayıcısının varsayılan çok süreçli açılışı konteynerin 128 PID sınırına takıldı. Yalnız `test-contract-unsigned-preview-browser.ts` içindeki bu tarayıcı, üretim render yolundaki `--single-process`, `--no-zygote`, `--disable-gpu` bayraklarını kullanacak şekilde düzeltildi. Ürün kodu ve konteyner kaynak sınırları değiştirilmedi. Güncel test Windows/Chrome'da EN/TR/AR için PASS; aynı üç bayrağı ekleyen ayrı bağlanmış Linux betiği de aynı ürün imajında PASS oldu. Linux kanıtı dağıtım kaydındaki imaj ve gerçekten çalıştırılan betik SHA-256 çiftiyle değerlendirilmelidir; yerel betikle byte eşliği iddia edilmez.
+
 ## Geri dönüş
 
 Bu ek commit geri alındığında yalnız önizleme düğmesi/endpoint ve yardımcıları kaldırılır. Migration, template publication, imza/evidence veya storage yazısı olmadığı için DB geri yükleme gerektirmez. Önceden imzalanmış sözleşmeler bu akıştan etkilenmez.
