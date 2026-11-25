@@ -15,6 +15,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
+import { ContractEmailStatus, type ContractEmailDelivery } from '@/components/contracts/ContractEmailStatus';
 import {
   User, Globe, Shield, Save, Check, Briefcase,
   Loader2, Phone, Mail, TrendingUp, MapPin,
@@ -139,7 +140,7 @@ export default function AgentAccount() {
     // contract does not imply work is running, and rendering may need recovery.
     refetchInterval: (query) => {
       const d = query.state.data as any;
-      if (d?.signedContract?.pdfStatus !== "pending") return false;
+      if (d?.signedContract?.pdfStatus !== "pending" && d?.signedContract?.emailDelivery?.state !== 'pending') return false;
       if (Date.now() - contractPollStart.current > 120_000) return false;
       return 5_000;
     },
@@ -775,7 +776,7 @@ function DocumentUploader({
   );
 }
 
-function SignedAgencyContract({ contract }: { contract: { signedAt: string; pdfStatus: "ready" | "pending"; downloadUrl: string | null } }) {
+function SignedAgencyContract({ contract }: { contract: { signedAt: string; pdfStatus: "ready" | "pending"; downloadUrl: string | null; emailDelivery?:ContractEmailDelivery } }) {
   const { lang } = useI18n();
   const copy = agentContractCopy(lang);
   const qc = useQueryClient();
@@ -813,6 +814,7 @@ function SignedAgencyContract({ contract }: { contract: { signedAt: string; pdfS
     <div className="min-h-40 rounded-lg border bg-secondary/30 p-4 space-y-3">
       <Badge variant="outline"><Check className="me-1 h-3 w-3" />{copy.signed}</Badge>
       <p className="text-xs text-muted-foreground">{new Date(contract.signedAt).toLocaleDateString(lang)}</p>
+      <ContractEmailStatus delivery={contract.emailDelivery} lang={lang}/>
       {pending || contract.pdfStatus === "pending" ? <>
         <p className="text-xs text-muted-foreground" role="status">{copy.pending}</p>
         <Button type="button" size="sm" variant="outline" onClick={refresh}>{copy.refresh}</Button>

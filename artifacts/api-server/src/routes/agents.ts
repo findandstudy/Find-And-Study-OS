@@ -22,6 +22,7 @@ import {
 import { db, agentsTable, agentIntegrationsTable, usersTable, rolesTable, DEFAULT_ROLE_PERMISSIONS, getAllPermissions, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable, auditLogsTable } from "@workspace/db";
 import { loadNewestSignedContractForAgent } from "../lib/signContract";
 import { agentSignedContractSummary } from "../lib/agentSignedContractSummary";
+import { readContractDeliveryStatus } from "../lib/contractDeliveryStatus";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
@@ -677,7 +678,9 @@ router.get("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req, r
   let contractUrl = agent.contractUrl;
   let signedContract: ReturnType<typeof agentSignedContractSummary> = null;
   try {
-    signedContract = agentSignedContractSummary(agent.id, await loadNewestSignedContractForAgent(agent.id));
+    const newest = await loadNewestSignedContractForAgent(agent.id);
+    const emailDelivery = newest ? await readContractDeliveryStatus(newest.session.id, agent.id) : undefined;
+    signedContract = agentSignedContractSummary(agent.id, newest, emailDelivery);
     if (signedContract) contractUrl = signedContract.downloadUrl;
   } catch (err) {
     console.error(`[agents/me] failed to resolve newest contract url for agent ${agent.id}:`, err);

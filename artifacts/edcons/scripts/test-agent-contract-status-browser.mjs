@@ -37,6 +37,7 @@ try {
     const writes = [];
     let profileReads = 0;
     let ready = false;
+    let emailState = 'pending';
     let pdfPending = false;
     let downloadCount = 0;
     let adminMode = false;
@@ -58,12 +59,12 @@ try {
       if (url.pathname === "/api/auth/me") body = { id: 987654, firstName: "TEST", lastName: "Agency", role: adminMode ? "super_admin" : "agent", language: lang, isActive: true, emailVerified: true, email: "synthetic@example.invalid", permissions: [], createdAt: "2026-01-01T00:00:00Z" };
       else if (url.pathname === "/api/agents/me") {
         profileReads++;
-        body = { id: 765432, userId: 987654, businessName: "TEST ONLY Agency", firstName: "TEST", lastName: "Agency", country: "Turkey", city: "Istanbul", status: "provisional", accessTier: "provisional", effectiveFeatures: { web_to_lead: false }, signedContract: { status: "signed", signedAt: "2026-11-25T17:00:00Z", pdfStatus: ready ? "ready" : "pending", downloadUrl: ready ? "/api/contracts/me/pdf" : null }, contractUrl: ready ? "/api/contracts/me/pdf" : null };
+        body = { id: 765432, userId: 987654, businessName: "TEST ONLY Agency", firstName: "TEST", lastName: "Agency", country: "Turkey", city: "Istanbul", status: "provisional", accessTier: "provisional", effectiveFeatures: { web_to_lead: false }, signedContract: { status: "signed", signedAt: "2026-11-25T17:00:00Z", pdfStatus: ready ? "ready" : "pending", downloadUrl: ready ? "/api/contracts/me/pdf" : null, emailDelivery:{state:emailState} }, contractUrl: ready ? "/api/contracts/me/pdf" : null };
       } else if (url.pathname === "/api/contracts/me/pdf") {
         if (pdfPending) { await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ status: "pending" }) }); return; }
         await route.fulfill({ status: 200, contentType: "application/pdf", body: pdfBytes }); return;
       } else if (url.pathname === "/api/agents/me/onboarding-status") body = { required: false, signed: true, hasSignedContract: true, contractStatus: "signed" };
-      else if (url.pathname === "/api/public/sign/SYNTHETIC-NOT-A-REAL-TOKEN") body = { data: { sessionId: 72, mode: "admin_driven", status: "signed", signerName: "TEST Only", signerEmail: "synthetic@example.invalid", verifiedEmail: "synthetic@example.invalid", expired: false, template: { name: "TEST Only Agreement", language: lang, intakeSchema: [] } } };
+      else if (url.pathname === "/api/public/sign/SYNTHETIC-NOT-A-REAL-TOKEN") body = { data: { sessionId: 72, mode: "admin_driven", status: "signed", signerName: "TEST Only", signerEmail: "synthetic@example.invalid", verifiedEmail: "synthetic@example.invalid", expired: false, emailDelivery:{state:emailState}, template: { name: "TEST Only Agreement", language: lang, intakeSchema: [] } } };
       else if (url.pathname === "/api/public/sign/SYNTHETIC-NOT-A-REAL-TOKEN/pdf") { await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ status: "pending" }) }); return; }
       else if (url.pathname === "/api/contracts/me") body = { data: { status: "signed" } };
       else if (url.pathname === "/api/contracts/signed") body = { data: [
@@ -79,6 +80,7 @@ try {
     await page.getByRole("tab", { name: "Agency", exact: true }).click();
     const contract = page.locator("div.space-y-2").filter({ has: page.locator("label").getByText(words.title, { exact: true }) });
     await contract.getByText(words.signed, { exact: true }).waitFor();
+    await contract.getByTestId('contract-email-status').filter({hasText:lang==='tr'?'gönderilmeyi bekliyor':'waiting to be sent'}).waitFor();
     await contract.getByRole("status").filter({ hasText: words.pending }).waitFor();
     assert.equal(await contract.getByText("Not uploaded", { exact: true }).count(), 0);
     assert.equal(await contract.getByRole("button", { name: words.download, exact: true }).count(), 0);
@@ -87,9 +89,11 @@ try {
 
     const beforeRefresh = profileReads;
     ready = true;
+    emailState = 'sent';
     await contract.getByRole("button", { name: words.refresh, exact: true }).click();
     const downloadButton = contract.getByRole("button", { name: words.download, exact: true });
     await downloadButton.waitFor();
+    await contract.getByTestId('contract-email-status').filter({hasText:lang==='tr'?'posta sunucusu tarafından kabul edildi':'accepted by the mail server'}).waitFor();
     assert.ok(profileReads > beforeRefresh, "refresh loads the server-projected PDF status");
     const downloading = page.waitForEvent("download");
     await downloadButton.click();
@@ -101,11 +105,13 @@ try {
     // erase the signed status. Its automatic refresh must recover even if the
     // profile still says ready, without sticking on local pending state.
     pdfPending = true;
+    emailState = 'attention';
     const readyRefresh = page.waitForResponse(response => response.url() === `${base}/api/agents/me`);
     await downloadButton.click();
     await readyRefresh;
     await downloadButton.waitFor();
     await contract.getByText(words.signed, { exact: true }).waitFor();
+    await contract.getByTestId('contract-email-status').filter({hasText:lang==='tr'?'gönderildiği doğrulanamadı':'could not be confirmed'}).waitFor();
     assert.equal(downloadCount, 1, "a 202 response is not downloaded as a PDF");
     pdfPending = false;
     const recoveredDownload = page.waitForEvent("download");

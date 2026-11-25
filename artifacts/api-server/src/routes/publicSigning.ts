@@ -8,6 +8,7 @@ import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOL
 
 import { ObjectStorageService } from "../lib/objectStorage";
 import { finalizeSign } from "../lib/signContract";
+import { readContractDeliveryStatus } from "../lib/contractDeliveryStatus";
 import { writeAudit } from "../lib/auditLog";
 import { buildSignVerificationCodeEmail, getAppBaseUrl } from "../lib/email";
 import { dispatchNotification } from "../lib/notificationDispatcher";
@@ -192,11 +193,14 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
         console.error("[public-sign] failed to record open:", auditErr);
       }
     }
+    const emailDelivery = r.session.status === "signed" ? await readContractDeliveryStatus(r.session.id) : undefined;
+    res.setHeader("Cache-Control", "private, no-store");
     res.json({
       data: {
         sessionId: r.session.id,
         mode: r.session.mode,
         status: r.session.status,
+        ...(emailDelivery ? { emailDelivery } : {}),
         signerEmail: r.session.signerEmail,
         verifiedEmail: r.session.verifiedEmail,
         emailVerificationRequired: contractRequiresEmailVerification(r.template.signingPageConfig),

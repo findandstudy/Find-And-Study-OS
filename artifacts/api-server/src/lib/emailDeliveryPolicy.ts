@@ -59,6 +59,22 @@ export type EmailAttemptResult = {
   messageId?: string;
 };
 
+/** SMTP acceptance must name exactly the attempted recipient and message. */
+export function classifyEmailTransportReceipt(result: unknown, recipient: string, messageId: string): EmailAttemptResult {
+  const receipt = (result || {}) as { accepted?: unknown; rejected?: unknown; messageId?: unknown; response?: unknown };
+  const mailbox = (value: unknown) => typeof value === "string" ? value.trim().toLowerCase()
+    : value && typeof value === "object" && "address" in value && typeof value.address === "string" ? value.address.trim().toLowerCase() : null;
+  const target = recipient.trim().toLowerCase();
+  if (Array.isArray(receipt.accepted) && receipt.accepted.length === 1 && mailbox(receipt.accepted[0]) === target
+    && Array.isArray(receipt.rejected) && receipt.rejected.length === 0 && receipt.messageId === messageId
+    && typeof receipt.response === "string" && /^2\d\d(?:[ -]|$)/.test(receipt.response)) {
+    return { status: "sent", code: null, messageId };
+  }
+  if (Array.isArray(receipt.rejected) && receipt.rejected.length === 1 && mailbox(receipt.rejected[0]) === target
+    && Array.isArray(receipt.accepted) && receipt.accepted.length === 0) return { status: "failed", code: "SMTP_RECIPIENT_REJECTED" };
+  return { status: "unknown", code: "SMTP_OUTCOME_UNKNOWN" };
+}
+
 const STAGE_EMAIL_POLICY_CODES = new Set([
   "AUTOMATION_INACTIVE_OR_HISTORICAL", "STAGE_EMAIL_EXPIRED", "RECORD_SCOPE_OR_STAGE_CHANGED",
   "STAGE_POLICY_CHANGED", "TEMPLATE_NOT_APPROVED", "SENDER_CHANGED_OR_UNVERIFIED",
@@ -133,6 +149,6 @@ export async function executeClaimedEmail(item: ClaimedEmail, deps: {
     }
   }
   try { await deps.save(item, emailRetryResult(result, item.retry_count, item.max_retries)); }
-  catch { deps.onSaveFailure(); } // processing rows become UNKNOWN, never blindly retried.
+  catch { deps.onSaveFailure(); return false; } // SMTP acceptance without a durable receipt is not confirmed delivery.
   return result.status === "sent";
 }
