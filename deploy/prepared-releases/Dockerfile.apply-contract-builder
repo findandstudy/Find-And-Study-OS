@@ -1,0 +1,87 @@
+# syntax=docker/dockerfile:1.7
+# Context contains ONLY source/ (verified assembled candidate) and
+# tooling/pnpm-10.33.2.tgz. No production bind mount or environment file.
+ARG CONTRACT_RUNTIME_IMAGE
+FROM ${CONTRACT_RUNTIME_IMAGE} AS builder
+ARG PNPM_TARBALL_SHA256
+ARG SOURCE_RECEIPT_SHA256
+USER root
+WORKDIR /candidate
+COPY tooling/pnpm-10.33.2.tgz /tmp/pnpm-10.33.2.tgz
+RUN set -eu; \
+    test "$(node --version)" = "v22.23.4"; \
+    printf '%s\n' "$PNPM_TARBALL_SHA256" | grep -Eq '^[a-f0-9]{64}$'; \
+    printf '%s  %s\n' "$PNPM_TARBALL_SHA256" /tmp/pnpm-10.33.2.tgz | sha256sum -c -; \
+    mkdir /opt/apply-pnpm; \
+    tar -xzf /tmp/pnpm-10.33.2.tgz --strip-components=1 -C /opt/apply-pnpm; \
+    test "$(node /opt/apply-pnpm/bin/pnpm.cjs --version)" = "10.33.2"; \
+    printf '#!/bin/sh\nexec node /opt/apply-pnpm/bin/pnpm.cjs "$@"\n' > /usr/local/bin/pnpm; \
+    chmod 0755 /usr/local/bin/pnpm
+COPY source/ /candidate/
+RUN --network=none node --input-type=module <<'NODE'
+import { createHash } from 'node:crypto';
+import { lstat, readFile, readdir } from 'node:fs/promises';
+const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+const raw = await readFile('.apply-candidate-receipt.json');
+if (!/^[a-f0-9]{64}$/.test(process.env.SOURCE_RECEIPT_SHA256 ?? '') || hash(raw) !== process.env.SOURCE_RECEIPT_SHA256) throw new Error('Source receipt mismatch');
+const receipt = JSON.parse(raw);
+if (hash(JSON.stringify(receipt.files)) !== receipt.sourceTreeSha256) throw new Error('Source tree receipt mismatch');
+const expected = new Set(receipt.files.map(entry => entry.path));
+const actual = [];
+async function walk(root = '.') {
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const file = root === '.' ? entry.name : `${root}/${entry.name}`;
+    if (entry.isDirectory()) await walk(file);
+    else if (entry.isFile()) { if (file !== '.apply-candidate-receipt.json') actual.push(file); }
+    else throw new Error('Source symlink rejected');
+  }
+}
+await walk();
+if (actual.length !== expected.size || actual.some(file => !expected.has(file))) throw new Error('Unexpected build context source');
+for (const entry of receipt.files) {
+  if (!/^[A-Za-z0-9._/-]+$/.test(entry.path) || entry.path.startsWith('/') || entry.path.split('/').some(part => !part || part === '.' || part === '..')) throw new Error('Invalid source path');
+  const stat = await lstat(entry.path), bytes = await readFile(entry.path);
+  if (!stat.isFile() || stat.nlink !== 1 || bytes.length !== entry.bytes || hash(bytes) !== entry.sha256) throw new Error('Source content changed');
+}
+NODE
+ENV ALLOW_LIVE_INTEGRATIONS=false EMAIL_DELIVERY_DISABLED=true \
+    SIGNED_CONTRACT_DELIVERY_ENABLED=false SIGNED_CONTRACT_PDF_WORKER_ENABLED=false \
+    SIGNED_CONTRACT_DURABLE_DELIVERY_MODE=off BACKGROUND_JOBS_ENABLED=false
+RUN test -f .apply-candidate-receipt.json && pnpm install --frozen-lockfile && chown -R 10000:10000 /candidate
+USER 10000:10000
+RUN --network=none pnpm run typecheck:libs && \
+    pnpm --filter @workspace/api-server exec tsc --noEmit && \
+    pnpm --filter @workspace/edcons exec tsc --noEmit
+RUN --network=none NODE_ENV=test pnpm --filter @workspace/api-server exec tsx --test \
+    scripts/test-contract47-recovery.ts scripts/test-contract-local-logo.ts \
+    scripts/test-contract-durable-enrollment.ts scripts/test-contract-smtp-adapter.ts
+RUN --network=none cd artifacts/edcons && BASE_PATH=/ PORT=3000 NODE_ENV=production pnpm run build
+RUN --network=none cd artifacts/api-server && NODE_ENV=production pnpm run build
+RUN --network=none node --input-type=module <<'NODE'
+import { createHash } from 'node:crypto';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
+const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+const files = ['pnpm-lock.yaml', 'artifacts/api-server/dist/index.cjs'];
+async function walk(root) {
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const name = `${root}/${entry.name}`;
+    if (entry.isDirectory()) await walk(name);
+    else if (entry.isFile()) files.push(name);
+    else throw new Error('Unexpected output symlink');
+  }
+}
+await walk('artifacts/edcons/dist/public');
+await walk('artifacts/api-server/dist/assets/fonts');
+const artifacts = [];
+for (const file of files.sort()) { const bytes = await readFile(file); artifacts.push({ path: file, bytes: bytes.length, sha256: hash(bytes) }); }
+const receipt = JSON.parse(await readFile('.apply-candidate-receipt.json', 'utf8'));
+await writeFile('.apply-build-evidence.json', `${JSON.stringify({ schemaVersion: 1, node: process.version, pnpm: '10.33.2',
+  sourceTreeSha256: receipt.sourceTreeSha256, patchCommit: receipt.patchCommit, artifacts,
+  tests: 'typechecks + recovery/local-logo/enrollment/SMTP-adapter; no real SMTP or database',
+  remaining: ['isolated full-prefix database tests', 'exact runtime init/readonly Chromium smoke', 'visual PDF review'] }, null, 2)}\n`, { flag: 'wx' });
+NODE
+
+FROM scratch AS exported-release
+COPY --from=builder /candidate /release
+COPY --from=builder /usr/local/share/apply-contract-runtime-packages.txt /evidence/runtime-packages.txt
+COPY --from=builder /opt/apply-pnpm /tooling/pnpm

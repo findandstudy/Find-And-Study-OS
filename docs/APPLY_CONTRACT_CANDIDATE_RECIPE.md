@@ -73,12 +73,15 @@ the tool never overwrites or silently cleans it.
 Use a new image and a separate builder workspace. Never bind the current Apply
 release or production storage writable into a builder.
 
-1. Pin `node:22.23.4-bookworm-slim` by its verified image digest. Build
-   `Dockerfile.apply-contract-runtime` with an explicit Debian snapshot timestamp
-   and exact Chromium/common/sandbox, DejaVu, Liberation and Noto package versions
-   resolved from that snapshot. Missing pins fail; do not replace them with
-   `latest`. Record final image ID and all installed package versions. This
-   adds Chromium/font infrastructure inside the new image, not on the VPS host.
+1. Build `Dockerfile.apply-contract-runtime` from the verified base
+   `node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da`.
+   Verified signed-repository package pins are Chromium/common/sandbox
+   `156.0.8078.108-1~deb12u1`, DejaVu `2.37-6`, Liberation `1:1.07.4-11`, and
+   Noto `20201225-1`. Existing official signed Debian repositories remain in
+   use; signature verification is not relaxed. Record the final image ID and
+   **all** installed versions from the generated package manifest. Transitive
+   dependencies are recorded at build time, not claimed frozen across future
+   rebuilds. This adds Chromium/fonts inside the image, not on the VPS host.
 2. Copy the assembled candidate into an isolated builder. Install the already
    approved `pnpm@10.33.2` from a hash-verified artifact, then use the exact lock
    with `pnpm install --frozen-lockfile`. Do not rewrite the lock or copy staging
@@ -96,6 +99,36 @@ release or production storage writable into a builder.
    fake email and real Chromium PDF tests in an isolated network/container.
    Test with the exact final image + candidate code + Node version. Linux
    descriptor tests must run, not skip. Inspect EN/TR/AR PDFs visually.
+
+An executable build/export path is provided by
+`Dockerfile.apply-contract-builder`. Its build context contains only `source/`
+(the assembled source plus receipt) and `tooling/pnpm-10.33.2.tgz`. The builder
+requires the exact `PNPM_TARBALL_SHA256` and `SOURCE_RECEIPT_SHA256` build args;
+it rechecks every source byte and source-tree membership **after Docker COPY**
+and before installation. Typechecks, selected fake-provider/unit tests and
+both builds run with BuildKit `--network=none` as UID/GID10000. Only package
+installation may use the network; no live credentials are present. Its
+`exported-release` target exports `/release`, `/evidence/runtime-packages.txt`
+and `/tooling/pnpm` to a new local output directory, without starting the app.
+
+Operator command shape (replace placeholders with verified values; not an
+instruction to execute against production):
+
+```text
+docker build -f <reviewed-runtime-Dockerfile> -t <unique-runtime-tag> <empty-build-context>
+docker buildx build -f <reviewed-builder-Dockerfile>
+  --build-arg CONTRACT_RUNTIME_IMAGE=<verified-unique-runtime-tag>
+  --build-arg PNPM_TARBALL_SHA256=<verified-pnpm-archive-sha256>
+  --build-arg SOURCE_RECEIPT_SHA256=<approved-source-receipt-sha256>
+  --target exported-release --output type=local,dest=<new-isolated-output>
+  <source-and-tooling-only-context>
+```
+
+Capture the runtime tag's actual image ID before and after the builder; a tag
+change invalidates the build evidence. The generated
+`.apply-build-evidence.json` binds source tree/patch commit to Node/pnpm and
+output hashes. Disposable PostgreSQL/full-prefix and the exact readonly/init
+runtime smoke remain separate tests, not implied by Docker build success.
 
 The runtime Dockerfile contains no application code, env file, proxy settings or
 storage. It provides the same Node major/minor/patch plus Chromium/fonts. The
