@@ -8,7 +8,7 @@ import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 import {
-  applyRecovery47, assertRecovery47Database, canonicalJson, prepareRecovery47,
+  applyRecovery47, assertRecovery47Database, assertRecovery47ExecutingSource, canonicalJson, prepareRecovery47,
   readPinnedRecoveryFile, readRecovery47Snapshot, recovery47InputDigest, sha256,
   REQUIRED_RECOVERY_SOURCE_FILES, validateRecovery47Manifest, validateRecovery47WorkerReceipt, writeImmutableRecoveryFile,
   type Recovery47Manifest,
@@ -48,6 +48,7 @@ async function main() {
   validateRecovery47Manifest(manifest);
   const canonicalRoot = await realpath(sourceRoot);
   if (canonicalRoot !== sourceRoot) throw new Error("recovery47:source_root_must_be_canonical");
+  await assertRecovery47ExecutingSource(canonicalRoot, import.meta.url);
   for (const [file, expected] of Object.entries(manifest.sourceFiles)) {
     if (!/^[a-zA-Z0-9_./-]+$/.test(file) || file.split("/").some(part => part === ".." || !part)
       || (!file.startsWith("artifacts/api-server/") && !(REQUIRED_RECOVERY_SOURCE_FILES as readonly string[]).includes(file))

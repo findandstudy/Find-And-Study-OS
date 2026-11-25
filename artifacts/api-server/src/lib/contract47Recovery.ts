@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import { buildAgentContext, buildFinalSignedContractHtml, contractNumber } from "./contractRenderer";
 import { sanitizeContractBranding, validateCompanySignatureDataUrl } from "./contractBranding";
@@ -16,6 +17,15 @@ const HEX = /^[a-f0-9]{64}$/;
 const MAX_PDF = 10 * 1024 * 1024;
 function FAIL(code: string): never { throw new Error(`recovery47:${code}`); }
 export const sha256 = (bytes: string | Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
+
+/** The reviewed tree must be the code executing this command, not a decoy. */
+export async function assertRecovery47ExecutingSource(sourceRoot: string, scriptUrl: string): Promise<void> {
+  const root = await realpath(sourceRoot);
+  if (root !== sourceRoot) FAIL("source_root_must_be_canonical");
+  const [script, helper] = await Promise.all([realpath(fileURLToPath(scriptUrl)), realpath(fileURLToPath(import.meta.url))]);
+  if (script !== path.join(root, "artifacts/api-server/scripts/recover-contract47.ts")
+    || helper !== path.join(root, "artifacts/api-server/src/lib/contract47Recovery.ts")) FAIL("executing_source_mismatch");
+}
 
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);

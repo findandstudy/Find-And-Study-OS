@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile, chmod } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import ts from "typescript";
 import {
   RECOVERY47_TARGET, REQUIRED_RECOVERY_SOURCE_FILES, canonicalJson, prepareRecovery47, recovery47InputDigest,
   sha256, validateRecovery47Manifest, validateRecovery47Pdf, readPinnedRecoveryFile, writeImmutableRecoveryFile,
   validateRecovery47WorkerReceipt,
+  assertRecovery47ExecutingSource,
   type Recovery47Snapshot, type Recovery47Manifest,
 } from "../src/lib/contract47Recovery";
 import { signedContractDeliveryWorkerEnabled } from "../src/lib/signedContractDeliveryPolicy";
@@ -115,6 +117,16 @@ test("manifest binds target, source and database identity", () => {
   const manifest = testManifest(); delete manifest.sourceFiles[REQUIRED_RECOVERY_SOURCE_FILES[0]];
   assert.throws(() => validateRecovery47Manifest(manifest), /source_attestation/);
   assert.throws(() => validateRecovery47Manifest({ ...testManifest(), target: { ...RECOVERY47_TARGET, contractId: 99 } }), /target_mismatch/);
+});
+
+test("source attestation binds executing CLI and imported helper to reviewed checkout", async () => {
+  const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  await assertRecovery47ExecutingSource(sourceRoot, new URL("./recover-contract47.ts", import.meta.url).href);
+  await assert.rejects(assertRecovery47ExecutingSource(sourceRoot, import.meta.url), /executing_source_mismatch/);
+  const other = await mkdtemp(path.join(tmpdir(), "fas-wrong-source-"));
+  try {
+    await assert.rejects(assertRecovery47ExecutingSource(await realpath(other), new URL("./recover-contract47.ts", import.meta.url).href), /executing_source_mismatch/);
+  } finally { await rm(other, { recursive: true, force: true }); }
 });
 
 test("candidate exact bytes required", () => {
