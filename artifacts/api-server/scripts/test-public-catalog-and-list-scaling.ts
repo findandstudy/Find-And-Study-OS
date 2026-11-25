@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
+import ts from "typescript";
 import {
   isPublicUniversityVisible,
   normaliseCountryRules,
@@ -150,15 +152,59 @@ test("applications API owns list filtering, sorting, and cross-page facets", () 
 
 test("catalog university lists use a lightweight summary and lazy logo endpoint", () => {
   assert.match(catalogPage, /summary:\s*"1"/);
-  assert.match(catalogPage, /const university = await api\(`\/api\/universities\/\$\{id\}`\)/);
   assert.match(universitiesRoute, /const \{[^}]*summary[^}]*\} = req\.query/);
   assert.match(universitiesRoute, /hasLogo:\s*sql<boolean>/);
   assert.match(universitiesRoute, /delete masked\.hasLogo/);
   assert.match(universitiesRoute, /router\.get\("\/universities\/:id\/logo"/);
-  assert.match(universitiesRoute, /Cache-Control", "public, max-age=86400"/);
+  assert.match(universitiesRoute, /Cache-Control", "public, max-age=0, must-revalidate"/);
+  assert.match(universitiesRoute, /setHeader\("ETag", etag\)/);
+  assert.match(universitiesRoute, /req\.headers\["if-none-match"\] === etag/);
   assert.match(universitiesRoute, /X-Content-Type-Options", "nosniff"/);
   assert.match(universitiesRoute, /Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox"/);
 });
+
+// Exercise the actual editor handler with mocked I/O. Its local declarations
+// may change (for example to Promise.all) without changing this contract.
+const catalogAst = ts.createSourceFile("Catalog.tsx", catalogPage, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let editUniversityHandler: ts.Expression | undefined;
+function findUniversityEditor(node: ts.Node): void {
+  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === "openEditUniversity") {
+    editUniversityHandler = node.initializer;
+  }
+  ts.forEachChild(node, findUniversityEditor);
+}
+findUniversityEditor(catalogAst);
+
+for (const periods of [[{ id: 9, name: "TEST Autumn" }], undefined]) {
+  test(`university editor loads full detail and ${periods ? "existing" : "absent"} application periods`, async () => {
+    assert.ok(editUniversityHandler, "the university editor handler must exist");
+    const calls: string[] = [];
+    const forms: unknown[] = [];
+    const countries: unknown[] = [];
+    const university = { id: 42, name: "TEST University", country: "TEST Country", description: "Full detail" };
+    const source = ts.transpileModule(`(${editUniversityHandler.getText(catalogAst)})`, {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
+    }).outputText;
+    const open = runInNewContext(source, {
+      api: async (path: string) => {
+        calls.push(path);
+        if (path === "/api/universities/42") return university;
+        assert.equal(path, "/api/universities/42/application-periods");
+        return { data: periods };
+      },
+      setForm: (form: unknown) => forms.push(structuredClone(form)),
+      setSelCountryId: (id: unknown) => countries.push(id),
+      allCountries: [{ id: 7, name: "TEST Country" }],
+      findCatalogCountry: (rows: Array<{ id: number; name: string }>, country: string) => rows.find(row => row.name === country),
+      toast: () => assert.fail("loading valid university details must not fail"),
+      t: (key: string) => key,
+    }, { timeout: 1_000 }) as (id: number) => Promise<void>;
+    await open(42);
+    assert.deepEqual(calls.sort(), ["/api/universities/42", "/api/universities/42/application-periods"]);
+    assert.deepEqual(forms, [{ ...university, applicationPeriods: periods ?? [] }]);
+    assert.deepEqual(countries, [7]);
+  });
+}
 
 test("program catalog resolves every university without paginated truncation", () => {
   assert.match(universitiesRoute, /router\.get\("\/universities\/options", requireAuth/);

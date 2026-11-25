@@ -76,6 +76,16 @@ Mevcut kirli Public-Detail-Release çalışma ağacına dokunulmadı.
   aynı 38 legacy hata ve aynı 7 sınıflandırılmamış writer var; bu yama yeni hata eklemedi.
   Bunlar yeşil veya production readiness kanıtı olarak sunulmaz.
 
+### Dağıtım öncesi CI düzeltmesi
+
+`cb116bf6` üzerinde Institution ve Portal kapıları 3/3, Live-first Windows ve iki
+PostgreSQL işi PASS oldu. Live-first Linux işi, bu yamadan önce de bulunan eski
+katalog test beklentisinde durdu. Yalnız ilgili test güncellendi: gerçek üniversite
+düzenleme fonksiyonu mock API ile çalıştırılarak detay ve başvuru dönemlerinin
+korunması doğrulanıyor; logo kontrolü mevcut revalidation/ETag davranışını bekliyor.
+Katalog ürün kodu, bağımlılıklar ve CI yapılandırması değişmedi. Bu test 17/17 PASS.
+Yeni head için uzak CI sonucu ayrıca doğrulanmalıdır.
+
 ## Apply ve staging'e taşıma sınırları
 
 Yama dalı `codex/agency-contract-delivery-20261125`, mevcut staging'in exact
