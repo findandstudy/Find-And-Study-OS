@@ -19,7 +19,7 @@ Yeni `POST /api/contract-templates/:id/unsigned-preview` yalnız aktif `admin`/`
 - Şablon 512 KiB, HTML 2 MiB, PDF 10 MiB/30 sayfa ile sınırlı; Chromium başlatma/render süresi 30 saniye bütçelidir ve hata/zaman aşımında kapatılır.
 - Süreç başına 10/dakika önizleme isteği sınırı vardır. Modal açılışı ön kontrol ve iframe belgesi için iki HTML okuması tüketir; PDF isteği ayrıca sayılır. Mevcut ortak render kilidi doluyken istek kuyruğa alınmaz; 429 döner. Önizleme imza PDF'siyle aynı süreçte eşzamanlı Chromium açmaz.
 - Veritabanı okuma beklemeleri mevcut pool bağlantı/query/statement sürelerine bağlıdır: varsayılan 10/30/30 saniye. Ortam değişkenleri bunları değiştirebilir; staging dağıtımı bu değerleri ayrıca doğrulamalıdır. 30 saniye sınırı tüm HTTP isteğinin değil Chromium aşamasının bütçesidir.
-- Başarısız/JSON yanıt PDF diye indirilmez; kullanıcı yeniden deneyebilir. Blob URL'si Safari'nin indirmeyi başlatmasına zaman tanımak için 60 saniye sonra temizlenir.
+- Başarısız/JSON yanıt PDF diye indirilmez; kullanıcı yeniden deneyebilir. PDF hazır olduğunda otomatik indirmenin yanında modal içinde açık bir kaydet bağlantısı gösterilir. Aynı doğrulanmış dosya tekrar API çağrısı yapmadan kaydedilir. Modal başına en fazla bir blob URL tutulur; görünürken süre dolmaz, yeni PDF/şablon veya modal kapanışı/unmount sırasında temizlenir.
 
 ## Doğrulama
 
@@ -46,7 +46,9 @@ Sentetik görsel/PDF kanıtları yerel `uat-evidence/2026-11-25/unsigned-preview
 
 ### Native Chrome indirme incelemesi
 
-Gerçek staging sekmesinde başarılı PDF HTTP yanıtına rağmen dosya/kaydet penceresinin gözlenememesi ayrıca araştırıldı. `test-contract-unsigned-preview-browser.mjs` için `CONTRACT_PREVIEW_HTTP_DOWNLOAD=true`, `CONTRACT_PREVIEW_HEADED=true` ve `CONTRACT_PREVIEW_REAL_PDF_PATH` seçenekleri eklendi. Ayrı geçici Chrome profilinde gerçek derlenmiş modal, strict üst sayfa CSP'si, 1,25 saniye sonra gerçek loopback HTTP POST yanıtıyla gelen önceden üretilmiş imzasız PDF kullanıldı. EN/TR/AR'da dosya adı, birebir PDF byte'ları ve tek indirme **PASS**. Kimlik/katalog API'leri sentetik fixture kaldı; gerçek kullanıcı profilinin Save As veya otomatik indirme politikası bu testle doğrulanmaz (`acceptDownloads` test context'inde açıktır). Genel CSP/Radix modal/link hatası yeniden üretilemediği için bu incelemede ürün indirme kodu veya tarayıcı izinleri değiştirilmedi.
+Gerçek staging sekmesinde başarılı PDF HTTP yanıtına rağmen dosya/kaydet penceresinin gözlenememesi ayrıca araştırıldı. `test-contract-unsigned-preview-browser.mjs` için `CONTRACT_PREVIEW_HTTP_DOWNLOAD=true`, `CONTRACT_PREVIEW_HEADED=true` ve `CONTRACT_PREVIEW_REAL_PDF_PATH` seçenekleri eklendi. Ayrı geçici Chrome profilinde gerçek derlenmiş modal, strict üst sayfa CSP'si, 1,25 saniye sonra gerçek loopback HTTP POST yanıtıyla gelen önceden üretilmiş imzasız PDF kullanıldı. EN/TR/AR'da dosya adı, birebir PDF byte'ları ve tek otomatik indirme **PASS**. Kimlik/katalog API'leri sentetik fixture kaldı; gerçek kullanıcı profilinin Save As veya otomatik indirme politikası bu testle doğrulanmaz (`acceptDownloads` test context'inde açıktır). Genel CSP/Radix modal/link hatası yeniden üretilemedi; tarayıcı izinleri değiştirilmedi.
+
+Native akış belirsizliğini kullanıcıya görünür biçimde çözmek için sonrasında EN/TR/AR durum metni ve modal içi açık kaydet bağlantısı eklendi. Bir otomatik indirme başlatma denemesi dosyanın gerçekten diske kaydedildiği şeklinde sunulmaz. Test aynı HTTP yanıtından otomatik ve manuel kaydı, 65 saniye sonra bağlantının geçerliliğini ve modal kapanışında blob temizliğini denetler.
 
 ## Geri dönüş
 

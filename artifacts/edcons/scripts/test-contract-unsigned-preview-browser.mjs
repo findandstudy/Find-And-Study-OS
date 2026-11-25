@@ -47,15 +47,23 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ headless: process.env.CONTRACT_PREVIEW_HEADED !== "true", ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : { channel: "chrome" }) });
 try {
   for (const [lang, width] of [["en", 1440], ["tr", 390], ["ar", 390]]) {
-    const words = lang === "tr" ? { preview: "İmzasız test önizlemesi", retry: "Yeniden dene", download: "İmzasız test PDF’ini indir", close: "Kapat" }
-      : lang === "ar" ? { preview: "معاينة تجريبية غير موقعة", retry: "إعادة المحاولة", download: "تنزيل ملف PDF تجريبي غير موقع", close: "إغلاق" }
-      : { preview: "Unsigned test preview", retry: "Retry", download: "Download unsigned test PDF", close: "Close" };
+    const words = lang === "tr" ? { preview: "İmzasız test önizlemesi", retry: "Yeniden dene", download: "İmzasız test PDF’ini indir", close: "Kapat", save: "PDF’i kaydet" }
+      : lang === "ar" ? { preview: "معاينة تجريبية غير موقعة", retry: "إعادة المحاولة", download: "تنزيل ملف PDF تجريبي غير موقع", close: "إغلاق", save: "حفظ ملف PDF" }
+      : { preview: "Unsigned test preview", retry: "Retry", download: "Download unsigned test PDF", close: "Close", save: "Save PDF" };
     const page = await browser.newPage({ viewport: { width, height: 900 }, acceptDownloads: true });
+    await page.clock.install();
     await page.context().addCookies([{ name: "csrf_token", value: "SYNTHETIC-TEST-CSRF", url: base }]);
     const errors = [], mutations = [];
     let htmlCalls = 0, documentCalls = 0, pdfCalls = 0, downloads = 0;
     page.on("pageerror", error => errors.push(error.message)); page.on("download", () => downloads++);
-    await page.addInitScript(locale => { if (window.top === window) localStorage.setItem("edcons_lang", locale); }, lang);
+    await page.addInitScript(locale => {
+      if (window.top !== window) return;
+      localStorage.setItem("edcons_lang", locale);
+      window.__unsignedPreviewTestUrls = { created: [], revoked: [] };
+      const create = URL.createObjectURL.bind(URL), revoke = URL.revokeObjectURL.bind(URL);
+      URL.createObjectURL = value => { const url = create(value); window.__unsignedPreviewTestUrls.created.push(url); return url; };
+      URL.revokeObjectURL = url => { window.__unsignedPreviewTestUrls.revoked.push(url); revoke(url); };
+    }, lang);
     await page.route("**/*", async route => {
       const url = new URL(route.request().url());
       if (url.origin !== base) { await route.abort(); return; }
@@ -122,11 +130,25 @@ try {
     assert.equal(download.suggestedFilename(), "UNSIGNED-TEST-template-18.pdf");
     assert.deepEqual(await readFile(await download.path()), pdfBytes);
     assert.equal(downloads, 1);
+    const saveLink = dialog.getByRole("link", { name: words.save, exact: true });
+    const preparedUrl = await saveLink.getAttribute("href");
+    assert.match(preparedUrl, /^blob:/);
+    await page.clock.fastForward(65_000);
+    const manualDownloadEvent = page.waitForEvent("download"); await saveLink.click();
+    const manualDownload = await manualDownloadEvent;
+    assert.equal(manualDownload.suggestedFilename(), "UNSIGNED-TEST-template-18.pdf");
+    assert.deepEqual(await readFile(await manualDownload.path()), pdfBytes);
+    assert.equal(pdfCalls, 2, "manual link reuses the successful request after the earlier simulated error");
+    assert.equal(downloads, 2);
+    const beforeClose = await page.evaluate(() => window.__unsignedPreviewTestUrls);
+    assert.equal(beforeClose.created.filter(url => url === preparedUrl).length, 1);
+    assert.ok(!beforeClose.revoked.includes(preparedUrl), "visible link must not expire after sixty seconds");
     await dialog.getByRole("button", { name: words.close, exact: true }).first().click();
     await dialog.waitFor({ state: "hidden" });
+    assert.ok(await page.evaluate(url => window.__unsignedPreviewTestUrls.revoked.includes(url), preparedUrl), "closing dialog releases prepared PDF");
     assert.deepEqual(errors, []);
     assert.equal(mutations.filter(value => !/^POST \/api\/(?:contract-templates\/18\/unsigned-preview|activity|notifications\/section\/)/.test(value)).length, 0, "no business mutation, signing or email API");
-    console.log(`PASS ${lang}/${width}: draft preview, busy retry, CSS iframe sandbox, mobile modal, PDF error/retry/download${realHttpDownload ? " via real HTTP" : ""}, no mutation`);
+    console.log(`PASS ${lang}/${width}: draft preview, busy retry, CSS sandbox, PDF auto/manual save with one response${realHttpDownload ? " via real HTTP" : ""}, blob lifecycle, no mutation`);
     await page.close();
   }
   if (realHttpDownload) assert.equal(actualPdfResponses, 3);
