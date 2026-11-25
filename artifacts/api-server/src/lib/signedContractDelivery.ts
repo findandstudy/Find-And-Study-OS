@@ -3,6 +3,8 @@ import { and, eq, isNull, isNotNull, gt, lt, or, asc } from "drizzle-orm";
 import { buildSignedContractEmail, sendEmail, getAppBaseUrl } from "./email";
 import { ensureSignedContractPdf } from "./signContract";
 import { dispatchNotification } from "./notificationDispatcher";
+import { signedContractDeliveryWorkerEnabled } from "./signedContractDeliveryPolicy";
+export { signedContractDeliveryWorkerEnabled } from "./signedContractDeliveryPolicy";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -65,6 +67,7 @@ let oomStreak = 0;
  * the instance restarting mid-render never permanently loses delivery.
  */
 export async function deliverPendingSignedContracts(): Promise<void> {
+  if (!signedContractDeliveryWorkerEnabled()) return;
   try {
     const cutoff = new Date(Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
     const leaseExpiry = new Date(Date.now() - LEASE_TIMEOUT_MS);
@@ -95,6 +98,7 @@ export async function deliverPendingSignedContracts(): Promise<void> {
     const adminContractUrl = `${getAppBaseUrl()}/admin/contracts`;
 
     for (const row of pending) {
+      if (!signedContractDeliveryWorkerEnabled()) return;
       // Atomically claim a lease on the row so concurrent workers / instances
       // don't deliver twice. The lease (delivery_claimed_at) is DISTINCT from
       // the delivered marker (emailed_at): we only set the lease here, and set
@@ -144,6 +148,7 @@ export async function deliverPendingSignedContracts(): Promise<void> {
         continue;
       }
 
+      if (!signedContractDeliveryWorkerEnabled()) return;
       try {
         const [template] = await db.select({ name: contractTemplatesTable.name, language: contractTemplatesTable.language })
           .from(contractTemplatesTable)
@@ -261,6 +266,7 @@ export async function deliverPendingSignedContracts(): Promise<void> {
  * can never contend for the same row. No new column / migration is required.
  */
 export async function backfillMissingSignedPdfs(): Promise<void> {
+  if (!signedContractDeliveryWorkerEnabled()) return;
   try {
     const leaseExpiry = new Date(Date.now() - LEASE_TIMEOUT_MS);
     const reclaimable = or(
@@ -280,6 +286,7 @@ export async function backfillMissingSignedPdfs(): Promise<void> {
     if (candidates.length === 0) return;
 
     for (const row of candidates) {
+      if (!signedContractDeliveryWorkerEnabled()) return;
       // Atomically claim via delivery_claimed_at. Reusing this column is safe:
       // emailed rows are never primary-sweep candidates, so there is no contention.
       const claimed = await db.update(signedContractsTable)
@@ -336,6 +343,7 @@ export async function backfillMissingSignedPdfs(): Promise<void> {
  * keeps this safe if two local API processes briefly overlap.
  */
 export async function generatePendingSignedContractPdfs(): Promise<void> {
+  if (!signedContractPdfWorkerEnabled()) return;
   try {
     const cutoff = new Date(Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
     const leaseExpiry = new Date(Date.now() - LEASE_TIMEOUT_MS);
@@ -418,6 +426,7 @@ async function runPdfOnlySweep(): Promise<void> {
 }
 
 export function startSignedContractPdfWorker(intervalMs = DELIVERY_INTERVAL_MS): () => Promise<void> {
+  if (!signedContractPdfWorkerEnabled()) return stopSignedContractPdfWorker;
   if (pdfOnlyInterval || pdfOnlyInitialTimer) return stopSignedContractPdfWorker;
   console.log(`[contract-pdf-local] Render-only worker started, running every ${intervalMs / 1000}s`);
   pdfOnlyInitialTimer = setTimeout(() => {
@@ -463,6 +472,7 @@ async function runSweep(): Promise<void> {
 }
 
 export function startSignedContractDeliveryWorker(intervalMs = DELIVERY_INTERVAL_MS): () => Promise<void> {
+  if (!signedContractDeliveryWorkerEnabled()) return stopSignedContractDeliveryWorker;
   if (deliveryInterval || deliveryInitialTimer) return stopSignedContractDeliveryWorker;
   console.log(`[SIGNED-DELIVERY] Worker started, running every ${intervalMs / 1000}s`);
   deliveryInitialTimer = setTimeout(() => {
