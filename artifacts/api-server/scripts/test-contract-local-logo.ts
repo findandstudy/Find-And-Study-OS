@@ -13,6 +13,7 @@ import sharp from "sharp";
 import { captureContractLogoSnapshot, validateContractLogoSnapshot, MAX_CONTRACT_LOGO_BYTES } from "../src/lib/contractPdfAssets";
 import { ObjectStorageService } from "../src/lib/objectStorage";
 import { buildUnsignedContractPreview } from "../src/lib/contractUnsignedPreview";
+import { JSDOM } from "jsdom";
 
 const origin = "https://staging.example.test";
 const keys = ["NODE_ENV", "STORAGE_DRIVER", "STORAGE_LOCAL_DIR", "APP_BASE_URL", "ALLOW_LIVE_INTEGRATIONS", "CONTRACT_PDF_TRUSTED_LOGO_URLS"] as const;
@@ -85,6 +86,93 @@ test("local-only preview refuses even allowlisted remote logos when integrations
   let requests = 0;
   assert.equal(await captureContractLogoSnapshot(url, { localOnly: true, request: async () => { requests++; throw new Error("REMOTE_FORBIDDEN"); } }), undefined);
   assert.equal(requests, 0);
+});
+
+test("unsigned preview captures an inline-only approved public logo without profile branding", linuxOffline, async () => {
+  const url = logoUrl(digest(png)); allow(url);
+  await fs.writeFile(logoFile(digest(png)), png);
+  const html = await buildUnsignedContractPreview(`<header><img src="${url}"></header>`, "en", null);
+  const dom = new JSDOM(html);
+  try {
+    assert.equal(dom.window.document.images.length, 1);
+    assert.match(dom.window.document.images[0].getAttribute("src")!, /^data:image\/png;base64,/);
+    assert.doesNotMatch(html, /IMAGE OMITTED/);
+  } finally { dom.window.close(); }
+});
+
+test("unsigned preview permits embedded PNG only after exact public-logo hash and stored bytes are verified", linuxOffline, async () => {
+  const url = logoUrl(digest(png)); allow(url); await fs.writeFile(logoFile(digest(png)), png);
+  const logoData = `data:image/png;base64,${png.toString("base64")}`;
+  const signatureBytes = await sharp({ create: { width: 40, height: 16, channels: 4, background: "#ff0000" } }).png().toBuffer();
+  const signatureData = `data:image/png;base64,${signatureBytes.toString("base64")}`;
+  const html = await buildUnsignedContractPreview(`<img src="${logoData}"><img src="${signatureData}"><img src="{{signature}}">`, "en", null);
+  const dom = new JSDOM(html);
+  try {
+    assert.equal(dom.window.document.images.length, 1);
+    const emitted = Buffer.from(dom.window.document.images[0].getAttribute("src")!.split(",")[1], "base64");
+    assert.deepEqual(await sharp(emitted).raw().toBuffer(), await sharp(png).raw().toBuffer());
+    assert.ok(!html.includes(signatureData));
+  } finally { dom.window.close(); }
+  // A matching URL/hash declaration alone must never authorize the input bytes.
+  await fs.unlink(logoFile(digest(png)));
+  await assert.rejects(buildUnsignedContractPreview(`<img src="${logoData}">`, "en", null), /contract_logo_capture_failed/);
+});
+
+test("embedded PNG with no exact current public-logo allowlist entry remains omitted", async () => {
+  const logoData = `data:image/png;base64,${png.toString("base64")}`;
+  process.env.CONTRACT_PDF_TRUSTED_LOGO_URLS = JSON.stringify([logoUrl(digest(png)).replace(origin, "https://other.example.test")]);
+  const open = mock.method(ObjectStorageService.prototype, "getObjectEntityFile", async () => { throw new Error("STORAGE_FORBIDDEN"); });
+  const html = await buildUnsignedContractPreview(`<img src="${logoData}">`, "en", null);
+  const dom = new JSDOM(html);
+  try { assert.equal(dom.window.document.images.length, 0); assert.equal(open.mock.callCount(), 0); }
+  finally { dom.window.close(); }
+});
+
+test("unsigned preview retains distinct approved profile and inline logos, deduplicating repeated sources", linuxOffline, async () => {
+  const second = await sharp({ create: { width: 40, height: 16, channels: 4, background: "#ffffff" } }).png().toBuffer();
+  const url = logoUrl(digest(png)), whiteUrl = logoUrl(digest(second));
+  process.env.CONTRACT_PDF_TRUSTED_LOGO_URLS = JSON.stringify([url, whiteUrl]);
+  await fs.writeFile(logoFile(digest(png)), png); await fs.writeFile(logoFile(digest(second)), second);
+  const resolve = ObjectStorageService.prototype.getObjectEntityFile;
+  const opened: string[] = [];
+  mock.method(ObjectStorageService.prototype, "getObjectEntityFile", async function (key, options) {
+    opened.push(key); return resolve.call(this, key, options);
+  });
+  const html = await buildUnsignedContractPreview(`<div style="background:#143591"><img src="${whiteUrl}"><img src="${whiteUrl}"></div>`, "en", { logoUrl: url });
+  const dom = new JSDOM(html);
+  try {
+    assert.equal(dom.window.document.images.length, 3);
+    assert.equal(new Set(Array.from(dom.window.document.images, image => image.src)).size, 2);
+    assert.equal(opened.length, 2);
+    assert.doesNotMatch(html, /IMAGE OMITTED|src="https:/);
+  } finally { dom.window.close(); }
+});
+
+test("unsigned preview never reads arbitrary remote, private or embedded signature images", async () => {
+  const privateUrl = `${origin}/api/storage/objects/signatures/real.png`;
+  const remoteUrl = "https://trusted.example.test/logo.png";
+  process.env.CONTRACT_PDF_TRUSTED_LOGO_URLS = JSON.stringify([privateUrl, remoteUrl]);
+  process.env.ALLOW_LIVE_INTEGRATIONS = "true";
+  const open = mock.method(ObjectStorageService.prototype, "getObjectEntityFile", async () => { throw new Error("PRIVATE_STORAGE_FORBIDDEN"); });
+  const html = await buildUnsignedContractPreview(`<img src="${privateUrl}"><img src="${remoteUrl}"><img src="data:image/png;base64,${png.toString("base64")}">`, "en", null);
+  const dom = new JSDOM(html);
+  try { assert.equal(dom.window.document.images.length, 0); assert.equal(open.mock.callCount(), 0); }
+  finally { dom.window.close(); }
+});
+
+test("unsigned preview bounds unique logos before any storage reads", async () => {
+  const urls = Array.from({ length: 5 }, (_, index) => logoUrl(String(index).repeat(64)));
+  process.env.CONTRACT_PDF_TRUSTED_LOGO_URLS = JSON.stringify(urls);
+  const open = mock.method(ObjectStorageService.prototype, "getObjectEntityFile", async () => { throw new Error("STORAGE_FORBIDDEN"); });
+  await assert.rejects(buildUnsignedContractPreview(urls.map(url => `<img src="${url}">`).join(""), "en", null), /preview_template_too_complex/);
+  assert.equal(open.mock.callCount(), 0);
+});
+
+test("unsigned preview bounds repeated logo expansion before serializing an oversized document", linuxOffline, async () => {
+  const large = await sharp({ create: { width: 1024, height: 1024, channels: 4, background: "#ffffff" } }).png().toBuffer();
+  const url = logoUrl(digest(large)); allow(url);
+  await fs.writeFile(logoFile(digest(large)), large);
+  await assert.rejects(buildUnsignedContractPreview(`<img src="${url}">`.repeat(1000), "en", null), /preview_html_too_large/);
 });
 
 test("empty trust set, another origin, private/signature namespaces and non-addressed paths never open storage", async () => {

@@ -11,8 +11,9 @@ Yeni `POST /api/contract-templates/:id/unsigned-preview` yalnız aktif `admin`/`
 ## Sınırlar
 
 - Kayıtlı şablon ve gerekiyorsa marka profili yalnız okunur. Agent/signing-session/signed-contract kaydı, audit delili, dosya veya e-posta oluşturulmaz.
-- Tüm değişkenler sentetik TEST değerleriyle doldurulur. Şirket imzası dahil gerçek imza verisi çıktıya konmaz. Şablondaki sabit resimler de yalnız kesin eşleşen, önceden izin verilmiş ve yerel public depodan doğrulanmış logo dışında kaldırılır.
+- Tüm değişkenler sentetik TEST değerleriyle doldurulur. Şirket imzası dahil gerçek imza verisi çıktıya konmaz. Şablondaki sabit resimler de yalnız kesin eşleşen, önceden izin verilmiş ve yerel public depodan doğrulanmış logo dışında kaldırılır. Profil ve gövde logoları farklı olabilir. Gövdeye gömülü PNG yalnız kendi byte SHA-256 değeri exact allowlist'teki aynı-origin public logo anahtarıyla eşleşip o nesne ayrıca depodan doğrulanırsa kabul edilir; salt data URL veya benzer dosya adı yeterli değildir.
 - Logo için mevcut content-addressed public storage yolu kullanılır. `localOnly` seçeneği açık entegrasyon ayarında bile uzak URL isteğini engeller. Linux descriptor-path, hash, MIME ve byte sınırları korunur.
+- En fazla dört farklı doğrulanmış logo kaynağı tek sefer okunur; tekrarlı görseller aynı yakalamayı kullanır. Data URL büyümesi her eklemede 2 MiB sınırına karşı kontrol edilir, büyük belge önce oluşturulup sonra reddedilmez.
 - HTML, mevcut sanitizer/renderTemplate/branding/documentShell üzerinden geçer; iframe scripts/same-origin izni içermez. HTML belgesi kendi dar CSP yanıtını taşır; global yönetici CSP'si değiştirilmez. CSP ve bağlantı temizliği dış istekleri engeller.
 - PDF mevcut Chromium ayarlarını ve ağ engelini kullanır; delil sayfası eklemez. Her sayfaya HTML/CSS'in gizleyemeyeceği imzasız TEST filigranı sonradan çizilir.
 - Şablon 512 KiB, HTML 2 MiB, PDF 10 MiB/30 sayfa ile sınırlı; Chromium başlatma/render süresi 30 saniye bütçelidir ve hata/zaman aşımında kapatılır.
@@ -38,6 +39,10 @@ Sentetik görsel/PDF kanıtları yerel `uat-evidence/2026-11-25/unsigned-preview
 ### Kısıtlı Linux konteyneri için test düzeltmesi
 
 `3b06bf8f` ürün adayı Linux'ta gerçek PDF üretimini geçerken, ayrı screenshot test tarayıcısının varsayılan çok süreçli açılışı konteynerin 128 PID sınırına takıldı. Yalnız `test-contract-unsigned-preview-browser.ts` içindeki bu tarayıcı, üretim render yolundaki `--single-process`, `--no-zygote`, `--disable-gpu` bayraklarını kullanacak şekilde düzeltildi. Ürün kodu ve konteyner kaynak sınırları değiştirilmedi. Güncel test Windows/Chrome'da EN/TR/AR için PASS; aynı üç bayrağı ekleyen ayrı bağlanmış Linux betiği de aynı ürün imajında PASS oldu. Linux kanıtı dağıtım kaydındaki imaj ve gerçekten çalıştırılan betik SHA-256 çiftiyle değerlendirilmelidir; yerel betikle byte eşliği iddia edilmez.
+
+### UAT ile bulunan gömülü logo eksikliği
+
+`99928f64` staging UAT'sinde CSS çalıştı; EN v6 şablonunun gövdesine gömülü public logo ise profil logosuyla aynı mekanizmadan gelmediği için kaldırılıyordu. Salt-okunur incelemede bu PNG'nin hash'i zaten izin verilmiş managed-public nesnesiyle eşleşti. Yukarıdaki exact hash + mevcut yerel nesne doğrulaması eklendi; taslak HTML veya imzalı kayıt değiştirilmedi. `test-contract-local-logo.ts` içine inline-only/embedded-hash/iki logo/dedup/diğer origin/özel görsel/sınır testleri eklendi. Linux descriptor doğrulaması Windows'ta atlanır; Linux pozitif testleri ve gerçek staging logo/PDF görünümü ayrı geçiş kanıtıdır.
 
 ## Geri dönüş
 
