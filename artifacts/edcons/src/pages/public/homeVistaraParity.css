@@ -289,3 +289,140 @@
   .home-future-page .home-hero-photo-2,
   .home-future-page .home-hero-photo-3 { animation: none; }
 }
+
+/* Post-deploy UI QA -----------------------------------------------------
+ * The reference composition in cmsEditorial.css intentionally used fixed
+ * scene heights. Real CMS copy and catalogue media vary, so those minimums
+ * created empty viewport-sized bands between otherwise complete sections.
+ * Keep the visual language, but let content determine each scene height.
+ */
+.home-future-page .home-future-hero {
+  min-height: 720px;
+}
+.home-future-page .home-future-hero-grid {
+  min-height: 640px;
+  padding-top: 88px !important;
+  padding-bottom: 142px !important;
+}
+.home-future-page .home-hero-visual {
+  right: 0;
+  width: 56%;
+}
+.home-future-page .home-hero-photo-2 { inset-inline-end: 16%; }
+.home-future-page .home-hero-photo-3 { inset-inline-start: 14%; }
+.home-future-page .home-hero-review-card {
+  right: 4%;
+  bottom: 8%;
+}
+
+.home-future-page .home-proof-rail,
+.home-future-page .home-bento-section,
+.home-future-page .home-offer-section,
+.home-future-page .home-timeline,
+.home-future-page .home-why-section,
+.home-future-page .home-proof-stories,
+.home-future-page .home-support-team,
+.home-future-page [data-cms-block="faq"],
+.home-future-page .home-university-wall,
+.home-future-page .home-journal-section {
+  min-height: 0;
+}
+.home-future-page .home-proof-rail { padding: 64px 20px 68px; }
+.home-future-page .home-about-layout { min-height: 0; gap: 64px; }
+.home-future-page .home-about-visual { min-height: 500px; }
+.home-future-page .home-bento-section { padding: 68px 0 72px; }
+.home-future-page .home-bento-card,
+.home-future-page .home-bento-card:first-child { min-height: 440px; }
+.home-future-page .home-offer-section { padding: 64px 20px; }
+.home-future-page .home-timeline { padding: 68px 20px 72px; }
+.home-future-page .home-timeline-step,
+.home-future-page .home-timeline-step:nth-child(2),
+.home-future-page .home-timeline-step:nth-child(3) { min-height: 300px; }
+.home-future-page .home-why-section { padding: 72px 20px 76px; }
+.home-future-page .home-why-visual { min-height: 560px; }
+.home-future-page .home-live-catalog { padding-block: 64px !important; }
+.home-future-page .home-proof-stories { padding-block: 68px 72px !important; }
+.home-future-page .home-proof-stories article { min-height: 270px; }
+.home-future-page .home-support-team { padding-block: 72px; }
+.home-future-page [data-cms-block="faq"] { padding-block: 72px; }
+.home-future-page [data-cms-block="faq"] > section::before { min-height: 360px; }
+.home-future-page .home-university-wall { padding-block: 72px 76px; }
+.home-future-page .home-journal-section { padding-block: 68px 72px; }
+
+/* Do not hide complete sections while the user is already scrolling them.
+ * Hover, image zoom and the small destination-pin motion remain available. */
+.home-future-page .home-motion-ready > .cms-editorial-block,
+.home-future-page .home-motion-ready > .cms-editorial-block.home-reveal-visible {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+.home-future-page .home-motion-ready > .cms-editorial-block.home-reveal-visible :is(.home-bento-card,.home-catalog-card,.home-timeline-step,.home-pathways article) {
+  animation: none;
+}
+
+@media (max-width: 1100px) {
+  .home-future-page .home-future-hero { min-height: 700px; }
+  .home-future-page .home-future-hero-grid { min-height: 620px; }
+  .home-future-page .home-hero-visual { right: -4%; width: 58%; }
+}
+
+@media (max-width: 760px) {
+  .home-future-page .home-future-hero { min-height: 0; }
+  .home-future-page .home-future-hero-grid { padding: 56px 18px 0 !important; }
+  .home-future-page .home-future-hero-copy h1 {
+    max-width: 10ch;
+    font-size: clamp(42px, 12vw, 58px) !important;
+    line-height: 1 !important;
+  }
+  .home-future-page .home-future-hero-copy .cms-action-row { margin-top: 28px; }
+  .home-future-page .home-future-hero-copy .cms-action-row a {
+    min-height: 50px;
+    padding-inline: 22px !important;
+  }
+  .home-future-page .home-hero-visual {
+    right: auto;
+    width: calc(100% + 36px);
+    height: 360px;
+    margin: 30px -18px 0;
+  }
+  .home-future-page .home-hero-photo-2 { inset: 17% 16px auto auto; }
+  .home-future-page .home-hero-photo-3 { inset: 55% auto auto 16px; }
+  .home-future-page .home-hero-review-card {
+    right: 14px;
+    bottom: 14px;
+    min-width: 0;
+    width: min(270px, calc(100% - 28px));
+  }
+  .home-future-page .home-hero-service-strip { grid-template-columns: 1fr; }
+  .home-future-page .home-hero-service-strip article,
+  .home-future-page .home-hero-service-strip article:first-child,
+  .home-future-page .home-hero-service-strip article:last-child {
+    min-height: 92px;
+    grid-template-columns: 42px minmax(0,1fr);
+    padding: 15px 18px;
+    border-right: 0 !important;
+  }
+  .home-future-page .home-proof-rail,
+  .home-future-page .home-bento-section,
+  .home-future-page .home-offer-section,
+  .home-future-page .home-timeline,
+  .home-future-page .home-why-section,
+  .home-future-page .home-proof-stories,
+  .home-future-page .home-support-team,
+  .home-future-page [data-cms-block="faq"],
+  .home-future-page .home-university-wall,
+  .home-future-page .home-journal-section { padding-block: 52px; }
+  .home-future-page .home-about-layout { gap: 32px; }
+  .home-future-page .home-about-visual { min-height: 360px; }
+  .home-future-page .home-bento-card,
+  .home-future-page .home-bento-card:first-child { min-height: 0; }
+  .home-future-page .home-service-card-media { height: 190px; }
+  .home-future-page .home-offer-visual { min-height: 390px; }
+  .home-future-page .home-timeline-step,
+  .home-future-page .home-timeline-step:nth-child(2),
+  .home-future-page .home-timeline-step:nth-child(3) { min-height: 0; }
+  .home-future-page .home-why-visual { min-height: 380px; }
+  .home-future-page .home-proof-stories article { min-height: 0; }
+  .home-future-page [data-cms-block="faq"] > section::before { min-height: 240px; }
+}
