@@ -85,7 +85,11 @@ try {
     assert.equal((await pool.query(`select count(*)::int as count from public.${table}`)).rows[0].count, 0, `Database not empty: ${table}`);
   }
   const playwright = await dependency("playwright-core");
-  browser = await playwright.chromium.launch({ executablePath: "/usr/bin/chromium", headless: true,
+  // createRequire.resolve selects the package's CommonJS entry. Dynamic import
+  // may expose its exports only below default; do not rely on CJS named inference.
+  const chromium = playwright.chromium ?? playwright.default?.chromium;
+  assert.equal(typeof chromium?.launch, "function", "Candidate playwright-core Chromium export unavailable");
+  browser = await chromium.launch({ executablePath: "/usr/bin/chromium", headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--single-process", "--no-zygote",
       "--disable-gpu", "--disable-software-rasterizer", "--disable-extensions", "--disable-background-networking"] });
   const page = await browser.newPage();
@@ -131,9 +135,11 @@ try {
     fixtures[name] = { session, signed, token };
   }
   const { default: express } = await dependency("express");
+  assert.equal(typeof express, "function", "Candidate Express default export unavailable");
   const adminRouter = (await source("routes/contracts.ts")).default;
   const agentRouter = (await source("routes/agentOnboarding.ts")).default;
   const publicRouter = (await source("routes/publicSigning.ts")).default;
+  for (const router of [adminRouter, agentRouter, publicRouter]) assert.equal(typeof router, "function", "Candidate router default export unavailable");
   const app = express();
   app.use((req: any, res: any, next: any) => {
     if (req.method !== "GET") return res.status(405).json({ error: "GET_ONLY_TEST_HARNESS" });
