@@ -451,3 +451,191 @@
   .home-future-page .home-proof-stories article { min-height: 0; }
   .home-future-page [data-cms-block="faq"] > section::before { min-height: 240px; }
 }
+
+/* Full-bleed homepage scene contract ------------------------------------
+ * The shared CMS renderer deliberately constrains every direct section to
+ * `calc(100% - 64px)`. That is appropriate for article pages, but on the
+ * managed homepage it left alternating 32px gutters around every coloured
+ * scene. Keep backgrounds edge-to-edge and constrain only the content
+ * inside each scene to one consistent stage width.
+ */
+.home-future-page {
+  --home-stage-max: 1440px;
+  --home-stage-gutter: clamp(20px, 4vw, 64px);
+}
+
+.home-future-page .home-motion-ready > .cms-editorial-block {
+  overflow: clip;
+}
+
+.home-future-page .home-motion-ready > .cms-editorial-block > :is(
+  .home-proof-rail,
+  .home-bento-section,
+  .home-offer-section,
+  .home-timeline,
+  .home-why-section,
+  .home-live-catalog,
+  .home-proof-stories,
+  .home-support-team,
+  .home-university-wall,
+  .home-journal-section,
+  .home-future-cta
+) {
+  width: 100% !important;
+  max-width: none !important;
+  margin-inline: 0 !important;
+}
+
+.home-future-page .home-proof-rail {
+  margin-top: 0 !important;
+  padding-inline: var(--home-stage-gutter) !important;
+}
+.home-future-page .home-about-layout {
+  width: min(100%, var(--home-stage-max));
+  margin-inline: auto;
+}
+
+.home-future-page .home-bento-section > div,
+.home-future-page .home-timeline > div {
+  width: min(calc(100% - (var(--home-stage-gutter) * 2)), var(--home-stage-max));
+  max-width: none !important;
+  margin-inline: auto;
+  padding-inline: 0 !important;
+}
+
+.home-future-page .home-offer-section,
+.home-future-page .home-why-section,
+.home-future-page .home-support-team,
+.home-future-page .home-university-wall {
+  padding-inline: var(--home-stage-gutter) !important;
+}
+.home-future-page :is(.home-offer-inner, .home-why-inner, .home-support-team-inner) {
+  width: min(100%, var(--home-stage-max));
+  max-width: none;
+  margin-inline: auto;
+}
+
+.home-future-page .home-live-catalog {
+  padding-inline: var(--home-stage-gutter) !important;
+  background: #fff;
+}
+.home-future-page .home-live-catalog > * {
+  width: min(100%, var(--home-stage-max));
+  margin-inline: auto;
+}
+
+.home-future-page .home-proof-stories,
+.home-future-page .home-journal-section {
+  padding-inline: max(var(--home-stage-gutter), calc((100% - var(--home-stage-max)) / 2)) !important;
+}
+
+.home-future-page .home-proof-stories > :is(.home-section-kicker, h2, p) {
+  margin-inline: 0 !important;
+  text-align: start !important;
+}
+.home-future-page .home-proof-stories > h2 {
+  max-width: 18ch;
+  margin-top: 18px;
+}
+.home-future-page .home-proof-stories > p:not(.home-section-kicker) {
+  max-width: 68ch;
+  margin-top: 18px;
+}
+.home-future-page .home-proof-stories > .cms-responsive-grid {
+  margin-top: 38px;
+}
+
+.home-future-page :is(.home-support-team, .home-university-wall) .home-section-kicker {
+  color: var(--vistara-blue) !important;
+  background: #fff !important;
+}
+
+.home-future-page [data-cms-block="faq"] > section {
+  width: min(calc(100% - (var(--home-stage-gutter) * 2)), var(--home-stage-max));
+  max-width: none;
+  margin-inline: auto;
+  grid-template-columns: minmax(340px, .9fr) minmax(0, 1.1fr);
+  grid-template-rows: auto auto auto;
+  align-items: start;
+  column-gap: clamp(36px, 5vw, 72px);
+  row-gap: 16px;
+  padding: 0;
+}
+.home-future-page [data-cms-block="faq"] > section > h2 {
+  grid-column: 1;
+  grid-row: 1;
+  max-width: 13ch;
+  font-size: clamp(40px, 4.2vw, 58px);
+  line-height: 1.04;
+}
+.home-future-page [data-cms-block="faq"] > section > p {
+  grid-column: 1;
+  grid-row: 2;
+  max-width: 48ch;
+  margin: 0;
+  line-height: 1.7;
+}
+.home-future-page [data-cms-block="faq"] > section::before {
+  grid-column: 1;
+  grid-row: 3;
+  min-height: 270px;
+  margin-top: 18px;
+}
+.home-future-page [data-cms-block="faq"] > section > div {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  width: 100%;
+  margin-top: 0 !important;
+}
+
+.home-future-page .home-university-grid {
+  width: min(100%, var(--home-stage-max));
+}
+
+.public-cms-page.home-future-page [data-cms-block="cta_banner"] > .home-future-cta {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding-inline: max(var(--home-stage-gutter), calc((100% - var(--home-stage-max)) / 2)) !important;
+}
+
+@media (max-width: 760px) {
+  .home-future-page {
+    --home-stage-gutter: 18px;
+  }
+
+  .home-future-page .home-proof-rail,
+  .home-future-page .home-offer-section,
+  .home-future-page .home-timeline,
+  .home-future-page .home-why-section,
+  .home-future-page .home-live-catalog,
+  .home-future-page .home-proof-stories,
+  .home-future-page .home-support-team,
+  .home-future-page .home-university-wall,
+  .home-future-page .home-journal-section {
+    padding-inline: var(--home-stage-gutter) !important;
+  }
+
+  .home-future-page .home-bento-section > div,
+  .home-future-page .home-timeline > div,
+  .home-future-page [data-cms-block="faq"] > section {
+    width: calc(100% - (var(--home-stage-gutter) * 2));
+  }
+
+  .home-future-page [data-cms-block="faq"] > section {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    row-gap: 18px;
+  }
+  .home-future-page [data-cms-block="faq"] > section > h2,
+  .home-future-page [data-cms-block="faq"] > section > p,
+  .home-future-page [data-cms-block="faq"] > section::before,
+  .home-future-page [data-cms-block="faq"] > section > div {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .home-future-page [data-cms-block="faq"] > section::before {
+    min-height: 220px;
+    margin-top: 4px;
+  }
+}
