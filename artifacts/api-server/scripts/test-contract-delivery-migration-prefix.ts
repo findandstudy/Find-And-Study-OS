@@ -19,13 +19,26 @@ test('fresh exact Apply0000-0065 + attested0066 + prepared0067, migration replay
   try{
     await client.connect();assert.equal((await client.query("SELECT count(*)::int AS n FROM pg_tables WHERE schemaname='public'")).rows[0].n,0);
     assert.equal((await client.query('SELECT host(inet_server_addr()) AS address')).rows[0].address,'127.0.0.1');
-    const journal=JSON.parse(await readFile(path.join(source,'meta/_journal.json'),'utf8'));assert.equal(journal.entries.length,66);
+    const sourceJournal=await readFile(path.join(source,'meta/_journal.json'));
+    const journal=JSON.parse(sourceJournal.toString('utf8'));
+    assert.ok(journal.entries.length===66||journal.entries.length===67,'Only the reviewed Apply66 base or attested Apply67 source is allowed');
+    const expected0066={idx:66,version:'7',when:1791040178940,tag:'0066_education_country',breakpoints:true};
+    const expected0066Hash='72747e384a9b6ce96c1f72947cfbdf83808310ab0904a528cc38e7d7c93c8f52';
+    const hasSource0066=journal.entries.length===67;
+    if(hasSource0066)assert.deepEqual(journal.entries[66],expected0066);
+    else assert.ok(process.env.APPLY_0066_SQL_PATH,'Apply66 requires the explicit attested 0066 SQL file');
+    for(const [index,entry] of journal.entries.entries())assert.equal(entry.idx,index);
     await mkdir(path.join(temp,'meta'));
     for(const entry of journal.entries)await copyFile(path.join(source,`${entry.tag}.sql`),path.join(temp,`${entry.tag}.sql`));
-    const live0066=await readFile(process.env.APPLY_0066_SQL_PATH||'');
-    assert.equal(createHash('sha256').update(live0066).digest('hex'),'72747e384a9b6ce96c1f72947cfbdf83808310ab0904a528cc38e7d7c93c8f52');
+    const live0066=await readFile(hasSource0066?path.join(source,'0066_education_country.sql'):(process.env.APPLY_0066_SQL_PATH||''));
+    assert.equal(createHash('sha256').update(live0066).digest('hex'),expected0066Hash);
+    if(hasSource0066&&process.env.APPLY_0066_SQL_PATH){
+      const independentlyAttested0066=await readFile(process.env.APPLY_0066_SQL_PATH);
+      assert.equal(createHash('sha256').update(independentlyAttested0066).digest('hex'),expected0066Hash);
+      assert.deepEqual(live0066,independentlyAttested0066);
+    }
     await writeFile(path.join(temp,'0066_education_country.sql'),live0066);
-    journal.entries.push({idx:66,version:'7',when:1791040178940,tag:'0066_education_country',breakpoints:true});
+    if(!hasSource0066)journal.entries.push(expected0066);
     await writeFile(path.join(temp,'meta/_journal.json'),JSON.stringify(journal));
     const db=drizzle(client);await migrate(db,{migrationsFolder:temp});
     const prefix=(await client.query('SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY id')).rows;
@@ -37,8 +50,11 @@ test('fresh exact Apply0000-0065 + attested0066 + prepared0067, migration replay
     assert.deepEqual((await client.query('SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY id LIMIT 67')).rows,prefix);
     assert.equal((await client.query('SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations')).rows[0].n,68);
     assert.equal((await client.query('SELECT count(*)::int AS n FROM signed_contract_deliveries')).rows[0].n,0);
+    const migrated=(await client.query('SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY id')).rows;
     await migrate(db,{migrationsFolder:temp});
     assert.equal((await client.query('SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations')).rows[0].n,68);
     assert.equal((await client.query('SELECT count(*)::int AS n FROM signed_contract_deliveries')).rows[0].n,0);
+    assert.deepEqual((await client.query('SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY id')).rows,migrated);
+    assert.deepEqual(await readFile(path.join(source,'meta/_journal.json')),sourceJournal);
   }finally{await client.end();assert.equal(path.dirname(temp),tmpdir());assert.ok(path.basename(temp).startsWith('fas-contract-prefix-'));await rm(temp,{recursive:true,force:true});}
 });
