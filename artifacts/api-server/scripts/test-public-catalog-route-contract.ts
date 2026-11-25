@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
+import ts from "typescript";
 import {
   PUBLIC_CATALOG_RELATED_LIMIT,
   PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT,
@@ -141,8 +143,6 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(destinations, /readPublishedLocalizedEntities/);
   assert.match(destinations, /\.limit\(64\)/);
   assert.match(destinations, /PUBLIC_DESTINATION_TRANSLATION_NOT_PUBLISHED/);
-  assert.match(destinations, /readPublishedDetailHeroImageUrls\("city", cityCandidates\.map\(\(city\) => city\.id\), locale\)/);
-  assert.match(destinations, /cardHeroImageUrl: cityHeroImageUrls\.get\(city\.id\) \?\? null/);
   assert.match(detailContent, /readRawHeroSrc/);
   assert.match(destinations, /contentPolicy/);
   assert.doesNotMatch(destinations, /\.limit\(50\)/);
@@ -157,7 +157,8 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(publicWeb, /PUBLIC_PAGE_NOT_FOUND/);
   assert.match(websiteAdmin, /translationsJson: page\.translationsJson/);
   assert.match(websiteAdmin, /updates\.status = "draft"/);
-  assert.match(websiteAdmin, /translationsJson: req\.body\.translations \|\| \{\}, status: "draft", publishedAt: null/);
+  assert.match(websiteAdmin, /const translationsJson = enrichWebsiteTranslationSeo\(req\.body\.translations \|\| \{\}, current\.translationsJson, current\.title\)/);
+  assert.match(websiteAdmin, /\.set\(\{ translationsJson, status: "draft", publishedAt: null \}\)/);
   assert.match(websiteAdmin, /"catalog_grid"/);
   assert.match(websiteAdmin, /invalidatePublicCatalogRenderCache\(\{ entityType: "page"/);
   assert.match(websiteAdmin, /onMutation\?: \(id: number\) => void/);
@@ -171,18 +172,86 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(translationQueue, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/);
   assert.match(translationQueue, /invalidatePublicWebDiscoveryCache\(\)/);
   const countCalls = (source: string, pattern: RegExp) => (source.match(pattern) || []).length;
-  assert.equal(
-    countCalls(catalogAdmin, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/g),
-    countCalls(catalogAdmin, /invalidatePublicWebDiscoveryCache\(\)/g),
-  );
-  assert.equal(
-    countCalls(universitiesAdmin, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/g),
-    countCalls(universitiesAdmin, /invalidatePublicWebDiscoveryCache\(\)/g),
-  );
+  // Weather/external facts affect rendered content, not route identities or
+  // published sitemap records. Every other catalog writer must invalidate both.
+  const renderOnlyRoutes = new Set([
+    "post /catalog/weather/refresh-due",
+    "put /cities/:id/external-facts",
+    "post /cities/:id/weather/refresh",
+  ]);
+  const observedRenderOnly = new Set<string>();
+  for (const source of [catalogAdmin, universitiesAdmin]) {
+    const ast = ts.createSourceFile("catalog-route.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    let checkedRenderCalls = 0;
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+          && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === "router"
+          && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
+        const routeKey = `${node.expression.name.text} ${node.arguments[0].text}`;
+        const body = node.getText(ast);
+        const renderCalls = countCalls(body, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/g);
+        const discoveryCalls = countCalls(body, /invalidatePublicWebDiscoveryCache\(\)/g);
+        checkedRenderCalls += renderCalls;
+        if (renderCalls && renderOnlyRoutes.has(routeKey)) {
+          observedRenderOnly.add(routeKey);
+        } else if (renderCalls) {
+          assert.equal(discoveryCalls, renderCalls, `${routeKey} must refresh public discovery with rendered content`);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(ast);
+    assert.equal(checkedRenderCalls, countCalls(source, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/g));
+  }
+  assert.deepEqual(observedRenderOnly, renderOnlyRoutes);
   assert.equal(
     countCalls(translationQueue, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/g),
     countCalls(translationQueue, /invalidatePublicWebDiscoveryCache\(\)/g),
   );
   assert.match(exampleEnvironment, /^PUBLIC_WEB_INTERNAL_LINK_MODE=off$/m);
   assert.doesNotMatch(publicWeb, /authorEmail|commission|serviceFee|contactPerson/i);
+});
+
+test("destination city cards use the canonical render model hero with a safe missing-content fallback", async () => {
+  const source = read("../src/routes/destinations.ts");
+  const ast = ts.createSourceFile("destinations.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const projections: ts.Expression[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === "cities"
+        && node.initializer && node.initializer.getText(ast).includes("cityCards.map")) {
+      projections.push(node.initializer);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(ast);
+  assert.equal(projections.length, 1, "the destination must have one city-card projection");
+  const code = ts.transpileModule(`(async () => (${projections[0].getText(ast)}))`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
+  }).outputText;
+  const city = { id: 7, name: "TEST City", canonicalPath: "/en/cities/test-city-7", universityCount: 2 };
+  const hero = { sections: [{ key: "hero", images: [{ src: " https://example.test/city.jpg " }] }] };
+  for (const scenario of [
+    { kind: "city_detail", editorial: hero, routeMatches: true, expected: "https://example.test/city.jpg" },
+    { kind: "city_detail", editorial: { sections: [] }, routeMatches: true, expected: null },
+    { kind: "university_detail", editorial: hero, routeMatches: true, expected: null },
+    { kind: null, editorial: null, routeMatches: true, expected: null },
+    { kind: null, editorial: null, routeMatches: false, expected: null },
+  ]) {
+    const matchedRoute = { entityType: "city", id: 7, locale: "en" };
+    const lookups: unknown[] = [];
+    const project = runInNewContext(code, {
+      cityCards: [city],
+      matchPublicCatalogRenderPath: (path: string) => {
+        assert.equal(path, city.canonicalPath);
+        return scenario.routeMatches ? matchedRoute : null;
+      },
+      getPublicCatalogRenderModel: async (route: unknown) => {
+        assert.equal(route, matchedRoute);
+        lookups.push(route);
+        return scenario.kind ? { value: { kind: scenario.kind, editorial: scenario.editorial } } : null;
+      },
+    }, { timeout: 1_000 }) as () => Promise<unknown>;
+    assert.deepEqual(structuredClone(await project()), [{ ...city, cardHeroImageUrl: scenario.expected }]);
+    assert.equal(lookups.length, scenario.routeMatches ? 1 : 0);
+  }
 });

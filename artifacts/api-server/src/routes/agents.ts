@@ -369,7 +369,7 @@ async function loadAgentCatalog(visible: number[] | null): Promise<AgentCatalog>
       language: contractTemplatesTable.language,
       entityType: contractTemplatesTable.entityType,
     }).from(contractTemplatesTable)
-      .where(and(isNull(contractTemplatesTable.deletedAt), eq(contractTemplatesTable.isActive, true)))
+      .where(and(isNull(contractTemplatesTable.deletedAt), eq(contractTemplatesTable.isActive, true), eq(contractTemplatesTable.publicationStatus, "published")))
       .orderBy(contractTemplatesTable.name),
     db.select({
       id: agentsTable.id,
@@ -513,16 +513,17 @@ router.post(
             throw new Error(`Parent agent ID ${values.parentAgentId} not found or out of scope`);
           }
         }
-        // Contract template must exist, be active and not deleted (matches the
+        // Contract template must be published, active and not deleted (matches the
         // reference sheet shown in the template/export workbook).
         if (values.assignedContractTemplateId) {
           const [tpl] = await db.select({ id: contractTemplatesTable.id }).from(contractTemplatesTable)
             .where(and(
               eq(contractTemplatesTable.id, values.assignedContractTemplateId as number),
               eq(contractTemplatesTable.isActive, true),
+              eq(contractTemplatesTable.publicationStatus, "published"),
               isNull(contractTemplatesTable.deletedAt),
             ));
-          if (!tpl) throw new Error(`Contract template ID ${values.assignedContractTemplateId} not found, inactive, or deleted`);
+          if (!tpl) throw new Error(`Contract template ID ${values.assignedContractTemplateId} not found, inactive, unpublished, or deleted`);
         }
 
         const insertValues: any = {
@@ -1766,9 +1767,10 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
       eq(contractTemplatesTable.id, tplId),
       isNull(contractTemplatesTable.deletedAt),
       eq(contractTemplatesTable.isActive, true),
+      eq(contractTemplatesTable.publicationStatus, "published"),
     ));
     if (!tpl) {
-      res.status(404).json({ error: "Selected contract template not found or inactive" });
+      res.status(404).json({ error: "Selected contract template not found, inactive, or unpublished" });
       return;
     }
     template = tpl;

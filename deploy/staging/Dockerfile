@@ -32,6 +32,16 @@ FROM ${NODE_IMAGE} AS runtime
 ENV COREPACK_HOME=/usr/local/share/corepack
 ARG APP_UID=10042
 ARG APP_GID=10042
+# PDF rendering uses the distribution's Chromium and fonts. Install from the
+# pinned Debian base's signed repositories; never download a browser at boot.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+       ca-certificates chromium fontconfig fonts-liberation \
+       fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji \
+  && fc-cache -f \
+  && test -x /usr/bin/chromium \
+  && chromium --version \
+  && rm -rf /var/lib/apt/lists/*
 RUN install -d -o root -g root -m 0755 "${COREPACK_HOME}" \
   && corepack enable \
   && corepack prepare pnpm@10.33.2 --activate \
@@ -45,7 +55,10 @@ RUN rm -rf /app/.git /app/.github /app/test-results /app/playwright-report
 
 WORKDIR /app
 ENV NODE_ENV=production \
-    PORT=5000
+    PORT=5000 \
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium \
+    XDG_CACHE_HOME=/tmp/findandstudy-cache \
+    XDG_CONFIG_HOME=/tmp/findandstudy-config
 USER findandstudy
 EXPOSE 5000
 CMD ["node", "artifacts/api-server/dist/index.cjs"]

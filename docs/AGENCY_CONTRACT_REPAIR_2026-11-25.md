@@ -115,6 +115,49 @@ canonical şablon/logo aktarımı erişim engeli nedeniyle henüz yapılmadı.
 
 ## Canlı kurtarma ve geri dönüş
 
+### 25 Kasım VPS konsolu ile ek kanıt
+
+Konsol erişimi sağlandı. `srv2107561` üzerinde staging source HEAD'i temiz
+`977868897cc9301c7eccd47b7d6647f641827cfb`; çalışan image ID'si
+`sha256:965b6ccd77646fd87d65cbeb0ce1732ed6fd0b6ef02ec930f0cf6bbbd9535031`.
+Staging global jobs ve PDF worker false, dış entegrasyonlar false, email disabled true.
+Hem Apply hem staging konteynerinde sistem Chromium'u ve Playwright tarayıcısı yok.
+Apply'ın son 500 log satırında `browserType.launch` / `Executable doesn't exist`
+eşleşmesi 30 kez bulundu. Üretim dosyası, ayarı veya servisi değiştirilmedi.
+
+Yalnız TEST02 için salt-okunur sorgu: session 165 signed, template 48/v6, snapshot'ta
+bir style bloğu ve şirket imzası alanı var; signed contract 47'de PDF/hash/emailedAt
+yok. Bu nedenle imza kaydı ile PDF/teslimatın tamamlanması ayrı raporlanır.
+Apply'ın bağlı release klasöründe Git metadata yok; health release ID'si gerçek
+kaynak commit'ini doğrulamak için yeterli değildir.
+
+Staging'de template/brand/signed contract sayıları 0/0/0. Apply'da 49 template,
+18 aktif yayımlanmış template var. En yeni İngilizce şirket v7 taslak ve CSS'siz;
+yayımlanmış v6 CSS içeriyor. Aktarım yalnız yayımlanmış kaynakları pasif taslak
+olarak hazırlıyor; imza konfigürasyonu, signed/session/agency satırları hariçtir.
+
+Bu incelemede bulunan iki ek önkoşul giderildi: eski acente oluşturma/import/resend
+yolları taslak/silinmiş şablonları artık seçemez (10/10 test); staging Dockerfile
+Chromium ve çok dilli fontları içerir. Gerçek image gate dağıtımdan önce zorunludur.
+Yerel public branding PNG'leri için exact-origin/exact-allowlist/content-hash bağlı,
+256 KiB sınırlı ağsız logo snapshot okuması eklendi. Global entegrasyon sınırı
+değişmez. Birleşik template-selection/local-logo/assets testleri 34 PASS/1 Windows
+symlink SKIP; API TypeScript PASS.
+
+İki eski katalog testi daha deklarasyon/metin eşliği yerine mevcut gerçek parser,
+projeksiyon ve rota invalidation davranışını kontrol edecek şekilde güncellendi.
+Ürün katalog kodu değişmedi. İlgili gruplar 5/5, 72/72, 6/6, 3/3, 68/68 PASS.
+Önceden bilinen genel writer/legacy audit açıkları bu test düzeltmeleriyle kapanmaz.
+
+Staging yedeği: `/opt/findandstudy-staging/backups/agency-contract-20261125T180600Z`.
+DB dump 11.422.455 byte, SHA-256
+`95a3a6ec20f67de6194ac59defe555f77ef64550b8652962d40fb4463564973a`.
+Storage archive 16.092.083 byte, SHA-256
+`5002828f0d9e2cbcc2b72c8d6d706326cde4768921c2697a61f8b66e9cf6ffa2`.
+Network-none disposable PostgreSQL restore PASS: ledger 144 ve digest
+`e1a215c2390356b0452e8c460b15cecc`, seçilmiş aggregate sayımlar eşleşti.
+Test konteyneri kaldırıldı; staging DB'ye restore yapılmadı.
+
 Bu yama, eski `emailedAt` değerlerinin doğruluğunu geriye dönük varsaymaz.
 Eski anahtarsız outbox kaydı ile yeni anahtarlı kayıt birlikte mevcut olabileceğinden,
 canlı kurtarma öncesi TEST02 için kuyruk/SMTP receipt kontrolü gerekir. Kör resend,

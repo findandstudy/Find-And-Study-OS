@@ -95,7 +95,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/agentOnboarding.ts",
-      "sha256": "a3f71f6daa6daace004ec1df1f1bfb20e01c2888c11e43090f42b2fbbb63d37c",
+      "sha256": "f12baed5041e163813c96e66aee0b8d7458cd3f67bb58116e0a61464f482469e",
       "routeRegistrations": 14,
       "requireAuth": 14,
       "requireRole": 1,
@@ -110,7 +110,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/agents.ts",
-      "sha256": "156de9e8bcc251e656f31520c6727367efd28b9bcba5e6f93232260e3d25eecc",
+      "sha256": "de8d3b211e989649bc0b600c858ec5382ed748c5c41c4e99f0917eefd3cfa6b1",
       "routeRegistrations": 38,
       "requireAuth": 39,
       "requireRole": 33,

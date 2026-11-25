@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { parseSafeOutboundUrl, safeOutboundRequest } from "./safeOutboundRequest";
+import { readBoundedDocumentStream } from "./documentByteLimits";
 
 export type ContractLogoSnapshot = {
   sourceUrl: string;
@@ -87,6 +88,53 @@ function untilAborted<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
+/** Only operator-copied, content-addressed logos in an already public namespace. */
+function managedPublicLogo(sourceUrl: string): { objectPath: string; sha256: string } | undefined {
+  if (process.env.STORAGE_DRIVER !== "local") return;
+  const appRoot = canonicalLogoUrl(`${process.env.APP_BASE_URL?.replace(/\/$/, "") || ""}/`);
+  if (!appRoot || new URL(appRoot).pathname !== "/") return;
+  const source = new URL(sourceUrl);
+  if (source.origin !== new URL(appRoot).origin) return;
+  const match = /^\/api\/storage\/public-branding\/embed-widget\/(contract-logo-([a-f0-9]{64})\.png)$/.exec(source.pathname);
+  if (!match) return;
+  return { objectPath: `/objects/branding/embed-widget/${match[1]}`, sha256: match[2] };
+}
+
+async function readManagedPublicLogo(
+  asset: { objectPath: string; sha256: string },
+  signal: AbortSignal,
+): Promise<Buffer> {
+  const [{ ObjectStorageService }, fs, path] = await Promise.all([
+    import("./objectStorage"), import("node:fs/promises"), import("node:path"),
+  ]);
+  const file = await untilAborted(new ObjectStorageService().getObjectEntityFile(asset.objectPath, { requireCancellableRead: true }), signal);
+  const root = await untilAborted(fs.realpath(process.env.STORAGE_LOCAL_DIR || ""), signal);
+  const expected = path.resolve(root, asset.objectPath.slice("/objects/".length));
+  // The storage helper prevents root escape. Also reject aliases/symlinks into
+  // a private object elsewhere inside that root before any bytes are read.
+  if (!("localPath" in file) || file.localPath !== expected) throw new Error();
+  const stat = await untilAborted(fs.lstat(expected), signal);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size < 8 || stat.size > MAX_CONTRACT_LOGO_BYTES) throw new Error();
+  const handle = await fs.open(expected, "r");
+  try {
+    const opened = await handle.stat();
+    if (signal.aborted || !opened.isFile() || opened.nlink !== 1 || opened.dev !== stat.dev
+      || opened.ino !== stat.ino || opened.size !== stat.size) throw new Error();
+    const stream = handle.createReadStream({ start: 0, end: MAX_CONTRACT_LOGO_BYTES, autoClose: true });
+    const abortRead = () => { stream.destroy(new Error("contract_logo_capture_failed")); };
+    signal.addEventListener("abort", abortRead, { once: true });
+    if (signal.aborted) abortRead();
+    try {
+      const bytes = await readBoundedDocumentStream(stream, { maxBytes: MAX_CONTRACT_LOGO_BYTES, readTimeoutMs: CONTRACT_LOGO_TIMEOUT_MS });
+      // Derive MIME from content, never trust a mutable .ct sidecar. The copied
+      // PNG's hash is part of the exact operator-allowlisted URL.
+      if (bytes.length !== stat.size || imageMime(bytes) !== "image/png"
+        || createHash("sha256").update(bytes).digest("hex") !== asset.sha256) throw new Error();
+      return bytes;
+    } finally { signal.removeEventListener("abort", abortRead); }
+  } finally { await handle.close(); }
+}
+
 /**
  * Capture before a NEW signing session is issued. Never call this from signed
  * PDF rendering, download, regeneration or a historical-session resolver.
@@ -104,13 +152,18 @@ export async function captureContractLogoSnapshot(
     : validateTrustedUrls(options.trustedLogoUrls);
   const sourceUrl = canonicalLogoUrl(logoUrl);
   if (!sourceUrl || !trustedUrls.includes(sourceUrl)) return;
-  if (!options.request && process.env.ALLOW_LIVE_INTEGRATIONS !== "true") return;
+  const localLogo = managedPublicLogo(sourceUrl);
+  if (!localLogo && !options.request && process.env.ALLOW_LIVE_INTEGRATIONS !== "true") return;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CONTRACT_LOGO_TIMEOUT_MS);
   const request = options.request ?? safeOutboundRequest;
   try {
-    const response = await untilAborted(request(sourceUrl, {
+    const localBytes = localLogo ? await readManagedPublicLogo(localLogo, controller.signal) : undefined;
+    const response = localBytes ? {
+      ok: true, status: 200, url: sourceUrl, body: localBytes,
+      headers: { "content-type": "image/png", "content-length": String(localBytes.length) } as Record<string, string>,
+    } : await untilAborted(request(sourceUrl, {
       method: "GET",
       headers: { Accept: "image/png, image/jpeg", "Accept-Encoding": "identity" },
       allowedProtocols: ["https:"], allowedPorts: [443],

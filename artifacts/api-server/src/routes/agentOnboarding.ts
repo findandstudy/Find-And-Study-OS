@@ -2,7 +2,7 @@ import express, { Router, type IRouter, type Request, type Response, type NextFu
 import { getRateLimitIp, getClientIp } from "../lib/clientIp";
 import crypto from "crypto";
 import { db, agentsTable, usersTable, signingSessionsTable, signedContractsTable, contractTemplatesTable, settingsTable, emailVerificationCodesTable, agentApplicationsTable } from "@workspace/db";
-import { and, eq, gt, desc, ilike, or } from "drizzle-orm";
+import { and, eq, gt, desc, ilike, or, isNull } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { writeAudit } from "../lib/auditLog";
@@ -937,13 +937,27 @@ router.post("/contracts/agent/:agentId/resend-onboarding", requireAuth, requireR
   if (!templateId && agent.assignedContractTemplateId) templateId = agent.assignedContractTemplateId;
   let template: typeof contractTemplatesTable.$inferSelect | undefined;
   if (templateId) {
-    [template] = await db.select().from(contractTemplatesTable).where(eq(contractTemplatesTable.id, templateId));
+    [template] = await db.select().from(contractTemplatesTable).where(and(
+      eq(contractTemplatesTable.id, templateId),
+      eq(contractTemplatesTable.isActive, true),
+      eq(contractTemplatesTable.publicationStatus, "published"),
+      isNull(contractTemplatesTable.deletedAt),
+    ));
+    // An explicitly selected/assigned template must not silently turn into a
+    // different agreement when the selected version is no longer available.
+    if (!template) { res.status(404).json({ error: "Selected contract template is unavailable or unpublished" }); return; }
   }
   if (!template) {
     const lang = agent.preferredContractLanguage || "en";
     const entityType = agent.entityType === "individual" ? "individual" : "company";
     [template] = await db.select().from(contractTemplatesTable)
-      .where(and(eq(contractTemplatesTable.language, lang), eq(contractTemplatesTable.entityType, entityType), eq(contractTemplatesTable.isActive, true)))
+      .where(and(
+        eq(contractTemplatesTable.language, lang),
+        eq(contractTemplatesTable.entityType, entityType),
+        eq(contractTemplatesTable.isActive, true),
+        eq(contractTemplatesTable.publicationStatus, "published"),
+        isNull(contractTemplatesTable.deletedAt),
+      ))
       .orderBy(desc(contractTemplatesTable.version)).limit(1);
   }
   if (!template) { res.status(404).json({ error: "No matching contract template found" }); return; }
