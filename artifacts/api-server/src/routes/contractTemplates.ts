@@ -1,4 +1,4 @@
-import express, { Router, type IRouter } from "express";
+import express, { Router, type IRouter, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { db, contractTemplatesTable } from "@workspace/db";
 import { and, desc, eq, isNull } from "drizzle-orm";
@@ -27,13 +27,14 @@ const unsignedPreviewLimiter = rateLimit({
   message: { error: "Too many previews. Please retry in a minute." },
 });
 
-router.post("/contract-templates/:id/unsigned-preview", requireAuth, requireRole("admin", "super_admin"), requirePermission("contract_templates.view"), unsignedPreviewLimiter, async (req, res): Promise<void> => {
+async function handleUnsignedPreview(req: Request, res: Response): Promise<void> {
   res.setHeader("Cache-Control", "private, no-store");
   res.setHeader("X-Content-Type-Options", "nosniff");
   const idText = String(req.params.id);
   const id = Number(idText);
   if (!/^[1-9]\d{0,9}$/.test(idText) || !Number.isSafeInteger(id) || id > 2_147_483_647) { res.status(400).json({ error: "Invalid template id" }); return; }
-  const body = req.body;
+  const documentRequest = req.method === "GET";
+  const body = documentRequest ? { format: "html" } : req.body;
   if (!body || Array.isArray(body) || typeof body !== "object" || Object.keys(body).length !== 1
     || !["html", "pdf"].includes(body.format)) {
     res.status(400).json({ error: "Choose html or pdf. Preview accepts no personal data or agent reference." }); return;
@@ -56,6 +57,13 @@ router.post("/contract-templates/:id/unsigned-preview", requireAuth, requireRole
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="UNSIGNED-TEST-template-${id}.pdf"`);
       res.send(Buffer.from(result.bytes));
+    } else if (documentRequest) {
+      // A srcDoc frame inherits the admin SPA's style-src 'self'. A real
+      // authenticated document gets only this scoped policy; global CSP stays
+      // unchanged. No scripts, remote images, forms or navigation are allowed.
+      res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src data:; font-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'");
+      res.setHeader("Referrer-Policy", "no-referrer");
+      res.type("html").send(result.data.html);
     } else res.json({ data: result.data });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
@@ -66,7 +74,10 @@ router.post("/contract-templates/:id/unsigned-preview", requireAuth, requireRole
       res.status(503).json({ error: "The unsigned preview could not be generated. Please retry shortly." });
     }
   }
-});
+}
+
+router.post("/contract-templates/:id/unsigned-preview", requireAuth, requireRole("admin", "super_admin"), requirePermission("contract_templates.view"), unsignedPreviewLimiter, handleUnsignedPreview);
+router.get("/contract-templates/:id/unsigned-preview.html", requireAuth, requireRole("admin", "super_admin"), requirePermission("contract_templates.view"), unsignedPreviewLimiter, handleUnsignedPreview);
 
 router.get("/contract-templates", requireAuth, requirePermission("contract_templates.view"), async (req, res): Promise<void> => {
   try {

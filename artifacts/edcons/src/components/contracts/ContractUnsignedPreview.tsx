@@ -90,7 +90,7 @@ export function ContractUnsignedPreview({ template, onClose }: {
       <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900" dir="ltr">UNSIGNED TEST PREVIEW — NOT A SIGNED CONTRACT</div>
       {error && <div role="alert" className="rounded border border-destructive/30 p-3 text-sm text-destructive flex items-center gap-3"><span className="flex-1">{error}</span><Button variant="outline" size="sm" disabled={loading || downloading} onClick={() => setAttempt(value => value + 1)}><RotateCw className="h-4 w-4 me-1" />{words.retry}</Button></div>}
       {loading && <div role="status" className="flex-1 flex items-center justify-center gap-2"><Loader2 className="h-5 w-5 animate-spin" />{words.loading}</div>}
-      {!loading && html && <iframe title={words.frame} sandbox="" referrerPolicy="no-referrer" srcDoc={html} className="min-h-0 flex-1 w-full rounded border bg-slate-100" />}
+      {!loading && html && <iframe key={`${template?.id}-${attempt}`} title={words.frame} sandbox="" referrerPolicy="no-referrer" src={`${BASE_URL}/api/contract-templates/${template?.id}/unsigned-preview.html`} className="min-h-0 flex-1 w-full rounded border bg-slate-100" />}
       <DialogFooter className="mt-auto shrink-0">
         <Button variant="outline" onClick={onClose}>{words.close}</Button>
         <Button onClick={download} disabled={!html || loading || downloading}>{downloading ? <Loader2 className="h-4 w-4 me-2 animate-spin" /> : <Download className="h-4 w-4 me-2" />}{words.download}</Button>

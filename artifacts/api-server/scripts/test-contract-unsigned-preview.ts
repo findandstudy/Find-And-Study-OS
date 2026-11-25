@@ -60,6 +60,10 @@ mock.method(chromium, "launch", async (options: any) => {
 
 const { default: router } = await import("../src/routes/contractTemplates");
 const app = express();
+app.use((_req, res, next) => {
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; frame-src 'self'");
+  next();
+});
 app.use(express.json());
 app.use(cookieParser());
 app.use(csrfProtection);
@@ -83,10 +87,10 @@ const limiter = route.stack[3].handle;
 beforeEach(() => { current = template(); reads = 0; failure = null; closed = 0; lastHtml = ""; limiter.resetKey("unsigned-contract-preview"); });
 after(async () => { await new Promise<void>(resolve => server.close(() => resolve())); await pool.end(); mock.restoreAll(); });
 
-function request(body: unknown = { format: "html" }, role = "super_admin", extraHeaders: Record<string, string> = {}, id = "18") {
+function request(body: unknown = { format: "html" }, role = "super_admin", extraHeaders: Record<string, string> = {}, id = "18", method = "POST") {
   return new Promise<{ status: number; headers: http.IncomingHttpHeaders; bytes: Buffer; json: any }>((resolve, reject) => {
-    const payload = JSON.stringify(body);
-    const req = http.request({ host: "127.0.0.1", port, path: `/api/contract-templates/${id}/unsigned-preview`, method: "POST", headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload), Cookie: "csrf_token=SYNTHETIC-TEST-CSRF", "x-csrf-token": "SYNTHETIC-TEST-CSRF", ...(role ? { "x-test-role": role } : {}), ...extraHeaders } }, res => {
+    const payload = method === "GET" ? "" : JSON.stringify(body);
+    const req = http.request({ host: "127.0.0.1", port, path: `/api/contract-templates/${id}/unsigned-preview${method === "GET" ? ".html" : ""}`, method, headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload), Cookie: "csrf_token=SYNTHETIC-TEST-CSRF", "x-csrf-token": "SYNTHETIC-TEST-CSRF", ...(role ? { "x-test-role": role } : {}), ...extraHeaders } }, res => {
       const chunks: Buffer[] = [];
       res.on("data", chunk => chunks.push(chunk));
       res.on("end", () => { const bytes = Buffer.concat(chunks); resolve({ status: res.statusCode!, headers: res.headers, bytes, json: res.headers["content-type"]?.includes("json") ? JSON.parse(bytes.toString()) : undefined }); });
@@ -125,6 +129,23 @@ test("saved inactive drafts preview with synthetic data, preserved CSS, CSP and 
   assert.doesNotMatch(html, /UFJJVkFURVNJR05BVFVSRQ|src="https:|href=/);
   assert.equal(new JSDOM(html).window.document.images.length, 0);
   assert.equal(closed, 0, "HTML preview never launches Chromium");
+});
+
+test("real HTML document overrides only its own CSP and repeats all admin authorization checks", async () => {
+  for (const [role, headers, status] of [["", {}, 401], ["agent", {}, 403], ["staff", {}, 403], ["admin", { "x-test-inactive": "true" }, 403], ["admin", { "x-test-denied": "true" }, 403]] as const) {
+    assert.equal((await request({}, role, headers, "18", "GET")).status, status);
+  }
+  assert.equal(reads, 0);
+  const response = await request({}, "admin", { "x-csrf-token": "" }, "18", "GET");
+  assert.equal(response.status, 200);
+  assert.match(String(response.headers["content-type"]), /text\/html/);
+  assert.equal(response.headers["cache-control"], "private, no-store");
+  assert.equal(response.headers["content-security-policy"], "sandbox; default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src data:; font-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'");
+  assert.match(response.bytes.toString(), /\.title\{color:#143591\}/);
+  assert.match(response.bytes.toString(), /UNSIGNED TEST PREVIEW/);
+  assert.doesNotMatch(response.bytes.toString(), /UFJJVkFURVNJR05BVFVSRQ|src="https:|href=/);
+  assert.equal(closed, 0);
+  assert.match(String((await request()).headers["content-security-policy"]), /style-src 'self'/, "JSON/API response retains global policy");
 });
 
 test("preview refuses caller data, non-exact IDs and unsupported formats without reads", async () => {
