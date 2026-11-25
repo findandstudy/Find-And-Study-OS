@@ -18,7 +18,7 @@ import {
   contractNumber,
   signedContractFilename,
 } from "../src/lib/contractRenderer";
-import { REGENERATE_PDF_CACHE_RESET } from "../src/routes/contracts";
+import { MISSING_PDF_LEASE_RESET } from "../src/lib/signedContractPdfRecovery";
 
 // A real 1x1 transparent PNG (starts with the PNG magic 89 50 4E 47 0D 0A 1A 0A).
 const VALID_PNG_BASE64 =
@@ -251,31 +251,25 @@ test("signedContractFilename = <contract_number>_signed.pdf (same source as {{co
   assert.equal(signedContractFilename(25, signedAt), `${contractNumber(25, signedAt)}_signed.pdf`);
 });
 
-// --- Regenerate is status-neutral. POST /api/contracts/signed/:id/regenerate
-// clears ONLY the rendered-PDF cache fields so the background sweep re-renders
-// the PDF. It must NEVER mutate any status: signed_contracts has no status
-// column, and a signed contract's "signed" state lives on
-// signing_sessions.status, which the regenerate payload does not touch. This
-// guards the prod incident where clearing the PDF cache made an already-signed
-// agent look unsigned and re-triggered the onboarding gate/banner. ---
+// Missing-artifact recovery must preserve all signature, PDF and evidence fields.
 
-test("regenerate clears EXACTLY the three PDF-cache fields (no extras)", () => {
+test("missing-PDF recovery changes only an expired delivery lease", () => {
   assert.deepEqual(
-    Object.keys(REGENERATE_PDF_CACHE_RESET).sort(),
-    ["deliveryClaimedAt", "evidenceHash", "pdfObjectKey"],
+    Object.keys(MISSING_PDF_LEASE_RESET).sort(),
+    ["deliveryClaimedAt"],
   );
 });
 
-test("regenerate payload sets every PDF-cache field to null (cache reset, not a value write)", () => {
-  for (const v of Object.values(REGENERATE_PDF_CACHE_RESET)) {
+test("missing-PDF recovery releases only an eligible lease", () => {
+  for (const v of Object.values(MISSING_PDF_LEASE_RESET)) {
     assert.equal(v, null);
   }
 });
 
-test("regenerate payload never touches a signing-session or signed-contract status field", () => {
-  const keys = Object.keys(REGENERATE_PDF_CACHE_RESET);
+test("missing-PDF recovery preserves signed PDF, evidence and session state", () => {
+  const keys = Object.keys(MISSING_PDF_LEASE_RESET);
   // signing_sessions status fields that must never be flipped by a PDF regen.
-  for (const forbidden of ["status", "signedAt", "revokedAt", "expiresAt"]) {
+  for (const forbidden of ["status", "signedAt", "revokedAt", "expiresAt", "pdfObjectKey", "evidenceHash", "emailedAt"]) {
     assert.equal(keys.includes(forbidden), false, `regenerate must not mutate ${forbidden}`);
   }
 });

@@ -619,7 +619,8 @@ router.get("/public/sign/:token/pdf", signLimiter, async (req, res): Promise<voi
       // off the request path (no Chromium here — synchronous render was the
       // autoscale OOM root cause). Tell the client to retry shortly.
       res.setHeader("Retry-After", "30");
-      res.status(202).json({ status: "pending", message: "PDF is being generated. Please try again in a moment.", retryAfter: 30 });
+      res.setHeader("Cache-Control", "private, no-store");
+      res.status(202).json({ status: "pending", message: "The signature is recorded, but the PDF is not ready. If this persists, contact support.", retryAfter: 30 });
       return;
     }
     let normalizedPath = pdfKey;

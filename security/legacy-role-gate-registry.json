@@ -95,7 +95,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/agentOnboarding.ts",
-      "sha256": "04c44726e4f2db3e9051f9099cc04e5c93f63478af2d9d3f0c330c09dd7434fb",
+      "sha256": "a3f71f6daa6daace004ec1df1f1bfb20e01c2888c11e43090f42b2fbbb63d37c",
       "routeRegistrations": 14,
       "requireAuth": 14,
       "requireRole": 1,
@@ -110,7 +110,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/agents.ts",
-      "sha256": "844d05f7b72ceec811d9be6458ac64c618f04d8fc2c2ac248f24c01574df15ce",
+      "sha256": "156de9e8bcc251e656f31520c6727367efd28b9bcba5e6f93232260e3d25eecc",
       "routeRegistrations": 38,
       "requireAuth": 39,
       "requireRole": 33,
@@ -395,7 +395,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/contracts.ts",
-      "sha256": "e29d482351e7b1eeb509bb0cf1f9d4e8ad33d0b9a9d187d4bd093a8a855efed4",
+      "sha256": "5ee523c9f32e5c2cfbdf509fbf37ca414f4f3cd9ecf684710df7b0186a947ea5",
       "routeRegistrations": 12,
       "requireAuth": 13,
       "requireRole": 0,
@@ -980,7 +980,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/publicSigning.ts",
-      "sha256": "7f8b8579f00b5f6b2c4ef60e003c3be056a07944baf86c0632ba00c0f5973f10",
+      "sha256": "475dc9f8c9ff5c159641a0b4c6f0fa3c41a72900ac4a765ea2311b0bc991ebe1",
       "routeRegistrations": 8,
       "requireAuth": 0,
       "requireRole": 0,

@@ -2860,7 +2860,7 @@
     "titleReview": "Rivedi il contratto",
     "titleSign": "Aggiungi la tua firma",
     "signed": "Firmato",
-    "signedBody": "Una copia del PDF firmato è stata inviata alla tua email. Puoi chiudere questa finestra.",
+    "signedBody": "La firma è stata registrata. La preparazione del PDF e la consegna dell’email sono passaggi separati; questa schermata non conferma l’invio dell’email.",
     "expired": "Link scaduto",
     "expiredBody": "Questo link per la firma è scaduto. Richiederne uno nuovo.",
     "revoked": "Link revocato",
@@ -5703,11 +5703,11 @@
     "submitButton": "Imposta password"
   },
   "signedContract": {
-    "pdfPending": "Il PDF è ancora in fase di generazione. Riprova tra circa 30 secondi.",
+    "pdfPending": "Il PDF firmato non è ancora pronto. Riprova più tardi; se il problema persiste, contatta l’assistenza.",
     "pdfDownloadError": "Impossibile scaricare il PDF.",
     "download": "Scarica PDF",
-    "regenerate": "Rigenera PDF",
-    "regenerateQueued": "Rigenerazione del PDF; sarà pronto per il download in circa 30 secondi.",
+    "regenerate": "Riprova PDF mancante",
+    "regenerateQueued": "Il PDF mancante è in attesa di elaborazione. I file firmati esistenti vengono conservati.",
     "regenerateError": "Impossibile avviare la rigenerazione."
   },
   "apiTokens": {

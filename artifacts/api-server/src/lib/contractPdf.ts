@@ -131,7 +131,7 @@ const CHROMIUM_LAUNCH_ARGS = [
  * buildSignedPdf force-close the browser on a render timeout, guaranteeing
  * memory is freed even when the underlying promise is still in flight.
  */
-async function renderHtmlToPdf(browser: any, html: string): Promise<Uint8Array> {
+export async function renderContractHtmlToPdf(browser: any, html: string): Promise<Uint8Array> {
   const page = await browser.newPage();
   try {
     await page.route("**/*", (route: any) => {
@@ -145,14 +145,12 @@ async function renderHtmlToPdf(browser: any, html: string): Promise<Uint8Array> 
       // rather than trying to maintain a hostname/IP deny list in Chromium.
       return route.abort();
     });
-    try {
-      await page.setContent(html, { waitUntil: "networkidle", timeout: 15000 });
-    } catch {
-      // A slow or blocked external asset can prevent networkidle from settling.
-      // The DOM content is already in place, so render what loaded rather than
-      // failing the whole signing flow.
-      console.warn("[contractPdf] networkidle wait timed out; rendering current state");
-    }
+    // A failed load does not prove the signed content has reached the page.
+    // Never publish a partial/blank PDF as the immutable signed artifact. The
+    // caller retains the pending state and can recover the same frozen input.
+    // External resources are already aborted above; relaxing this boundary is
+    // not a valid fallback for a missing logo or an unavailable browser.
+    await page.setContent(html, { waitUntil: "networkidle", timeout: 15000 });
     const buf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
     return new Uint8Array(buf);
   } finally {
@@ -206,8 +204,8 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
   // buildSignedPdf owns both browser handles. The finally block force-closes
   // whichever browser is still alive when a render timeout or any error fires,
   // so Chromium is never left running in the background after the render lock
-  // is released. renderHtmlToPdf does NOT close the browser (it only closes the
-  // page), keeping all lifecycle management in one place here.
+  // is released. renderContractHtmlToPdf only closes the page, keeping browser
+  // lifecycle management in one place here.
   let browser1: any = null;
   let browser2: any = null;
 
@@ -219,7 +217,7 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
   try {
     browser1 = await chromium.launch({ executablePath, args: CHROMIUM_LAUNCH_ARGS });
     const contentBytes = await renderWithTimeout(
-      renderHtmlToPdf(browser1, documentShell(params.bodyHtml)),
+      renderContractHtmlToPdf(browser1, documentShell(params.bodyHtml)),
       remainingMs(),
       "Contract PDF content render",
     );
@@ -246,7 +244,7 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
 
     browser2 = await chromium.launch({ executablePath, args: CHROMIUM_LAUNCH_ARGS });
     const evidenceBytes = await renderWithTimeout(
-      renderHtmlToPdf(browser2, documentShell(evidencePageHtml(params, evidenceHash))),
+      renderContractHtmlToPdf(browser2, documentShell(evidencePageHtml(params, evidenceHash))),
       remainingMs(),
       "Contract PDF evidence render",
     );
@@ -270,7 +268,7 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
   } finally {
     // Force-close any browser still alive. This is the critical path for
     // timeout scenarios: renderWithTimeout rejects and buildSignedPdf throws,
-    // but the underlying renderHtmlToPdf promise may still be running inside
+    // but the underlying renderContractHtmlToPdf promise may still be running inside
     // Chromium. Closing the browser here terminates the Chromium process
     // immediately, bounding peak memory before the render lock is released.
     if (browser1) await browser1.close().catch(() => {});

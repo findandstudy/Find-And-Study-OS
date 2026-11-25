@@ -11,6 +11,7 @@ import { createSigningToken } from "../lib/signingTokens";
 import { hasContractCompanySignature } from "../lib/contractBranding";
 import { resolveContractTemplateBranding } from "../lib/contractTemplateBranding";
 import { finalizeSign, loadNewestSignedContractForAgent } from "../lib/signContract";
+import { reconcileAgentApplicationRestriction } from "../lib/agentApplicationLifecycle";
 import { agentIntakeDefaults, signedContractFilename } from "../lib/contractRenderer";
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { pool } from "@workspace/db";
@@ -121,7 +122,7 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
     return;
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
-  const agent = await loadAgentForUser(req.user!.id, req.user!.role);
+  let agent = await loadAgentForUser(req.user!.id, req.user!.role);
   if (!agent) {
     res.json({
       requiresOnboarding: !user?.emailVerified,
@@ -139,13 +140,22 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
     try { await syncAdminContracts(agent); } catch (err) { console.error("[onboarding-status] admin contract sync:", err); }
   }
 
-  const [application] = await db.select().from(agentApplicationsTable)
+  let [application] = await db.select().from(agentApplicationsTable)
     .where(or(
       eq(agentApplicationsTable.provisionalAgentId, agent.id),
       eq(agentApplicationsTable.approvedAgentId, agent.id),
     ))
     .orderBy(desc(agentApplicationsTable.createdAt))
     .limit(1);
+
+  if (agent.accessTier !== "full" && application) {
+    const current = await reconcileAgentApplicationRestriction(application.id, agent.id);
+    if (current) {
+      agent = current.agent;
+      application = current.application;
+      session = current.session || null;
+    }
+  }
 
   // Authoritative signed detection. An agent counts as signed whenever they
   // have ANY signing_sessions row with status='signed', resolved to the
@@ -170,31 +180,8 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
     else contractStatus = "pending";
   }
   const provisionalPortal = agent.accessTier !== "full";
-  let portalAccessStatus = application?.portalAccessStatus ?? agent.accessTier ?? "full";
-  let accessRestrictionReason = application?.accessRestrictionReason ?? null;
-  if (provisionalPortal && application) {
-    const rejected = application.status === "rejected";
-    const contractExpired = contractStatus === "expired"
-      || (!!application.contractDeadlineAt && application.contractDeadlineAt.getTime() < Date.now() && contractStatus !== "signed");
-    if (rejected || contractExpired || agent.accessTier === "restricted") {
-      const reason = rejected ? "application_rejected" : (accessRestrictionReason || "contract_expired");
-      const now = new Date();
-      portalAccessStatus = "restricted";
-      accessRestrictionReason = reason;
-      if (application.portalAccessStatus !== "restricted" || agent.accessTier !== "restricted") {
-        await db.transaction(async (tx) => {
-          await tx.update(agentApplicationsTable).set({
-            portalAccessStatus: "restricted",
-            accessRestrictedAt: application.accessRestrictedAt ?? now,
-            accessRestrictionReason: reason,
-            updatedAt: now,
-          }).where(eq(agentApplicationsTable.id, application.id));
-          await tx.update(agentsTable).set({ accessTier: "restricted", status: "provisional", updatedAt: now })
-            .where(eq(agentsTable.id, agent.id));
-        });
-      }
-    }
-  }
+  const portalAccessStatus = application?.portalAccessStatus ?? agent.accessTier ?? "full";
+  const accessRestrictionReason = application?.accessRestrictionReason ?? null;
   const passwordSet = !!user?.passwordHash;
   res.json({
     requiresOnboarding: provisionalPortal || !user?.emailVerified || !passwordSet || (contractStatus !== "signed" && contractStatus !== "none"),

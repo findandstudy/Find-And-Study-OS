@@ -2860,7 +2860,7 @@
     "titleReview": "çatynjalar barada bileleşiň",
     "titleSign": "Imzlaňy ekle",
     "signed": "Alamatly ýädä",
-    "signedBody": "A copy of the signed PDF has been sent to your email. You may close this window.",
+    "signedBody": "Goluňyz hasaba alyndy. PDF taýýarlamak we e-poçtany ýetirmek aýry ädimlerdir; bu ekran e-poçtanyň iberilendigini tassyklamaýar.",
     "expired": "Seleň Girdir",
     "expiredBody": "Emma bu golýazma arkaly täze bir zat soraň.",
     "revoked": "Takyklaýa",
@@ -5703,11 +5703,11 @@
     "submitButton": "_Maxfiy soz:"
   },
   "signedContract": {
-    "pdfPending": "PDF is still being generated. Please try again in about 30 seconds.",
+    "pdfPending": "Gol çekilen PDF entek taýýar däl. Soňrak gaýtadan synanyşyň; mesele dowam etse, goldaw gullugyna ýüz tutuň.",
     "pdfDownloadError": "Failed to download PDF.",
     "download": "Download PDF",
-    "regenerate": "Regenerate PDF",
-    "regenerateQueued": "Regenerating the PDF; it will be ready to download in about 30 seconds.",
+    "regenerate": "Ýok PDF üçin gaýtadan synanyş",
+    "regenerateQueued": "Ýok PDF fonda işlenmegine garaşýar. Bar bolan gol çekilen faýllar saklanýar.",
     "regenerateError": "Could not start regeneration."
   },
   "apiTokens": {

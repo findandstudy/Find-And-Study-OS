@@ -27,6 +27,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { MultiSelectFilter } from "@/components/admin/MultiSelectFilter";
 import { performLogout } from "@/lib/logout";
 import { SYSTEM_LANGUAGE_OPTIONS } from "@/lib/i18n";
+import { agentContractCopy } from "./agentContractCopy";
 
 const BASE_URL = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
@@ -134,12 +135,11 @@ export default function AgentAccount() {
     // Re-fetch when the tab regains focus so admin-side changes (e.g.
     // uploading/replacing the contract file) appear without a hard reload.
     refetchOnWindowFocus: true,
-    // Poll every 5 s until contractUrl is populated (background PDF worker runs
-    // ~30 s after signing). Stop after 2 minutes to avoid indefinite polling
-    // for agents who genuinely have no signed contract yet.
+    // Only poll a known signed contract with a pending derived PDF. A missing
+    // contract does not imply work is running, and rendering may need recovery.
     refetchInterval: (query) => {
       const d = query.state.data as any;
-      if (!d || d.contractUrl) return false;
+      if (d?.signedContract?.pdfStatus !== "pending") return false;
       if (Date.now() - contractPollStart.current > 120_000) return false;
       return 5_000;
     },
@@ -691,13 +691,12 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
             label="Representative ID"
             value={agentProfile.agentIdProofUrl}
           />
-          <DocumentViewer
-            label="Contract"
-            value={agentProfile.contractUrl}
-            startDate={agentProfile.contractStartDate}
-            endDate={agentProfile.contractEndDate}
-            adminOnly
-          />
+          {agentProfile.signedContract ? (
+            <SignedAgencyContract contract={agentProfile.signedContract} />
+          ) : (
+            <DocumentViewer label="Contract" value={agentProfile.contractUrl}
+              startDate={agentProfile.contractStartDate} endDate={agentProfile.contractEndDate} />
+          )}
           <DocumentUploader
             label="Business Certificate"
             accept="image/*,.pdf"
@@ -774,6 +773,54 @@ function DocumentUploader({
         onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
     </div>
   );
+}
+
+function SignedAgencyContract({ contract }: { contract: { signedAt: string; pdfStatus: "ready" | "pending"; downloadUrl: string | null } }) {
+  const { lang } = useI18n();
+  const copy = agentContractCopy(lang);
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState(false);
+  useEffect(() => { setPending(contract.pdfStatus === "pending"); }, [contract.pdfStatus]);
+  const refresh = async () => {
+    await qc.invalidateQueries({ queryKey: ["agent-me"] });
+    // A 202 can race with the next successful render. If the refetch returns
+    // "ready" again, that prop did not change and the effect will not run.
+    setPending(false);
+  };
+  async function download() {
+    if (contract.downloadUrl !== "/api/contracts/me/pdf") return;
+    setBusy(true);
+    try {
+      const response = await fetch(`${BASE_URL}${contract.downloadUrl}`, { credentials: "include" });
+      if (response.status === 202) { setPending(true); await refresh(); return; }
+      if (!response.ok || !response.headers.get("content-type")?.includes("application/pdf")) throw new Error("PDF unavailable");
+      const blob = await response.blob();
+      if (!blob.size) throw new Error("Empty PDF");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "signed-contract.pdf";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1_000);
+    } catch {
+      toast({ title: copy.downloadError, variant: "destructive" });
+    } finally { setBusy(false); }
+  }
+  return <div className="space-y-2">
+    <Label className="text-xs font-medium text-muted-foreground">{copy.title}</Label>
+    <div className="min-h-40 rounded-lg border bg-secondary/30 p-4 space-y-3">
+      <Badge variant="outline"><Check className="me-1 h-3 w-3" />{copy.signed}</Badge>
+      <p className="text-xs text-muted-foreground">{new Date(contract.signedAt).toLocaleDateString(lang)}</p>
+      {pending || contract.pdfStatus === "pending" ? <>
+        <p className="text-xs text-muted-foreground" role="status">{copy.pending}</p>
+        <Button type="button" size="sm" variant="outline" onClick={refresh}>{copy.refresh}</Button>
+      </> : <Button type="button" size="sm" className="w-full whitespace-normal" disabled={busy} onClick={download}>
+        {busy ? <Loader2 className="me-2 h-4 w-4 shrink-0 animate-spin" /> : <Download className="me-2 h-4 w-4 shrink-0" />}{copy.download}
+      </Button>}
+    </div>
+  </div>;
 }
 
 function DocumentViewer({

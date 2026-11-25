@@ -20,7 +20,8 @@ import {
   type AgentCatalog,
 } from "../lib/exportImportExcel";
 import { db, agentsTable, agentIntegrationsTable, usersTable, rolesTable, DEFAULT_ROLE_PERMISSIONS, getAllPermissions, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable, auditLogsTable } from "@workspace/db";
-import { getNewestSignedContractUrl } from "../lib/signContract";
+import { loadNewestSignedContractForAgent } from "../lib/signContract";
+import { agentSignedContractSummary } from "../lib/agentSignedContractSummary";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
@@ -670,21 +671,20 @@ router.get("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req, r
     }
   }
 
-  // Resolve contractUrl at read time to the agent's NEWEST signed contract. The
-  // stored agents.contractUrl is hydrated lazily on first PDF render and could be
-  // locked to an earlier (possibly broken) contract when the agent later
-  // re-signed via a resend. Falling back to the stored value preserves manually
-  // set URLs and agents whose newest contract PDF has not rendered yet.
+  // Keep signature existence separate from the derived PDF. A newer signed
+  // contract awaiting rendering must not show an older contract or "not uploaded".
   let contractUrl = agent.contractUrl;
+  let signedContract: ReturnType<typeof agentSignedContractSummary> = null;
   try {
-    const resolved = await getNewestSignedContractUrl(agent.id);
-    if (resolved) contractUrl = resolved;
+    signedContract = agentSignedContractSummary(agent.id, await loadNewestSignedContractForAgent(agent.id));
+    if (signedContract) contractUrl = signedContract.downloadUrl;
   } catch (err) {
     console.error(`[agents/me] failed to resolve newest contract url for agent ${agent.id}:`, err);
   }
 
   const browserAgent = {
     ...agent,
+    signedContract,
     logoUrl: browserStorageUrl(agent.logoUrl),
     agentIdProofUrl: browserStorageUrl(agent.agentIdProofUrl),
     businessCertUrl: browserStorageUrl(agent.businessCertUrl),

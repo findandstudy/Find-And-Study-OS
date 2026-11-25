@@ -1,10 +1,40 @@
-import { db, signedContractsTable, contractTemplatesTable, agentsTable } from "@workspace/db";
+import { db, signedContractsTable, contractTemplatesTable, agentsTable, emailQueueTable } from "@workspace/db";
 import { and, eq, isNull, isNotNull, gt, lt, or, asc } from "drizzle-orm";
 import { buildSignedContractEmail, sendEmail, getAppBaseUrl } from "./email";
 import { ensureSignedContractPdf } from "./signContract";
 import { dispatchNotification } from "./notificationDispatcher";
+import { EMAIL_ATTACHMENT_LIMITS, deserializeEmailAttachments, isEmailMailbox } from "./emailDeliveryPolicy";
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// These effects are injected only by isolated tests. Production keeps the same
+// renderer, storage and durable email queue; no alternate delivery path exists.
+export type SignedContractDeliveryEffects = {
+  ensurePdf: typeof ensureSignedContractPdf;
+  readPdf: (key: string) => Promise<Buffer>;
+  buildEmail: typeof buildSignedContractEmail;
+  sendEmail: typeof sendEmail;
+  notify: typeof dispatchNotification;
+};
+
+const deliveryEffects: SignedContractDeliveryEffects = {
+  ensurePdf: ensureSignedContractPdf,
+  readPdf: async (key) => {
+    const { ObjectStorageService } = await import("./objectStorage");
+    const file = await new ObjectStorageService().getObjectEntityFile(key);
+    const [buffer] = await file.download();
+    return buffer;
+  },
+  buildEmail: buildSignedContractEmail,
+  sendEmail,
+  notify: dispatchNotification,
+};
+
+function requirePdfAttachment(buffer: Buffer): void {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 8
+    || buffer.length > EMAIL_ATTACHMENT_LIMITS.totalBytes
+    || buffer.subarray(0, 5).toString("ascii") !== "%PDF-") {
+    throw new Error("SIGNED_CONTRACT_PDF_ATTACHMENT_INVALID");
+  }
+}
 
 // How often the delivery sweep runs. Delivery is best-effort and not latency
 // sensitive — a sub-minute cadence is plenty for an agent who has just signed.
@@ -50,7 +80,7 @@ let oomStreak = 0;
  *      agents.contractUrl. This is the ONLY place headless Chromium runs for the
  *      in-app / onboarding signing flow — never on a request path.
  *   3. Sets contractStartDate / contractEndDate on the agent row.
- *   4. Sends a link-only notification email to the signer (portal login URL).
+ *   4. Sends the final PDF attachment to the signer through the durable queue.
  *   5. Fires contract.signed via the notification-rule system (in_app + email
  *      to roles as configured in Settings > Notification Rules).
  *   6. Marks emailed_at = now, permanently excluding the row from future sweeps.
@@ -64,7 +94,7 @@ let oomStreak = 0;
  * released and emailed_at stays NULL so the row is retried on a later sweep —
  * the instance restarting mid-render never permanently loses delivery.
  */
-export async function deliverPendingSignedContracts(): Promise<void> {
+export async function deliverPendingSignedContracts(effects: SignedContractDeliveryEffects = deliveryEffects): Promise<void> {
   try {
     const cutoff = new Date(Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
     const leaseExpiry = new Date(Date.now() - LEASE_TIMEOUT_MS);
@@ -101,8 +131,9 @@ export async function deliverPendingSignedContracts(): Promise<void> {
       // emailed_at after delivery succeeds. A crash between the two leaves the
       // lease to expire and the row to be reclaimed — delivery is never
       // permanently lost.
+      const claimedAt = new Date();
       const claimed = await db.update(signedContractsTable)
-        .set({ deliveryClaimedAt: new Date() })
+        .set({ deliveryClaimedAt: claimedAt })
         .where(and(
           eq(signedContractsTable.id, row.id),
           isNull(signedContractsTable.emailedAt),
@@ -118,7 +149,7 @@ export async function deliverPendingSignedContracts(): Promise<void> {
       // lease and leave emailed_at NULL for a later retry; a non-OOM render error
       // is handled the same way (retry) but without the OOM streak bookkeeping.
       try {
-        await ensureSignedContractPdf(row.id);
+        await effects.ensurePdf(row.id);
         oomStreak = 0;
       } catch (pdfErr) {
         const msg = String((pdfErr as any)?.message || pdfErr || "");
@@ -137,7 +168,7 @@ export async function deliverPendingSignedContracts(): Promise<void> {
         try {
           await db.update(signedContractsTable)
             .set({ deliveryClaimedAt: null })
-            .where(and(eq(signedContractsTable.id, row.id), isNull(signedContractsTable.emailedAt)));
+            .where(and(eq(signedContractsTable.id, row.id), isNull(signedContractsTable.emailedAt), eq(signedContractsTable.deliveryClaimedAt, claimedAt)));
         } catch (resetErr) {
           console.error(`[SIGNED-DELIVERY] failed to release lease for signed_contract ${row.id}:`, resetErr);
         }
@@ -163,48 +194,69 @@ export async function deliverPendingSignedContracts(): Promise<void> {
         }
 
         const signerEmail = (row.signerEmail || "").trim();
-        if (signerEmail && EMAIL_RE.test(signerEmail)) {
-          const email = await buildSignedContractEmail({
-            signerName: row.signerName,
-            templateName,
-            portalUrl,
-            language: template?.language,
-          });
-
-          // Attach the signed PDF if it was successfully rendered.
-          let pdfOpts: { attachments: import("./email").EmailAttachment[] } | undefined;
-          try {
-            const [pdfRow] = await db
-              .select({ pdfObjectKey: signedContractsTable.pdfObjectKey })
-              .from(signedContractsTable)
-              .where(eq(signedContractsTable.id, row.id));
-            if (pdfRow?.pdfObjectKey) {
-              const { ObjectStorageService } = await import("./objectStorage");
-              const svc = new ObjectStorageService();
-              const file = await svc.getObjectEntityFile(pdfRow.pdfObjectKey);
-              const [pdfBuffer] = await file.download();
-              const safeSlug = templateName.replace(/[^a-z0-9]/gi, "-").replace(/-+/g, "-").slice(0, 60);
-              pdfOpts = {
-                attachments: [{
-                  filename: `${safeSlug}-signed.pdf`,
-                  content: pdfBuffer,
-                  contentType: "application/pdf",
-                }],
-              };
+        if (!isEmailMailbox(signerEmail)) throw new Error("SIGNED_CONTRACT_RECIPIENT_INVALID");
+        {
+          // A completion email must contain the stored final artifact. Storage
+          // failures must not silently turn it into an attachment-free email.
+          const [pdfRow] = await db
+            .select({ pdfObjectKey: signedContractsTable.pdfObjectKey, evidenceHash: signedContractsTable.evidenceHash })
+            .from(signedContractsTable)
+            .where(eq(signedContractsTable.id, row.id));
+          if (!pdfRow?.pdfObjectKey || !pdfRow.evidenceHash) throw new Error("SIGNED_CONTRACT_PDF_NOT_READY");
+          const pdfBuffer = await effects.readPdf(pdfRow.pdfObjectKey);
+          requirePdfAttachment(pdfBuffer);
+          const idempotencyKey = `signed-contract:${row.id}:signer:v1`;
+          const [receipt] = await db.select({
+            toEmail: emailQueueTable.toEmail,
+            status: emailQueueTable.status,
+            sentAt: emailQueueTable.sentAt,
+            attachments: emailQueueTable.attachments,
+          }).from(emailQueueTable).where(eq(emailQueueTable.idempotencyKey, idempotencyKey));
+          let sent: boolean;
+          if (receipt) {
+            // Branding, template labels and language can change after enqueue.
+            // Reconcile the original queued message by its contract, recipient
+            // and immutable PDF, never by rebuilding today's mutable email HTML.
+            const attachments = deserializeEmailAttachments(receipt.attachments);
+            if (receipt.toEmail !== signerEmail || attachments?.length !== 1
+              || attachments[0].contentType !== "application/pdf"
+              || !attachments[0].content.equals(pdfBuffer)) {
+              throw new Error("SIGNED_CONTRACT_EMAIL_RECEIPT_MISMATCH");
             }
-          } catch (attachErr) {
-            console.warn(`[SIGNED-DELIVERY] Could not attach PDF for signed_contract ${row.id}:`, attachErr);
+            // Pending work is owned by the existing queue worker. Processing,
+            // unknown and failed outcomes are not a new-send authorization.
+            sent = receipt.status === "sent" && receipt.sentAt instanceof Date && Number.isFinite(receipt.sentAt.getTime());
+          } else {
+            const email = await effects.buildEmail({
+              signerName: row.signerName,
+              templateName,
+              portalUrl,
+              language: template?.language,
+            });
+            const safeSlug = templateName.replace(/[^a-z0-9]/gi, "-").replace(/-+/g, "-").slice(0, 60) || "Contract";
+            sent = await effects.sendEmail(signerEmail, email, {
+              // The existing queue's exact-payload replay remains a final race
+              // guard if another owner enqueues between the read and insertion.
+              idempotencyKey,
+              attachments: [{ filename: `${safeSlug}-signed.pdf`, content: pdfBuffer, contentType: "application/pdf" }],
+            });
           }
-
-          await sendEmail(signerEmail, email, pdfOpts);
+          if (sent !== true) throw new Error("SIGNED_CONTRACT_EMAIL_NOT_CONFIRMED");
         }
+
+        // Persist only a confirmed SMTP/durable-queue receipt, under our lease.
+        const delivered = await db.update(signedContractsTable)
+          .set({ emailedAt: new Date(), deliveryClaimedAt: null })
+          .where(and(eq(signedContractsTable.id, row.id), isNull(signedContractsTable.emailedAt), eq(signedContractsTable.deliveryClaimedAt, claimedAt)))
+          .returning({ id: signedContractsTable.id });
+        if (delivered.length === 0) continue;
 
         // Notify admins/super_admins via the notification-rule system (respects
         // Settings > Notification Rules > Contracts > Contract Signed channels/active).
         // This replaces the previous hardcoded buildSignedContractAdminEmail loop.
         (async () => {
           try {
-            await dispatchNotification({
+            await effects.notify({
               event: "contract.signed",
               title: "Contract Signed",
               body: `${row.signerName || signerEmail || "A signer"} signed "${templateName}".`,
@@ -218,25 +270,18 @@ export async function deliverPendingSignedContracts(): Promise<void> {
           } catch (e) { console.error(`[SIGNED-DELIVERY] contract.signed dispatch failed for signed_contract ${row.id}:`, e); }
         })();
 
-        // Mark delivered only now that the dates were updated and the signer
-        // email was sent. emailed_at is the permanent "done" flag and excludes
-        // the row from all future sweeps. The contract.signed dispatch is
-        // fire-and-forget so admin notification failures never block delivery.
-        await db.update(signedContractsTable)
-          .set({ emailedAt: new Date() })
-          .where(eq(signedContractsTable.id, row.id));
-
-        console.log(`[SIGNED-DELIVERY] delivered signed_contract ${row.id} (signer=${signerEmail || "none"})`);
+        console.log(`[SIGNED-DELIVERY] delivered signed_contract ${row.id}`);
       } catch (err) {
         // Release the lease so the row is retried on the next sweep (still bounded
         // by RECENT_WINDOW_DAYS). emailed_at stays NULL, so a partial failure
-        // before the signer email never marks the row delivered. The signer email
-        // is the last throwing step, so retries do not re-send a successful one.
+        // before a confirmed receipt never marks the row delivered. If storing
+        // the marker failed after SMTP accepted it, the durable key reconciles
+        // that already-sent result on the next attempt without a second send.
         console.error(`[SIGNED-DELIVERY] delivery failed for signed_contract ${row.id}, releasing lease for retry:`, err);
         try {
           await db.update(signedContractsTable)
             .set({ deliveryClaimedAt: null })
-            .where(and(eq(signedContractsTable.id, row.id), isNull(signedContractsTable.emailedAt)));
+            .where(and(eq(signedContractsTable.id, row.id), isNull(signedContractsTable.emailedAt), eq(signedContractsTable.deliveryClaimedAt, claimedAt)));
         } catch (resetErr) {
           console.error(`[SIGNED-DELIVERY] failed to release lease for signed_contract ${row.id}:`, resetErr);
         }

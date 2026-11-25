@@ -2861,7 +2861,7 @@
     "titleReview": "Review the contract",
     "titleSign": "Add your signature",
     "signed": "Signed",
-    "signedBody": "A copy of the signed PDF has been sent to your email. You may close this window.",
+    "signedBody": "Your signature has been recorded. PDF preparation and email delivery are separate steps; this screen does not confirm that an email was sent.",
     "expired": "Link expired",
     "expiredBody": "This signing link has expired. Please request a new one.",
     "revoked": "Link revoked",
@@ -5704,11 +5704,11 @@
     "submitButton": "Set Password"
   },
   "signedContract": {
-    "pdfPending": "PDF is still being generated. Please try again in about 30 seconds.",
+    "pdfPending": "The signed PDF is not ready yet. Try again later; if this continues, contact support.",
     "pdfDownloadError": "Failed to download PDF.",
     "download": "Download PDF",
-    "regenerate": "Regenerate PDF",
-    "regenerateQueued": "Regenerating the PDF; it will be ready to download in about 30 seconds.",
+    "regenerate": "Retry missing PDF",
+    "regenerateQueued": "The missing PDF is awaiting background processing. Existing signed files are preserved.",
     "regenerateError": "Could not start regeneration."
   },
   "apiTokens": {

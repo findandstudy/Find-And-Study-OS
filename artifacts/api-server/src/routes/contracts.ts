@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, usersTable, agentBranchesTable } from "@workspace/db";
-import { and, desc, eq, getTableColumns, gte, ilike, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, ilike, inArray, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
 import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import { createSigningToken } from "../lib/signingTokens";
@@ -10,6 +10,8 @@ import { signedContractFilename } from "../lib/contractRenderer";
 import { getVisibleBranchIds, isAgentInScope } from "../lib/branchScope";
 import { hasContractCompanySignature } from "../lib/contractBranding";
 import { resolveContractTemplateBranding } from "../lib/contractTemplateBranding";
+import { backgroundJobsEnabled } from "../lib/backgroundJobs";
+import { decideMissingPdfRecovery, MISSING_PDF_LEASE_RESET, PDF_LEASE_MS } from "../lib/signedContractPdfRecovery";
 
 const router: IRouter = Router();
 
@@ -46,20 +48,6 @@ async function markEmailSent(sessionId: number, reminder = false) {
   if (reminder) updates.lastReminderAt = now;
   await db.update(signingSessionsTable).set(updates).where(eq(signingSessionsTable.id, sessionId));
 }
-
-// Status-neutral PDF-cache reset applied by the regenerate endpoint. It clears
-// ONLY the rendered-PDF cache fields so the background sweep re-renders the PDF;
-// it must NEVER include any status field (signed_contracts has no status; a
-// signed contract's "signed" state lives on signing_sessions.status, which this
-// payload does not touch). Exported so a regression test can assert the exact
-// (PDF-cache-only) key set and catch any future status mutation. Keep this in
-// lockstep with the agent's signed-contract detection: detection keys off
-// signing_sessions.status='signed', never off these PDF-cache fields.
-export const REGENERATE_PDF_CACHE_RESET = {
-  pdfObjectKey: null,
-  evidenceHash: null,
-  deliveryClaimedAt: null,
-} as const;
 
 async function pickTemplate(language: string, entityType: string) {
   // Strict match: only the exact (language, entityType) pair, latest version.
@@ -238,7 +226,7 @@ router.get("/contracts/signed", requireAuth, requirePermission("contracts.view")
 });
 
 // Signed contracts are immutable evidence records. They may be downloaded or
-// regenerated from their captured snapshot, but never deleted through the API.
+// recovered only when absent, but never overwritten or deleted through the API.
 router.delete("/contracts/signed/:id", requireAuth, requirePermission("contracts.manage"), async (_req, res): Promise<void> => {
   res.status(409).json({ error: "Signed contracts are immutable and cannot be deleted." });
 });
@@ -258,9 +246,10 @@ router.get("/contracts/signed/:id/pdf", requireAuth, requirePermission("contract
     if (!pdfKey) {
       // PDF not yet rendered. The signed-contract delivery worker generates it
       // off the request path (no Chromium here — synchronous render was the
-      // autoscale OOM root cause). Tell the client to retry shortly.
+      // autoscale OOM root cause). Absence does not prove a worker is running.
       res.setHeader("Retry-After", "30");
-      res.status(202).json({ status: "pending", message: "PDF is being generated. Please try again in a moment.", retryAfter: 30 });
+      res.setHeader("Cache-Control", "private, no-store");
+      res.status(202).json({ status: "pending", message: "The signature is recorded, but the PDF is not ready. If this persists, contact support.", retryAfter: 30 });
       return;
     }
     const { ObjectStorageService } = await import("../lib/objectStorage");
@@ -281,20 +270,8 @@ router.get("/contracts/signed/:id/pdf", requireAuth, requirePermission("contract
   }
 });
 
-// Force-regenerate a signed contract's final PDF, bypassing the idempotent
-// render cache. ensureSignedContractPdf() early-returns whenever
-// pdf_object_key + evidence_hash are already set, so a template/renderer change
-// (e.g. adding the main-agency seal) never reaches an already-rendered contract.
-// This endpoint clears those columns (and releases any delivery lease) so the
-// existing background sweep (backfillMissingSignedPdfs, which targets
-// pdf_object_key IS NULL) re-renders the PDF with the current renderer.
-//
-// The render itself deliberately runs OFF the request path: launching headless
-// Chromium inside an HTTP handler OOM-killed the 512MB autoscale container and
-// surfaced as an opaque edge 403, so we never render synchronously here. We only
-// clear the cache and let the worker pick it up (within ~30s of any instance
-// being alive). We do NOT touch emailed_at, so an already-delivered contract is
-// regenerated WITHOUT re-sending any notification email.
+// Compatibility route: recover a missing artifact only. Never clear an existing
+// final PDF/hash or steal an active worker lease. Rendering stays off HTTP paths.
 router.post("/contracts/signed/:id/regenerate", requireAuth, requirePermission("contracts.manage"), async (req, res): Promise<void> => {
   try {
     const id = parseInt(String(req.params.id), 10);
@@ -305,18 +282,31 @@ router.post("/contracts/signed/:id/regenerate", requireAuth, requirePermission("
       const inScope = await isAgentInScope((req as any).user!.id, (req as any).user!.role, row.agentId);
       if (!inScope) { res.status(403).json({ error: "Access denied: agent is outside your branch scope" }); return; }
     }
-    await db.update(signedContractsTable)
-      .set(REGENERATE_PDF_CACHE_RESET)
-      .where(eq(signedContractsTable.id, id));
+    const { signedContractPdfWorkerEnabled } = await import("../lib/signedContractDelivery");
+    const now = new Date();
+    const decision = decideMissingPdfRecovery(row, {
+      delivery: backgroundJobsEnabled(),
+      pdfOnly: signedContractPdfWorkerEnabled(),
+    }, now);
+    if (!decision.ok) { res.status(decision.status).json({ error: decision.error, code: decision.code }); return; }
+    const recovered = await db.update(signedContractsTable)
+      .set(MISSING_PDF_LEASE_RESET)
+      .where(and(
+        eq(signedContractsTable.id, id),
+        isNull(signedContractsTable.pdfObjectKey),
+        isNull(signedContractsTable.evidenceHash),
+        or(isNull(signedContractsTable.deliveryClaimedAt), lt(signedContractsTable.deliveryClaimedAt, new Date(now.getTime() - PDF_LEASE_MS))),
+      )).returning({ id: signedContractsTable.id });
+    if (!recovered.length) { res.status(409).json({ error: "The contract changed or was claimed by a worker. Refresh before retrying." }); return; }
     await writeAudit({
       userId: (req as any).user?.id ?? null,
-      action: "contract.regenerate_pdf",
+      action: "contract.recover_missing_pdf",
       resource: "signed_contract",
       resourceId: id,
       changes: { signingSessionId: row.signingSessionId, agentId: row.agentId },
       ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
     });
-    res.status(202).json({ status: "queued", message: "PDF yeniden oluşturuluyor; kısa süre içinde indirilmeye hazır olacak." });
+    res.status(202).json({ status: "pending", message: "The missing PDF is eligible for background recovery. Existing signatures and delivery records were preserved." });
   } catch (err) {
     console.error("[contracts] regenerate pdf:", err);
     res.status(500).json({ error: "Failed to queue regeneration" });

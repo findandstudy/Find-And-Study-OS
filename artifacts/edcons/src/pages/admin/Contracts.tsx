@@ -482,21 +482,23 @@ export default function ContractsPage() {
                   <td className="px-4 py-3 text-xs text-muted-foreground">{fmtDate(c.signedAt)}</td>
                   <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{c.evidenceHash ? c.evidenceHash.slice(0, 16) + "…" : "—"}</td>
                   <td className="px-4 py-3 text-right">
-                    <Button
+                    {!c.pdfObjectKey && !c.evidenceHash && <Button
                       size="sm"
                       variant="ghost"
                       title={t("signedContract.regenerate")}
+                      aria-label={t("signedContract.regenerate")}
                       disabled={regeneratingId === c.id}
                       onClick={() => regeneratePdf(c.id)}
                     >
                       {regeneratingId === c.id
                         ? <Loader2 className="w-4 h-4 animate-spin" />
                         : <RotateCw className="w-4 h-4" />}
-                    </Button>
+                    </Button>}
                     <Button
                       size="sm"
                       variant="ghost"
                       title={t("signedContract.download")}
+                      aria-label={t("signedContract.download")}
                       disabled={downloadingId === c.id}
                       onClick={() => downloadSignedPdf(c.id)}
                     >

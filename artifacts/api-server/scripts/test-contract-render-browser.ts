@@ -31,11 +31,11 @@ test("designed fragment and full-document contracts retain styling and embedded 
     logoSnapshot,
     pdfFooterText: "LOCAL TEST ONLY - NOT A SIGNED CONTRACT",
   };
-  const css = '<style>@page{size:A4;margin:18mm}.contract-title{color:#143591;font-size:28px}.terms-box{border:2px solid #143591;background:#eaf1ff;padding:18px;border-radius:8px}td{padding:8px;border-bottom:1px solid #cbd5e1}</style>';
+  const css = '<style>@page{size:A4;margin:18mm}.contract-title{color:#143591;font-size:28px}.terms-box{border:2px solid #143591;background:#eaf1ff;padding:18px;border-radius:8px}td{padding:8px;border-bottom:1px solid #cbd5e1}html[data-contract-layout="agency-v6"] body.contract-page .terms-box{border-radius:12px}</style>';
   const body = `<h1 class="contract-title">Sözleşme tasarım kontrolü</h1><p>SENTETİK TEST - İMZALI BELGE DEĞİLDİR</p><img src="${sourceUrl}" width="180"><div class="terms-box"><h2>Koşullar / Terms</h2><p>{{company}} metni değişmeden korunur.</p><table><tr><td>Hizmet</td><td>Örnek danışmanlık</td></tr><tr><td>Süre</td><td>12 ay</td></tr></table></div><p dir="rtl">اختبار تنسيق العقد</p>`;
   for (const [name, template] of [
     ["fragment", `${css}${body}`],
-    ["full-document", `<!doctype html><html lang="tr"><head>${css}</head><body>${body}</body></html>`],
+    ["full-document", `<!doctype html><html lang="ar" dir="rtl" data-contract-layout="agency-v6"><head>${css}</head><body class="contract-page">${body}</body></html>`],
   ] as const) {
     const rendered = applyContractBranding(renderTemplate(template, { company: "Örnek Şirket" }), branding);
     const browser = await chromium.launch({ executablePath, headless: true });
@@ -47,19 +47,29 @@ test("designed fragment and full-document contracts retain styling and embedded 
         externalRequests++;
         return route.abort();
       });
-      await page.emulateMedia({ media: "print" });
       await page.setContent(documentShell(rendered));
       await page.evaluate(async () => { await Promise.all(Array.from(document.images, image => image.decode())); });
-      const appearance = await page.evaluate(() => ({
-        color: getComputedStyle(document.querySelector(".contract-title")!).color,
-        background: getComputedStyle(document.querySelector(".terms-box")!).backgroundColor,
-        text: document.body.textContent,
-        logos: Array.from(document.images).filter(image => image.src.startsWith("data:image/png;") && image.naturalWidth === 240).length,
-      }));
-      assert.equal(appearance.color, "rgb(20, 53, 145)");
-      assert.equal(appearance.background, "rgb(234, 241, 255)");
-      assert.match(appearance.text!, /Örnek Şirket metni değişmeden korunur/);
-      assert.equal(appearance.logos, 2);
+      for (const media of ["screen", "print"] as const) {
+        await page.emulateMedia({ media });
+        const appearance = await page.evaluate(() => ({
+          color: getComputedStyle(document.querySelector(".contract-title")!).color,
+          titleSize: getComputedStyle(document.querySelector(".contract-title")!).fontSize,
+          background: getComputedStyle(document.querySelector(".terms-box")!).backgroundColor,
+          border: getComputedStyle(document.querySelector(".terms-box")!).borderRadius,
+          cellPadding: getComputedStyle(document.querySelector("td")!).padding,
+          direction: getComputedStyle(document.body).direction,
+          text: document.body.textContent,
+          logos: Array.from(document.images).filter(image => image.src.startsWith("data:image/png;") && image.naturalWidth === 240).length,
+        }));
+        assert.equal(appearance.color, "rgb(20, 53, 145)", `${name}/${media}: title color`);
+        assert.equal(appearance.titleSize, "28px", `${name}/${media}: heading typography`);
+        assert.equal(appearance.background, "rgb(234, 241, 255)", `${name}/${media}: colored box`);
+        assert.equal(appearance.border, name === "full-document" ? "12px" : "8px", `${name}/${media}: document/body attributes and selector cascade`);
+        assert.equal(appearance.cellPadding, "8px", `${name}/${media}: table spacing`);
+        assert.equal(appearance.direction, name === "full-document" ? "rtl" : "ltr", `${name}/${media}: document writing direction`);
+        assert.match(appearance.text!, /Örnek Şirket metni değişmeden korunur/);
+        assert.equal(appearance.logos, 2);
+      }
       assert.equal(externalRequests, 0, "no external image request is needed");
     } finally { await browser.close(); }
     const built = await buildSignedPdf({
