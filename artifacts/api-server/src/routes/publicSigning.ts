@@ -19,6 +19,7 @@ import {
   publicContractBranding,
 } from "../lib/contractBranding";
 import { markAgentApplicationContractSigned } from "../lib/agentApplicationLifecycle";
+import { readContractDeliveryStatus } from "../lib/contractDeliveryStatus";
 
 const router: IRouter = Router();
 
@@ -192,11 +193,13 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
         console.error("[public-sign] failed to record open:", auditErr);
       }
     }
+    res.setHeader('Cache-Control','private, no-store');
     res.json({
       data: {
         sessionId: r.session.id,
         mode: r.session.mode,
         status: r.session.status,
+        ...(r.session.status==='signed' ? { emailDelivery:await readContractDeliveryStatus(r.session.id) } : {}),
         signerEmail: r.session.signerEmail,
         verifiedEmail: r.session.verifiedEmail,
         emailVerificationRequired: contractRequiresEmailVerification(r.template.signingPageConfig),

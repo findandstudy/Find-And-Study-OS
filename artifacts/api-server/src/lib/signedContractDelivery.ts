@@ -472,7 +472,14 @@ async function runSweep(): Promise<void> {
 }
 
 export function startSignedContractDeliveryWorker(intervalMs = DELIVERY_INTERVAL_MS): () => Promise<void> {
-  if (!signedContractDeliveryWorkerEnabled()) return stopSignedContractDeliveryWorker;
+  if (!signedContractDeliveryWorkerEnabled()) {
+    if (process.env.SIGNED_CONTRACT_DELIVERY_ENABLED === 'false'
+      && ['prepare', 'send'].includes(process.env.SIGNED_CONTRACT_DURABLE_DELIVERY_MODE || '')) {
+      const started = import('./contractDeliveryWorker').then(module => module.startDurableContractDeliveryWorker(intervalMs));
+      return async () => { const stop = await started; await stop(); };
+    }
+    return stopSignedContractDeliveryWorker;
+  }
   if (deliveryInterval || deliveryInitialTimer) return stopSignedContractDeliveryWorker;
   console.log(`[SIGNED-DELIVERY] Worker started, running every ${intervalMs / 1000}s`);
   deliveryInitialTimer = setTimeout(() => {

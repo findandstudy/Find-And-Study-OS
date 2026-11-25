@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { test } from 'node:test';
+import vm from 'node:vm';
+import ts from 'typescript';
+import { contractSmtpAllowed } from '../src/lib/contractDeliveryPolicy';
+import { contractSmtpOutcome } from '../src/lib/contractSmtpReceipt';
+
+test('actual contract SMTP adapter reuses vetted config, includes PDF, and never uses global queue',async()=>{
+  const src=await readFile(new URL('../src/lib/email.ts',import.meta.url),'utf8');
+  const js=ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
+  const env={NODE_ENV:'production',SIGNED_CONTRACT_DELIVERY_ENABLED:'false',SIGNED_CONTRACT_PDF_WORKER_ENABLED:'false',SIGNED_CONTRACT_DURABLE_DELIVERY_MODE:'send',ALLOW_LIVE_INTEGRATIONS:'true'};
+  let options:any,mail:any,sends=0,queries=0,response:any,closeCount=0;
+  const integrationsTable={},settingsTable={emailSenderName:1,emailSenderEmail:2,emailReplyTo:3};
+  const db={select:()=>({from:(table:any)=>{
+    queries++;
+    if(table===integrationsTable)return{where:async()=>[{isEnabled:true,config:{host:'smtp.example.invalid',port:587,username:'test@example.invalid',password:'SYNTHETIC-NOT-A-SECRET'}}]};
+    assert.equal(table,settingsTable);return Promise.resolve([{emailSenderName:'TEST',emailSenderEmail:'test@example.invalid'}]);
+  }})};
+  const exports:any={};
+  const forbidden=()=>{throw new Error('UNEXPECTED_PROVIDER_OR_QUEUE');};
+  const req=(name:string):any=>{
+    if(name==='./contractDeliveryPolicy')return{contractSmtpAllowed:()=>contractSmtpAllowed(env)};
+    if(name==='./contractSmtpReceipt')return{contractSmtpOutcome};
+    if(name==='@workspace/db')return{db,integrationsTable,settingsTable,emailQueueTable:{},pool:{}};
+    if(name==='drizzle-orm')return{eq:()=>({})};
+    if(name==='node:dns/promises')return{lookup:async()=>[{address:'93.184.216.34'}]};
+    if(name==='node:net')return{isIP:()=>0};
+    if(name==='./safeOutboundRequest')return{isBlockedOutboundIp:()=>false};
+    if(name==='nodemailer')return{createTransport:(value:any)=>{options=value;return{close(){closeCount++;},sendMail:async(value:any)=>{mail=value;sends++;if(response instanceof Error)throw response;if(response==='hang')return new Promise(()=>{});return response??{accepted:[value.to.address],rejected:[],messageId:value.messageId,response:'250 2.0.0 TEST'};}};}};
+    if(name==='crypto')return{};
+    return new Proxy({},{get:()=>forbidden});
+  };
+  vm.runInNewContext(js,{exports,require:req,process:{env},console:{log:forbidden,error:forbidden,warn:forbidden},setTimeout:(fn:()=>void,ms:number)=>setTimeout(fn,response==='hang'?5:ms),clearTimeout,Buffer});
+  const pdf=Buffer.from('%PDF-1.7 TEST ONLY');
+  const payload={recipient:'recipient@example.invalid',messageId:'<synthetic@findandstudy.com>',subject:'TEST',html:'<p>TEST</p>',text:'TEST',pdf};
+  const transport=await exports.prepareContractSmtpTransport();
+  assert.equal((await transport.send(payload)).state,'accepted');
+  assert.equal(options.host,'93.184.216.34');assert.equal(options.requireTLS,true);assert.equal(options.tls.rejectUnauthorized,true);assert.equal(options.tls.servername,'smtp.example.invalid');
+  assert.equal(mail.to.address,payload.recipient);assert.equal(mail.messageId,payload.messageId);assert.deepEqual(mail.attachments[0].content,pdf);
+  assert.equal(mail.disableFileAccess,true);assert.equal(mail.disableUrlAccess,true);assert.ok(closeCount>0);
+  response={accepted:['wrong@example.invalid'],rejected:[],messageId:payload.messageId,response:'250 OK'};
+  assert.equal((await(await exports.prepareContractSmtpTransport()).send(payload)).state,'ambiguous');
+  response='hang';
+  assert.equal((await(await exports.prepareContractSmtpTransport()).send(payload)).state,'ambiguous');
+  response=new Error('lost response after DATA');
+  assert.equal((await(await exports.prepareContractSmtpTransport()).send(payload)).state,'ambiguous');
+  const before={sends,queries};env.SIGNED_CONTRACT_DURABLE_DELIVERY_MODE='off';
+  assert.equal(await exports.prepareContractSmtpTransport(),null);assert.deepEqual({sends,queries},before);
+});

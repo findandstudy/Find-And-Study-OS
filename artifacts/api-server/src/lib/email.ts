@@ -8,6 +8,8 @@ import { pool } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { isLiveIntegrationsEnabled } from "./inbox/liveMode";
 import { isBlockedOutboundIp } from "./safeOutboundRequest";
+import { contractSmtpAllowed } from "./contractDeliveryPolicy";
+import { contractSmtpOutcome, type ContractSmtpOutcome } from "./contractSmtpReceipt";
 
 let cachedTransporter: Transporter | null = null;
 let transporterConfigHash = "";
@@ -188,6 +190,43 @@ export interface EmailAttachment {
   filename: string;
   content: Buffer;
   contentType?: string;
+}
+
+/** Contract-only adapter. Never enters the legacy body-only retry queue. */
+export async function prepareContractSmtpTransport(): Promise<{
+  send: (message: { recipient: string; messageId: string; subject: string; html: string; text: string; pdf: Buffer }) => Promise<ContractSmtpOutcome>;
+  close: () => void;
+} | null> {
+  if (!contractSmtpAllowed()) return null;
+  const config = await getSmtpConfig();
+  if (!config) return null;
+  const defaults = await getSenderDefaults();
+  // Dedicated vetted TLS transport: a timeout must not close the global sender.
+  const transporter = await createSmtpTransporter(config);
+  return {
+    close: () => transporter.close(),
+    async send(message) {
+      if (!contractSmtpAllowed()) return { state: 'ambiguous', code: 'CONTRACT_DELIVERY_DISABLED_BEFORE_SEND' };
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const result = await Promise.race([
+          transporter.sendMail({
+            from: { name: defaults.senderName || config.fromName || 'Find And Study', address: defaults.senderEmail || config.fromEmail || config.username },
+            ...(defaults.replyTo ? { replyTo: defaults.replyTo } : {}),
+            to: { address: message.recipient, name: '' },
+            messageId: message.messageId, subject: message.subject, html: message.html, text: message.text,
+            attachments: [{ filename: 'signed-contract.pdf', content: message.pdf, contentType: 'application/pdf' }],
+            disableFileAccess: true, disableUrlAccess: true,
+          }),
+          new Promise<never>((_, reject) => { timer = setTimeout(() => { transporter.close(); reject(new Error('CONTRACT_SMTP_TIMEOUT')); }, 30000); }),
+        ]);
+        return contractSmtpOutcome(result, message.recipient, message.messageId);
+      } catch {
+        // Timeout/disconnect can follow DATA acceptance. Never blindly retry.
+        return { state: 'ambiguous', code: 'SMTP_OUTCOME_UNCONFIRMED' };
+      } finally { if (timer) clearTimeout(timer); transporter.close(); }
+    },
+  };
 }
 
 async function sendViaSmtp(

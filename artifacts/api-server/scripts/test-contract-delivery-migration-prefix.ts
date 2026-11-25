@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { mkdtemp,readFile,writeFile,mkdir,copyFile,rm } from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+const ownRequire=createRequire(import.meta.url),pg=createRequire(ownRequire.resolve('@workspace/db'))('pg');
+test('fresh exact Apply0000-0065 + attested0066 + prepared0067, migration replay',async()=>{
+  const url=new URL(process.env.CONTRACT_DELIVERY_PREFIX_DATABASE_URL||'http://invalid');
+  assert.equal(url.protocol,'postgres:');assert.equal(url.hostname,'127.0.0.1');assert.equal(url.search,'');
+  assert.match(url.pathname,/^\/fas_contract_mail_prefix_test_[a-z0-9_]+$/);
+  const source=fileURLToPath(new URL('../../../lib/db/drizzle/',import.meta.url));
+  const temp=await mkdtemp(path.join(tmpdir(),'fas-contract-prefix-'));
+  const client=new pg.Client({connectionString:url.toString()});
+  try{
+    await client.connect();assert.equal((await client.query("SELECT count(*)::int AS n FROM pg_tables WHERE schemaname='public'")).rows[0].n,0);
+    assert.equal((await client.query('SELECT host(inet_server_addr()) AS address')).rows[0].address,'127.0.0.1');
+    const journal=JSON.parse(await readFile(path.join(source,'meta/_journal.json'),'utf8'));assert.equal(journal.entries.length,66);
+    await mkdir(path.join(temp,'meta'));
+    for(const entry of journal.entries)await copyFile(path.join(source,`${entry.tag}.sql`),path.join(temp,`${entry.tag}.sql`));
+    const live0066=await readFile(process.env.APPLY_0066_SQL_PATH||'');
+    assert.equal(createHash('sha256').update(live0066).digest('hex'),'72747e384a9b6ce96c1f72947cfbdf83808310ab0904a528cc38e7d7c93c8f52');
+    await writeFile(path.join(temp,'0066_education_country.sql'),live0066);
+    journal.entries.push({idx:66,version:'7',when:1791040178940,tag:'0066_education_country',breakpoints:true});
+    await writeFile(path.join(temp,'meta/_journal.json'),JSON.stringify(journal));
+    const db=drizzle(client);await migrate(db,{migrationsFolder:temp});
+    const prefix=(await client.query('SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY id')).rows;
+    assert.equal(prefix.length,67);
+    await copyFile(fileURLToPath(new URL('../../../deploy/prepared-migrations/apply/0067_signed_contract_delivery.sql',import.meta.url)),path.join(temp,'0067_signed_contract_delivery.sql'));
+    journal.entries.push({idx:67,version:'7',when:Date.UTC(2026,10,25),tag:'0067_signed_contract_delivery',breakpoints:true});
+    await writeFile(path.join(temp,'meta/_journal.json'),JSON.stringify(journal));
+    await migrate(db,{migrationsFolder:temp});
+    assert.deepEqual((await client.query('SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY id LIMIT 67')).rows,prefix);
+    assert.equal((await client.query('SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations')).rows[0].n,68);
+    assert.equal((await client.query('SELECT count(*)::int AS n FROM signed_contract_deliveries')).rows[0].n,0);
+    await migrate(db,{migrationsFolder:temp});
+    assert.equal((await client.query('SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations')).rows[0].n,68);
+    assert.equal((await client.query('SELECT count(*)::int AS n FROM signed_contract_deliveries')).rows[0].n,0);
+  }finally{await client.end();assert.equal(path.dirname(temp),tmpdir());assert.ok(path.basename(temp).startsWith('fas-contract-prefix-'));await rm(temp,{recursive:true,force:true});}
+});

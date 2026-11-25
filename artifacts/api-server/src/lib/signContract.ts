@@ -1,5 +1,7 @@
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable } from "@workspace/db";
-import { and, eq, isNull, desc } from "drizzle-orm";
+import { and, eq, isNull, desc, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { contractDeliveryMode } from "./contractDeliveryPolicy";
 import { buildFinalSignedContractHtml, contractNumber } from "./contractRenderer";
 import { buildSignedPdf } from "./contractPdf";
 import { ObjectStorageService } from "./objectStorage";
@@ -164,6 +166,15 @@ export async function finalizeSign(opts: {
         emailVerifiedAt: emailVerificationEvidence.verifiedAt,
         signedAt,
       }).returning();
+      // Opt-in only, and atomic with this NEW signature. No startup scan ever
+      // enrolls old signed contracts or re-sends their historical mail.
+      if (contractDeliveryMode() !== 'off') {
+        const recipient = row.signerEmail.trim().toLowerCase();
+        const messageId = `<contract-${randomUUID()}@findandstudy.com>`;
+        await tx.execute(sql`INSERT INTO signed_contract_deliveries
+          (signed_contract_id, signing_session_id, recipient, message_id)
+          VALUES (${row.id}, ${row.signingSessionId}, ${recipient}, ${messageId})`);
+      }
       return { ok: true, row };
     });
   } catch (txErr: any) {
