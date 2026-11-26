@@ -33,11 +33,20 @@ export function contractTemplateVariables(html: string): string[] {
   } finally { dom.window.close(); }
 }
 
-/** Only an explicit WhatsApp answer is an alias. Generic phone is not. */
+const SIGNING_FIELD_ALIASES = [
+  ['agencyName', 'agency_name'],
+  ['contactPersonName', 'contact_person_name'],
+  ['agencyEmail', 'agency_email'],
+  ['whatsappPhone', 'whatsapp_phone'],
+] as const;
+
+/** Explicit form answers only. Generic phone is never a WhatsApp answer. */
 export function normalizeContractSigningIntake(value: unknown): Record<string, unknown> {
   const intake = value && typeof value === 'object' && !Array.isArray(value) ? { ...value } as Record<string, unknown> : {};
-  if (!Object.prototype.hasOwnProperty.call(intake, 'whatsapp_phone') && typeof intake.whatsappPhone === 'string' && intake.whatsappPhone.trim()) {
-    intake.whatsapp_phone = intake.whatsappPhone.trim();
+  for (const [alias, canonical] of SIGNING_FIELD_ALIASES) {
+    if (!Object.prototype.hasOwnProperty.call(intake, canonical) && typeof intake[alias] === 'string' && String(intake[alias]).trim()) {
+      intake[canonical] = String(intake[alias]).trim();
+    }
   }
   return intake;
 }
@@ -47,13 +56,15 @@ export function contractSigningIntakeRequirements(input: { bodyHtml: string; int
   const fields: ContractIntakeField[] = Array.isArray(input.intakeSchema)
     ? input.intakeSchema.filter((field: any) => field && typeof field.key === 'string').map((field: any) => ({ ...field })) : [];
   const intake = normalizeContractSigningIntake(input.intakeData);
-  if (contractTemplateVariables(input.bodyHtml).some(key => key === 'whatsapp_phone' || key === 'intake.whatsapp_phone')) {
-    const declared = fields.find(field => field.key === 'whatsapp_phone' || field.key === 'whatsappPhone');
+  const variables = contractTemplateVariables(input.bodyHtml);
+  for (const [alias, canonical] of SIGNING_FIELD_ALIASES) {
+    if (!variables.some(key => key === canonical || key === `intake.${canonical}`)) continue;
+    const declared = fields.find(field => field.key === canonical || field.key === alias);
     // The displayed field must be the value the canonical template uses.
     // Otherwise an explicit blank canonical value plus stale camelCase answer
     // can pass the form but fail PDF validation forever.
-    if (declared) { declared.key = 'whatsapp_phone'; declared.required = true; }
-    else fields.push({ key: 'whatsapp_phone', type: 'tel', required: true,
+    if (declared) { declared.key = canonical; declared.required = true; }
+    else if (canonical === 'whatsapp_phone') fields.push({ key: 'whatsapp_phone', type: 'tel', required: true,
       label: input.language === 'tr' ? 'WhatsApp numarası' : input.language === 'ar' ? 'رقم واتساب' : 'WhatsApp number' });
   }
   const missingFields = fields.filter(field => field.required && (typeof intake[field.key] !== 'string' || !String(intake[field.key]).trim())).map(field => field.key);
