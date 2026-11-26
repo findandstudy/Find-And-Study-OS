@@ -10,7 +10,10 @@ import { useJsonLd, SITE_URL, SITE_NAME, ORG_SCHEMA } from "@/hooks/use-json-ld"
 import { enrichManagedHomePageBlocks, managedHomePageBlocks } from "@/lib/website/managedPageStarters";
 import { hydrateManagedHomeDestinations, hydrateManagedHomeUniversities, type HomeDestination, type HomeUniversity } from "@/lib/website/homeDestinationCards";
 
-type HomeUniversityResponse = { data: HomeUniversity[] };
+type HomeUniversityResponse = {
+  data: HomeUniversity[];
+  meta?: { total?: number; capped?: boolean };
+};
 
 function normalizeHomeBranding<T>(value: T): T {
   if (typeof value === "string") {
@@ -107,7 +110,7 @@ export default function Home() {
   });
   const universityQuery = useQuery<HomeUniversityResponse>({
     queryKey: ["home-featured-universities"],
-    queryFn: () => customFetch("/api/universities?limit=100&offset=0"),
+    queryFn: () => customFetch("/api/public/home-universities"),
     staleTime: 5 * 60_000,
     retry: false,
   });
@@ -143,6 +146,8 @@ export default function Home() {
     const hydrated = hydrateManagedHomeUniversities(
       hydrateManagedHomeDestinations(blocks, destinationQuery.data || []),
       universityQuery.data?.data || [],
+      destinationQuery.data || [],
+      lang,
     );
     return <HomeBlocks blocks={hydrated} version={page.data.versionNumber} pageTitle={page.data.title} locale={lang} />;
   }
@@ -170,6 +175,8 @@ export default function Home() {
   const hydrated = hydrateManagedHomeUniversities(
     hydrateManagedHomeDestinations(fallbackBlocks, destinationQuery.data || []),
     universityQuery.data?.data || [],
+    destinationQuery.data || [],
+    lang,
   );
   return <HomeBlocks blocks={hydrated} pageTitle={t("seo.homeTitle")} locale={lang} />;
 }

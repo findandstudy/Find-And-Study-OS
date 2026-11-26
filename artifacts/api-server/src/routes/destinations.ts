@@ -36,6 +36,33 @@ const router: IRouter = Router();
 const DESTINATION_LINK_LIMIT = 24;
 const DESTINATION_LINK_CANDIDATE_LIMIT = 64;
 
+router.get("/public/home-universities", async (_req: Request, res: Response): Promise<void> => {
+  const policy = await getPublicCatalogPolicy();
+  const publicConditions: any[] = [];
+  addPublicCatalogConditions(publicConditions, policy);
+  const rows = await db.select({
+    id: universitiesTable.id,
+    name: universitiesTable.name,
+    country: universitiesTable.country,
+    logoVersion: universitiesTable.updatedAt,
+    hasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL
+      AND length(trim(${universitiesTable.logoUrl})) > 0`.as("has_logo"),
+  })
+    .from(universitiesTable)
+    .where(and(...publicConditions))
+    .orderBy(asc(universitiesTable.country), asc(universitiesTable.name), asc(universitiesTable.id))
+    .limit(2_500);
+
+  res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=3600");
+  res.json({
+    data: rows.map(({ hasLogo, logoVersion, ...university }) => ({
+      ...university,
+      logoUrl: courseFinderUniversityLogoUrl(university.id, hasLogo, logoVersion),
+    })),
+    meta: { total: rows.length, capped: rows.length === 2_500 },
+  });
+});
+
 router.get("/public/destinations", async (req: Request, res: Response): Promise<void> => {
   const locale = normalizeProgramLocale(req.query.locale);
   const policy = await getPublicCatalogPolicy();

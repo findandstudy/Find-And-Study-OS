@@ -19,6 +19,32 @@ export type HomeUniversity = {
   logoUrl?: string | null;
 };
 
+function countryKey(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("en-US");
+}
+
+function publicCatalogSlug(value: unknown): string {
+  const normalized = String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("en-US")
+    .replace(/ı/g, "i")
+    .replace(/ş/g, "s")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 150)
+    .replace(/-+$/g, "");
+  return normalized || "item";
+}
+
 export function hydrateManagedHomeDestinations(blocks: PageBlock[], destinations: HomeDestination[]): PageBlock[] {
   const items = destinations.filter(destination => destination.name && destination.canonicalPath).slice(0, 6).map(destination => ({
     id: destination.id ?? destination.canonicalPath,
@@ -61,17 +87,39 @@ export function hydrateManagedHomeDestinations(blocks: PageBlock[], destinations
   });
 }
 
-export function hydrateManagedHomeUniversities(blocks: PageBlock[], universities: HomeUniversity[]): PageBlock[] {
-  const seen = new Set<string>();
+export function hydrateManagedHomeUniversities(
+  blocks: PageBlock[],
+  universities: HomeUniversity[],
+  destinations: HomeDestination[] = [],
+  locale = "en",
+): PageBlock[] {
+  const seen = new Set<number>();
   const logos = universities.flatMap(university => {
     const name = university.name?.trim();
-    const imageUrl = university.logoUrl?.trim();
-    if (!name || !imageUrl || seen.has(imageUrl)) return [];
-    seen.add(imageUrl);
-    return [{ name, imageUrl, country: university.country || "" }];
-  }).slice(0, 8);
+    if (!name || !Number.isSafeInteger(university.id) || university.id < 1 || seen.has(university.id)) return [];
+    seen.add(university.id);
+    return [{
+      id: university.id,
+      name,
+      imageUrl: university.logoUrl?.trim() || null,
+      country: university.country?.trim() || "",
+      countryKey: countryKey(university.country),
+      linkUrl: `/${locale}/universities/${publicCatalogSlug(name)}-${university.id}`,
+    }];
+  });
+  const countryTabs = destinations.flatMap(destination => {
+    const sourceName = destination.country?.trim() || destination.name?.trim();
+    const label = destination.name?.trim();
+    const key = countryKey(sourceName);
+    if (!key || !label) return [];
+    return [{ key, label, linkUrl: destination.canonicalPath }];
+  }).filter((tab, index, tabs) => tabs.findIndex(candidate => candidate.key === tab.key) === index);
+  const allowedCountries = new Set(countryTabs.map(tab => tab.key));
+  const filteredLogos = allowedCountries.size
+    ? logos.filter(logo => allowedCountries.has(logo.countryKey))
+    : logos;
   if (!logos.length) return blocks;
   return blocks.map(block => block.blockType === "logo_grid" && block.content.variant === "home-universities"
-    ? { ...block, content: { ...block.content, logos } }
+    ? { ...block, content: { ...block.content, logos: filteredLogos, countryTabs } }
     : block);
 }

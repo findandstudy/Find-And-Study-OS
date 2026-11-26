@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { ArrowLeft, ArrowRight, BookOpen, Building2, Compass, FileText, Globe2, GraduationCap, Map, MessageCircle, Plane, Search, ShieldCheck, Sparkles, Star, Users } from "lucide-react";
@@ -226,6 +226,89 @@ function ActionLink({ href, label, secondary = false }: { href: unknown; label: 
   );
 }
 
+function UniversityCountrySlider({ content }: { content: Record<string, unknown> }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const logos = useMemo(() => items(content.logos, 2_000), [content.logos]);
+  const tabs = useMemo(() => {
+    const configured = items(content.countryTabs, 128).flatMap(tab => {
+      const key = text(tab.key, 160);
+      const label = text(tab.label, 160);
+      return key && label ? [{ key, label }] : [];
+    });
+    if (configured.length) return configured;
+    return logos.flatMap(logo => {
+      const key = text(logo.countryKey, 160) || text(logo.country, 160).toLocaleLowerCase("en-US");
+      const label = text(logo.country, 160);
+      return key && label ? [{ key, label }] : [];
+    }).filter((tab, index, all) => all.findIndex(candidate => candidate.key === tab.key) === index);
+  }, [content.countryTabs, logos]);
+  const [activeKey, setActiveKey] = useState(() => tabs[0]?.key || "");
+  const activeTab = tabs.find(tab => tab.key === activeKey) || tabs[0];
+  const activeLogos = activeTab
+    ? logos.filter(logo => (text(logo.countryKey, 160) || text(logo.country, 160).toLocaleLowerCase("en-US")) === activeTab.key)
+    : logos;
+
+  useEffect(() => {
+    if (!tabs.length) return;
+    if (!tabs.some(tab => tab.key === activeKey)) setActiveKey(tabs[0].key);
+  }, [activeKey, tabs]);
+
+  useEffect(() => {
+    trackRef.current?.scrollTo({ left: 0, behavior: "auto" });
+  }, [activeTab?.key]);
+
+  const move = (direction: 1 | -1) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const distance = Math.max(260, Math.round(track.clientWidth * .78));
+    const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 12;
+    const atStart = track.scrollLeft <= 12;
+    if (direction === 1 && atEnd) track.scrollTo({ left: 0, behavior: "smooth" });
+    else if (direction === -1 && atStart) track.scrollTo({ left: track.scrollWidth, behavior: "smooth" });
+    else track.scrollBy({ left: distance * direction, behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    if (isPaused || activeLogos.length < 2 || typeof window === "undefined"
+      || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => move(1), 4_800);
+    return () => window.clearInterval(timer);
+  }, [activeTab?.key, activeLogos.length, isPaused]);
+
+  if (!logos.length || !tabs.length) return null;
+  return (
+    <section
+      className="home-university-wall"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      onFocusCapture={() => setIsPaused(true)}
+      onBlurCapture={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsPaused(false);
+      }}
+    >
+      {content.eyebrow ? <p className="home-section-kicker text-center">{text(content.eyebrow, 200)}</p> : null}
+      <h2 className="text-center text-3xl font-bold">{text(content.title, 500)}</h2>
+      {content.subtitle ? <p className="home-university-wall-subtitle">{text(content.subtitle, 2_000)}</p> : null}
+      <div className="home-university-tabs" role="tablist" aria-label="Choose a study country">
+        {tabs.map(tab => <button key={tab.key} type="button" role="tab" aria-selected={tab.key === activeTab?.key} onClick={() => setActiveKey(tab.key)}>{tab.label}</button>)}
+      </div>
+      <div className="home-university-slider-shell">
+        <button className="home-university-slider-control is-previous" type="button" onClick={() => move(-1)} aria-label="Previous universities"><ArrowLeft aria-hidden="true" /></button>
+        <div ref={trackRef} className="home-university-slider-track" role="tabpanel" aria-label={`${activeTab?.label || "Selected country"} universities`}>
+          {activeLogos.length ? activeLogos.map((logo, index) => {
+            const image = safeImageUrl(logo.imageUrl);
+            const href = safeUrl(logo.linkUrl);
+            const visual = <>{image ? <img src={image} alt="" loading="lazy" /> : <span className="home-university-placeholder"><Building2 aria-hidden="true" /></span>}<div><strong>{text(logo.name, 200)}</strong>{logo.country ? <span>{text(logo.country, 120)}</span> : null}</div><ArrowRight className="home-university-card-arrow" aria-hidden="true" /></>;
+            return href ? <a key={text(logo.id, 64) || index} href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined}>{visual}</a> : <div key={text(logo.id, 64) || index}>{visual}</div>;
+          }) : <p className="home-university-empty">No active institutions are listed for this country yet.</p>}
+        </div>
+        <button className="home-university-slider-control is-next" type="button" onClick={() => move(1)} aria-label="Next universities"><ArrowRight aria-hidden="true" /></button>
+      </div>
+    </section>
+  );
+}
+
 export function Block({ block, index }: { block: PageBlock; index: number }) {
   const content = block.content;
   switch (block.blockType) {
@@ -352,8 +435,8 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
                 const Icon = iconByName[iconName] || Globe2;
                 const href = safeUrl(card.linkUrl);
                 const image = safeImageUrl(card.imageUrl);
-                const body = <><div className="home-service-card-head"><div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center"><Icon className="w-7 h-7 text-primary transition-colors duration-300" /></div><h3 className="text-xl font-bold font-display">{text(card.title, 300)}</h3></div><p className="text-muted-foreground leading-relaxed">{text(card.description)}</p>{image ? <div className="home-service-card-media"><img src={image} alt="" loading="lazy" /></div> : null}<span className="home-service-card-link">Explore support <ArrowRight aria-hidden="true" /></span></>;
-                return <article key={cardIndex} className="home-bento-card group">{href ? <a className="block h-full" href={href}>{body}</a> : body}</article>;
+                const body = <><div className="home-service-card-head"><div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center"><Icon className="w-7 h-7 text-primary transition-colors duration-300" /></div><h3 className="text-xl font-bold font-display">{text(card.title, 300)}</h3></div><p className="text-muted-foreground leading-relaxed">{text(card.description)}</p><span className="home-service-card-link">Explore support <ArrowRight aria-hidden="true" /></span>{image ? <div className="home-service-card-media"><img src={image} alt="" loading="lazy" /></div> : null}</>;
+                return <article key={cardIndex} className="home-bento-card group">{href ? <a className="home-service-card-body" href={href}>{body}</a> : <div className="home-service-card-body">{body}</div>}</article>;
               })}
             </div>
           </div>
@@ -415,7 +498,8 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
               {cards.map((item, index) => {
                 const href = safeUrl(item.canonicalPath);
                 const image = safeImageUrl(item.imageUrl);
-                const card = <>{image ? <div className="home-catalog-media"><img src={image} alt="" loading="lazy" /><span>{text(item.flagEmoji, 12)}</span></div> : null}<div className="home-catalog-copy"><span className="home-card-index">{String(index + 1).padStart(2, "0")}</span><h3 className="text-xl font-semibold">{text(item.title, 500)}</h3>{item.description ? <p className="mt-2 text-muted-foreground">{text(item.description)}</p> : null}<ArrowRight className="mt-6 h-5 w-5" aria-hidden="true" /></div></>;
+                const flag = text(item.flagEmoji, 12);
+                const card = <>{image ? <div className="home-catalog-media"><img src={image} alt="" loading="lazy" />{flag ? <span>{flag}</span> : null}</div> : null}<div className="home-catalog-copy"><span className="home-card-index">{String(index + 1).padStart(2, "0")}</span><h3 className="text-xl font-semibold">{text(item.title, 500)}</h3>{item.description ? <p className="mt-2 text-muted-foreground">{text(item.description)}</p> : null}<ArrowRight className="mt-6 h-5 w-5" aria-hidden="true" /></div></>;
                 return <article key={text(item.id, 64) || index} className="home-catalog-card rounded-2xl border bg-card shadow-sm">{href ? <a href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{card}</a> : card}</article>;
               })}
             </div>
@@ -486,6 +570,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
     case "logo_grid": {
       const logos = items(content.logos, 40);
       if (!logos.length) return null;
+      if (content.variant === "home-universities") return <UniversityCountrySlider content={content} />;
       return <section className={content.variant === "home-universities" ? "home-university-wall" : "mx-auto max-w-6xl px-4 py-14"}>{content.eyebrow ? <p className="home-section-kicker text-center">{text(content.eyebrow, 200)}</p> : null}<h2 className="text-center text-3xl font-bold">{text(content.title, 500)}</h2>{content.subtitle ? <p className="home-university-wall-subtitle">{text(content.subtitle, 2_000)}</p> : null}<div className="home-university-grid">{logos.map((logo, index) => { const image = safeImageUrl(logo.imageUrl); const href = safeUrl(logo.linkUrl); const visual = <>{image ? <img src={image} alt={text(logo.name, 200)} loading="lazy" /> : <Building2 aria-hidden="true" />}<strong>{text(logo.name, 200)}</strong>{logo.country ? <span>{text(logo.country, 120)}</span> : null}</>; return href ? <a key={index} href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined}>{visual}</a> : <div key={index}>{visual}</div>; })}</div></section>;
     }
     case "testimonials": {

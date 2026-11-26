@@ -139,11 +139,19 @@ test("Home uses live university logos without fabricating institution cards", ()
   const hydrated = hydrateManagedHomeUniversities(blocks, [
     { id: 1, name: "Example University", country: "Exampleland", logoUrl: "/api/universities/1/logo" },
     { id: 2, name: "Duplicate logo", country: "Exampleland", logoUrl: "/api/universities/1/logo" },
-  ]);
+  ], [{ id: 9, name: "Exampleland", country: "Exampleland", canonicalPath: "/en/countries/exampleland" }], "en");
   const wall = hydrated.find(block => block.blockType === "logo_grid");
-  assert.deepEqual(wall?.content.logos, [{ name: "Example University", country: "Exampleland", imageUrl: "/api/universities/1/logo" }]);
+  assert.deepEqual(wall?.content.logos, [
+    { id: 1, name: "Example University", country: "Exampleland", countryKey: "exampleland", imageUrl: "/api/universities/1/logo", linkUrl: "/en/universities/example-university-1" },
+    { id: 2, name: "Duplicate logo", country: "Exampleland", countryKey: "exampleland", imageUrl: "/api/universities/1/logo", linkUrl: "/en/universities/duplicate-logo-2" },
+  ]);
+  assert.deepEqual(wall?.content.countryTabs, [{ key: "exampleland", label: "Exampleland", linkUrl: "/en/countries/exampleland" }]);
   assert.match(source("pages/public/Home.tsx"), /home-featured-universities/);
-  assert.match(source("pages/public/cmsEditorial.css"), /\.home-university-wall/);
+  assert.match(source("pages/public/Home.tsx"), /\/api\/public\/home-universities/);
+  assert.match(source("pages/public/PublicPage.tsx"), /UniversityCountrySlider/);
+  assert.match(source("pages/public/PublicPage.tsx"), /setInterval\(\(\) => move\(1\), 4_800\)/);
+  assert.match(source("pages/public/PublicPage.tsx"), /onMouseEnter=\{\(\) => setIsPaused\(true\)\}/);
+  assert.match(source("pages/public/homeVistaraParity.css"), /\.home-university-slider-track/);
 });
 
 test("managed editor previews collection-backed blocks with the same data contract as public pages", () => {

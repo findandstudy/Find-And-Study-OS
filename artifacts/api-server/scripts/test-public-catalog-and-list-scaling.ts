@@ -26,11 +26,23 @@ const studentsPage = read("../../edcons/src/pages/staff/Students.tsx");
 const applicationsPage = read("../../edcons/src/pages/staff/Applications.tsx");
 const catalogPage = read("../../edcons/src/pages/admin/Catalog.tsx");
 const catalogRoute = read("../src/routes/catalog.ts");
+const destinationsRoute = read("../src/routes/destinations.ts");
 const universityTypeSeed = read("../../../lib/db/drizzle/0140_catalog_university_type_options.sql");
 
 test("public catalogue uses an explicit public scope for programs and facets", () => {
   assert.match(publicPrograms, /p\.set\("scope", "public"\)/);
   assert.match(publicPrograms, /params\.set\("scope", "public"\)/);
+});
+
+test("homepage university rail is a bounded public-policy projection", () => {
+  const start = destinationsRoute.indexOf('router.get("/public/home-universities"');
+  const handler = destinationsRoute.slice(start, destinationsRoute.indexOf('router.get("/public/destinations"', start));
+  assert.ok(start >= 0);
+  assert.match(handler, /addPublicCatalogConditions\(publicConditions, policy\)/);
+  assert.match(handler, /\.limit\(2_500\)/);
+  assert.match(handler, /courseFinderUniversityLogoUrl/);
+  assert.match(handler, /Cache-Control/);
+  assert.doesNotMatch(handler, /select\(\)|sourceMetadata|description/);
 });
 
 test("anonymous course-finder requests fail closed to a private-only default", () => {
