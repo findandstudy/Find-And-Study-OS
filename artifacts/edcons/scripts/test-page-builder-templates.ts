@@ -220,7 +220,12 @@ test("managed inner pages share the Vistara-inspired responsive presentation con
   assert.match(managed, /breadcrumbLabel/);
   assert.match(managed, /\/images\/auth-bg\.png/);
   assert.match(managed, /template === "about" && block\.blockType === "media_text"/);
+  assert.match(managed, /about-native-proof/);
+  assert.match(managed, /about-native-story/);
+  assert.match(managed, /about-native-values/);
   assert.match(publicPage, /cms-inner-breadcrumb/);
+  assert.match(publicPage, /about-native-proof-grid/);
+  assert.match(publicPage, /about-native-story-visual/);
   assert.match(publicPage, /cms-inner-faq-intro/);
   assert.match(publicPage, /cms-inner-faq-list/);
   assert.match(source("pages/public/Countries.tsx"), /inner-destination-card/);
@@ -237,6 +242,8 @@ test("managed inner pages share the Vistara-inspired responsive presentation con
   assert.match(css, /inner-destination-flag/);
   assert.match(css, /About page: Vistara reference composition/);
   assert.match(css, /--about-deep/);
+  assert.match(css, /Project-native About composition/);
+  assert.match(css, /--about-native-navy/);
   assert.match(css, /@media \(max-width: 760px\)/);
   assert.match(css, /prefers-reduced-motion: reduce/);
 });

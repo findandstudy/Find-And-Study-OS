@@ -35,8 +35,8 @@ export function ManagedPublicPage({
     : managedPageStarterBlocks(template, lang);
   const aboutBlockOrder = new Map([
     ["hero", 0],
-    ["media_text", 1],
-    ["counter_grid", 2],
+    ["counter_grid", 1],
+    ["media_text", 2],
     ["grid_box", 3],
     ["process_steps", 4],
     ["team_grid", 5],
@@ -64,6 +64,7 @@ export function ManagedPublicPage({
         ...block,
         content: {
           ...block.content,
+          ...(template === "about" ? { variant: "about-native-hero" } : {}),
           backgroundImage: block.content.backgroundImage || "/images/auth-bg.png",
           breadcrumbHome: homeLabels[lang] || "Home",
           breadcrumbHomeUrl: `/${lang}`,
@@ -84,6 +85,7 @@ export function ManagedPublicPage({
           imageUrl: "/images/auth-bg.png",
           altText: block.content.altText || page?.data.title || SITE_NAME,
           imagePosition: "left",
+          variant: "about-native-story",
         },
       };
     }
@@ -91,8 +93,20 @@ export function ManagedPublicPage({
     if (template === "about" && block.blockType === "media_text") {
       return {
         ...block,
-        content: { ...block.content, imagePosition: "left" },
+        content: { ...block.content, imagePosition: "left", variant: "about-native-story" },
       };
+    }
+
+    if (template === "about" && block.blockType === "counter_grid") {
+      return { ...block, content: { ...block.content, variant: "about-native-proof" } };
+    }
+
+    if (template === "about" && block.blockType === "grid_box") {
+      return { ...block, content: { ...block.content, variant: "about-native-values" } };
+    }
+
+    if (template === "about" && block.blockType === "process_steps") {
+      return { ...block, content: { ...block.content, variant: "about-native-process" } };
     }
 
     return block;
