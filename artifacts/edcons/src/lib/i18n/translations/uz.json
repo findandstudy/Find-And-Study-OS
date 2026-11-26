@@ -2860,7 +2860,7 @@
     "titleReview": "Yozma xotira",
     "titleSign": "Imzoni qoʻshish",
     "signed": "Imzo qoʻyish",
-    "signedBody": "A copy of the signed PDF has been sent to your email. You may close this window.",
+    "signedBody": "Imzoingiz saqlandi. PDF tayyorlash va elektron xatni yetkazish alohida bosqichlar; bu ekran xat yuborilganini tasdiqlamaydi.",
     "expired": "Bogʻni oʻchirish",
     "expiredBody": "Imzo qoʻyish",
     "revoked": "Bogʻni oʻchirish",
@@ -5703,11 +5703,11 @@
     "submitButton": "_Maxfiy soʻz:"
   },
   "signedContract": {
-    "pdfPending": "PDF is still being generated. Please try again in about 30 seconds.",
+    "pdfPending": "Imzolangan PDF hali tayyor emas. Keyinroq qayta urinib ko‘ring; muammo davom etsa, yordam xizmatiga murojaat qiling.",
     "pdfDownloadError": "Failed to download PDF.",
     "download": "Download PDF",
-    "regenerate": "Regenerate PDF",
-    "regenerateQueued": "Regenerating the PDF; it will be ready to download in about 30 seconds.",
+    "regenerate": "Mavjud bo‘lmagan PDF uchun qayta urinish",
+    "regenerateQueued": "Mavjud bo‘lmagan PDF fonda qayta ishlanishni kutmoqda. Mavjud imzolangan fayllar saqlanadi.",
     "regenerateError": "Dasturni ishga tushirib boʻlmadi."
   },
   "apiTokens": {

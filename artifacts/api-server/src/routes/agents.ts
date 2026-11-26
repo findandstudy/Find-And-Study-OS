@@ -20,7 +20,9 @@ import {
   type AgentCatalog,
 } from "../lib/exportImportExcel";
 import { db, agentsTable, agentIntegrationsTable, usersTable, rolesTable, DEFAULT_ROLE_PERMISSIONS, getAllPermissions, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable, auditLogsTable } from "@workspace/db";
-import { getNewestSignedContractUrl } from "../lib/signContract";
+import { loadNewestSignedContractForAgent } from "../lib/signContract";
+import { agentSignedContractSummary } from "../lib/agentSignedContractSummary";
+import { readContractDeliveryStatus } from "../lib/contractDeliveryStatus";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
@@ -368,7 +370,7 @@ async function loadAgentCatalog(visible: number[] | null): Promise<AgentCatalog>
       language: contractTemplatesTable.language,
       entityType: contractTemplatesTable.entityType,
     }).from(contractTemplatesTable)
-      .where(and(isNull(contractTemplatesTable.deletedAt), eq(contractTemplatesTable.isActive, true)))
+      .where(and(isNull(contractTemplatesTable.deletedAt), eq(contractTemplatesTable.isActive, true), eq(contractTemplatesTable.publicationStatus, "published")))
       .orderBy(contractTemplatesTable.name),
     db.select({
       id: agentsTable.id,
@@ -512,16 +514,17 @@ router.post(
             throw new Error(`Parent agent ID ${values.parentAgentId} not found or out of scope`);
           }
         }
-        // Contract template must exist, be active and not deleted (matches the
+        // Contract template must be published, active and not deleted (matches the
         // reference sheet shown in the template/export workbook).
         if (values.assignedContractTemplateId) {
           const [tpl] = await db.select({ id: contractTemplatesTable.id }).from(contractTemplatesTable)
             .where(and(
               eq(contractTemplatesTable.id, values.assignedContractTemplateId as number),
               eq(contractTemplatesTable.isActive, true),
+              eq(contractTemplatesTable.publicationStatus, "published"),
               isNull(contractTemplatesTable.deletedAt),
             ));
-          if (!tpl) throw new Error(`Contract template ID ${values.assignedContractTemplateId} not found, inactive, or deleted`);
+          if (!tpl) throw new Error(`Contract template ID ${values.assignedContractTemplateId} not found, inactive, unpublished, or deleted`);
         }
 
         const insertValues: any = {
@@ -670,21 +673,22 @@ router.get("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req, r
     }
   }
 
-  // Resolve contractUrl at read time to the agent's NEWEST signed contract. The
-  // stored agents.contractUrl is hydrated lazily on first PDF render and could be
-  // locked to an earlier (possibly broken) contract when the agent later
-  // re-signed via a resend. Falling back to the stored value preserves manually
-  // set URLs and agents whose newest contract PDF has not rendered yet.
+  // Keep signature existence separate from the derived PDF. A newer signed
+  // contract awaiting rendering must not show an older contract or "not uploaded".
   let contractUrl = agent.contractUrl;
+  let signedContract: ReturnType<typeof agentSignedContractSummary> = null;
   try {
-    const resolved = await getNewestSignedContractUrl(agent.id);
-    if (resolved) contractUrl = resolved;
+    const newest = await loadNewestSignedContractForAgent(agent.id);
+    const emailDelivery = newest ? await readContractDeliveryStatus(newest.session.id, agent.id) : undefined;
+    signedContract = agentSignedContractSummary(agent.id, newest, emailDelivery);
+    if (signedContract) contractUrl = signedContract.downloadUrl;
   } catch (err) {
     console.error(`[agents/me] failed to resolve newest contract url for agent ${agent.id}:`, err);
   }
 
   const browserAgent = {
     ...agent,
+    signedContract,
     logoUrl: browserStorageUrl(agent.logoUrl),
     agentIdProofUrl: browserStorageUrl(agent.agentIdProofUrl),
     businessCertUrl: browserStorageUrl(agent.businessCertUrl),
@@ -1766,9 +1770,10 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
       eq(contractTemplatesTable.id, tplId),
       isNull(contractTemplatesTable.deletedAt),
       eq(contractTemplatesTable.isActive, true),
+      eq(contractTemplatesTable.publicationStatus, "published"),
     ));
     if (!tpl) {
-      res.status(404).json({ error: "Selected contract template not found or inactive" });
+      res.status(404).json({ error: "Selected contract template not found, inactive, or unpublished" });
       return;
     }
     template = tpl;

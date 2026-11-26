@@ -4732,7 +4732,7 @@
     "titleReview": "Tinjau kontrak",
     "titleSign": "Add your signature",
     "signed": "Ditandatangani",
-    "signedBody": "Salinan PDF yang ditandatangani telah dikirim ke email Anda. Anda dapat menutup jendela ini.",
+    "signedBody": "Tanda tangan Anda telah dicatat. Penyiapan PDF dan pengiriman email adalah langkah terpisah; layar ini tidak mengonfirmasi bahwa email telah dikirim.",
     "expired": "Tautan kedaluwarsa",
     "expiredBody": "Tautan penandatanganan ini telah kedaluwarsa. Silakan minta yang baru.",
     "revoked": "Tautan dicabut",
@@ -5705,11 +5705,11 @@
     "submitButton": "Tetapkan Kata Sandi"
   },
   "signedContract": {
-    "pdfPending": "PDF sedang dibuat. Silakan coba lagi sekitar 30 detik.",
+    "pdfPending": "PDF bertanda tangan belum siap. Coba lagi nanti; jika berlanjut, hubungi dukungan.",
     "pdfDownloadError": "Gagal mengunduh PDF.",
     "download": "Unduh PDF",
-    "regenerate": "Buat ulang PDF",
-    "regenerateQueued": "PDF sedang dibuat ulang; akan siap diunduh dalam sekitar 30 detik.",
+    "regenerate": "Coba ulang PDF yang belum ada",
+    "regenerateQueued": "PDF yang belum ada menunggu pemrosesan latar belakang. Berkas bertanda tangan yang ada tetap disimpan.",
     "regenerateError": "Tidak dapat memulai pembuatan ulang."
   },
   "apiTokens": {

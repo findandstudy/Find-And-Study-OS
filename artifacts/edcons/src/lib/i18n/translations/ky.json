@@ -2860,7 +2860,7 @@
     "titleReview": "Келишимди кайрадан карап чык",
     "titleSign": "Колдонуу сиздин imzaңызды кошуу",
     "signed": "Көрсөтмө",
-    "signedBody": "A copy of the signed PDF has been sent to your email. You may close this window.",
+    "signedBody": "Кол тамгаңыз катталды. PDF даярдоо жана электрондук катты жеткирүү өзүнчө кадамдар; бул экран кат жөнөтүлгөнүн ырастабайт.",
     "expired": "Шилтеменин убакыты өтүп кеткен",
     "expiredBody": "Бул идея менен байланышуунун убакыты өтүп кетти. Жаңысын өтүнө бериңиз.",
     "revoked": "Шилтеме жокко чыгаруу",
@@ -5703,11 +5703,11 @@
     "submitButton": "Топтун сырсөзү"
   },
   "signedContract": {
-    "pdfPending": "PDF is still being generated. Please try again in about 30 seconds.",
+    "pdfPending": "Кол коюлган PDF али даяр эмес. Кийинчерээк кайталаңыз; маселе улана берсе, колдоо кызматына кайрылыңыз.",
     "pdfDownloadError": "Failed to download PDF.",
     "download": "Download PDF",
-    "regenerate": "Regenerate PDF",
-    "regenerateQueued": "Regenerating the PDF; it will be ready to download in about 30 seconds.",
+    "regenerate": "Жок PDF үчүн кайра аракет кылуу",
+    "regenerateQueued": "Жок PDF фондо иштетүүнү күтүп жатат. Учурдагы кол коюлган файлдар сакталат.",
     "regenerateError": "Кайра курууну иштетүүгө болбоду."
   },
   "apiTokens": {

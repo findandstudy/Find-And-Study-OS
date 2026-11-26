@@ -96,10 +96,9 @@ export default function ContractsPage() {
     }
   }
 
-  // Force a re-render of an already-generated PDF (e.g. to pick up the
-  // main-agency seal added after the contract was first signed). The backend
-  // clears the render cache and a background worker rebuilds the PDF off the
-  // request path; the new file is downloadable within ~30s.
+  // Retry only a missing PDF through the existing background worker. The
+  // backend preserves finalized artifacts and rejects active leases or an
+  // unavailable worker; no completion time is promised.
   async function regeneratePdf(id: number) {
     setRegeneratingId(id);
     try {
@@ -482,21 +481,23 @@ export default function ContractsPage() {
                   <td className="px-4 py-3 text-xs text-muted-foreground">{fmtDate(c.signedAt)}</td>
                   <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{c.evidenceHash ? c.evidenceHash.slice(0, 16) + "…" : "—"}</td>
                   <td className="px-4 py-3 text-right">
-                    <Button
+                    {!c.pdfObjectKey && !c.evidenceHash && <Button
                       size="sm"
                       variant="ghost"
                       title={t("signedContract.regenerate")}
+                      aria-label={t("signedContract.regenerate")}
                       disabled={regeneratingId === c.id}
                       onClick={() => regeneratePdf(c.id)}
                     >
                       {regeneratingId === c.id
                         ? <Loader2 className="w-4 h-4 animate-spin" />
                         : <RotateCw className="w-4 h-4" />}
-                    </Button>
+                    </Button>}
                     <Button
                       size="sm"
                       variant="ghost"
                       title={t("signedContract.download")}
+                      aria-label={t("signedContract.download")}
                       disabled={downloadingId === c.id}
                       onClick={() => downloadSignedPdf(c.id)}
                     >

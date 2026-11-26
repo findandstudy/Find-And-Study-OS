@@ -10,10 +10,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { FileText, Plus, Edit, Trash2, Loader2, ChevronDown, ChevronUp, AlertTriangle, ArrowRight, Palette, Send, CheckCircle2, Copy } from "lucide-react";
+import { FileText, Plus, Edit, Trash2, Loader2, ChevronDown, ChevronUp, AlertTriangle, ArrowRight, Palette, Send, CheckCircle2, Copy, Eye } from "lucide-react";
 import { ContractRichTextEditor } from "@/components/contracts/ContractRichTextEditor";
 import { ContractFieldBuilder, type ContractIntakeField } from "@/components/contracts/ContractFieldBuilder";
 import { ContractBrandProfilesDialog, type ContractBrandProfile } from "@/components/contracts/ContractBrandProfilesDialog";
+import { ContractUnsignedPreview } from "@/components/contracts/ContractUnsignedPreview";
 import { SYSTEM_LANGUAGE_OPTIONS } from "@/lib/i18n";
 
 type Template = {
@@ -146,13 +147,15 @@ function FieldMappingPanel({ schema, bodyHtml, t }: { schema: IntakeField[]; bod
 
 export default function ContractTemplatesPage() {
   const { toast } = useToast();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [rows, setRows] = useState<Template[]>([]);
   const [brands, setBrands] = useState<ContractBrandProfile[]>([]);
   const [brandDialogOpen, setBrandDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editing, setEditing] = useState<Template | null>(null);
+  const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
+  const previewLabel = lang === "tr" ? "İmzasız test önizlemesi" : lang === "ar" ? "معاينة تجريبية غير موقعة" : "Unsigned test preview";
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -439,6 +442,7 @@ export default function ContractTemplatesPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right space-x-2">
+                    <Button size="sm" variant="outline" title={previewLabel} aria-label={`${previewLabel}: ${tpl.name}`} onClick={() => setPreviewTemplate(tpl)}><Eye className="w-4 h-4" /></Button>
                     <Button size="sm" variant="ghost" onClick={() => openEdit(tpl)}><Edit className="w-4 h-4" /></Button>
                     {tpl.publicationStatus === "draft" && <Button size="sm" variant="outline" title="Submit for review" onClick={() => workflowAction(tpl, "submit-review")}><Send className="w-4 h-4" /></Button>}
                     {(["draft", "review_pending"] as const).includes(tpl.publicationStatus as any) && <Button size="sm" variant="outline" title="Publish" onClick={() => workflowAction(tpl, "publish")}><CheckCircle2 className="w-4 h-4 mr-2" />Publish</Button>}
@@ -697,6 +701,7 @@ export default function ContractTemplatesPage() {
         </DialogContent>
       </Dialog>
       <ContractBrandProfilesDialog open={brandDialogOpen} onOpenChange={setBrandDialogOpen} profiles={brands} onChanged={loadBrands} />
+      <ContractUnsignedPreview template={previewTemplate} onClose={() => setPreviewTemplate(null)} />
     </div>
   );
 }

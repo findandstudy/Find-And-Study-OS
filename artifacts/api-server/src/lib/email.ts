@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import { isLiveIntegrationsEnabled } from "./inbox/liveMode";
 import { isBlockedOutboundIp } from "./safeOutboundRequest";
 import { decryptConfig, isEncrypted } from "./encryption";
-import { classifyEmailTransportError, emailDeliveryAllowed, executeClaimedEmail, isEmailMailbox, serializeEmailAttachments, stageEmailDeliveryErrorCode, type ClaimedEmail, type EmailAttemptResult } from "./emailDeliveryPolicy";
+import { classifyEmailTransportError, classifyEmailTransportReceipt, emailDeliveryAllowed, executeClaimedEmail, isEmailMailbox, serializeEmailAttachments, stageEmailDeliveryErrorCode, type ClaimedEmail, type EmailAttemptResult } from "./emailDeliveryPolicy";
 
 let cachedTransporter: Transporter | null = null;
 let transporterConfigHash = "";
@@ -270,13 +270,7 @@ async function sendViaSmtp(item: ClaimedEmail, attachments?: EmailAttachment[]):
         ...(smtp.replyTo ? { replyTo: smtp.replyTo } : {}),
         ...(attachments?.length ? { attachments } : {}),
       });
-      if (Array.isArray(result.accepted) && result.accepted.length > 0 && (!Array.isArray(result.rejected) || result.rejected.length === 0)) {
-        return { status: "sent", code: null, messageId };
-      }
-      if (Array.isArray(result.rejected) && result.rejected.length > 0 && (!Array.isArray(result.accepted) || result.accepted.length === 0)) {
-        return { status: "failed", code: "SMTP_RECIPIENT_REJECTED" };
-      }
-      return { status: "unknown", code: "SMTP_OUTCOME_UNKNOWN" };
+      return classifyEmailTransportReceipt(result, item.to_email, messageId);
     } catch (error) { return classifyEmailTransportError(error); }
   } finally { if (closeAfterSend) smtp.transporter.close(); }
 }
@@ -1131,7 +1125,7 @@ async function deliverClaimed(item: ClaimedEmail): Promise<boolean> {
       return sendViaSmtp(row, attachments);
     },
     save: async (row, result) => {
-      await pool.query(
+      const saved = await pool.query(
         `UPDATE email_queue SET status=$3, retry_count=$4, delivery_error_code=$5,
            provider_message_id=coalesce($6,provider_message_id),
            sent_at=CASE WHEN $3='sent' THEN NOW() ELSE sent_at END,
@@ -1140,6 +1134,7 @@ async function deliverClaimed(item: ClaimedEmail): Promise<boolean> {
          WHERE id=$1 AND status='processing' AND claim_token=$2`,
         [row.id, row.claim_token, result.status, result.retryCount, result.code, result.messageId ?? null, result.backoffSeconds],
       );
+      if (saved.rowCount !== 1) throw new Error("EMAIL_RECEIPT_CLAIM_LOST");
     },
     onSaveFailure: () => console.error("[EMAIL] Delivery receipt persistence failed; claimed item requires reconciliation"),
   });

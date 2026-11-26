@@ -4730,7 +4730,7 @@
     "titleReview": "Revisa el contrato",
     "titleSign": "Add your signature",
     "signed": "Firmado",
-    "signedBody": "Se ha enviado una copia del PDF firmado a tu correo electrónico. Puedes cerrar esta ventana.",
+    "signedBody": "Tu firma se ha registrado. La preparación del PDF y la entrega del correo son pasos separados; esta pantalla no confirma el envío del correo.",
     "expired": "Enlace vencido",
     "expiredBody": "Este enlace de firma ha vencido. Solicita uno nuevo.",
     "revoked": "Enlace revocado",
@@ -5703,11 +5703,11 @@
     "submitButton": "Establecer contraseña"
   },
   "signedContract": {
-    "pdfPending": "El PDF se está generando. Por favor, inténtelo de nuevo en unos 30 segundos.",
+    "pdfPending": "El PDF firmado aún no está listo. Inténtalo más tarde; si el problema continúa, contacta con soporte.",
     "pdfDownloadError": "No se pudo descargar el PDF.",
     "download": "Descargar PDF",
-    "regenerate": "Regenerar PDF",
-    "regenerateQueued": "Regenerando el PDF; estará listo para descargar en unos 30 segundos.",
+    "regenerate": "Reintentar PDF faltante",
+    "regenerateQueued": "El PDF faltante está pendiente de procesamiento. Los archivos firmados existentes se conservan.",
     "regenerateError": "No se pudo iniciar la regeneración."
   },
   "apiTokens": {

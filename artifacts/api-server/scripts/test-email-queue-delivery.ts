@@ -33,6 +33,8 @@ let smtpOptions: any;
 let smtpFailure: unknown;
 let insertFailure = false;
 let receiptFailure = false;
+let receiptNoop = false;
+let smtpReceipt: Row | undefined;
 let approved = true;
 let disabledOnTransport = false;
 let loseClaimOnTransport = false;
@@ -54,7 +56,7 @@ mock.method(nodemailer, "createTransport", (options: unknown) => {
   smtpOptions = options;
   if (disabledOnTransport) process.env.EMAIL_DELIVERY_DISABLED = "true";
   if (loseClaimOnTransport) { rows[0].status = "unknown"; rows[0].claim_token = null; }
-  return { close() {}, async sendMail(value: Row) { sends.push(value); if (smtpFailure) throw smtpFailure; return { accepted: [recipient], rejected: [] }; } };
+  return { close() {}, async sendMail(value: Row) { sends.push(value); if (smtpFailure) throw smtpFailure; return smtpReceipt || { accepted: [recipient], rejected: [], messageId: value.messageId, response: "250 2.0.0 TEST accepted" }; } };
 });
 mock.method(pool, "query", async (sql: string, args: any[] = []) => {
   queries.push(sql);
@@ -78,6 +80,7 @@ mock.method(pool, "query", async (sql: string, args: any[] = []) => {
   if (sql.startsWith("SELECT id FROM email_queue")) return { rows: rows.filter(row => row.id === args[0] && row.status === "processing" && row.claim_token === args[1]).map(row => ({ id: row.id })) };
   if (sql.startsWith("UPDATE email_queue SET status=$3")) {
     if (receiptFailure) throw new Error("lost persistence receipt");
+    if (receiptNoop) return { rows: [], rowCount: 0 };
     const row = rows.find(row => row.id === args[0] && row.status === "processing" && row.claim_token === args[1]);
     if (row) Object.assign(row, { status: args[2], retry_count: args[3], delivery_error_code: args[4], provider_message_id: args[5], next_retry_at: args[6], claim_token: null, claimed_at: null });
     return { rows: [], rowCount: row ? 1 : 0 };
@@ -100,6 +103,7 @@ mock.method(pool, "query", async (sql: string, args: any[] = []) => {
 beforeEach(() => {
   email.invalidateSmtpCache(); rows = []; sends = []; queries = []; diagnostics = [];
   smtpFailure = undefined; smtpOptions = undefined; insertFailure = false; receiptFailure = false;
+  receiptNoop = false; smtpReceipt = undefined;
   approved = true; disabledOnTransport = false; loseClaimOnTransport = false; insertHook = undefined;
   senderRecord = undefined; beforeDnsReturn = undefined;
   // The only enabled transport is the above fake. Socket and DNS guards remain installed.
@@ -157,12 +161,35 @@ test("temporary failure retries exact attachments; ambiguous failure never retri
 
 test("SMTP acceptance with lost receipt is never blindly requeued on restart", async () => {
   receiptFailure = true;
-  assert.equal(await email.sendEmail(recipient, fixtureContent), true);
+  assert.equal(await email.sendEmail(recipient, fixtureContent), false);
   assert.equal(rows[0].status, "processing"); rows[0].stale = true;
   receiptFailure = false;
   assert.equal(await email.processEmailQueue(), 0);
   assert.equal(rows[0].status, "unknown"); assert.equal(sends.length, 1);
 });
+
+test("SMTP acceptance with a replaced receipt claim cannot report confirmed delivery", async () => {
+  receiptNoop = true;
+  assert.equal(await email.sendEmail(recipient, fixtureContent), false);
+  assert.equal(rows[0].status, "processing"); assert.equal(sends.length, 1);
+  rows[0].stale = true; receiptNoop = false;
+  assert.equal(await email.processEmailQueue(), 0);
+  assert.equal(rows[0].status, "unknown"); assert.equal(sends.length, 1);
+});
+
+for (const mismatch of ["recipient", "multiple", "message", "response", "incomplete"] as const) {
+  test(`actual SMTP ${mismatch} receipt is unconfirmed and never automatically resent`, async () => {
+    smtpReceipt = { accepted: [recipient], rejected: [], messageId: "<fas-email-1@example.test>", response: "250 TEST" };
+    if (mismatch === "recipient") smtpReceipt.accepted = ["other@example.test"];
+    if (mismatch === "multiple") smtpReceipt.accepted.push("other@example.test");
+    if (mismatch === "message") smtpReceipt.messageId = "<another@example.test>";
+    if (mismatch === "response") smtpReceipt.response = "451 Please retry";
+    if (mismatch === "incomplete") delete smtpReceipt.messageId;
+    assert.equal(await email.sendEmail(recipient, fixtureContent), false);
+    assert.equal(rows[0].status, "unknown");
+    assert.equal(await email.processEmailQueue(), 0); assert.equal(sends.length, 1);
+  });
+}
 
 test("actual-send kill switch after resolving transport blocks SMTP and consumes no retry", async () => {
   disabledOnTransport = true;

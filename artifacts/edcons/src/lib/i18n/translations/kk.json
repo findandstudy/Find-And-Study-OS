@@ -2860,7 +2860,7 @@
     "titleReview": "Реттіктарды қарастыру",
     "titleSign": "Қолтаңбаңызды қосу",
     "signed": "Қолтаңба",
-    "signedBody": "A copy of the signed PDF has been sent to your email. You may close this window.",
+    "signedBody": "Қолтаңбаңыз тіркелді. PDF дайындау және электрондық хатты жеткізу — бөлек қадамдар; бұл экран хаттың жіберілгенін растамайды.",
     "expired": "Сілтеме ескірген",
     "expiredBody": "Қолтаңбалау сілтемесі өтіп кеткен. Жаңасын сұраңыз.",
     "revoked": "Күшін жою",
@@ -5703,11 +5703,11 @@
     "submitButton": "Парольді орнату"
   },
   "signedContract": {
-    "pdfPending": "PDF is still being generated. Please try again in about 30 seconds.",
+    "pdfPending": "Қол қойылған PDF әлі дайын емес. Кейінірек қайталаңыз; мәселе жалғасса, қолдау қызметіне хабарласыңыз.",
     "pdfDownloadError": "Failed to download PDF.",
     "download": "Download PDF",
-    "regenerate": "Regenerate PDF",
-    "regenerateQueued": "Regenerating the PDF; it will be ready to download in about 30 seconds.",
+    "regenerate": "Жоқ PDF үшін қайталау",
+    "regenerateQueued": "Жоқ PDF фондық өңдеуді күтуде. Қол қойылған бар файлдар сақталады.",
     "regenerateError": "Қауіпсіздік іске қосылмады."
   },
   "apiTokens": {

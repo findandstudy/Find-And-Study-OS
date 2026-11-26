@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
 import sharp from "sharp";
 import { parseSafeOutboundUrl, safeOutboundRequest } from "./safeOutboundRequest";
+import { readBoundedDocumentStream } from "./documentByteLimits";
 
 export type ContractLogoSnapshot = {
   sourceUrl: string;
@@ -71,6 +73,8 @@ export function validateContractLogoSnapshot(value: unknown, logoUrl: unknown): 
 
 export type ContractLogoCaptureOptions = {
   trustedLogoUrls?: readonly string[];
+  /** Unsigned admin previews may read the approved public local asset only. */
+  localOnly?: boolean;
   /** Synthetic transport only; explicitly rejected outside NODE_ENV=test. */
   request?: typeof safeOutboundRequest;
 };
@@ -85,6 +89,62 @@ function untilAborted<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
       error => { signal.removeEventListener("abort", aborted); reject(error); },
     );
   });
+}
+
+/** Only operator-copied, content-addressed logos in an already public namespace. */
+function managedPublicLogo(sourceUrl: string): { objectPath: string; sha256: string } | undefined {
+  if (process.env.STORAGE_DRIVER !== "local") return;
+  const appRoot = canonicalLogoUrl(`${process.env.APP_BASE_URL?.replace(/\/$/, "") || ""}/`);
+  if (!appRoot || new URL(appRoot).pathname !== "/") return;
+  const source = new URL(sourceUrl);
+  if (source.origin !== new URL(appRoot).origin) return;
+  const match = /^\/api\/storage\/public-branding\/embed-widget\/(contract-logo-([a-f0-9]{64})\.png)$/.exec(source.pathname);
+  if (!match) return;
+  return { objectPath: `/objects/branding/embed-widget/${match[1]}`, sha256: match[2] };
+}
+
+async function readManagedPublicLogo(
+  asset: { objectPath: string; sha256: string },
+  signal: AbortSignal,
+): Promise<Buffer> {
+  // Node has no portable API for resolving the path of an opened descriptor.
+  // This offline path requires Linux /proc; another OS must not fall back to
+  // a pathname check that can race with a parent-directory/symlink replacement.
+  if (process.platform !== "linux") throw new Error();
+  const [{ ObjectStorageService }, fs, path] = await Promise.all([
+    import("./objectStorage"), import("node:fs/promises"), import("node:path"),
+  ]);
+  const file = await untilAborted(new ObjectStorageService().getObjectEntityFile(asset.objectPath, { requireCancellableRead: true }), signal);
+  const root = await untilAborted(fs.realpath(process.env.STORAGE_LOCAL_DIR || ""), signal);
+  const expected = path.resolve(root, asset.objectPath.slice("/objects/".length));
+  // The storage helper prevents root escape. Also reject aliases/symlinks into
+  // a private object elsewhere inside that root before any bytes are read.
+  if (!("localPath" in file) || file.localPath !== expected) throw new Error();
+  const stat = await untilAborted(fs.lstat(expected), signal);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size < 8 || stat.size > MAX_CONTRACT_LOGO_BYTES) throw new Error();
+  // A replaced leaf must neither follow a symlink nor block opening a FIFO.
+  const handle = await fs.open(expected, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+  try {
+    const opened = await handle.stat();
+    if (signal.aborted || !opened.isFile() || opened.nlink !== 1 || opened.dev !== stat.dev
+      || opened.ino !== stat.ino || opened.size !== stat.size) throw new Error();
+    // Bind the opened object, not the path resolved before open. A directory
+    // swapped for an alias into private storage can otherwise pass lstat/fstat.
+    const openedPath = await untilAborted(fs.realpath(`/proc/self/fd/${handle.fd}`), signal);
+    if (openedPath !== expected || signal.aborted) throw new Error();
+    const stream = handle.createReadStream({ start: 0, end: MAX_CONTRACT_LOGO_BYTES, autoClose: true });
+    const abortRead = () => { stream.destroy(new Error("contract_logo_capture_failed")); };
+    signal.addEventListener("abort", abortRead, { once: true });
+    if (signal.aborted) abortRead();
+    try {
+      const bytes = await readBoundedDocumentStream(stream, { maxBytes: MAX_CONTRACT_LOGO_BYTES, readTimeoutMs: CONTRACT_LOGO_TIMEOUT_MS });
+      // Derive MIME from content, never trust a mutable .ct sidecar. The copied
+      // PNG's hash is part of the exact operator-allowlisted URL.
+      if (bytes.length !== stat.size || imageMime(bytes) !== "image/png"
+        || createHash("sha256").update(bytes).digest("hex") !== asset.sha256) throw new Error();
+      return bytes;
+    } finally { signal.removeEventListener("abort", abortRead); }
+  } finally { await handle.close(); }
 }
 
 /**
@@ -104,13 +164,19 @@ export async function captureContractLogoSnapshot(
     : validateTrustedUrls(options.trustedLogoUrls);
   const sourceUrl = canonicalLogoUrl(logoUrl);
   if (!sourceUrl || !trustedUrls.includes(sourceUrl)) return;
-  if (!options.request && process.env.ALLOW_LIVE_INTEGRATIONS !== "true") return;
+  const localLogo = managedPublicLogo(sourceUrl);
+  if (options.localOnly && !localLogo) return;
+  if (!localLogo && !options.request && process.env.ALLOW_LIVE_INTEGRATIONS !== "true") return;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CONTRACT_LOGO_TIMEOUT_MS);
   const request = options.request ?? safeOutboundRequest;
   try {
-    const response = await untilAborted(request(sourceUrl, {
+    const localBytes = localLogo ? await readManagedPublicLogo(localLogo, controller.signal) : undefined;
+    const response = localBytes ? {
+      ok: true, status: 200, url: sourceUrl, body: localBytes,
+      headers: { "content-type": "image/png", "content-length": String(localBytes.length) } as Record<string, string>,
+    } : await untilAborted(request(sourceUrl, {
       method: "GET",
       headers: { Accept: "image/png, image/jpeg", "Accept-Encoding": "identity" },
       allowedProtocols: ["https:"], allowedPorts: [443],

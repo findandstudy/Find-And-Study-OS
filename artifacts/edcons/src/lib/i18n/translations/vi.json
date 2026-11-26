@@ -2860,7 +2860,7 @@
     "titleReview": "Xem lại hợp đồng",
     "titleSign": "Thêm chữ ký của bạn",
     "signed": "Đã ký",
-    "signedBody": "Một bản sao của bản PDF đã ký đã được gửi tới email của bạn. Bạn có thể đóng cửa sổ này.",
+    "signedBody": "Chữ ký của bạn đã được ghi nhận. Chuẩn bị PDF và gửi email là hai bước riêng biệt; màn hình này không xác nhận email đã được gửi.",
     "expired": "Liên kết đã hết hạn",
     "expiredBody": "Liên kết ký này đã hết hạn. Vui lòng yêu cầu một cái mới.",
     "revoked": "Liên kết đã bị thu hồi",
@@ -5703,11 +5703,11 @@
     "submitButton": "Đặt mật khẩu"
   },
   "signedContract": {
-    "pdfPending": "PDF vẫn đang được tạo. Vui lòng thử lại sau khoảng 30 giây.",
+    "pdfPending": "PDF đã ký chưa sẵn sàng. Hãy thử lại sau; nếu vấn đề tiếp diễn, hãy liên hệ hỗ trợ.",
     "pdfDownloadError": "Không tải xuống được bản PDF.",
     "download": "Tải xuống bản PDF",
-    "regenerate": "Tạo lại tệp PDF",
-    "regenerateQueued": "Đang tạo lại tệp PDF; nó sẽ sẵn sàng để tải xuống sau khoảng 30 giây.",
+    "regenerate": "Thử lại PDF còn thiếu",
+    "regenerateQueued": "PDF còn thiếu đang chờ xử lý nền. Các tệp đã ký hiện có được giữ nguyên.",
     "regenerateError": "Không thể bắt đầu tái tạo."
   },
   "apiTokens": {

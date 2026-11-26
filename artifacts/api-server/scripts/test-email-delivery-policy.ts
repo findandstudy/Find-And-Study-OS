@@ -134,12 +134,12 @@ test("ambiguous provider exception is saved unknown without retrying in-process"
   assert.equal(sent, false); assert.equal(sends, 1); assert.equal(status, "unknown");
 });
 
-test("SMTP success with persistence failure never resends and still reports actual send to caller", async () => {
+test("SMTP success with persistence failure never reports durable delivery or resends", async () => {
   let sends = 0, saveFailures = 0;
   const sent = await executeClaimedEmail(message, { allowed: () => true,
     send: async () => { sends++; return { status: "sent", code: null }; },
     save: async () => { throw new Error("database connection lost"); }, onSaveFailure: () => { saveFailures++; } });
-  assert.equal(sent, true); assert.equal(sends, 1); assert.equal(saveFailures, 1);
+  assert.equal(sent, false); assert.equal(sends, 1); assert.equal(saveFailures, 1);
 });
 
 test("legacy immediate and worker use one atomic durable claim; crashes are quarantined not requeued", () => {

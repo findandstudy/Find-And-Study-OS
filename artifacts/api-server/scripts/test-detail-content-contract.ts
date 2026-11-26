@@ -1,11 +1,34 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { DETAIL_CONTENT_LAYOUT_KEYS, detailContentPresentationOverrides, ensureDetailSeo, inheritEnglishDetailStructure, normalizeDetailSectionTitle, parseDetailContent, preserveDetailSectionDesign, safeDetailContentUrl } from "../src/lib/websiteDetailContentContract";
+import { DETAIL_CONTENT_LAYOUT_KEYS, detailContentPresentationOverrides, ensureDetailSeo, inheritEnglishDetailStructure, normalizeDetailSectionTitle, parseDetailContent as parseServerDetailContent, preserveDetailSectionDesign, safeDetailContentUrl } from "../src/lib/websiteDetailContentContract";
+import * as server from "../src/lib/websiteDetailContentContract";
+import * as browser from "../../edcons/src/lib/website/detailContentContract";
+// Every valid and rejected fixture below must have the same result on both
+// sides. Source formatting and legacy default order are not runtime contracts.
+const parseDetailContent: typeof parseServerDetailContent = (value, today) => {
+  const result = parseServerDetailContent(value, today);
+  assert.deepEqual(browser.parseDetailContent(value, today), result, "browser/API editorial parsing must agree");
+  return result;
+};
 const fixture = () => ({ version: 1, kind: "program", entityId: 7, locale: "en", sections: [{ key: "faq", title: "Questions", questions: [{ question: "How?", answer: "Contact the institution." }], sources: [{ label: "Institution", url: "https://example.org/info" }], reviewedOn: "2026-09-01" }] });
-test("editorial mirrors and valid human-reviewed structured content", () => {
+test("editorial browser/API contracts preserve equivalent validated content and presentation", () => {
   assert.ok(parseDetailContent(fixture(), "2026-09-19"));
-  assert.equal(readFileSync(new URL("../src/lib/websiteDetailContentContract.ts", import.meta.url), "utf8"), readFileSync(new URL("../../edcons/src/lib/website/detailContentContract.ts", import.meta.url), "utf8"));
+  assert.deepEqual(browser.DETAIL_CONTENT_KINDS, server.DETAIL_CONTENT_KINDS);
+  assert.deepEqual(browser.DETAIL_CONTENT_LOCALES, server.DETAIL_CONTENT_LOCALES);
+  assert.deepEqual(browser.DETAIL_GENERATED_CONTENT_KEYS, server.DETAIL_GENERATED_CONTENT_KEYS);
+  for (const kind of server.DETAIL_CONTENT_KINDS) {
+    assert.deepEqual(new Set(browser.DETAIL_CONTENT_KEYS[kind]), new Set(server.DETAIL_CONTENT_KEYS[kind]));
+    assert.deepEqual(new Set(browser.DETAIL_CONTENT_LAYOUT_KEYS[kind]), new Set(server.DETAIL_CONTENT_LAYOUT_KEYS[kind]));
+    for (const sectionOrder of [server.DETAIL_CONTENT_LAYOUT_KEYS[kind], browser.DETAIL_CONTENT_LAYOUT_KEYS[kind]]) {
+      const parsed = parseDetailContent({ ...fixture(), kind, sectionOrder }, "2026-09-19");
+      assert.ok(parsed);
+      assert.deepEqual(parsed.sectionOrder?.slice(0, 4), ["hero", "navigation", "overview", "languageCourses"]);
+      assert.deepEqual(browser.ensureDetailSeo(parsed), server.ensureDetailSeo(parsed));
+      assert.deepEqual(browser.effectiveDetailContentSections(parsed), server.effectiveDetailContentSections(parsed));
+      assert.deepEqual(browser.detailContentPresentationOverrides(parsed), server.detailContentPresentationOverrides(parsed));
+      assert.deepEqual(browser.resolveDetailTemplateContent(parsed, {}), server.resolveDetailTemplateContent(parsed, {}));
+    }
+  }
 });
 test("section titles use locale-aware sentence casing without changing hero identity", () => {
   assert.equal(normalizeDetailSectionTitle("weather and student life", "en"), "Weather and student life");
@@ -116,10 +139,12 @@ test("source-backed regeneration replaces old structured copy while preserving v
   assert.deepEqual(result.presentation, existing.presentation);
   assert.deepEqual(result.images, existing.images);
 });
-test("page-level section order is a complete bounded permutation with fixed structural sections", () => {
+test("page-level order preserves editorial permutation and normalizes language learning after overview", () => {
   const sectionOrder = [...DETAIL_CONTENT_LAYOUT_KEYS.program];
   [sectionOrder[3], sectionOrder[4]] = [sectionOrder[4], sectionOrder[3]];
-  assert.deepEqual(parseDetailContent({ ...fixture(), sectionOrder }, "2026-09-19")?.sectionOrder, sectionOrder);
+  const expected = sectionOrder.filter(key => key !== "languageCourses");
+  expected.splice(3, 0, "languageCourses");
+  assert.deepEqual(parseDetailContent({ ...fixture(), sectionOrder }, "2026-09-19")?.sectionOrder, expected);
   assert.equal(parseDetailContent({ ...fixture(), sectionOrder: sectionOrder.slice(1) }), null);
   assert.equal(parseDetailContent({ ...fixture(), sectionOrder: ["navigation", "hero", ...sectionOrder.slice(2)] }), null);
   assert.equal(parseDetailContent({ ...fixture(), sectionOrder: [...sectionOrder.slice(0, -1), "unknown"] }), null);

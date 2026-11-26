@@ -2860,7 +2860,7 @@
     "titleReview": "عہد کا جائزہ",
     "titleSign": "اپنے بندے میں شامل کریں",
     "signed": "بند",
-    "signedBody": "A copy of the signed PDF has been sent to your email. You may close this window.",
+    "signedBody": "آپ کے دستخط محفوظ ہو گئے ہیں۔ PDF کی تیاری اور ای میل کی ترسیل الگ مراحل ہیں؛ یہ اسکرین ای میل بھیجے جانے کی تصدیق نہیں کرتی۔",
     "expired": "لنک ختم ہو گیا",
     "expiredBody": "اس سائرنگ لنک کا مقدار ختم ہو گیا ہے. براہ مہربانی نیا درخواست کریں.",
     "revoked": "لنک منتقل کیا گیا",
@@ -5703,11 +5703,11 @@
     "submitButton": "پاس ورڈ متعین کریں"
   },
   "signedContract": {
-    "pdfPending": "PDF ابھی بھی پیدا کیا جا رہا ہے. براہ مہربانی تقریباً 30 سيکنڈ میں دوبارہ کوشش کریں",
+    "pdfPending": "دستخط شدہ PDF ابھی تیار نہیں۔ بعد میں دوبارہ کوشش کریں؛ مسئلہ جاری رہے تو معاونت سے رابطہ کریں۔",
     "pdfDownloadError": "PDF ڈولوڈ کرنے میں ناکام ہوگیا.",
     "download": "PDF ڈولوڈ کریں",
-    "regenerate": "Regenerate PDF",
-    "regenerateQueued": "Regenerating the PDF; it will be ready to download in about 30 seconds.",
+    "regenerate": "غائب PDF کے لیے دوبارہ کوشش",
+    "regenerateQueued": "غائب PDF پس منظر میں کارروائی کا منتظر ہے۔ موجودہ دستخط شدہ فائلیں محفوظ رہیں گی۔",
     "regenerateError": "دوبارہ پیدا نہیں کیا جاسکتا."
   },
   "apiTokens": {

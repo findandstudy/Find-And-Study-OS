@@ -13,6 +13,7 @@ import {
 import { getTranslation, isValidLanguage, isLanguageLoaded, loadLanguage, type Language, RTL_LANGUAGES } from "@/lib/i18n/index";
 import { FALLBACK_COUNTRIES } from "@/lib/nationalities";
 import { CITIES_BY_COUNTRY } from "@/lib/city-data";
+import { ContractEmailStatus, type ContractEmailDelivery } from '@/components/contracts/ContractEmailStatus';
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -30,6 +31,7 @@ type SigningPageConfig = {
 } | null;
 
 type SessionView = {
+  emailDelivery?:ContractEmailDelivery;
   sessionId: number;
   mode: "admin_driven" | "self_fill";
   status: "intake_pending" | "review_pending" | "signed" | "revoked";
@@ -214,6 +216,21 @@ export default function SignFlow({ token }: { token: string }) {
     }
   }, [step]);
 
+  useEffect(()=>{
+    if(step!=='success')return;
+    let stopped=false,attempts=0,timer:ReturnType<typeof setTimeout>|undefined;
+    const refresh=async()=>{
+      try{
+        const reply:any=await customFetch(`/api/public/sign/${encodeURIComponent(token)}`);
+        if(stopped)return;
+        setSession(current=>current?{...current,emailDelivery:reply.data?.emailDelivery}:current);
+        if(reply.data?.emailDelivery?.state==='pending'&&++attempts<12)timer=setTimeout(refresh,5000);
+      }catch{/* Unknown remains unconfirmed; never infer a successful send. */}
+    };
+    void refresh();
+    return()=>{stopped=true;if(timer)clearTimeout(timer);};
+  },[step,token]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -397,6 +414,7 @@ export default function SignFlow({ token }: { token: string }) {
       <CheckCircle2 className="w-14 h-14 text-emerald-500 mb-4" />
       <h1 className="text-2xl font-semibold mb-2">{t("signed")}</h1>
       <p className="text-muted-foreground text-sm text-center max-w-md mb-6">{t("signedBody")}</p>
+      <div className='mb-4 text-center'><ContractEmailStatus delivery={session?.emailDelivery} lang={lang}/></div>
       <Button
         onClick={handleDownloadPdf}
         disabled={downloadingPdf}

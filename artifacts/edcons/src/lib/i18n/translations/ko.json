@@ -2860,7 +2860,7 @@
     "titleReview": "계약서 검토",
     "titleSign": "서명 추가",
     "signed": "서명됨",
-    "signedBody": "서명된 PDF 사본이 귀하의 이메일로 전송되었습니다. 이 창을 닫아도 됩니다.",
+    "signedBody": "서명이 기록되었습니다. PDF 준비와 이메일 전달은 별도 단계이며, 이 화면은 이메일 발송을 확인하지 않습니다.",
     "expired": "링크가 만료되었습니다.",
     "expiredBody": "이 서명 링크는 만료되었습니다. 새 링크를 요청하세요.",
     "revoked": "링크 취소됨",
@@ -5703,11 +5703,11 @@
     "submitButton": "비밀번호 설정"
   },
   "signedContract": {
-    "pdfPending": "PDF는 아직 생성 중입니다. 약 30초 후에 다시 시도하십시오.",
+    "pdfPending": "서명된 PDF가 아직 준비되지 않았습니다. 나중에 다시 시도하고 문제가 계속되면 지원팀에 문의하세요.",
     "pdfDownloadError": "PDF를 다운로드하지 못했습니다.",
     "download": "PDF 다운로드",
-    "regenerate": "PDF 재생성",
-    "regenerateQueued": "PDF를 재생성하는 중입니다. 약 30초 후에 다운로드할 수 있습니다.",
+    "regenerate": "누락된 PDF 다시 시도",
+    "regenerateQueued": "누락된 PDF가 백그라운드 처리를 기다리고 있습니다. 기존 서명 파일은 보존됩니다.",
     "regenerateError": "재생성을 시작할 수 없습니다."
   },
   "apiTokens": {
