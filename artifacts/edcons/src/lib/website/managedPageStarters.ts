@@ -42,6 +42,29 @@ export const MANAGED_HOME_BLOCK_TYPES = new Set([
   "grid_box",
 ]);
 
+export type ManagedHomeSectionTemplate = {
+  id: string;
+  label: string;
+  description: string;
+  block: PageBlock;
+};
+
+const MANAGED_HOME_SECTION_META: Array<Pick<ManagedHomeSectionTemplate, "id" | "label" | "description">> = [
+  { id: "home-hero", label: "Homepage hero", description: "Hero, trust proof and connected-journey panel" },
+  { id: "home-trust-stats", label: "Trust and statistics", description: "Editorial introduction with four headline metrics" },
+  { id: "home-services", label: "Our services", description: "Four visual service cards" },
+  { id: "home-offer", label: "What we offer", description: "Split presentation with decision-focused highlights" },
+  { id: "home-process", label: "How it works", description: "Three-step student journey" },
+  { id: "home-why", label: "Why Find And Study", description: "Image-led accordion section" },
+  { id: "home-opportunities", label: "Study opportunities", description: "Live destination or program cards" },
+  { id: "home-proof", label: "Student-first support", description: "Linked proof and guidance cards" },
+  { id: "home-support-network", label: "Support network", description: "Specialist team presentation" },
+  { id: "home-faq", label: "Homepage FAQ", description: "Student questions and answers" },
+  { id: "home-institutions", label: "Institution country carousel", description: "Country tabs with live university logos" },
+  { id: "home-insights", label: "Guides and insights", description: "Three editorial resource cards" },
+  { id: "home-final-cta", label: "Homepage final CTA", description: "Closing two-action banner" },
+];
+
 function block(blockType: string, content: Record<string, unknown>): PageBlock {
   return { blockType, content, settings: { useThemeColors: true }, sortOrder: 0, isVisible: true };
 }
@@ -457,6 +480,23 @@ export function managedPageStarterBlocks(template: string | null | undefined, lo
     settings: structuredClone(entry.settings),
     sortOrder: index,
   }));
+}
+
+export function managedHomeSectionTemplates(locale: Language = "en"): ManagedHomeSectionTemplate[] {
+  const blocks = managedPageStarterBlocks("home", locale);
+  return MANAGED_HOME_SECTION_META.flatMap((meta, index) => {
+    const source = blocks[index];
+    if (!source) return [];
+    return [{
+      ...meta,
+      block: {
+        ...source,
+        content: structuredClone(source.content),
+        settings: structuredClone(source.settings),
+        sortOrder: 0,
+      },
+    }];
+  });
 }
 
 const LEGACY_MANAGED_TYPES: Record<Exclude<ManagedTemplate, "home">, string[][]> = {

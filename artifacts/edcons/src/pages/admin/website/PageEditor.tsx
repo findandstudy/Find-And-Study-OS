@@ -31,7 +31,7 @@ import { pageEditorText } from "./pageEditorCopy";
 import { BlockFieldEditor, GlobalBlockSelector } from "./PageEditorFields";
 import { CmsBlock, CmsPageCanvas } from "../../public/PublicPage";
 import { isSystemManagedPage, managedPagePublicPath } from "@/lib/website/managedPageRoutes";
-import { enrichManagedPageBlocks, managedPageStarterBlocks, managedPageStarterTranslations, MANAGED_HOME_BLOCK_TYPES } from "@/lib/website/managedPageStarters";
+import { enrichManagedPageBlocks, managedHomeSectionTemplates, managedPageStarterBlocks, managedPageStarterTranslations, MANAGED_HOME_BLOCK_TYPES } from "@/lib/website/managedPageStarters";
 import { pageEditorPreviewGeometry, samePageEditorPreviewGeometry } from "./pageEditorPreviewGeometry";
 import { SITE_NAME } from "@/hooks/use-json-ld";
 import { translateStructuredDraft } from "./adminAiTranslation";
@@ -690,6 +690,22 @@ function PageEditorSession({ id }: { id: number }) {
     markDirty();
   }, [blocks.length, markDirty]);
 
+  const addPreparedBlock = useCallback((source: PageBlock) => {
+    const newBlock: PageBlock = normalizeBlockAppearance({
+      ...structuredClone(source),
+      id: undefined,
+      sortOrder: blocks.length,
+      isVisible: true,
+    });
+    setBlocks(prev => [...prev, newBlock]);
+    setSelectedBlockIdx(blocks.length);
+    setMobilePane("editor");
+    setShowAddBlock(false);
+    setBlockSearch("");
+    setBlockCategory("all");
+    markDirty();
+  }, [blocks.length, markDirty]);
+
   const removeBlock = useCallback((idx: number) => {
     setBlocks(prev => prev.filter((_, i) => i !== idx));
     if (selectedBlockIdx === idx) setSelectedBlockIdx(null);
@@ -1191,7 +1207,32 @@ function PageEditorSession({ id }: { id: number }) {
                     <div className="relative"><Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={blockSearch} onChange={event => setBlockSearch(event.target.value)} placeholder={copy("Search sections...", "Bölümlerde ara...")} className="ps-9" /></div>
                     <div className="mt-3 flex flex-wrap gap-2">{(["all", "content", "media", "data", "layout", "reference"] as const).map(category => <Button key={category} type="button" size="sm" variant={blockCategory === category ? "default" : "outline"} className="h-7 rounded-full text-xs" onClick={() => setBlockCategory(category)}>{category === "all" ? copy("All", "Tümü") : copy(category[0].toUpperCase() + category.slice(1))}</Button>)}</div>
                   </div>
-                  <div className="grid max-h-[58vh] grid-cols-1 gap-3 overflow-y-auto p-6 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="max-h-[58vh] overflow-y-auto p-6">
+                    {page.template === "home" && blockCategory === "all" && (() => {
+                      const templates = managedHomeSectionTemplates((SUPPORTED_LANGUAGES.includes(editLocale as Language) ? editLocale : "en") as Language)
+                        .filter(template => !blockSearch.trim() || `${template.label} ${template.description}`.toLowerCase().includes(blockSearch.trim().toLowerCase()));
+                      if (!templates.length) return null;
+                      return <section className="mb-7" aria-labelledby="homepage-section-templates-title">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <div><h3 id="homepage-section-templates-title" className="text-sm font-semibold">{copy("Homepage ready templates", "Ana sayfa hazır şablonları")}</h3><p className="mt-1 text-xs text-muted-foreground">{copy("These are the exact responsive sections used on the staging homepage.", "Bunlar staging ana sayfasında kullanılan birebir responsive bölümlerdir.")}</p></div>
+                          <Badge variant="secondary">{templates.length}</Badge>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          {templates.map(template => <button
+                            key={template.id}
+                            type="button"
+                            onClick={() => addPreparedBlock(template.block)}
+                            className="group flex min-h-32 flex-col items-start rounded-2xl border border-primary/20 bg-primary/[0.035] p-4 text-left transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md"
+                          >
+                            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-lg text-primary-foreground"><Layers3 className="h-5 w-5" /></span>
+                            <p className="mt-3 text-sm font-semibold">{copy(template.label)}</p>
+                            <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{copy(template.description)}</p>
+                          </button>)}
+                        </div>
+                      </section>;
+                    })()}
+                    <div className="mb-3"><h3 className="text-sm font-semibold">{copy("Flexible sections", "Esnek bölümler")}</h3><p className="mt-1 text-xs text-muted-foreground">{copy("Start with a general section type and customise every field.", "Genel bir bölüm türüyle başlayın ve tüm alanları özelleştirin.")}</p></div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {BLOCK_TYPES.filter(bt => (blockCategory === "all" || bt.category === blockCategory) && (!blockSearch.trim() || `${bt.label} ${bt.category}`.toLowerCase().includes(blockSearch.trim().toLowerCase()))).map(bt => (
                       <button
                         key={bt.type}
@@ -1204,6 +1245,7 @@ function PageEditorSession({ id }: { id: number }) {
                       </button>
                     ))}
                     {BLOCK_TYPES.filter(bt => (blockCategory === "all" || bt.category === blockCategory) && (!blockSearch.trim() || `${bt.label} ${bt.category}`.toLowerCase().includes(blockSearch.trim().toLowerCase()))).length === 0 && <div className="col-span-full rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">{copy("No section matches this search.", "Bu aramayla eşleşen bölüm yok.")}</div>}
+                    </div>
                   </div>
                 </DialogContent>
               </Dialog>

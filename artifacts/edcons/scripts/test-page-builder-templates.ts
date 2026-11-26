@@ -155,6 +155,10 @@ test("Home uses live university logos without fabricating institution cards", ()
   assert.doesNotMatch(source("pages/public/PublicPage.tsx"), /onFocusCapture=\{/);
   assert.doesNotMatch(source("pages/public/PublicPage.tsx"), /Explore support/);
   assert.match(source("pages/public/homeVistaraParity.css"), /\.home-university-slider-track/);
+  assert.match(source("pages/public/homeVistaraParity.css"), /calc\(18\.1818% - 15px\)/);
+  assert.match(source("lib/website/managedPageStarters.ts"), /managedHomeSectionTemplates/);
+  assert.match(source("pages/admin/website/PageEditor.tsx"), /Homepage ready templates/);
+  assert.match(source("pages/admin/website/PageEditor.tsx"), /addPreparedBlock\(template\.block\)/);
 });
 
 test("managed editor previews collection-backed blocks with the same data contract as public pages", () => {

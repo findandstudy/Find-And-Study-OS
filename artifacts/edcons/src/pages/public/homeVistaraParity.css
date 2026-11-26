@@ -389,7 +389,7 @@
 }
 .home-future-page .home-university-slider-shell {
   position: relative;
-  width: min(100%,980px);
+  width: min(100%,var(--home-stage-max));
   margin-inline: auto;
   padding-inline: 54px;
 }
@@ -408,7 +408,7 @@
 .home-future-page .home-university-slider-track > div {
   position: relative;
   display: grid;
-  flex: 0 0 clamp(260px,28vw,292px);
+  flex: 0 0 max(180px,calc(18.1818% - 15px));
   min-height: 230px;
   grid-template-rows: 96px 1fr;
   place-items: center;
