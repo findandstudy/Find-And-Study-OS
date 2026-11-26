@@ -111,7 +111,7 @@ export function validateRecovery47AssetProvenance(raw: Uint8Array, assets: Recov
 
 /** Sidecar describes the recovered rendition. It does not change signed rows,
  * original signature evidence or claim that substituted branding is original. */
-export function recovery47AssetAudit(manifest: Recovery47Manifest): Buffer {
+export function recovery47AssetAudit(manifest: Pick<Recovery47Manifest, "inputSha256" | "sourceFiles" | "assetRecovery" | "candidate">): Buffer {
   if (!manifest.assetRecovery || !manifest.candidate) FAIL("asset_audit_requires_candidate");
   validateRecovery47Assets(manifest.assetRecovery);
   return Buffer.from(`${canonicalJson({ schemaVersion: 1, target: RECOVERY47_TARGET,
