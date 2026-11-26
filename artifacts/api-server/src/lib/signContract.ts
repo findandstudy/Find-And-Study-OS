@@ -1,5 +1,6 @@
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable } from "@workspace/db";
 import { and, eq, isNull, desc } from "drizzle-orm";
+import { preflightUnsignedContractPdf, signingSnapshotIdentity } from "./contractSigningPreflight";
 import { buildFinalSignedContractHtml, contractNumber } from "./contractRenderer";
 import { buildSignedPdf } from "./contractPdf";
 import { ObjectStorageService } from "./objectStorage";
@@ -47,7 +48,7 @@ const objectStorage = new ObjectStorageService();
 
 export type FinalizeSignResult =
   | { ok: true; signedContractId: number }
-  | { ok: false; status: number; error: string };
+  | { ok: false; status: number; error: string; code?: string; missingFields?: string[] };
 
 // First 8 bytes of every PNG file (magic number).
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -133,10 +134,26 @@ export async function finalizeSign(opts: {
   if (!sigCheck.ok) return sigCheck;
   const signatureBase64 = sigCheck.base64;
 
+  // Validate every new signature independently of delivery-worker rollout.
+  try {
+    preflightUnsignedContractPdf(session, { signedAt, signatureBase64, signerName: finalSignerName,
+      signerIp: opts.signerIp, signerUserAgent: opts.signerUserAgent, evidence: emailVerificationEvidence });
+  } catch (error: any) {
+    if (error?.message === 'CONTRACT_FROZEN_FIELD_MISSING' && session.mode !== 'admin_driven') return { ok: false, status: 422,
+      code: 'CONTRACT_INTAKE_REQUIRED', missingFields: error.missingFields,
+      error: 'Complete the required contract details before signing.' };
+    return { ok: false, status: 422, code: 'CONTRACT_DOCUMENT_NOT_READY',
+      error: 'The contract document is not ready for signing. Please contact our team; your signature was not saved.' };
+  }
+
   type Outcome = { ok: true; row: typeof signedContractsTable.$inferSelect } | { ok: false; status: number; error: string };
   let outcome: Outcome;
   try {
     outcome = await db.transaction(async (tx): Promise<Outcome> => {
+      const [current] = await tx.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, session.id)).for('update');
+      if (!current || signingSnapshotIdentity(current) !== signingSnapshotIdentity(session)) {
+        return { ok: false, status: 409, error: 'Contract details changed. Reload and review before signing.' };
+      }
       const [statusUpdate] = await tx.update(signingSessionsTable).set({
         status: "signed", signedAt, signerName: finalSignerName,
       }).where(and(
