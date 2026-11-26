@@ -228,15 +228,19 @@ function ActionLink({ href, label, secondary = false }: { href: unknown; label: 
 
 function UniversityCountrySlider({ content }: { content: Record<string, unknown> }) {
   const trackRef = useRef<HTMLDivElement>(null);
-  const [isPaused, setIsPaused] = useState(false);
+  const [isPointerPaused, setIsPointerPaused] = useState(false);
   const logos = useMemo(() => items(content.logos, 2_000), [content.logos]);
   const tabs = useMemo(() => {
+    const availableKeys = new Set(logos.flatMap(logo => {
+      const key = text(logo.countryKey, 160) || text(logo.country, 160).toLocaleLowerCase("en-US");
+      return key ? [key] : [];
+    }));
     const configured = items(content.countryTabs, 128).flatMap(tab => {
       const key = text(tab.key, 160);
       const label = text(tab.label, 160);
       return key && label ? [{ key, label }] : [];
     });
-    if (configured.length) return configured;
+    if (configured.length) return configured.filter(tab => availableKeys.has(tab.key));
     return logos.flatMap(logo => {
       const key = text(logo.countryKey, 160) || text(logo.country, 160).toLocaleLowerCase("en-US");
       const label = text(logo.country, 160);
@@ -270,22 +274,18 @@ function UniversityCountrySlider({ content }: { content: Record<string, unknown>
   };
 
   useEffect(() => {
-    if (isPaused || activeLogos.length < 2 || typeof window === "undefined"
+    if (isPointerPaused || activeLogos.length < 2 || typeof window === "undefined"
       || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = window.setInterval(() => move(1), 4_800);
+    const timer = window.setInterval(() => move(1), 4_000);
     return () => window.clearInterval(timer);
-  }, [activeTab?.key, activeLogos.length, isPaused]);
+  }, [activeTab?.key, activeLogos.length, isPointerPaused]);
 
   if (!logos.length || !tabs.length) return null;
   return (
     <section
       className="home-university-wall"
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
-      onFocusCapture={() => setIsPaused(true)}
-      onBlurCapture={event => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsPaused(false);
-      }}
+      onMouseEnter={() => setIsPointerPaused(true)}
+      onMouseLeave={() => setIsPointerPaused(false)}
     >
       {content.eyebrow ? <p className="home-section-kicker text-center">{text(content.eyebrow, 200)}</p> : null}
       <h2 className="text-center text-3xl font-bold">{text(content.title, 500)}</h2>
@@ -435,7 +435,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
                 const Icon = iconByName[iconName] || Globe2;
                 const href = safeUrl(card.linkUrl);
                 const image = safeImageUrl(card.imageUrl);
-                const body = <><div className="home-service-card-head"><div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center"><Icon className="w-7 h-7 text-primary transition-colors duration-300" /></div><h3 className="text-xl font-bold font-display">{text(card.title, 300)}</h3></div><p className="text-muted-foreground leading-relaxed">{text(card.description)}</p><span className="home-service-card-link">Explore support <ArrowRight aria-hidden="true" /></span>{image ? <div className="home-service-card-media"><img src={image} alt="" loading="lazy" /></div> : null}</>;
+                const body = <><div className="home-service-card-head"><div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center"><Icon className="w-7 h-7 text-primary transition-colors duration-300" /></div><h3 className="text-xl font-bold font-display">{text(card.title, 300)}</h3></div><p className="text-muted-foreground leading-relaxed">{text(card.description)}</p>{image ? <div className="home-service-card-media"><img src={image} alt="" loading="lazy" /></div> : null}</>;
                 return <article key={cardIndex} className="home-bento-card group">{href ? <a className="home-service-card-body" href={href}>{body}</a> : <div className="home-service-card-body">{body}</div>}</article>;
               })}
             </div>

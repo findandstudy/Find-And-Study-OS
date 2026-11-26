@@ -15,16 +15,32 @@ type HomeUniversityResponse = {
   meta?: { total?: number; capped?: boolean };
 };
 
-function normalizeHomeBranding<T>(value: T): T {
+const HOME_PUBLIC_COPY_REPLACEMENTS = new Map<string, string>([
+  ["We connect live catalogue research, practical preparation and human guidance in one clearer student journey.", "We connect study research, practical preparation and human guidance in one clearer student journey."],
+  ["Move through one connected journey with live catalogue context and clear preparation at each stage.", "Move through one connected journey with clear context and preparation at each stage."],
+  ["The platform keeps catalogue facts, preparation and human support in the same decision trail.", "The platform keeps research, preparation and human support in the same decision trail."],
+  ["Live catalogue context", "Current study options"],
+  ["Start with live catalogue data, then open each destination or program to review the details that shape your decision.", "Start with current study options, then open each destination or program to review the details that shape your decision."],
+  ["Browse the current catalogue and open each program for its available details.", "Browse current programs and open each option for its available details."],
+  ["Universities in the live catalogue", "Explore universities by country"],
+  ["Institution names and logos are loaded from the current Find & Study catalogue.", "Choose a destination to explore its universities and open each institution page for details."],
+  ["Use practical guidance alongside live catalogue information when building your study plan.", "Use practical guidance and current study information when building your study plan."],
+]);
+
+function normalizeHomePresentation<T>(value: T): T {
   if (typeof value === "string") {
-    return value
+    const branded = value
       .replace(/FIND\s*&\s*STUDY/g, "FIND AND STUDY")
-      .replace(/Find\s*&\s*Study/g, "Find And Study") as T;
+      .replace(/Find\s*&\s*Study/g, "Find And Study");
+    return (HOME_PUBLIC_COPY_REPLACEMENTS.get(branded) || branded
+      .replace(/\blive catalogue\b/gi, "current study options")
+      .replace(/\bcatalogue facts\b/gi, "study information")
+      .replace(/\bcatalogue (?:data|information)\b/gi, "study information")) as T;
   }
-  if (Array.isArray(value)) return value.map(item => normalizeHomeBranding(item)) as T;
+  if (Array.isArray(value)) return value.map(item => normalizeHomePresentation(item)) as T;
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, normalizeHomeBranding(item)]),
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, normalizeHomePresentation(item)]),
     ) as T;
   }
   return value;
@@ -32,7 +48,7 @@ function normalizeHomeBranding<T>(value: T): T {
 
 function HomeBlocks({ blocks, version, pageTitle, locale }: { blocks: PageBlock[]; version?: number; pageTitle: string; locale: string }) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const brandedBlocks = useMemo(() => normalizeHomeBranding(blocks), [blocks]);
+  const brandedBlocks = useMemo(() => normalizeHomePresentation(blocks), [blocks]);
 
   useEffect(() => {
     const root = contentRef.current;

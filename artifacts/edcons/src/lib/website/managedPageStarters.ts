@@ -102,7 +102,7 @@ export function managedHomePageBlocks(
     block("home_fallback_stats", {
       eyebrow: "About Find & Study",
       title: "A trusted partner for global education decisions",
-      subtitle: "We connect live catalogue research, practical preparation and human guidance in one clearer student journey.",
+      subtitle: "We connect study research, practical preparation and human guidance in one clearer student journey.",
       stats: [
         { value: "98%", label: copy.visaRate },
         { value: "500+", label: copy.universities },
@@ -137,7 +137,7 @@ export function managedHomePageBlocks(
     block("process_steps", {
       variant: "home-process",
       title: "A simpler route from research to your next step",
-      subtitle: "Move through one connected journey with live catalogue context and clear preparation at each stage.",
+      subtitle: "Move through one connected journey with clear context and preparation at each stage.",
       steps: [
         { number: "01", title: "Choose your study direction", description: "Compare destinations, universities and programs around your academic goals, timing and practical priorities." },
         { number: "02", title: "Plan and prepare with context", description: "Review current requirements, assemble the right information and resolve open questions before submission." },
@@ -148,9 +148,9 @@ export function managedHomePageBlocks(
       variant: "home-why",
       eyebrow: "Why Find & Study",
       title: "A clearer, connected way to plan international education",
-      subtitle: "The platform keeps catalogue facts, preparation and human support in the same decision trail.",
+      subtitle: "The platform keeps research, preparation and human support in the same decision trail.",
       cards: [
-        { icon: "Search", title: "Live catalogue context", description: "Start from current destinations, institutions and programs instead of a generic shortlist." },
+        { icon: "Search", title: "Current study options", description: "Start from current destinations, institutions and programs instead of a generic shortlist." },
         { icon: "ShieldCheck", title: "Preparation before action", description: "Review requirements, documents and uncertainties before an application moves forward." },
         { icon: "FileText", title: "Visible next actions", description: "Keep outstanding requests, ownership and progress understandable throughout the journey." },
         { icon: "MessageCircle", title: "Human guidance when needed", description: "Bring a shortlist, budget or unresolved decision to an adviser without starting the research again." },
@@ -158,7 +158,7 @@ export function managedHomePageBlocks(
     }),
     block("catalog_grid", {
       title: "Explore current study opportunities",
-      subtitle: "Start with live catalogue data, then open each destination or program to review the details that shape your decision.",
+      subtitle: "Start with current study options, then open each destination or program to review the details that shape your decision.",
       source: "destinations",
       limit: 6,
       country: "",
@@ -167,7 +167,7 @@ export function managedHomePageBlocks(
       columns: "3",
       fallbackItems: [
         { id: "destinations", title: "Study destinations", description: "Compare countries and cities before narrowing your study options.", canonicalPath: countriesPath },
-        { id: "programs", title: "Programs", description: "Browse the current catalogue and open each program for its available details.", canonicalPath: programsPath },
+        { id: "programs", title: "Programs", description: "Browse current programs and open each option for its available details.", canonicalPath: programsPath },
         { id: "advice", title: "Adviser support", description: "Bring your shortlist and questions together for a more practical next step.", canonicalPath: contactPath },
       ],
     }),
@@ -211,15 +211,15 @@ export function managedHomePageBlocks(
     block("logo_grid", {
       variant: "home-universities",
       eyebrow: "Explore institutions",
-      title: "Universities in the live catalogue",
-      subtitle: "Institution names and logos are loaded from the current Find & Study catalogue.",
+      title: "Explore universities by country",
+      subtitle: "Choose a destination to explore its universities and open each institution page for details.",
       logos: [],
     }),
     block("grid_box", {
       variant: "home-journal",
       eyebrow: "Guides and insights",
       title: "Research the next decision before you make it",
-      subtitle: "Use practical guidance alongside live catalogue information when building your study plan.",
+      subtitle: "Use practical guidance and current study information when building your study plan.",
       columns: "3",
       cards: [
         { title: "Choosing a destination", description: "Compare academic fit, budget, city context and the route ahead before narrowing your options.", linkLabel: "Explore destinations", linkUrl: countriesPath },

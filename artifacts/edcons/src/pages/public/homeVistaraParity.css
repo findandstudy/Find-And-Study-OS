@@ -302,7 +302,6 @@
   .home-offer-copy > a,
   .home-support-team-intro > a,
   .home-future-cta a,
-  .home-service-card-link,
   .home-university-tabs button,
   .home-university-slider-control
 ) {
@@ -390,7 +389,7 @@
 }
 .home-future-page .home-university-slider-shell {
   position: relative;
-  width: min(100%,var(--home-stage-max));
+  width: min(100%,980px);
   margin-inline: auto;
   padding-inline: 54px;
 }
@@ -409,7 +408,7 @@
 .home-future-page .home-university-slider-track > div {
   position: relative;
   display: grid;
-  flex: 0 0 clamp(230px,24vw,292px);
+  flex: 0 0 clamp(260px,28vw,292px);
   min-height: 230px;
   grid-template-rows: 96px 1fr;
   place-items: center;
@@ -1517,7 +1516,7 @@ body:has(.home-future-page) .public-site-header--home a[href*="/login"]:hover::a
   border: 0 !important;
 }
 .home-future-page .home-live-catalog .home-catalog-card {
-  min-height: 330px;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(15,23,42,.09) !important;
   border-radius: 18px !important;
@@ -1555,15 +1554,15 @@ body:has(.home-future-page) .public-site-header--home a[href*="/login"]:hover::a
 }
 .home-future-page .home-live-catalog .home-catalog-copy {
   position: relative;
-  min-height: 124px;
-  padding: 22px 52px 22px 22px;
+  min-height: 88px;
+  padding: 17px 48px 16px 18px;
   text-align: left;
 }
 .home-future-page .home-live-catalog .home-catalog-copy h3 { margin: 0; color: var(--vistara-ink); font-size: 18px; }
 .home-future-page .home-live-catalog .home-catalog-copy svg {
   position: absolute;
   right: 20px;
-  bottom: 24px;
+  bottom: 18px;
   display: block;
   color: var(--vistara-blue);
 }
@@ -1672,7 +1671,7 @@ body:has(.home-future-page) .public-site-header--home a[href*="/login"]:hover::a
 
 @media (max-width: 760px) {
   .home-future-page .home-live-catalog .cms-responsive-grid { grid-template-columns: 1fr !important; }
-  .home-future-page .home-live-catalog .home-catalog-card { min-height: 300px; }
+  .home-future-page .home-live-catalog .home-catalog-card { min-height: 0; }
   .home-future-page .home-live-catalog .home-catalog-media { height: 190px; }
   .home-future-page .home-support-team-grid article { min-height: 260px; }
   .home-future-page [data-cms-block="faq"] .home-faq-brand,
@@ -1699,12 +1698,11 @@ body:has(.home-future-page) .public-site-header--home a[href*="/login"]:hover::a
   padding: 28px 25px 0;
 }
 .home-future-page .home-service-card-body > p { min-height: 78px; margin: 20px 0 15px; }
-.home-future-page .home-service-card-link { margin: 2px 0 22px; }
 .home-future-page .home-service-card-media {
   flex: 0 0 215px;
   width: calc(100% + 50px);
   height: 215px;
-  margin: auto -25px 0;
+  margin: 18px -25px 0;
   border-radius: 0 !important;
 }
 .home-future-page .home-university-wall { min-height: 0; padding-block: 78px 86px !important; }

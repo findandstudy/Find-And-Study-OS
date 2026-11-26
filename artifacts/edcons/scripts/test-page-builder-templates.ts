@@ -149,8 +149,11 @@ test("Home uses live university logos without fabricating institution cards", ()
   assert.match(source("pages/public/Home.tsx"), /home-featured-universities/);
   assert.match(source("pages/public/Home.tsx"), /\/api\/public\/home-universities/);
   assert.match(source("pages/public/PublicPage.tsx"), /UniversityCountrySlider/);
-  assert.match(source("pages/public/PublicPage.tsx"), /setInterval\(\(\) => move\(1\), 4_800\)/);
-  assert.match(source("pages/public/PublicPage.tsx"), /onMouseEnter=\{\(\) => setIsPaused\(true\)\}/);
+  assert.match(source("pages/public/PublicPage.tsx"), /configured\.filter\(tab => availableKeys\.has\(tab\.key\)\)/);
+  assert.match(source("pages/public/PublicPage.tsx"), /setInterval\(\(\) => move\(1\), 4_000\)/);
+  assert.match(source("pages/public/PublicPage.tsx"), /onMouseEnter=\{\(\) => setIsPointerPaused\(true\)\}/);
+  assert.doesNotMatch(source("pages/public/PublicPage.tsx"), /onFocusCapture=\{/);
+  assert.doesNotMatch(source("pages/public/PublicPage.tsx"), /Explore support/);
   assert.match(source("pages/public/homeVistaraParity.css"), /\.home-university-slider-track/);
 });
 
