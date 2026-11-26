@@ -224,6 +224,7 @@ test("managed inner pages share the Vistara-inspired responsive presentation con
   assert.match(publicPage, /cms-inner-faq-intro/);
   assert.match(publicPage, /cms-inner-faq-list/);
   assert.match(source("pages/public/Countries.tsx"), /inner-destination-card/);
+  assert.match(source("pages/public/Countries.tsx"), /inner-destination-flag/);
   assert.match(source("pages/public/Contact.tsx"), /inner-contact-form-card/);
   assert.match(source("pages/public/Contact.tsx"), /inner-contact-intro/);
   assert.match(source("pages/public/Blog.tsx"), /inner-blog-sidebar/);
@@ -232,6 +233,8 @@ test("managed inner pages share the Vistara-inspired responsive presentation con
   assert.match(css, /\.inner-guide-related-grid/);
   assert.match(css, /managed-agency-page--countries/);
   assert.match(css, /cms-inner-faq-brand/);
+  assert.match(css, /--inner-card-shadow-hover/);
+  assert.match(css, /inner-destination-flag/);
   assert.match(css, /@media \(max-width: 760px\)/);
   assert.match(css, /prefers-reduced-motion: reduce/);
 });

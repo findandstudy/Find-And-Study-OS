@@ -211,25 +211,41 @@
 .inner-destination-group > h2 { color: var(--inner-ink); font-size: clamp(30px, 3vw, 42px); letter-spacing: -.04em; }
 .inner-destination-grid { gap: 22px !important; }
 .inner-destination-card {
-  min-height: 410px !important;
+  min-height: 430px !important;
   border-color: rgba(18,42,77,.09) !important;
-  border-radius: var(--inner-radius) !important;
-  background: #fff;
-  box-shadow: 0 16px 38px rgba(21,45,78,.09) !important;
+  border-radius: 22px !important;
+  background: linear-gradient(160deg,#fff 66%,#f5f8fd);
+  box-shadow: 0 16px 40px rgba(21,45,78,.1) !important;
   transition: transform .3s cubic-bezier(.2,.7,.2,1), box-shadow .3s ease, border-color .3s ease !important;
 }
-.inner-destination-link:hover .inner-destination-card { border-color: rgba(40,107,230,.3) !important; box-shadow: 0 27px 58px rgba(21,45,78,.16) !important; transform: translateY(-7px); }
-.inner-destination-media { height: 220px !important; overflow: hidden; background: #e6eef9; }
+.inner-destination-link:hover .inner-destination-card { border-color: rgba(40,107,230,.32) !important; box-shadow: 0 28px 64px rgba(21,45,78,.18) !important; transform: translateY(-8px); }
+.inner-destination-media { height: 235px !important; overflow: hidden; background: #e6eef9; }
 .inner-destination-media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(8,23,43,.28)); pointer-events: none; }
 .inner-destination-media .destination-card-image { transition: transform .7s cubic-bezier(.2,.7,.2,1); }
 .inner-destination-link:hover .destination-card-image { transform: scale(1.065); }
-.inner-destination-copy { position: relative; padding: 24px !important; }
+.inner-destination-flag {
+  position: absolute;
+  z-index: 2;
+  inset-block-start: 18px;
+  inset-inline-start: 18px;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.65);
+  border-radius: 15px;
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 12px 26px rgba(8,23,43,.2);
+  backdrop-filter: blur(12px);
+}
+.inner-destination-copy { position: relative; padding: 25px !important; }
 .inner-destination-copy h3 { color: var(--inner-ink); font-size: 24px; letter-spacing: -.025em; }
-.inner-destination-facts { gap: 9px !important; }
-.inner-destination-facts span { padding: 7px 10px; border-radius: 999px; background: #f2f6fc; font-size: 12px; }
-.inner-destination-action { justify-content: space-between; color: var(--inner-blue); }
+.inner-destination-facts { display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px !important; }
+.inner-destination-facts span { min-height: 42px; padding: 8px 10px; border: 1px solid #e4ebf5; border-radius: 12px; background: rgba(245,248,253,.9); font-size: 12px; }
+.inner-destination-action { min-height: 42px; justify-content: space-between; margin-top: 16px !important; padding: 0 14px; border-radius: 12px; color: #fff; background: var(--inner-navy); transition: background .25s ease; }
 .inner-destination-action svg { margin-inline-start: auto; transition: transform .25s ease; }
-.inner-destination-link:hover .inner-destination-action svg { transform: translateX(5px); }
+.inner-destination-link:hover .inner-destination-action { background: var(--inner-blue); }
+.inner-destination-link:hover .inner-destination-action svg { transform: translateX(4px); }
 
 /* Contact */
 .inner-contact-workspace { background: var(--inner-paper); }
@@ -376,6 +392,198 @@
 }
 .managed-agency-page [data-cms-block="cta_banner"] > .home-future-cta :is(h2,p,svg) { color: #fff !important; }
 .managed-agency-page [data-cms-block="cta_banner"] > .home-future-cta > p { color: rgba(255,255,255,.76) !important; }
+
+/* Modern card language for managed inner pages ------------------------
+ * Counter, editorial, scroll and comparison cards share one elevation,
+ * radius and motion contract. This keeps future managed pages consistent
+ * without baking page-specific content into the renderer. */
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) {
+  --inner-card-radius: 22px;
+  --inner-card-shadow: 0 14px 36px rgba(17,42,76,.075);
+  --inner-card-shadow-hover: 0 24px 52px rgba(17,42,76,.15);
+  --inner-card-ease: cubic-bezier(.2,.72,.2,1);
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) .cms-section-heading {
+  max-width: 760px;
+  margin-inline: 0;
+  text-align: start;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) .cms-section-heading h2 {
+  color: var(--inner-ink);
+  letter-spacing: -.045em;
+  text-wrap: balance;
+}
+
+/* Compact cards that bridge the masthead and page content. */
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="counter_grid"] {
+  position: relative;
+  z-index: 5;
+  margin-top: -28px;
+  padding-bottom: 22px;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="counter_grid"] > section {
+  padding-block: 0;
+  background: transparent;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="counter_grid"] .cms-section-heading { display: none; }
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="counter_grid"] .cms-counter-grid {
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(25,56,94,.08);
+  border-radius: 28px;
+  background: rgba(244,248,253,.82);
+  box-shadow: 0 24px 64px rgba(11,31,60,.13);
+  backdrop-filter: blur(18px);
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="counter_grid"] .cms-counter-grid > article {
+  position: relative;
+  min-height: 168px;
+  padding: 24px;
+  overflow: hidden;
+  border: 1px solid rgba(32,73,125,.1);
+  border-radius: 18px;
+  background: linear-gradient(145deg,#fff 30%,#f5f9ff);
+  box-shadow: 0 8px 24px rgba(20,47,82,.055);
+  transition: transform .3s var(--inner-card-ease),border-color .3s ease,box-shadow .3s ease;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="counter_grid"] .cms-counter-grid > article::before {
+  content: "";
+  position: absolute;
+  width: 72px;
+  height: 72px;
+  inset: -38px -24px auto auto;
+  border-radius: 50%;
+  background: rgba(40,107,230,.1);
+  box-shadow: 0 0 0 16px rgba(40,107,230,.035);
+  transition: transform .45s var(--inner-card-ease);
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="counter_grid"] .cms-counter-grid > article:hover {
+  z-index: 1;
+  border-color: rgba(40,107,230,.3);
+  box-shadow: var(--inner-card-shadow-hover);
+  transform: translateY(-6px);
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="counter_grid"] .cms-counter-grid > article:hover::before { transform: scale(1.18); }
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="counter_grid"] .cms-counter-value {
+  font-size: clamp(28px,3vw,40px);
+  line-height: 1;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="counter_grid"] .cms-counter-grid h3 {
+  margin-top: 15px;
+  color: var(--inner-ink);
+  font-size: 14px;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="counter_grid"] .cms-counter-grid article > p:last-child:not(.cms-counter-value) {
+  margin-top: 10px;
+  color: var(--inner-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* Editorial card modules. */
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-grid-box-grid { gap: 18px; }
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-grid-box-card:first-child { grid-column: auto; }
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-grid-box-card {
+  position: relative;
+  min-height: 230px;
+  overflow: hidden;
+  border: 1px solid rgba(27,62,105,.1);
+  border-radius: var(--inner-card-radius);
+  background: linear-gradient(155deg,#fff 58%,#f3f7fd);
+  box-shadow: var(--inner-card-shadow);
+  transition: transform .32s var(--inner-card-ease),border-color .32s ease,box-shadow .32s ease;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-grid-box-card::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  height: 3px;
+  inset: 0 0 auto;
+  background: linear-gradient(90deg,var(--inner-blue),#67c7c0);
+  opacity: .85;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-grid-box-card:hover {
+  border-color: rgba(40,107,230,.28);
+  box-shadow: var(--inner-card-shadow-hover);
+  transform: translateY(-7px);
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-grid-box-media {
+  width: 58px;
+  min-height: 58px;
+  margin: 25px 25px 0;
+  border: 1px solid rgba(40,107,230,.13);
+  border-radius: 17px;
+  color: var(--inner-blue);
+  background: linear-gradient(135deg,#e8f1ff,#eaf9f7);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-grid-box-media > span {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-grid-box-media img {
+  width: 100%;
+  height: 100%;
+  min-height: 58px;
+  object-fit: cover;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-grid-box-copy { padding: 20px 25px 26px; }
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-grid-box-copy > .home-card-index { display: none; }
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-grid-box-copy h3 { color: var(--inner-ink); font-size: 20px; letter-spacing: -.025em; }
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-grid-box-copy > p { color: var(--inner-muted); font-size: 15px; line-height: 1.65; }
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="grid_box"] .cms-inline-link { margin-top: 20px; color: var(--inner-blue); font-size: 14px; font-weight: 750; }
+
+/* Comparison columns and horizontal cards share the same surface. */
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) .cms-column-layout-grid { gap: 18px; }
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) .cms-column-layout-grid > article {
+  min-height: 230px;
+  padding: 28px;
+  border: 1px solid rgba(27,62,105,.1);
+  border-radius: var(--inner-card-radius);
+  background: linear-gradient(155deg,#fff,#f5f8fd);
+  box-shadow: var(--inner-card-shadow);
+  transition: transform .3s var(--inner-card-ease),box-shadow .3s ease,border-color .3s ease;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) .cms-column-layout-grid > article:hover {
+  border-color: rgba(40,107,230,.28);
+  box-shadow: var(--inner-card-shadow-hover);
+  transform: translateY(-6px);
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) .cms-column-number {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: var(--inner-blue);
+  background: #eaf2ff;
+  font-size: 13px;
+  font-weight: 800;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) .cms-column-layout-grid h3 { margin-top: 24px; color: var(--inner-ink); }
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) :is(.cms-scroll-card,.cms-carousel-slide) {
+  border-radius: var(--inner-card-radius);
+  background: linear-gradient(155deg,#fff,#f5f8fd);
+  box-shadow: var(--inner-card-shadow);
+}
+
+/* Contact form and office cards use the same elevated surface. */
+.managed-agency-page--contact .inner-contact-form-card {
+  border-color: rgba(29,66,112,.1);
+  background: linear-gradient(155deg,#fff 65%,#f5f8fd);
+  box-shadow: 0 26px 68px rgba(15,38,72,.14);
+}
+.managed-agency-page--contact .inner-contact-office-grid > div {
+  border: 1px solid rgba(27,62,105,.1) !important;
+  border-radius: 18px !important;
+  background: linear-gradient(155deg,#fff,#f5f8fd) !important;
+  box-shadow: var(--inner-card-shadow) !important;
+  transition: transform .3s var(--inner-card-ease),box-shadow .3s ease !important;
+}
+.managed-agency-page--contact .inner-contact-office-grid > div:hover { box-shadow: var(--inner-card-shadow-hover) !important; transform: translateY(-5px); }
 
 @media (max-width: 1024px) {
   .managed-agency-page--about [data-cms-block="process_steps"] .cms-responsive-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
