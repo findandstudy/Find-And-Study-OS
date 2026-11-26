@@ -1729,6 +1729,7 @@
     "seo": "SEO",
     "emails": "Configuración de correo",
     "accountDetails": "Detalles de la cuenta",
+    "accountStatus": "Estado de la cuenta",
     "role": "Rol",
     "accountId": "ID de la cuenta",
     "activeSessions": "Sesiones activas",

@@ -377,8 +377,8 @@ export default function AgentSubAgents() {
 
   return (
     <>
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+      <div className="w-full max-w-7xl mx-auto">
+        <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-display font-bold text-foreground">{t("agentSubAgents.title")}</h1>
             <p className="text-muted-foreground text-sm mt-1">{t("agentSubAgents.subtitle")}</p>
@@ -392,12 +392,12 @@ export default function AgentSubAgents() {
           <div className="p-4 border-b border-border/50">
             <form onSubmit={handleSearch} className="flex gap-2">
               <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Search className="absolute left-3 right-auto top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground rtl:right-3 rtl:left-auto" />
                 <Input
                   value={searchInput}
                   onChange={e => setSearchInput(e.target.value)}
                   placeholder={t("subAgentsPage.searchPlaceholder")}
-                  className="pl-9 h-9"
+                  className="pl-9 pr-3 h-9 rtl:pl-3 rtl:pr-9"
                 />
               </div>
               <Button type="submit" variant="outline" size="sm" className="h-9">{t("common.search")}</Button>

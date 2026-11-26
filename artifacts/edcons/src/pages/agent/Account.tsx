@@ -250,31 +250,31 @@ export default function AgentAccount() {
   const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || user?.email?.[0] || "?"}`.toUpperCase();
 
   return (
-      <div className="max-w-4xl mx-auto">
+      <div className="w-full max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-2xl font-display font-bold text-foreground">{t("agentAccount.title")}</h1>
           <p className="text-muted-foreground text-sm mt-1">{t("agentAccount.subtitle")}</p>
         </div>
 
         <Tabs defaultValue="profile" className="space-y-0">
-          <TabsList className="w-full justify-start rounded-none border-b bg-transparent p-0 h-auto gap-0">
+          <TabsList className="w-full justify-start overflow-x-auto rounded-none border-b bg-transparent p-0 h-auto gap-0">
             {[
-              { value: "profile", label: "Profile", icon: User },
-              { value: "agency", label: "Agency", icon: Briefcase },
+              { value: "profile", label: t("agentAccount.profile"), icon: User },
+              { value: "agency", label: t("agentAccount.company"), icon: Briefcase },
               ...(agentProfile?.effectiveFeatures?.web_to_lead !== false
-                ? [{ value: "web-to-lead", label: "Website Widgets", icon: Code }]
+                ? [{ value: "web-to-lead", label: t("agentAccount.webToLeadTitle"), icon: Code }]
                 : []),
               ...(["agent", "sub_agent"].includes(user?.role || "")
                 && (agentProfile?.effectiveFeatures?.email_integration || agentProfile?.effectiveFeatures?.whatsapp_integration)
-                ? [{ value: "integrations", label: "Integrations", icon: Plug }]
+                ? [{ value: "integrations", label: t("settingsPage.navIntegrations"), icon: Plug }]
                 : []),
-              { value: "language", label: "Language", icon: Globe },
-              { value: "security", label: "Security", icon: Shield },
+              { value: "language", label: t("agentAccount.language"), icon: Globe },
+              { value: "security", label: t("agentAccount.security"), icon: Shield },
             ].map(tab => (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-5 py-3 gap-2 text-sm font-medium"
+                className="shrink-0 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-5 py-3 gap-2 text-sm font-medium"
               >
                 <tab.icon className="w-4 h-4" />
                 {tab.label}
@@ -312,19 +312,19 @@ export default function AgentAccount() {
                 <h3 className="font-display font-bold text-lg text-foreground">{user?.firstName} {user?.lastName}</h3>
                 <p className="text-muted-foreground text-sm mt-0.5">{user?.email}</p>
                 <Badge className="bg-amber-500/10 text-amber-600 border-amber-200 text-xs mt-3">
-                  {user?.role === "sub_agent" ? "Sub Agent" : "Agent"}
+                  {user?.role === "sub_agent" ? t("settingsPage.roleSubAgent") : t("settingsPage.roleAgent")}
                 </Badge>
-                <p className="text-[11px] text-muted-foreground mt-3">Hover photo to change</p>
+                <p className="text-[11px] text-muted-foreground mt-3">{t("staffSettings.hoverPhoto")}</p>
               </Card>
 
               {/* Right: Profile Form */}
               <div className="space-y-6">
                 <Card className="border shadow-sm p-6">
-                  <h3 className="font-display font-semibold text-base mb-5">Personal Information</h3>
+                  <h3 className="font-display font-semibold text-base mb-5">{t("account.personalInformation")}</h3>
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                        First Name
+                        {t("account.firstName")}
                         {isImmutable && (
                           <Tooltip>
                             <TooltipTrigger asChild><Lock className="w-3 h-3 text-muted-foreground/60 cursor-help" /></TooltipTrigger>
@@ -337,7 +337,7 @@ export default function AgentAccount() {
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                        Last Name
+                        {t("account.lastName")}
                         {isImmutable && (
                           <Tooltip>
                             <TooltipTrigger asChild><Lock className="w-3 h-3 text-muted-foreground/60 cursor-help" /></TooltipTrigger>
@@ -350,7 +350,7 @@ export default function AgentAccount() {
                     </div>
                     <div className="sm:col-span-2 space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                        <Mail className="w-3 h-3" /> Email
+                        <Mail className="w-3 h-3" /> {t("account.emailLabel")}
                         {isImmutable && (
                           <Tooltip>
                             <TooltipTrigger asChild><Lock className="w-3 h-3 text-muted-foreground/60 cursor-help" /></TooltipTrigger>
@@ -363,7 +363,7 @@ export default function AgentAccount() {
                     </div>
                     <div className="sm:col-span-2 space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                        <Phone className="w-3 h-3" /> Phone
+                        <Phone className="w-3 h-3" /> {t("account.phoneLabel")}
                       </Label>
                       <div className="flex gap-2">
                         <PhoneCodePicker value={form.phoneCode} onChange={v => setForm(f => ({ ...f, phoneCode: v }))} triggerClassName="w-[110px] h-10 shrink-0" />
@@ -380,7 +380,7 @@ export default function AgentAccount() {
                   <div className="flex justify-end mt-5 pt-4 border-t border-border/50">
                     <Button onClick={handleSaveProfile} disabled={saving} size="sm" className="gap-2 px-6">
                       {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                      Save Changes
+                      {t("account.saveChanges")}
                     </Button>
                   </div>
                 </Card>
@@ -390,26 +390,26 @@ export default function AgentAccount() {
                     <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
                       <KeyRound className="w-4 h-4 text-amber-600" />
                     </div>
-                    <h3 className="font-display font-semibold text-base">Change Password</h3>
+                    <h3 className="font-display font-semibold text-base">{t("settingsPage.changePassword")}</h3>
                   </div>
                   <div className="grid sm:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Current Password</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t("login.passwordLabel")}</Label>
                       <Input type="password" value={pwForm.currentPassword} onChange={e => setPwForm(f => ({ ...f, currentPassword: e.target.value }))} className="h-10" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">New Password</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t("login.newPassword")}</Label>
                       <Input type="password" value={pwForm.newPassword} onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Min 6 characters" className="h-10" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Confirm Password</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t("login.confirmPassword")}</Label>
                       <Input type="password" value={pwForm.confirmPassword} onChange={e => setPwForm(f => ({ ...f, confirmPassword: e.target.value }))} className="h-10" />
                     </div>
                   </div>
                   <div className="flex justify-end mt-5 pt-4 border-t border-border/50">
                     <Button onClick={handleChangePassword} disabled={changingPw || !pwForm.currentPassword || !pwForm.newPassword} variant="outline" size="sm" className="gap-2 px-6">
                       {changingPw ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" />}
-                      Update Password
+                      {t("settingsPage.changePassword")}
                     </Button>
                   </div>
                 </Card>
@@ -434,7 +434,7 @@ export default function AgentAccount() {
           {/* ── Language Tab ── */}
           <TabsContent value="language" className="pt-6">
             <Card className="border shadow-sm p-6">
-              <h3 className="font-display font-semibold text-base mb-5">Language Preference</h3>
+              <h3 className="font-display font-semibold text-base mb-5">{t("account.languagePreference")}</h3>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {LANGUAGES.map(l => (
                   <button key={l.code} onClick={() => handleSaveLang(l.code)}
@@ -460,26 +460,26 @@ export default function AgentAccount() {
                   <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
                     <Shield className="w-4 h-4 text-blue-600" />
                   </div>
-                  <h3 className="font-display font-semibold text-base">Account Security</h3>
+                  <h3 className="font-display font-semibold text-base">{t("settingsPage.securityAccess")}</h3>
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center py-3 border-b border-border/50">
-                    <span className="text-sm text-muted-foreground">Account Status</span>
-                    <Badge className="bg-green-500/10 text-green-600 border-green-200 text-xs">Active</Badge>
+                    <span className="text-sm text-muted-foreground">{t("staffSettings.accountStatus")}</span>
+                    <Badge className="bg-green-500/10 text-green-600 border-green-200 text-xs">{t("settingsPage.active")}</Badge>
                   </div>
                   <div className="flex justify-between items-center py-3 border-b border-border/50">
-                    <span className="text-sm text-muted-foreground">Role</span>
+                    <span className="text-sm text-muted-foreground">{t("common.role")}</span>
                     <Badge className="bg-amber-500/10 text-amber-600 border-amber-200 text-xs capitalize">
-                      {user?.role?.replace("_", " ")}
+                      {user?.role === "sub_agent" ? t("settingsPage.roleSubAgent") : user?.role === "agent" ? t("settingsPage.roleAgent") : user?.role?.replace("_", " ")}
                     </Badge>
                   </div>
                   <div className="flex justify-between items-center py-3 border-b border-border/50">
-                    <span className="text-sm text-muted-foreground">Account ID</span>
+                    <span className="text-sm text-muted-foreground">{t("staffSettings.accountId")}</span>
                     <span className="font-mono text-sm text-foreground">#{user?.id}</span>
                   </div>
                   <div className="flex justify-between items-center py-3">
-                    <span className="text-sm text-muted-foreground">Authentication</span>
-                    <span className="text-sm text-foreground">Email & Password</span>
+                    <span className="text-sm text-muted-foreground">{t("staffSettings.secureAuth")}</span>
+                    <span className="text-sm text-foreground">{t("login.emailLabel")} &amp; {t("login.passwordLabel")}</span>
                   </div>
                 </div>
               </Card>
@@ -488,12 +488,12 @@ export default function AgentAccount() {
                   <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
                     <LogOut className="w-4 h-4 text-red-500" />
                   </div>
-                  <h3 className="font-display font-semibold text-base">Session</h3>
+                  <h3 className="font-display font-semibold text-base">{t("settingsPage.currentSession")}</h3>
                 </div>
-                <p className="text-sm text-muted-foreground mb-5 flex-1">Sign out of your current session on this device. You will need to log in again to access your account.</p>
+                <p className="text-sm text-muted-foreground mb-5 flex-1">{t("settingsPage.securityAccessDesc")}</p>
                 <Button variant="outline" className="w-full text-destructive hover:bg-destructive/5 hover:border-destructive/30 gap-2" onClick={() => void performLogout()}>
                   <LogOut className="w-4 h-4" />
-                  Sign Out
+                  {t("settingsPage.signOut")}
                 </Button>
               </Card>
             </div>
