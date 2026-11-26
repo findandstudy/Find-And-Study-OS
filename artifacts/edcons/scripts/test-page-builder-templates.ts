@@ -211,3 +211,21 @@ test("the exact legacy staging About composition upgrades without replacing arbi
   const custom = [{ blockType: "html", content: { html: "<p>Custom</p>" }, settings: {}, sortOrder: 0, isVisible: true }];
   assert.deepEqual(enrichManagedPageBlocks("about", custom, "en"), custom);
 });
+
+test("managed inner pages share the Vistara-inspired responsive presentation contract", () => {
+  const managed = source("pages/public/ManagedPublicPage.tsx");
+  const publicPage = source("pages/public/PublicPage.tsx");
+  const css = source("pages/public/innerPagesVistara.css");
+  assert.match(managed, /innerPagesVistara\.css/);
+  assert.match(managed, /breadcrumbLabel/);
+  assert.match(managed, /\/images\/auth-bg\.png/);
+  assert.match(publicPage, /cms-inner-breadcrumb/);
+  assert.match(source("pages/public/Countries.tsx"), /inner-destination-card/);
+  assert.match(source("pages/public/Contact.tsx"), /inner-contact-form-card/);
+  assert.match(source("pages/public/Blog.tsx"), /inner-blog-sidebar/);
+  assert.match(source("pages/public/GuideDetail.tsx"), /inner-guide-hero/);
+  assert.match(css, /\.inner-blog-layout/);
+  assert.match(css, /\.inner-guide-related-grid/);
+  assert.match(css, /@media \(max-width: 760px\)/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+});

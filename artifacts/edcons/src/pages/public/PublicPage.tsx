@@ -449,6 +449,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
         <section className="relative overflow-hidden px-4 py-24 text-center">
           {background ? <img src={background} alt="" className="absolute inset-0 h-full w-full object-cover opacity-15" loading="eager" /> : null}
           <div className="relative mx-auto max-w-5xl">
+            {content.breadcrumbLabel ? <nav className="cms-inner-breadcrumb" aria-label="Breadcrumb"><a href={safeUrl(content.breadcrumbHomeUrl) || "/"}>{text(content.breadcrumbHome, 80) || "Home"}</a><ArrowRight aria-hidden="true" /><span>{text(content.breadcrumbLabel, 200)}</span></nav> : null}
             {content.badge ? <p className="text-sm font-semibold text-primary">{text(content.badge, 200)}</p> : null}
             <h1 className="mt-3 font-display text-4xl font-bold md:text-6xl">{text(content.title, 500)}</h1>
             {content.subtitle ? <p className="mx-auto mt-5 max-w-3xl text-lg text-muted-foreground">{text(content.subtitle)}</p> : null}

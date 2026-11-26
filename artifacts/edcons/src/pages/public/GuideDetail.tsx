@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
-import { ArrowLeft, BookOpen, Calendar, Clock } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Calendar, Clock } from "lucide-react";
 import { Link } from "wouter";
 
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { useSeo } from "@/hooks/use-seo";
 import type { Language } from "@/lib/i18n";
 import { sanitizePublicHtmlContent } from "@/lib/publicHtmlSanitizer";
 import "./guideEditorial.css";
+import "./innerPagesVistara.css";
 
 type GuideResponse = {
   data: {
@@ -113,44 +114,48 @@ export default function GuideDetail({ routeKey }: { routeKey: string }) {
     );
   }
 
+  const heroImage = "/images/auth-bg.png";
   return (
-    <main className="mx-auto max-w-3xl px-4 py-24 sm:px-6">
-      <Link href={localePath("/blog")} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary">
-        <ArrowLeft className="h-4 w-4" />{t("blog.badge")}
-      </Link>
-      <article className="mt-8">
-        <header>
-          <h1 className="font-display text-4xl font-bold leading-tight text-foreground md:text-5xl">{guide.data.title}</h1>
-          <div className="mt-5 flex flex-wrap items-center gap-5 text-sm text-muted-foreground">
-            <span className="inline-flex items-center gap-2"><Calendar className="h-4 w-4" />{new Date(guide.data.publishedAt).toLocaleDateString(lang)}</span>
-            {guide.data.readTime ? <span className="inline-flex items-center gap-2"><Clock className="h-4 w-4" />{guide.data.readTime} {t("blog.minRead")}</span> : null}
+    <main className="inner-guide-page">
+      <header className="inner-guide-hero">
+        <img src={heroImage} alt="" aria-hidden="true" />
+        <div className="inner-guide-hero-overlay" />
+        <div className="inner-guide-hero-content">
+          <nav className="inner-guide-breadcrumb" aria-label="Breadcrumb">
+            <Link href={localePath("/")}>{t("nav.home")}</Link><ArrowRight aria-hidden="true" />
+            <Link href={localePath("/blog")}>{t("blog.badge")}</Link><ArrowRight aria-hidden="true" />
+            <span>{guide.data.title}</span>
+          </nav>
+          <h1>{guide.data.title}</h1>
+          <div className="inner-guide-meta">
+            <span><Calendar aria-hidden="true" />{new Date(guide.data.publishedAt).toLocaleDateString(lang)}</span>
+            {guide.data.readTime ? <span><Clock aria-hidden="true" />{guide.data.readTime} {t("blog.minRead")}</span> : null}
           </div>
-          {guide.data.excerpt ? <p className="mt-7 text-xl leading-8 text-muted-foreground">{guide.data.excerpt}</p> : null}
-        </header>
-        <div
-          className="guide-html prose prose-slate mt-10 max-w-none dark:prose-invert"
-          dangerouslySetInnerHTML={{ __html: sanitizePublicHtmlContent(guide.data.body) }}
-        />
-      </article>
-      {guide.related.length > 0 ? (
-        <section className="mt-16 border-t border-border pt-10" aria-label={t("blog.badge")}>
-          <h2 className="font-display text-2xl font-bold">{t("blog.badge")}</h2>
-          <div className="mt-6 grid gap-5 sm:grid-cols-2">
-            {guide.related.map((item) => (
-              <Link
-                key={item.id}
-                href={item.canonicalPath}
-                className="rounded-2xl border border-border/60 bg-card p-5 transition-all hover:-translate-y-1 hover:border-primary/30 hover:shadow-md"
-              >
-                <p className="text-xs text-muted-foreground">{new Date(item.publishedAt).toLocaleDateString(lang)}</p>
-                <h3 className="mt-2 line-clamp-2 font-bold text-foreground">{item.title}</h3>
-                {item.excerpt ? <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{item.excerpt}</p> : null}
-                <span className="mt-4 inline-flex items-center text-sm font-semibold text-primary">{t("blog.readMore")}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
+        </div>
+      </header>
+      <div className="inner-guide-stage">
+        {guide.meta.ogImageUrl ? <figure className="inner-guide-cover"><img src={guide.meta.ogImageUrl} alt="" /></figure> : null}
+        <article className="inner-guide-article">
+          {guide.data.excerpt ? <p className="inner-guide-lead">{guide.data.excerpt}</p> : null}
+          <div className="guide-html prose prose-slate max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: sanitizePublicHtmlContent(guide.data.body) }} />
+        </article>
+        {guide.related.length > 0 ? (
+          <section className="inner-guide-related" aria-label={t("blog.badge")}>
+            <div className="inner-guide-related-heading"><span>{t("blog.badge")}</span><h2>{t("blog.readMore")}</h2></div>
+            <div className="inner-guide-related-grid">
+              {guide.related.map((item) => (
+                <Link key={item.id} href={item.canonicalPath} className="inner-guide-related-card">
+                  <p>{new Date(item.publishedAt).toLocaleDateString(lang)}</p>
+                  <h3>{item.title}</h3>
+                  {item.excerpt ? <span>{item.excerpt}</span> : null}
+                  <strong>{t("blog.readMore")}<ArrowRight aria-hidden="true" /></strong>
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        <Link href={localePath("/blog")} className="inner-guide-back"><ArrowLeft aria-hidden="true" />{t("blog.badge")}</Link>
+      </div>
     </main>
   );
 }

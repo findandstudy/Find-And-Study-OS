@@ -5,6 +5,7 @@ import type { PageBlock, PageResponse } from "./PublicPage";
 import { CmsBlock, CmsPageCanvas } from "./PublicPage";
 import type { ManagedTemplateSlug } from "./useTemplatePage";
 import { SITE_NAME } from "@/hooks/use-json-ld";
+import "./innerPagesVistara.css";
 
 type ManagedPublicPageProps = {
   template: Exclude<ManagedTemplateSlug, "home">;
@@ -32,7 +33,21 @@ export function ManagedPublicPage({
   const sourceBlocks = page?.data.blocks?.length
     ? enrichManagedPageBlocks(template, page.data.blocks, lang)
     : managedPageStarterBlocks(template, lang);
-  const blocks = transformBlock ? sourceBlocks.map(transformBlock) : sourceBlocks;
+  const homeLabels: Partial<Record<Language, string>> = {
+    en: "Home", tr: "Ana Sayfa", fr: "Accueil", es: "Inicio",
+    ru: "Главная", zh: "首页", ar: "الرئيسية", fa: "خانه",
+  };
+  const decoratedBlocks = sourceBlocks.map(block => block.blockType === "hero" ? {
+    ...block,
+    content: {
+      ...block.content,
+      backgroundImage: block.content.backgroundImage || "/images/auth-bg.png",
+      breadcrumbHome: homeLabels[lang] || "Home",
+      breadcrumbHomeUrl: `/${lang}`,
+      breadcrumbLabel: page?.data.title || template,
+    },
+  } : block);
+  const blocks = transformBlock ? decoratedBlocks.map(transformBlock) : decoratedBlocks;
   const hasSlot = Boolean(slotBlockType && blocks.some(block => block.blockType === slotBlockType));
   let insertedFallbackSlot = false;
 

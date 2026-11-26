@@ -207,9 +207,9 @@ export default function Contact() {
   ].filter(Boolean) as { icon: typeof Mail; label: string; value: string; href: string | undefined }[];
 
   const contactWorkspace = (
-      <section id="offices" className="scroll-mt-28 py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-2 gap-16">
-          <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}>
+      <section id="offices" className="inner-contact-workspace scroll-mt-28 py-16">
+        <div className="inner-contact-layout max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-2 gap-16">
+          <motion.div className="inner-contact-form-card" initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}>
             <h2 className="text-2xl font-display font-bold text-foreground mb-2">{t("contact.formTitle")}</h2>
             <p className="text-muted-foreground mb-8">{t("contact.formSubtitle")}</p>
 
@@ -317,7 +317,7 @@ export default function Contact() {
             )}
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
+          <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} className="inner-contact-aside space-y-8">
             {quickContactItems.length > 0 && (
               <div>
                 <h2 className="text-2xl font-display font-bold text-foreground mb-6">{t("contact.quickContact")}</h2>
