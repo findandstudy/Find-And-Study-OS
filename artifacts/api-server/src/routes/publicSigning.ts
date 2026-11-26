@@ -20,6 +20,9 @@ import {
 } from "../lib/contractBranding";
 import { markAgentApplicationContractSigned } from "../lib/agentApplicationLifecycle";
 import { readContractDeliveryStatus } from "../lib/contractDeliveryStatus";
+import { contractDeliveryMode } from "../lib/contractDeliveryPolicy";
+import { contractSigningIntakeRequirements, mergeContractSigningIntake, normalizeContractSigningIntake } from "../lib/contractSigningFields";
+import { signingSnapshotIdentity } from "../lib/contractDeliveryPdf";
 
 const router: IRouter = Router();
 
@@ -193,12 +196,16 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
         console.error("[public-sign] failed to record open:", auditErr);
       }
     }
+    const intakeRequirements = contractDeliveryMode() !== 'off' && r.session.status !== 'signed'
+      ? contractSigningIntakeRequirements({ bodyHtml:r.template.bodyHtml, intakeSchema:r.template.intakeSchema,
+        intakeData:r.session.intakeData, language:r.template.language }) : null;
     res.setHeader('Cache-Control','private, no-store');
     res.json({
       data: {
         sessionId: r.session.id,
         mode: r.session.mode,
         status: r.session.status,
+        ...(intakeRequirements ? { missingIntakeFields:intakeRequirements.missingFields } : {}),
         ...(r.session.status==='signed' ? { emailDelivery:await readContractDeliveryStatus(r.session.id) } : {}),
         signerEmail: r.session.signerEmail,
         verifiedEmail: r.session.verifiedEmail,
@@ -211,7 +218,7 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
           name: r.template.name,
           language: r.template.language,
           entityType: r.template.entityType,
-          intakeSchema: r.template.intakeSchema || null,
+          intakeSchema: intakeRequirements?.fields ?? r.template.intakeSchema ?? null,
           signingPageConfig: publicContractBranding(r.template.signingPageConfig),
         },
         agent: r.agent ? {
@@ -225,7 +232,7 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
           entityType: r.agent.entityType,
           taxNumber: r.agent.taxNumber,
         } : null,
-        intakeData: r.session.intakeData || null,
+        intakeData: intakeRequirements?.intake ?? r.session.intakeData ?? null,
       }
     });
   } catch (err) {
@@ -239,7 +246,8 @@ router.get("/public/sign/:token/preview", signLimiter, async (req, res): Promise
     const r = await resolveByToken(String(req.params.token));
     if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
     if (r.expired) { res.status(410).json({ error: "Link expired" }); return; }
-    const ctx = buildAgentContext(r.agent, (r.session.intakeData as any) || null, {
+    const ctx = buildAgentContext(r.agent, r.session.status !== 'signed' && contractDeliveryMode() !== 'off'
+      ? normalizeContractSigningIntake(r.session.intakeData) : (r.session.intakeData as any) || null, {
       signerEmail: r.session.signerEmail,
       signerName: r.session.signerName || undefined,
       number: contractNumber(r.session.id),
@@ -286,7 +294,8 @@ router.get("/public/sign/:token/preview.html", signLimiter, async (req, res): Pr
     const r = await resolveByToken(String(req.params.token));
     if ("error" in r) { sendPlain(r.status, r.error); return; }
     if (r.expired) { sendPlain(410, "Link expired"); return; }
-    const ctx = buildAgentContext(r.agent, (r.session.intakeData as any) || null, {
+    const ctx = buildAgentContext(r.agent, r.session.status !== 'signed' && contractDeliveryMode() !== 'off'
+      ? normalizeContractSigningIntake(r.session.intakeData) : (r.session.intakeData as any) || null, {
       signerEmail: r.session.signerEmail,
       signerName: r.session.signerName || undefined,
       number: contractNumber(r.session.id),
@@ -488,12 +497,20 @@ router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise
     for (const [k, v] of Object.entries(intakeRaw)) {
       if (count >= 50) break;
       const key = String(k).slice(0, 80);
+      if (['__proto__','prototype','constructor'].includes(key)) { res.status(400).json({ error:'Invalid intake field' }); return; }
       const val = v == null ? "" : String(v).slice(0, 2000);
       cleaned[key] = val;
       count++;
     }
+    const savedIntake = mergeContractSigningIntake(r.session.intakeData, cleaned);
+    if (contractDeliveryMode() !== 'off') {
+      const required = contractSigningIntakeRequirements({ bodyHtml:r.template.bodyHtml, intakeSchema:r.template.intakeSchema,
+        intakeData:savedIntake, language:r.template.language });
+      if (required.missingFields.length) { res.status(422).json({ error:'Complete the required contract details before continuing.',
+        code:'CONTRACT_INTAKE_REQUIRED', missingFields:required.missingFields }); return; }
+    }
     const sessionUpdate: Record<string, unknown> = {
-      intakeData: cleaned,
+      intakeData: savedIntake,
       status: "review_pending",
       signerName: cleaned.signerName || cleaned.fullName || r.session.signerName,
     };
@@ -513,9 +530,15 @@ router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise
       // the supplied identity without falsely marking it as verified.
       sessionUpdate.signerEmail = signerEmail;
     }
-    await db.update(signingSessionsTable).set(sessionUpdate)
-      .where(eq(signingSessionsTable.id, r.session.id));
-    res.json({ success: true });
+    const saved = await db.transaction(async tx => {
+      const [current] = await tx.select().from(signingSessionsTable).where(eq(signingSessionsTable.id,r.session.id)).for('update');
+      if (!current || !['intake_pending','review_pending'].includes(current.status)
+        || signingSnapshotIdentity(current) !== signingSnapshotIdentity(r.session)) return false;
+      await tx.update(signingSessionsTable).set(sessionUpdate).where(eq(signingSessionsTable.id,current.id));
+      return true;
+    });
+    if (!saved) { res.status(409).json({ error:'Contract details changed. Reload before continuing.' }); return; }
+    res.json({ success: true, intakeData:savedIntake });
   } catch (err) {
     console.error("[public-sign] intake:", err);
     res.status(500).json({ error: "Failed to save intake" });
@@ -570,7 +593,7 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
       const rejMs = Date.now() - signStart;
       const rejRss = Math.round(process.memoryUsage().rss / (1024 * 1024));
       console.log(`[public-sign] rejected sessionId=${r.session.id} status=${result.status} ms=${rejMs} rss=${rejRss}MB`);
-      res.status(result.status).json({ error: result.error });
+      res.status(result.status).json({ error: result.error, ...('code' in result ? {code:result.code,missingFields:result.missingFields} : {}) });
       return;
     }
 

@@ -2,6 +2,7 @@ import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable,
 import { and, eq, isNull, desc, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { contractDeliveryMode } from "./contractDeliveryPolicy";
+import { preflightUnsignedContractPdf, signingSnapshotIdentity } from "./contractDeliveryPdf";
 import { buildFinalSignedContractHtml, contractNumber } from "./contractRenderer";
 import { buildSignedPdf } from "./contractPdf";
 import { ObjectStorageService } from "./objectStorage";
@@ -49,7 +50,7 @@ const objectStorage = new ObjectStorageService();
 
 export type FinalizeSignResult =
   | { ok: true; signedContractId: number }
-  | { ok: false; status: number; error: string };
+  | { ok: false; status: number; error: string; code?: string; missingFields?: string[] };
 
 // First 8 bytes of every PNG file (magic number).
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -135,10 +136,30 @@ export async function finalizeSign(opts: {
   if (!sigCheck.ok) return sigCheck;
   const signatureBase64 = sigCheck.base64;
 
+  const deliveryMode = contractDeliveryMode();
+  if (deliveryMode !== 'off') {
+    try {
+      preflightUnsignedContractPdf(session, { signedAt, signatureBase64, signerName: finalSignerName,
+        signerIp: opts.signerIp, signerUserAgent: opts.signerUserAgent, evidence: emailVerificationEvidence });
+    } catch (error: any) {
+      if (error?.message === 'CONTRACT_FROZEN_FIELD_MISSING' && session.mode !== 'admin_driven') return { ok: false, status: 422,
+        code: 'CONTRACT_INTAKE_REQUIRED', missingFields: error.missingFields,
+        error: 'Complete the required contract details before signing.' };
+      return { ok: false, status: 422, code: 'CONTRACT_DOCUMENT_NOT_READY',
+        error: 'The contract document is not ready for signing. Please contact our team; your signature was not saved.' };
+    }
+  }
+
   type Outcome = { ok: true; row: typeof signedContractsTable.$inferSelect } | { ok: false; status: number; error: string };
   let outcome: Outcome;
   try {
     outcome = await db.transaction(async (tx): Promise<Outcome> => {
+      if (deliveryMode !== 'off') {
+        const [current] = await tx.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, session.id)).for('update');
+        if (!current || signingSnapshotIdentity(current) !== signingSnapshotIdentity(session)) {
+          return { ok: false, status: 409, error: 'Contract details changed. Reload and review before signing.' };
+        }
+      }
       const [statusUpdate] = await tx.update(signingSessionsTable).set({
         status: "signed", signedAt, signerName: finalSignerName,
       }).where(and(
@@ -168,7 +189,7 @@ export async function finalizeSign(opts: {
       }).returning();
       // Opt-in only, and atomic with this NEW signature. No startup scan ever
       // enrolls old signed contracts or re-sends their historical mail.
-      if (contractDeliveryMode() !== 'off') {
+      if (deliveryMode !== 'off') {
         const recipient = row.signerEmail.trim().toLowerCase();
         const messageId = `<contract-${randomUUID()}@findandstudy.com>`;
         await tx.execute(sql`INSERT INTO signed_contract_deliveries
