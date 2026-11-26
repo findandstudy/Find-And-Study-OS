@@ -48,6 +48,10 @@ type GuideResponse = {
 
 export default function GuideDetail({ routeKey }: { routeKey: string }) {
   const { t, lang, localePath } = useI18n();
+  const copy = (key: string, fallback: string) => {
+    const translated = t(key);
+    return translated === key ? fallback : translated;
+  };
   const [guide, setGuide] = useState<GuideResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -65,7 +69,7 @@ export default function GuideDetail({ routeKey }: { routeKey: string }) {
   }, [lang, routeKey]);
 
   useSeo({
-    title: guide?.meta.title || t("blog.badge"),
+    title: guide?.meta.title || copy("blog.badge", "The Blog"),
     description: guide?.meta.description || t("seo.blogDesc"),
     canonical: guide ? `${SITE_URL}${guide.meta.canonicalPath}` : undefined,
     noindex: !guide?.meta.indexable,
@@ -105,10 +109,10 @@ export default function GuideDetail({ routeKey }: { routeKey: string }) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-28 text-center">
         <BookOpen className="mx-auto h-14 w-14 text-muted-foreground/30" />
-        <h1 className="mt-5 text-2xl font-bold">{t("blog.noArticles")}</h1>
-        <p className="mt-2 text-muted-foreground">{t("blog.tryAdjusting")}</p>
+        <h1 className="mt-5 text-2xl font-bold">{copy("blog.noArticles", "No articles found")}</h1>
+        <p className="mt-2 text-muted-foreground">{copy("blog.tryAdjusting", "Try adjusting your search or filters")}</p>
         <Button asChild variant="outline" className="mt-7 rounded-full">
-          <Link href={localePath("/blog")}><ArrowLeft className="mr-2 h-4 w-4" />{t("blog.badge")}</Link>
+          <Link href={localePath("/blog")}><ArrowLeft className="mr-2 h-4 w-4" />{copy("blog.badge", "The Blog")}</Link>
         </Button>
       </main>
     );
@@ -123,13 +127,13 @@ export default function GuideDetail({ routeKey }: { routeKey: string }) {
         <div className="inner-guide-hero-content">
           <nav className="inner-guide-breadcrumb" aria-label="Breadcrumb">
             <Link href={localePath("/")}>{t("nav.home")}</Link><ArrowRight aria-hidden="true" />
-            <Link href={localePath("/blog")}>{t("blog.badge")}</Link><ArrowRight aria-hidden="true" />
+            <Link href={localePath("/blog")}>{copy("blog.badge", "The Blog")}</Link><ArrowRight aria-hidden="true" />
             <span>{guide.data.title}</span>
           </nav>
           <h1>{guide.data.title}</h1>
           <div className="inner-guide-meta">
             <span><Calendar aria-hidden="true" />{new Date(guide.data.publishedAt).toLocaleDateString(lang)}</span>
-            {guide.data.readTime ? <span><Clock aria-hidden="true" />{guide.data.readTime} {t("blog.minRead")}</span> : null}
+            {guide.data.readTime ? <span><Clock aria-hidden="true" />{guide.data.readTime} {copy("blog.minRead", "min read")}</span> : null}
           </div>
         </div>
       </header>
@@ -140,21 +144,21 @@ export default function GuideDetail({ routeKey }: { routeKey: string }) {
           <div className="guide-html prose prose-slate max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: sanitizePublicHtmlContent(guide.data.body) }} />
         </article>
         {guide.related.length > 0 ? (
-          <section className="inner-guide-related" aria-label={t("blog.badge")}>
-            <div className="inner-guide-related-heading"><span>{t("blog.badge")}</span><h2>{t("blog.readMore")}</h2></div>
+          <section className="inner-guide-related" aria-label={copy("blog.badge", "The Blog")}>
+            <div className="inner-guide-related-heading"><span>{copy("blog.badge", "The Blog")}</span><h2>{copy("blog.readMore", "Read more")}</h2></div>
             <div className="inner-guide-related-grid">
               {guide.related.map((item) => (
                 <Link key={item.id} href={item.canonicalPath} className="inner-guide-related-card">
                   <p>{new Date(item.publishedAt).toLocaleDateString(lang)}</p>
                   <h3>{item.title}</h3>
                   {item.excerpt ? <span>{item.excerpt}</span> : null}
-                  <strong>{t("blog.readMore")}<ArrowRight aria-hidden="true" /></strong>
+                  <strong>{copy("blog.readMore", "Read more")}<ArrowRight aria-hidden="true" /></strong>
                 </Link>
               ))}
             </div>
           </section>
         ) : null}
-        <Link href={localePath("/blog")} className="inner-guide-back"><ArrowLeft aria-hidden="true" />{t("blog.badge")}</Link>
+        <Link href={localePath("/blog")} className="inner-guide-back"><ArrowLeft aria-hidden="true" />{copy("blog.badge", "The Blog")}</Link>
       </div>
     </main>
   );

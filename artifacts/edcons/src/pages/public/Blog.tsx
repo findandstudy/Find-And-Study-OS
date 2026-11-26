@@ -26,6 +26,10 @@ type Guide = {
 
 export default function Blog() {
   const { t, lang } = useI18n();
+  const copy = (key: string, fallback: string) => {
+    const translated = t(key);
+    return translated === key ? fallback : translated;
+  };
   const page = useTemplatePage("blog", lang);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
@@ -35,7 +39,7 @@ export default function Blog() {
   });
   const posts = Array.isArray(postsResponse?.data) ? postsResponse.data : [];
   const categories = [
-    ["All", t("blog.all")],
+    ["All", copy("blog.all", "All")],
     ["University Guide", t("blog.universityGuide")],
     ["Visa Tips", t("blog.visaTips")],
     ["Scholarships", t("blog.scholarships")],
@@ -60,15 +64,15 @@ export default function Blog() {
     <div className="inner-blog-layout mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div className="inner-blog-results">
         {isLoading ? <div className="inner-blog-grid grid gap-8 md:grid-cols-2">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-80 animate-pulse rounded-3xl bg-secondary" />)}</div>
-          : filtered.length === 0 ? <div className="py-24 text-center"><BookOpen className="mx-auto mb-4 h-16 w-16 text-muted-foreground/30" /><h2 className="text-xl font-bold">{t("blog.noArticles")}</h2><p className="mt-2 text-muted-foreground">{t("blog.tryAdjusting")}</p></div>
+          : filtered.length === 0 ? <div className="py-24 text-center"><BookOpen className="mx-auto mb-4 h-16 w-16 text-muted-foreground/30" /><h2 className="text-xl font-bold">{copy("blog.noArticles", "No articles found")}</h2><p className="mt-2 text-muted-foreground">{copy("blog.tryAdjusting", "Try adjusting your search or filters")}</p></div>
           : <div className="inner-blog-grid grid gap-8 md:grid-cols-2">{filtered.map(post => <article key={post.id} className="inner-blog-card group flex flex-col overflow-hidden rounded-[1.75rem] border border-border/50 bg-card shadow-lg shadow-slate-950/5 transition duration-300 hover:-translate-y-1 hover:shadow-xl"><div className="inner-blog-card-media relative h-48 overflow-hidden bg-gradient-to-br from-accent/20 via-primary/10 to-accent/5">{post.featuredImageUrl ? <img src={post.featuredImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" /> : <BookOpen className="absolute inset-0 m-auto h-16 w-16 text-accent/30" />}{post.category ? <Badge className="absolute start-4 top-4 bg-accent text-white">{post.category}</Badge> : null}</div><div className="inner-blog-card-copy flex flex-1 flex-col p-6"><div className="mb-3 flex flex-wrap gap-4 text-xs text-muted-foreground">{post.publishedAt ? <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{new Date(post.publishedAt).toLocaleDateString(lang, { month: "short", day: "numeric", year: "numeric" })}</span> : null}<span className="flex items-center gap-1"><Clock className="h-3 w-3" />5 {t("blog.minRead")}</span></div><h2 className="font-display text-xl font-bold leading-snug transition-colors group-hover:text-primary"><Link href={post.canonicalPath}>{post.title}</Link></h2>{post.excerpt ? <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{post.excerpt}</p> : null}<Link href={post.canonicalPath} aria-label={`${t("blog.readMore")} — ${post.title}`} className="inner-blog-read-more mt-auto inline-flex items-center gap-2 pt-6 text-sm font-semibold text-primary">{t("blog.readMore")} <ArrowRight className="h-4 w-4" /></Link></div></article>)}</div>}
       </div>
-      <aside className="inner-blog-sidebar" aria-label={t("blog.filterByCategory")}>
+      <aside className="inner-blog-sidebar" aria-label={copy("blog.filterByCategory", "Filter by category")}>
         <div className="inner-blog-search rounded-[1.5rem] border bg-card/90 p-3 shadow-lg shadow-slate-950/5">
-          <div className="relative"><Search className="absolute start-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input id="blog-search" value={search} onChange={event => setSearch(event.target.value)} placeholder={t("blog.searchPlaceholder")} aria-label={t("blog.searchPlaceholder")} className="h-12 rounded-xl border-0 ps-12 shadow-none" /></div>
+          <div className="relative"><Search className="absolute start-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input id="blog-search" value={search} onChange={event => setSearch(event.target.value)} placeholder={copy("blog.searchPlaceholder", "Search articles...")} aria-label={copy("blog.searchPlaceholder", "Search articles...")} className="h-12 rounded-xl border-0 ps-12 shadow-none" /></div>
         </div>
-        <div className="inner-blog-categories" role="group" aria-label={t("blog.filterByCategory")}>
-          <h2>{t("blog.filterByCategory")}</h2>
+        <div className="inner-blog-categories" role="group" aria-label={copy("blog.filterByCategory", "Filter by category")}>
+          <h2>{copy("blog.filterByCategory", "Filter by category")}</h2>
           {categories.map(([key, label]) => <button key={key} type="button" onClick={() => setCategory(key)} aria-pressed={category === key}>{label}<span aria-hidden="true">›</span></button>)}
         </div>
       </aside>
