@@ -10,6 +10,8 @@ type TokenPayload = {
   documentKind?: "logo" | "representative_id" | "business_registration";
 };
 
+export const AGENT_APPLICATION_EMAIL_PROOF_TTL_MS = 30 * 60 * 1000;
+
 function secret(): string {
   const configured = process.env.AGENT_APPLICATION_TOKEN_SECRET
     || process.env.SESSION_SECRET
@@ -46,11 +48,11 @@ function read(token: string, kind: TokenKind): TokenPayload | null {
   }
 }
 
-export function issueAgentApplicationEmailProof(email: string): string {
+export function issueAgentApplicationEmailProof(email: string, issuedAt = Date.now()): string {
   return issue({
     kind: "email-proof",
     email: email.trim().toLowerCase(),
-    expiresAt: Date.now() + 30 * 60 * 1000,
+    expiresAt: issuedAt + AGENT_APPLICATION_EMAIL_PROOF_TTL_MS,
   });
 }
 

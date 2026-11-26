@@ -38,6 +38,7 @@ import { writeAudit } from "../lib/auditLog";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import {
+  AGENT_APPLICATION_EMAIL_PROOF_TTL_MS,
   agentApplicationUploadPrefix,
   issueAgentApplicationEmailProof,
   issueAgentApplicationUploadTicket,
@@ -436,7 +437,14 @@ router.post("/public/agent-applications/email-verification/confirm", publicLimit
   ));
   if (!record) { res.status(400).json({ error: "The verification code is invalid or expired" }); return; }
   await db.update(emailVerificationCodesTable).set({ used: true }).where(eq(emailVerificationCodesTable.id, record.id));
-  res.json({ data: { email, verificationToken: issueAgentApplicationEmailProof(email), verifiedAt: new Date().toISOString() } });
+  const verifiedAt = Date.now();
+  res.json({ data: {
+    email,
+    verificationToken: issueAgentApplicationEmailProof(email, verifiedAt),
+    verifiedAt: new Date(verifiedAt).toISOString(),
+    expiresAt: new Date(verifiedAt + AGENT_APPLICATION_EMAIL_PROOF_TTL_MS).toISOString(),
+    expiresInSeconds: Math.floor(AGENT_APPLICATION_EMAIL_PROOF_TTL_MS / 1000),
+  } });
 });
 
 router.post("/public/agent-applications/uploads/request-url", publicLimiter, async (req, res): Promise<void> => {
@@ -451,7 +459,13 @@ router.post("/public/agent-applications/uploads/request-url", publicLimiter, asy
   if (!parsed.success) { res.status(400).json({ error: "Invalid document upload request" }); return; }
   const email = parsed.data.email.toLowerCase();
   const proof = readAgentApplicationEmailProof(parsed.data.emailVerificationToken);
-  if (!proof || proof.email !== email) { res.status(403).json({ error: "Verify the business email before uploading documents" }); return; }
+  if (!proof || proof.email !== email) {
+    res.status(403).json({
+      code: "EMAIL_VERIFICATION_REQUIRED",
+      error: "Email verification expired. Request a new code before uploading documents.",
+    });
+    return;
+  }
   const validationError = validateDocumentMetadata(parsed.data.name, parsed.data.contentType, parsed.data.size);
   if (validationError) { res.status(400).json({ error: validationError }); return; }
   try {
@@ -525,7 +539,10 @@ router.post("/public/agent-applications", publicLimiter, async (req, res): Promi
     const email = body.email.trim().toLowerCase();
     const verification = readAgentApplicationEmailProof(body.emailVerificationToken);
     if (!verification || verification.email !== email) {
-      res.status(403).json({ error: "Verify the business email before submitting the application" });
+      res.status(403).json({
+        code: "EMAIL_VERIFICATION_REQUIRED",
+        error: "Email verification expired. Request a new code before submitting the application.",
+      });
       return;
     }
     const idempotencyKey = String(req.headers["idempotency-key"] || "").trim();

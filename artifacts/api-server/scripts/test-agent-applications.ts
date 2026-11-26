@@ -12,6 +12,12 @@ const {
 } = await import(policyModuleUrl) as typeof import("../src/lib/agentApplicationPolicy");
 const liveModeModuleUrl = new URL("../src/lib/inbox/liveMode.ts", import.meta.url).href;
 const { isLiveIntegrationsEnabled } = await import(liveModeModuleUrl) as typeof import("../src/lib/inbox/liveMode");
+const tokenModuleUrl = new URL("../src/lib/agentApplicationTokens.ts", import.meta.url).href;
+const {
+  AGENT_APPLICATION_EMAIL_PROOF_TTL_MS,
+  issueAgentApplicationEmailProof,
+  readAgentApplicationEmailProof,
+} = await import(tokenModuleUrl) as typeof import("../src/lib/agentApplicationTokens");
 
 test("production agency emails are live without requiring a redundant override", () => {
   const previousNodeEnv = process.env.NODE_ENV;
@@ -54,6 +60,20 @@ test("sensitive application evidence fails closed in production without a secret
     else process.env.SESSION_SECRET = previousSessionSecret;
     if (previousAuthSecret === undefined) delete process.env.AUTH_SECRET;
     else process.env.AUTH_SECRET = previousAuthSecret;
+  }
+});
+
+test("agency email proof has an explicit bounded lifetime", () => {
+  const issuedAt = 1_800_000_000_000;
+  const originalNow = Date.now;
+  try {
+    const token = issueAgentApplicationEmailProof(" Mixed@Example.com ", issuedAt);
+    Date.now = () => issuedAt + AGENT_APPLICATION_EMAIL_PROOF_TTL_MS - 1;
+    assert.equal(readAgentApplicationEmailProof(token)?.email, "mixed@example.com");
+    Date.now = () => issuedAt + AGENT_APPLICATION_EMAIL_PROOF_TTL_MS;
+    assert.equal(readAgentApplicationEmailProof(token), null);
+  } finally {
+    Date.now = originalNow;
   }
 });
 
@@ -142,6 +162,20 @@ test("public agency application uses system-backed multi-selects and exposes inv
   assert.match(source, /cause\?\.data\?\.details\?\.fieldErrors/);
   assert.match(source, /website: normalizeWebsite\(form\.website\)/);
   assert.doesNotMatch(source, /hint=\{copy\.commaHint\}/);
+  assert.match(source, /expiresAt: string/);
+  assert.match(source, /EMAIL_VERIFICATION_REQUIRED/);
+  assert.match(source, /expireEmailVerification\(\)/);
+  assert.match(source, /sessionStorage\.getItem\("fas_agency_application_idempotency"\)/);
+  assert.match(source, /sessionStorage\.removeItem\("fas_agency_application_idempotency"\)/);
+  assert.doesNotMatch(source, /localStorage\.getItem\("fas_agency_application_idempotency"\)/);
+});
+
+test("agency verification API exposes expiry and a stable recovery code", async () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const source = await readFile(path.resolve(here, "../src/routes/agentApplications.ts"), "utf8");
+  assert.match(source, /expiresAt: new Date\(verifiedAt \+ AGENT_APPLICATION_EMAIL_PROOF_TTL_MS\)/);
+  assert.match(source, /expiresInSeconds: Math\.floor\(AGENT_APPLICATION_EMAIL_PROOF_TTL_MS \/ 1000\)/);
+  assert.ok((source.match(/code: "EMAIL_VERIFICATION_REQUIRED"/g) || []).length >= 2);
 });
 
 test("migration is additive and links application evidence to lifecycle records", async () => {

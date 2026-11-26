@@ -40,7 +40,7 @@ type Copy = {
   updateApplication: string; rejected: string; approved: string; awaitingSignature: string; signContract: string; signing: string;
   startNew: string; errorRequired: string; errorEmail: string; errorVerify: string; errorPhone: string; errorCompany: string;
   errorDocuments: string; errorConsent: string; errorVerificationDelivery: string; errorWebsite: string;
-  errorInvalidFields: string; security: string; securityText: string;
+  errorInvalidFields: string; verificationExpired: string; security: string; securityText: string;
 };
 
 const EN: Copy = {
@@ -73,6 +73,7 @@ const EN: Copy = {
   errorDocuments: "Upload the required documents.", errorConsent: "Accept the declaration before submitting.",
   errorVerificationDelivery: "The verification email could not be delivered. Please try again shortly.",
   errorWebsite: "Enter a valid website address.", errorInvalidFields: "Please review these fields",
+  verificationExpired: "Email verification expired. Request and confirm a new code; your form details have been kept.",
   security: "Review before signing", securityText: "Submitting does not create an agent account. Staff review the application, may change the contract template, and invite you to sign. The system creates a unique agency code only after final approval.",
 };
 
@@ -104,7 +105,8 @@ const COPY: Partial<Record<Language, Partial<Copy>>> = {
     errorPhone: "Ülke koduyla birlikte geçerli bir telefon numarası girin.", errorCompany: "Şirket başvurularında şirket unvanı ve kayıt belgesi zorunludur.",
     errorDocuments: "Zorunlu belgeleri yükleyin.", errorConsent: "Göndermeden önce beyanı kabul edin.",
     errorVerificationDelivery: "Doğrulama e-postası gönderilemedi. Lütfen kısa süre sonra tekrar deneyin.",
-    errorWebsite: "Geçerli bir web sitesi adresi girin.", errorInvalidFields: "Lütfen şu alanları kontrol edin", security: "İmzadan önce inceleme",
+    errorWebsite: "Geçerli bir web sitesi adresi girin.", errorInvalidFields: "Lütfen şu alanları kontrol edin",
+    verificationExpired: "E-posta doğrulamasının süresi doldu. Yeni kod isteyip doğrulayın; form bilgileriniz korundu.", security: "İmzadan önce inceleme",
     securityText: "Başvuruyu göndermek acente hesabı oluşturmaz. Personel başvuruyu inceler, sözleşme şablonunu değiştirebilir ve sizi imzaya davet eder. Benzersiz acente kodu yalnızca son onaydan sonra sistem tarafından oluşturulur.",
   },
   ar: { title: "كن شريكًا لـ Find And Study", steps: ["بيانات العمل", "الاتصال والتحقق", "المستندات", "المراجعة"], continue: "متابعة", back: "رجوع", submit: "إرسال الطلب", language: "لغة الطلب", entityType: "نوع مقدم الطلب", company: "شركة", individual: "فرد", country: "الدولة", city: "المدينة", firstName: "الاسم", lastName: "اسم العائلة", email: "البريد الإلكتروني للعمل", phone: "الهاتف", verifyEmail: "إرسال رمز التحقق", confirmCode: "تحقق" },
@@ -164,6 +166,7 @@ export default function AgencyApplication() {
   const [documents, setDocuments] = useState<Documents>({});
   const [emailCode, setEmailCode] = useState("");
   const [emailToken, setEmailToken] = useState("");
+  const [emailTokenExpiresAt, setEmailTokenExpiresAt] = useState<number | null>(null);
   const [verificationSent, setVerificationSent] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -172,6 +175,26 @@ export default function AgencyApplication() {
   const [signing, setSigning] = useState(false);
   const [existing, setExisting] = useState<PublicApplication | null>(null);
   const [accessToken, setAccessToken] = useState("");
+
+  function expireEmailVerification(message = copy.verificationExpired) {
+    setEmailToken("");
+    setEmailTokenExpiresAt(null);
+    setEmailCode("");
+    setVerificationSent(false);
+    setStep(2);
+    setError(message);
+  }
+
+  useEffect(() => {
+    if (!emailToken || !emailTokenExpiresAt) return;
+    const remaining = emailTokenExpiresAt - Date.now();
+    if (remaining <= 0) {
+      expireEmailVerification();
+      return;
+    }
+    const timeout = window.setTimeout(() => expireEmailVerification(), remaining);
+    return () => window.clearTimeout(timeout);
+  }, [emailToken, emailTokenExpiresAt]);
 
   useEffect(() => {
     const queryToken = new URLSearchParams(window.location.search).get("application") || "";
@@ -225,7 +248,7 @@ export default function AgencyApplication() {
     setForm((current) => ({ ...current, entityType: value, preferredLanguage: preferred?.language || "" }));
     if (normalize(value) === "individual") setDocuments((current) => ({ ...current, businessRegistration: null }));
   }
-  function changeEmail(value: string) { setForm((current) => ({ ...current, email: value })); setEmailToken(""); setEmailCode(""); setVerificationSent(false); setError(""); }
+  function changeEmail(value: string) { setForm((current) => ({ ...current, email: value })); setEmailToken(""); setEmailTokenExpiresAt(null); setEmailCode(""); setVerificationSent(false); setError(""); }
 
   async function requestVerification() {
     if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) { setError(copy.errorEmail); return; }
@@ -240,8 +263,9 @@ export default function AgencyApplication() {
   async function confirmVerification() {
     setVerifying(true); setError("");
     try {
-      const response = await customFetch<{ data: { verificationToken: string } }>("/api/public/agent-applications/email-verification/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: form.email, code: emailCode }) });
+      const response = await customFetch<{ data: { verificationToken: string; expiresAt: string } }>("/api/public/agent-applications/email-verification/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: form.email, code: emailCode }) });
       setEmailToken(response.data.verificationToken);
+      setEmailTokenExpiresAt(Date.parse(response.data.expiresAt));
     } catch (cause: any) { setError(cause?.data?.error || cause?.message || "Email could not be verified"); }
     finally { setVerifying(false); }
   }
@@ -256,7 +280,10 @@ export default function AgencyApplication() {
       const uploadResponse = await fetch(response.data.uploadURL, { method: "PUT", body: file, headers: localUpload ? { "Content-Type": file.type, "X-File-Name": file.name, "X-Upload-Ticket": response.data.uploadTicket || "" } : { "Content-Type": file.type } });
       if (!uploadResponse.ok) throw new Error(`Upload failed (${uploadResponse.status})`);
       setDocuments((current) => ({ ...current, [kind]: { fileKey: response.data.objectPath, name: file.name, contentType: file.type as UploadDocument["contentType"], size: file.size } }));
-    } catch (cause: any) { setError(cause?.data?.error || cause?.message || "Document could not be uploaded"); }
+    } catch (cause: any) {
+      if (cause?.data?.code === "EMAIL_VERIFICATION_REQUIRED") expireEmailVerification();
+      else setError(cause?.data?.error || cause?.message || "Document could not be uploaded");
+    }
     finally { setUploading(null); }
   }
   function validateStep(current: number) {
@@ -288,8 +315,11 @@ export default function AgencyApplication() {
     if (!validateStep(2)) { setStep(2); return; }
     if (!validateStep(3)) { setStep(3); return; }
     setSubmitting(true); setError("");
-    const idempotencyKey = localStorage.getItem("fas_agency_application_idempotency") || crypto.randomUUID();
-    localStorage.setItem("fas_agency_application_idempotency", idempotencyKey);
+    // A key must survive a response-loss retry in the same tab, but it must not
+    // leak into a later application (which previously caused payload conflicts).
+    localStorage.removeItem("fas_agency_application_idempotency");
+    const idempotencyKey = sessionStorage.getItem("fas_agency_application_idempotency") || crypto.randomUUID();
+    sessionStorage.setItem("fas_agency_application_idempotency", idempotencyKey);
     const payload = {
       ...form,
       website: normalizeWebsite(form.website),
@@ -304,6 +334,7 @@ export default function AgencyApplication() {
       const response = await customFetch<{ data: { application: PublicApplication; accessToken: string | null } }>(revision ? `/api/public/agent-applications/${encodeURIComponent(accessToken)}` : "/api/public/agent-applications", { method: revision ? "PATCH" : "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify(payload) });
       const token = response.data.accessToken || accessToken;
       if (token) { sessionStorage.setItem("fas_agency_application_token", token); setAccessToken(token); }
+      sessionStorage.removeItem("fas_agency_application_idempotency");
       setExisting(response.data.application);
       window.history.replaceState(null, "", `/${lang}/agency/apply`);
     } catch (cause: any) {
@@ -325,6 +356,8 @@ export default function AgencyApplication() {
         else if (["estimatedStudents", "operatingCountries", "recruitmentMarkets", "documents"].includes(first)) setStep(3);
         else if (first !== "consentAccepted") setStep(1);
         setError(`${copy.errorInvalidFields}: ${invalidKeys.map((field) => labels[field] || field).join(", ")}.`);
+      } else if (cause?.data?.code === "EMAIL_VERIFICATION_REQUIRED") {
+        expireEmailVerification();
       } else {
         setError(cause?.data?.error || cause?.message || "Application could not be submitted");
       }
@@ -360,7 +393,7 @@ export default function AgencyApplication() {
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">{copy.steps.map((label, index) => <div key={label} className={`rounded-xl px-3 py-3 text-center text-sm font-medium ${step === index + 1 ? "bg-primary text-primary-foreground" : step > index + 1 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>{index + 1}. {label}</div>)}</div>
     <Card className="p-5 md:p-8 shadow-lg border-border/70">
       {step === 1 ? <div className="space-y-6"><div className="grid md:grid-cols-2 gap-5"><Field label={copy.language}><Select value={form.preferredLanguage} onValueChange={(value) => setField("preferredLanguage", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{languages.map((value) => <SelectItem key={value} value={value}><LanguageOption value={value} /></SelectItem>)}</SelectContent></Select></Field><Field label={copy.entityType}><Select value={form.entityType} onValueChange={selectEntity}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{entityTypes.map((value) => <SelectItem key={value} value={value}>{normalize(value) === "company" ? copy.company : copy.individual}</SelectItem>)}</SelectContent></Select></Field></div><div className="grid md:grid-cols-2 gap-4">{entityTypes.map((value) => <button key={value} type="button" onClick={() => selectEntity(value)} className={`text-start rounded-xl border-2 p-4 ${normalize(form.entityType) === normalize(value) ? "border-primary bg-primary/5" : "border-border"}`}><strong>{normalize(value) === "company" ? copy.company : copy.individual}</strong><span className="block text-sm text-muted-foreground mt-1">{normalize(value) === "company" ? copy.companyHint : copy.individualHint}</span></button>)}</div><div className="grid md:grid-cols-2 gap-5">{isCompany ? <TextField label={copy.companyName} required value={form.companyName} onChange={(value) => setField("companyName", value)} /> : null}<TextField label={copy.displayName} required value={form.businessName} onChange={(value) => setField("businessName", value)} />{isCompany ? <TextField label={copy.taxNumber} value={form.taxNumber} onChange={(value) => setField("taxNumber", value)} /> : null}</div><div className="grid md:grid-cols-2 gap-5"><Field label={`${copy.country} *`}><Select value={form.country} onValueChange={(value) => setForm((current) => ({ ...current, country: value, city: "" }))}><SelectTrigger><SelectValue placeholder={copy.country} /></SelectTrigger><SelectContent className="max-h-72">{countries.map((country) => <SelectItem key={country.id} value={country.name}><span className="inline-flex items-center gap-2"><CountryFlag code={country.code} size="sm" alt="" /><span>{country.name}</span></span></SelectItem>)}</SelectContent></Select></Field><Field label={`${copy.city} *`}><Select value={form.city} onValueChange={(value) => setField("city", value)} disabled={!selectedCountry || citiesLoading || cityOptions.length === 0}><SelectTrigger><SelectValue placeholder={copy.city} /></SelectTrigger><SelectContent className="max-h-72">{cityOptions.map((city) => <SelectItem key={city} value={city}>{city}</SelectItem>)}</SelectContent></Select></Field></div><div className="flex justify-end"><Button onClick={() => { if (validateStep(1)) setStep(2); }}>{copy.continue}<ArrowRight className="ms-2 h-4 w-4" /></Button></div></div> : null}
-      {step === 2 ? <div className="space-y-6"><h2 className="text-xl font-bold">{copy.contactTitle}</h2><div className="grid md:grid-cols-2 gap-5"><TextField label={copy.firstName} required value={form.firstName} onChange={(value) => setField("firstName", value)} /><TextField label={copy.lastName} required value={form.lastName} onChange={(value) => setField("lastName", value)} /></div><Field label={`${copy.email} *`}><div className="flex gap-2"><Input type="email" value={form.email} onChange={(event) => changeEmail(event.target.value)} disabled={Boolean(emailToken)} /><Button type="button" variant="outline" onClick={emailToken ? () => { setEmailToken(""); setVerificationSent(false); } : requestVerification} disabled={verifying}>{emailToken ? <RefreshCw className="h-4 w-4" /> : verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : copy.verifyEmail}</Button></div>{verificationSent && !emailToken ? <div className="mt-2 flex flex-col sm:flex-row gap-2"><Input inputMode="numeric" maxLength={6} value={emailCode} onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ""))} placeholder={copy.code} /><Button type="button" onClick={confirmVerification} disabled={verifying || emailCode.length !== 6}>{copy.confirmCode}</Button></div> : null}{verificationSent && !emailToken ? <p className="text-xs text-muted-foreground">{copy.verificationSent}</p> : null}{emailToken ? <p className="text-sm text-emerald-700 flex items-center gap-2"><MailCheck className="h-4 w-4" />{copy.verified}</p> : null}</Field><Field label={`${copy.phone} *`}><PhoneInput value={form.phone} onChange={(value) => setField("phone", value)} className="[&>button]:h-10 [&>input]:h-10" /></Field><div className="grid md:grid-cols-2 gap-5"><TextField label={copy.website} type="url" value={form.website} onChange={(value) => setField("website", value)} /><TextField label={copy.state} value={form.state} onChange={(value) => setField("state", value)} /></div><TextField label={copy.address} required value={form.address} onChange={(value) => setField("address", value)} /><div className="flex justify-between"><Button variant="outline" onClick={() => setStep(1)}><ArrowLeft className="me-2 h-4 w-4" />{copy.back}</Button><Button onClick={() => { if (validateStep(2)) setStep(3); }}>{copy.continue}<ArrowRight className="ms-2 h-4 w-4" /></Button></div></div> : null}
+      {step === 2 ? <div className="space-y-6"><h2 className="text-xl font-bold">{copy.contactTitle}</h2><div className="grid md:grid-cols-2 gap-5"><TextField label={copy.firstName} required value={form.firstName} onChange={(value) => setField("firstName", value)} /><TextField label={copy.lastName} required value={form.lastName} onChange={(value) => setField("lastName", value)} /></div><Field label={`${copy.email} *`}><div className="flex gap-2"><Input type="email" value={form.email} onChange={(event) => changeEmail(event.target.value)} disabled={Boolean(emailToken)} /><Button type="button" variant="outline" onClick={emailToken ? () => expireEmailVerification("") : requestVerification} disabled={verifying}>{emailToken ? <RefreshCw className="h-4 w-4" /> : verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : copy.verifyEmail}</Button></div>{verificationSent && !emailToken ? <div className="mt-2 flex flex-col sm:flex-row gap-2"><Input inputMode="numeric" maxLength={6} value={emailCode} onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ""))} placeholder={copy.code} /><Button type="button" onClick={confirmVerification} disabled={verifying || emailCode.length !== 6}>{copy.confirmCode}</Button></div> : null}{verificationSent && !emailToken ? <p className="text-xs text-muted-foreground">{copy.verificationSent}</p> : null}{emailToken ? <p className="text-sm text-emerald-700 flex items-center gap-2"><MailCheck className="h-4 w-4" />{copy.verified}</p> : null}</Field><Field label={`${copy.phone} *`}><PhoneInput value={form.phone} onChange={(value) => setField("phone", value)} className="[&>button]:h-10 [&>input]:h-10" /></Field><div className="grid md:grid-cols-2 gap-5"><TextField label={copy.website} type="url" value={form.website} onChange={(value) => setField("website", value)} /><TextField label={copy.state} value={form.state} onChange={(value) => setField("state", value)} /></div><TextField label={copy.address} required value={form.address} onChange={(value) => setField("address", value)} /><div className="flex justify-between"><Button variant="outline" onClick={() => setStep(1)}><ArrowLeft className="me-2 h-4 w-4" />{copy.back}</Button><Button onClick={() => { if (validateStep(2)) setStep(3); }}>{copy.continue}<ArrowRight className="ms-2 h-4 w-4" /></Button></div></div> : null}
       {step === 3 ? <div className="space-y-6">
         <h2 className="text-xl font-bold">{copy.documentsTitle}</h2>
         <div className="grid md:grid-cols-3 gap-4">
