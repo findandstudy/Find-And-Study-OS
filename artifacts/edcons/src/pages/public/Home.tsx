@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
@@ -12,8 +12,24 @@ import { hydrateManagedHomeDestinations, hydrateManagedHomeUniversities, type Ho
 
 type HomeUniversityResponse = { data: HomeUniversity[] };
 
+function normalizeHomeBranding<T>(value: T): T {
+  if (typeof value === "string") {
+    return value
+      .replace(/FIND\s*&\s*STUDY/g, "FIND AND STUDY")
+      .replace(/Find\s*&\s*Study/g, "Find And Study") as T;
+  }
+  if (Array.isArray(value)) return value.map(item => normalizeHomeBranding(item)) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, normalizeHomeBranding(item)]),
+    ) as T;
+  }
+  return value;
+}
+
 function HomeBlocks({ blocks, version, pageTitle, locale }: { blocks: PageBlock[]; version?: number; pageTitle: string; locale: string }) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const brandedBlocks = useMemo(() => normalizeHomeBranding(blocks), [blocks]);
 
   useEffect(() => {
     const root = contentRef.current;
@@ -76,7 +92,7 @@ function HomeBlocks({ blocks, version, pageTitle, locale }: { blocks: PageBlock[
     };
   }, [blocks, locale, version]);
 
-  const content = <div ref={contentRef} data-public-page-version={version}>{blocks.map((block, index) => <CmsBlock block={block} index={index} variables={{ siteName: SITE_NAME, pageTitle, pageSlug: "home", pageLocale: locale }} key={`${block.blockType}-${index}`} />)}</div>;
+  const content = <div ref={contentRef} data-public-page-version={version}>{brandedBlocks.map((block, index) => <CmsBlock block={block} index={index} variables={{ siteName: SITE_NAME, pageTitle, pageSlug: "home", pageLocale: locale }} key={`${block.blockType}-${index}`} />)}</div>;
   return <CmsPageCanvas className="home-future-page">{content}</CmsPageCanvas>;
 }
 
