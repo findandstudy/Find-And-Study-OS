@@ -15,6 +15,35 @@ import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
+const CONTACT_COPY_FALLBACKS: Record<string, string> = {
+  "contact.email": "Email",
+  "contact.emailLabel": "Email",
+  "contact.emailPlaceholder": "john@example.com",
+  "contact.firstName": "First Name",
+  "contact.firstNamePlaceholder": "John",
+  "contact.formSubtitle": "Fill out the form below and we'll get back to you shortly.",
+  "contact.formTitle": "Send Us a Message",
+  "contact.hoursLabel": "Hours",
+  "contact.lastName": "Last Name",
+  "contact.lastNamePlaceholder": "Doe",
+  "contact.latinOnly": "Please use Latin letters only.",
+  "contact.message": "Message",
+  "contact.messagePlaceholder": "Tell us about your education goals...",
+  "contact.messageTooLong": "Your message is too long.",
+  "contact.nationality": "Nationality",
+  "contact.nationalityPlaceholder": "Select nationality",
+  "contact.ourOffices": "Our Offices",
+  "contact.phone": "Phone",
+  "contact.phoneCodeRequired": "Select a country code.",
+  "contact.phoneLabel": "Phone",
+  "contact.phonePlaceholder": "555 000 0000",
+  "contact.send": "Send Message",
+  "contact.sendAnother": "Send Another Message",
+  "contact.sending": "Sending...",
+  "contact.successMessage": "Thank you for reaching out. One of our advisers will contact you shortly.",
+  "contact.successTitle": "Message Sent!",
+};
+
 const LATIN_RE = /^[A-Za-zÀ-ÖØ-öø-ÿĀ-ſ\s'-]*$/;
 const LATIN_MSG_RE = /^[A-Za-zÀ-ÖØ-öø-ÿĀ-ſ0-9\s.,;:!?'"\-()@#&/]*$/;
 const HTML_RE = /<[^>]*>/;
@@ -57,7 +86,11 @@ interface Branding {
 }
 
 export default function Contact() {
-  const { t, lang } = useI18n();
+  const { t: translate, lang } = useI18n();
+  const t = (key: string, params?: Record<string, string | number>) => {
+    const value = translate(key, params);
+    return value === key ? CONTACT_COPY_FALLBACKS[key] || key : value;
+  };
   const managedPage = useTemplatePage("contact", lang);
 
   const { data: offices = [] } = useQuery<Office[]>({
