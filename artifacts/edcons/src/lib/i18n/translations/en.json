@@ -1911,6 +1911,7 @@
   },
   "agentAccount": {
     "title": "Account Settings",
+    "accountStatus": "Account Status",
     "subtitle": "Manage your profile, preferences, and security.",
     "profile": "Profile",
     "company": "Company Details",

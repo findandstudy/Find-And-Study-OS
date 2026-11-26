@@ -1982,6 +1982,7 @@
   },
   "agentAccount": {
     "title": "Hisob moslamalari",
+    "accountStatus": "Hisob holati",
     "subtitle": "Profilingiz, moslamalar va xavfsizlik sizni boshqarish.",
     "profile": "Profil",
     "company": "Sertifikat tafsilotlari...",

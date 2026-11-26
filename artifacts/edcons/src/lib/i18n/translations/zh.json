@@ -1982,6 +1982,7 @@
   },
   "agentAccount": {
     "title": "账户设置",
+    "accountStatus": "账户状态",
     "subtitle": "管理您的个人资料、偏好设置与安全。",
     "profile": "个人资料",
     "company": "公司详情",

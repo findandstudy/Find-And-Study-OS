@@ -1852,6 +1852,7 @@
   },
   "agentAccount": {
     "title": "Hesap Ayarları",
+    "accountStatus": "Hesap Durumu",
     "subtitle": "Profilini, tercihlerini ve güvenliğini yönet.",
     "profile": "Profil",
     "company": "Şirket Detayları",

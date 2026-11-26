@@ -1982,6 +1982,7 @@
   },
   "agentAccount": {
     "title": "Impostazioni account",
+    "accountStatus": "Stato dell'account",
     "subtitle": "Gestisci il tuo profilo, le tue preferenze e la tua sicurezza.",
     "profile": "Profilo",
     "company": "Dettagli aziendali",

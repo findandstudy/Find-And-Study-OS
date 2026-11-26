@@ -1982,6 +1982,7 @@
   },
   "agentAccount": {
     "title": "Cài đặt tài khoản",
+    "accountStatus": "Trạng thái tài khoản",
     "subtitle": "Quản lý hồ sơ, tùy chọn và bảo mật của bạn.",
     "profile": "Hồ sơ",
     "company": "Chi tiết công ty",

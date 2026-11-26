@@ -1912,6 +1912,7 @@
   },
   "agentAccount": {
     "title": "Pengaturan Akun",
+    "accountStatus": "Status Akun",
     "subtitle": "Kelola profil, preferensi, dan keamanan Anda.",
     "profile": "Profil",
     "company": "Detail Perusahaan",

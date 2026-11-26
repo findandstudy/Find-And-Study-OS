@@ -96,7 +96,7 @@ function allPermissionKeys(options: PermissionOption[]): string[] {
 }
 
 export default function AgentTeam() {
-  const { t } = useI18n();
+  const { t, isRTL } = useI18n();
   const { user } = useAuth(true);
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -132,13 +132,13 @@ export default function AgentTeam() {
 
   return (
     <>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="mx-auto w-full max-w-7xl space-y-6">
+        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-display font-bold text-foreground">{t("agentTeam.title")}</h1>
             <p className="text-muted-foreground text-sm mt-1">{t("agentTeam.subtitle")}</p>
           </div>
-          <Button onClick={() => setShowCreate(true)} className="gap-2">
+          <Button onClick={() => setShowCreate(true)} className="w-full gap-2 sm:w-auto">
             <Plus className="w-4 h-4" />
             {t("teamPage.addStaff")}
           </Button>
@@ -146,14 +146,15 @@ export default function AgentTeam() {
 
         <Card className="border shadow-sm">
           <div className="p-4 border-b border-border/50">
-            <form onSubmit={handleSearch} className="flex gap-2">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <form onSubmit={handleSearch} className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative w-full flex-1 sm:max-w-sm">
+                <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
+                  dir={isRTL ? "rtl" : "ltr"}
                   value={searchInput}
                   onChange={e => setSearchInput(e.target.value)}
                   placeholder={t("teamPage.searchPlaceholder")}
-                  className="pl-9 h-9"
+                  className="h-9 ps-9"
                 />
               </div>
               <Button type="submit" variant="outline" size="sm" className="h-9">{t("common.search")}</Button>
