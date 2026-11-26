@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { ContractSmtpOutcome } from './contractSmtpReceipt';
+import { contractMatchesSmtpScope, type ContractSmtpScope } from './contractDeliveryPolicy';
 export interface ContractDeliveryClient {
   query(text: string, values?: unknown[]): Promise<{ rows: any[]; rowCount: number | null }>;
   release(): void;
@@ -9,6 +10,7 @@ export interface ContractDeliveryRow {
   signed_contract_id: number; signing_session_id: number; recipient: string; message_id: string;
   state: string; claim_id: string; pdf_object_key: string; pdf_sha256: string; evidence_hash: string;
   subject: string; html_body: string; text_body: string;
+  created_at: Date; signature_signed_at: Date;
 }
 export const contractPdfDigest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 export function validateDeliveryPdf(bytes: Buffer): void {
@@ -63,12 +65,16 @@ export class ContractDeliveryStore {
       if (result.rowCount !== 1) throw new Error('CONTRACT_DELIVERY_BIND_CHANGED');
     });
   }
-  async nextReady(): Promise<ContractDeliveryRow | null> {
+  async nextReady(scope: ContractSmtpScope | null): Promise<ContractDeliveryRow | null> {
     return this.transaction(async client => {
       // SMTP may have succeeded before a crash. Never return these to ready.
       await client.query(`UPDATE signed_contract_deliveries SET state='ambiguous',failure_code='SMTP_ATTEMPT_INTERRUPTED',updated_at=now()
         WHERE state='sending' AND sending_at < now()-interval '5 minutes'`);
-      const result = await client.query(`SELECT * FROM signed_contract_deliveries WHERE state='ready' ORDER BY created_at LIMIT 1`);
+      if (!scope) return null;
+      const result = await client.query(`SELECT d.*, sc.signed_at AS signature_signed_at FROM signed_contract_deliveries d
+        JOIN signed_contracts sc ON sc.id=d.signed_contract_id AND sc.signing_session_id=d.signing_session_id
+        WHERE d.state='ready' AND ${scope.kind === 'canary' ? 'd.signed_contract_id=$1 AND d.recipient=$2' : 'd.created_at >= $1::timestamptz AND sc.signed_at >= $1::timestamptz'}
+        ORDER BY d.created_at LIMIT 1`, scope.kind === 'canary' ? [scope.signedContractId, scope.recipient] : [scope.from]);
       return result.rows[0] ?? null;
     });
   }
@@ -76,7 +82,9 @@ export class ContractDeliveryStore {
     await this.transaction(client => client.query(`UPDATE signed_contract_deliveries SET state='failed',failure_code=$2,updated_at=now()
       WHERE signed_contract_id=$1 AND state='ready'`,[row.signed_contract_id,code]).then(()=>{}));
   }
-  async claimSending(row: ContractDeliveryRow, bytes: Buffer): Promise<ContractDeliveryRow | null> {
+  async claimSending(row: ContractDeliveryRow, bytes: Buffer, scope: ContractSmtpScope | null): Promise<ContractDeliveryRow | null> {
+    if (!scope || !contractMatchesSmtpScope({ signedContractId: row.signed_contract_id, recipient: row.recipient,
+      enrolledAt: row.created_at, signedAt: row.signature_signed_at }, scope)) return null;
     try {
       validateDeliveryPdf(bytes);
       if (contractPdfDigest(bytes) !== row.pdf_sha256) throw new Error('CONTRACT_ATTACHMENT_CHANGED');
@@ -87,7 +95,9 @@ export class ContractDeliveryStore {
         WHERE d.signed_contract_id=$1 AND d.state='ready' AND d.pdf_sha256=$3 AND sc.id=d.signed_contract_id
         AND sc.signing_session_id=d.signing_session_id AND sc.pdf_object_key=d.pdf_object_key AND sc.evidence_hash=d.evidence_hash
         AND lower(btrim(sc.signer_email))=d.recipient AND sc.emailed_at IS NULL AND ss.status='signed' AND ss.revoked_at IS NULL
-        RETURNING d.*`, [row.signed_contract_id, randomUUID(), row.pdf_sha256]);
+        AND ${scope.kind === 'canary' ? 'd.signed_contract_id=$4 AND d.recipient=$5' : 'd.created_at >= $4::timestamptz AND sc.signed_at >= $4::timestamptz'}
+        RETURNING d.*, sc.signed_at AS signature_signed_at`, [row.signed_contract_id, randomUUID(), row.pdf_sha256,
+          ...(scope.kind === 'canary' ? [scope.signedContractId, scope.recipient] : [scope.from])]);
       if (!result.rows.length) {
         // Invalid source must not permanently block every later ready item.
         // If another worker won the send claim this WHERE is a no-op.

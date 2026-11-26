@@ -1,6 +1,6 @@
 import { pool } from '@workspace/db';
 import { ContractDeliveryStore, type ContractDeliveryRow } from './contractDeliveryStore';
-import { contractDeliveryMode, contractSmtpAllowed } from './contractDeliveryPolicy';
+import { contractDeliveryMode, contractSmtpScope, contractSmtpMessageAllowed, type ContractSmtpScope } from './contractDeliveryPolicy';
 import type { ContractSmtpOutcome } from './contractSmtpReceipt';
 import { buildSignedContractEmail, getAppBaseUrl, prepareContractSmtpTransport } from './email';
 import { ObjectStorageService } from './objectStorage';
@@ -12,7 +12,8 @@ export interface ContractDeliveryDependencies {
   prepare: (row: ContractDeliveryRow) => Promise<{ artifact: { key: string; evidenceHash: string; bytes: Buffer }; email: { subject: string; html: string; text: string } }>;
   readPdf: (key: string) => Promise<Buffer>;
   transport: () => Promise<Transport | null>;
-  maySend: () => boolean;
+  sendScope: () => ContractSmtpScope | null;
+  maySend: (row: ContractDeliveryRow) => boolean;
 }
 
 /** One bounded sweep through actual durable transitions; dependencies are fake in tests. */
@@ -26,21 +27,27 @@ export async function runContractDeliverySweep(deps: ContractDeliveryDependencie
       await deps.store.failPreparation(preparing);
     }
   }
-  const ready = await deps.store.nextReady();
-  if (!ready || !deps.maySend()) return;
+  const scope = deps.sendScope();
+  const ready = await deps.store.nextReady(scope);
+  if (!ready || !deps.maySend(ready)) return;
   let transport: Transport | null = null;
   try {
     let pdf: Buffer;
     try { pdf = await deps.readPdf(ready.pdf_object_key); }
     catch { await deps.store.failReady(ready,'CONTRACT_ATTACHMENT_CHANGED'); return; }
     transport = await deps.transport();
-    if (!transport || !deps.maySend()) return;
+    if (!transport || !deps.maySend(ready)) return;
     // SMTP must not begin unless this unique attempt is committed first.
-    const sending = await deps.store.claimSending(ready, pdf);
+    const sending = await deps.store.claimSending(ready, pdf, deps.sendScope());
     if (!sending) return;
+    if (!deps.maySend(sending)) {
+      await deps.store.finishSending(sending, { state: 'ambiguous', code: 'CONTRACT_SCOPE_CHANGED_BEFORE_SEND' });
+      return;
+    }
     let outcome: ContractSmtpOutcome;
     try {
-      outcome = await transport.send({ recipient: sending.recipient, messageId: sending.message_id,
+      outcome = await transport.send({ signedContractId: sending.signed_contract_id, enrolledAt: sending.created_at,
+        signedAt: sending.signature_signed_at, recipient: sending.recipient, messageId: sending.message_id,
         subject: sending.subject, html: sending.html_body, text: sending.text_body, pdf });
     } catch { outcome = { state: 'ambiguous', code: 'SMTP_OUTCOME_UNCONFIRMED' }; }
     // A DB failure after acceptance leaves SENDING; next sweep marks it
@@ -56,7 +63,9 @@ async function readPdf(key: string): Promise<Buffer> {
 }
 const store = new ContractDeliveryStore(pool);
 const runtime: ContractDeliveryDependencies = {
-  store, readPdf, transport: prepareContractSmtpTransport, maySend: contractSmtpAllowed,
+  store, readPdf, transport: prepareContractSmtpTransport, sendScope: contractSmtpScope,
+  maySend: row => contractSmtpMessageAllowed({ signedContractId: row.signed_contract_id, recipient: row.recipient,
+    enrolledAt: row.created_at, signedAt: row.signature_signed_at }),
   async prepare(row) {
     const client = await pool.connect();
     let source: any;

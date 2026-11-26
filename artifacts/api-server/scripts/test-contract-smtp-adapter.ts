@@ -3,13 +3,14 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import vm from 'node:vm';
 import ts from 'typescript';
-import { contractSmtpAllowed } from '../src/lib/contractDeliveryPolicy';
+import { contractSmtpAllowed, contractSmtpMessageAllowed } from '../src/lib/contractDeliveryPolicy';
 import { contractSmtpOutcome } from '../src/lib/contractSmtpReceipt';
 
 test('actual contract SMTP adapter reuses vetted config, includes PDF, and never uses global queue',async()=>{
   const src=await readFile(new URL('../src/lib/email.ts',import.meta.url),'utf8');
   const js=ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
-  const env={NODE_ENV:'production',SIGNED_CONTRACT_DELIVERY_ENABLED:'false',SIGNED_CONTRACT_PDF_WORKER_ENABLED:'false',SIGNED_CONTRACT_DURABLE_DELIVERY_MODE:'send',ALLOW_LIVE_INTEGRATIONS:'true'};
+  const env:NodeJS.ProcessEnv={NODE_ENV:'production',SIGNED_CONTRACT_DELIVERY_ENABLED:'false',SIGNED_CONTRACT_PDF_WORKER_ENABLED:'false',SIGNED_CONTRACT_DURABLE_DELIVERY_MODE:'send',
+    SIGNED_CONTRACT_SMTP_ENABLED:'true',SIGNED_CONTRACT_SMTP_SCOPE:'canary',SIGNED_CONTRACT_SMTP_CANARY_CONTRACT_ID:'1',SIGNED_CONTRACT_SMTP_CANARY_RECIPIENT:'recipient@example.invalid'};
   let options:any,mail:any,sends=0,queries=0,response:any,closeCount=0;
   const integrationsTable={},settingsTable={emailSenderName:1,emailSenderEmail:2,emailReplyTo:3};
   const db={select:()=>({from:(table:any)=>{
@@ -20,7 +21,7 @@ test('actual contract SMTP adapter reuses vetted config, includes PDF, and never
   const exports:any={};
   const forbidden=()=>{throw new Error('UNEXPECTED_PROVIDER_OR_QUEUE');};
   const req=(name:string):any=>{
-    if(name==='./contractDeliveryPolicy')return{contractSmtpAllowed:()=>contractSmtpAllowed(env)};
+    if(name==='./contractDeliveryPolicy')return{contractSmtpAllowed:()=>contractSmtpAllowed(env),contractSmtpMessageAllowed:(message:any)=>contractSmtpMessageAllowed(message,env)};
     if(name==='./contractSmtpReceipt')return{contractSmtpOutcome};
     if(name==='@workspace/db')return{db,integrationsTable,settingsTable,emailQueueTable:{},pool:{}};
     if(name==='drizzle-orm')return{eq:()=>({})};
@@ -33,12 +34,24 @@ test('actual contract SMTP adapter reuses vetted config, includes PDF, and never
   };
   vm.runInNewContext(js,{exports,require:req,process:{env},console:{log:forbidden,error:forbidden,warn:forbidden},setTimeout:(fn:()=>void,ms:number)=>setTimeout(fn,response==='hang'?5:ms),clearTimeout,Buffer});
   const pdf=Buffer.from('%PDF-1.7 TEST ONLY');
-  const payload={recipient:'recipient@example.invalid',messageId:'<synthetic@findandstudy.com>',subject:'TEST',html:'<p>TEST</p>',text:'TEST',pdf};
+  const payload={signedContractId:1,enrolledAt:'2026-11-25T00:00:00.000Z',signedAt:'2026-11-25T00:00:00.000Z',recipient:'recipient@example.invalid',messageId:'<synthetic@findandstudy.com>',subject:'TEST',html:'<p>TEST</p>',text:'TEST',pdf};
   const transport=await exports.prepareContractSmtpTransport();
   assert.equal((await transport.send(payload)).state,'accepted');
   assert.equal(options.host,'93.184.216.34');assert.equal(options.requireTLS,true);assert.equal(options.tls.rejectUnauthorized,true);assert.equal(options.tls.servername,'smtp.example.invalid');
   assert.equal(mail.to.address,payload.recipient);assert.equal(mail.messageId,payload.messageId);assert.deepEqual(mail.attachments[0].content,pdf);
   assert.equal(mail.disableFileAccess,true);assert.equal(mail.disableUrlAccess,true);assert.ok(closeCount>0);
+  const canarySends=sends;
+  for(const patch of [{signedContractId:2},{recipient:'other@example.invalid'}])
+    assert.equal((await transport.send({...payload,...patch})).state,'ambiguous');
+  assert.equal(sends,canarySends,'adapter itself rejects a mismatched target without SMTP');
+  env.ALLOW_LIVE_INTEGRATIONS='false';
+  assert.equal((await transport.send(payload)).state,'ambiguous');assert.equal(sends,canarySends);
+  delete env.ALLOW_LIVE_INTEGRATIONS;
+  env.SIGNED_CONTRACT_SMTP_SCOPE='future';env.SIGNED_CONTRACT_SMTP_FUTURE_FROM='2026-11-25T00:00:00.000Z';
+  assert.equal((await transport.send({...payload,signedAt:'2026-11-24T23:59:59.999Z'})).state,'ambiguous');
+  assert.equal(sends,canarySends,'historical signature cannot be sent through future mode');
+  assert.equal((await transport.send({...payload,signedContractId:2,recipient:'future@example.invalid'})).state,'accepted');
+  env.SIGNED_CONTRACT_SMTP_SCOPE='canary';delete env.SIGNED_CONTRACT_SMTP_FUTURE_FROM;
   response={accepted:['wrong@example.invalid'],rejected:[],messageId:payload.messageId,response:'250 OK'};
   assert.equal((await(await exports.prepareContractSmtpTransport()).send(payload)).state,'ambiguous');
   response='hang';

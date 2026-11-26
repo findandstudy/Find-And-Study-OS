@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { contractDeliveryMode, contractSmtpAllowed } from '../src/lib/contractDeliveryPolicy';
+import { contractDeliveryMode, contractSmtpAllowed, type ContractSmtpScope } from '../src/lib/contractDeliveryPolicy';
 import { contractSmtpOutcome } from '../src/lib/contractSmtpReceipt';
 import { ContractDeliveryStore, contractPdfDigest } from '../src/lib/contractDeliveryStore';
 
@@ -70,7 +70,7 @@ test('disposable PostgreSQL + fake SMTP execute durable delivery transitions',as
     assert.equal((await client.query("SELECT count(*)::int AS n FROM pg_tables WHERE schemaname='public'")).rows[0].n,0,'fresh disposable DB only');
     assert.equal((await readContractDeliveryStatus(1,9)).state,'unconfirmed','pre-migration status remains truthful');
     await client.query(`CREATE TABLE signing_sessions(id integer PRIMARY KEY,status text NOT NULL,revoked_at timestamptz);
-      CREATE TABLE signed_contracts(id integer PRIMARY KEY,signing_session_id integer NOT NULL,signer_email text NOT NULL,pdf_object_key text,evidence_hash text,emailed_at timestamptz,agent_id integer DEFAULT 9);
+      CREATE TABLE signed_contracts(id integer PRIMARY KEY,signing_session_id integer NOT NULL,signer_email text NOT NULL,pdf_object_key text,evidence_hash text,emailed_at timestamptz,agent_id integer DEFAULT 9,signed_at timestamptz NOT NULL DEFAULT now());
       CREATE TABLE email_queue(id integer PRIMARY KEY,html_body text);`);
     await client.query(await readFile(new URL('../../../deploy/prepared-migrations/apply/0067_signed_contract_delivery.sql',import.meta.url),'utf8'));
     const reset=async(enroll=true)=>{
@@ -80,7 +80,9 @@ test('disposable PostgreSQL + fake SMTP execute durable delivery transitions',as
       if(enroll)await client.query("INSERT INTO signed_contract_deliveries(signed_contract_id,signing_session_id,recipient,message_id) VALUES(1,1,'test@example.invalid','<synthetic@findandstudy.com>')");
     };
     let sends=0;let transportOutcome:any;let afterSend:undefined|(()=>void);
-    const deps={store,readPdf:async()=>pdf,maySend:()=>true,
+    const canary:ContractSmtpScope={kind:'canary',signedContractId:1,recipient:'test@example.invalid'};
+    const future:ContractSmtpScope={kind:'future',from:'2026-01-01T00:00:00.000Z'};
+    const deps={store,readPdf:async()=>pdf,maySend:()=>true,sendScope:()=>canary,
       prepare:async()=>({artifact:{key,evidenceHash:evidence,bytes:pdf},email:{subject:'TEST signed contract',html:'<p>TEST ONLY</p>',text:'TEST ONLY'}}),
       transport:async()=>({close(){},send:async(message:any)=>{sends++;assert.deepEqual(message.pdf,pdf);assert.equal(message.recipient,'test@example.invalid');afterSend?.();return transportOutcome??contractSmtpOutcome({accepted:[message.recipient],rejected:[],messageId:message.messageId,response:'250 2.0.0 test receipt'},message.recipient,message.messageId);}})};
     const state=async()=> (await client.query('SELECT * FROM signed_contract_deliveries WHERE signed_contract_id=1')).rows[0];
@@ -140,7 +142,7 @@ test('disposable PostgreSQL + fake SMTP execute durable delivery transitions',as
       await client.query("INSERT INTO signed_contract_deliveries(signed_contract_id,signing_session_id,recipient,message_id) VALUES(2,2,'historical@example.invalid','<second-synthetic@findandstudy.com>')");
       const second=await store.claimPreparation();assert.equal(second?.signed_contract_id,2);
       await store.bindPrepared(second!,{key,evidenceHash:evidence,bytes:pdf},{subject:'TEST second',html:'TEST',text:'TEST'});
-      const progress={...deps,readPdf:async()=>{if((await state()).state==='ready')throw new Error('TEST MISSING FILE');return pdf;},
+      const progress={...deps,sendScope:()=>future,readPdf:async()=>{if((await state()).state==='ready')throw new Error('TEST MISSING FILE');return pdf;},
         transport:async()=>({close(){},send:async(message:any)=>{sends++;assert.equal(message.recipient,'historical@example.invalid');return contractSmtpOutcome({accepted:[message.recipient],rejected:[],messageId:message.messageId,response:'250 TEST'},message.recipient,message.messageId);}})};
       await runContractDeliverySweep(progress);assert.equal((await state()).state,'failed');assert.equal(sends,0);
       await runContractDeliverySweep(progress);assert.equal(sends,1);
@@ -153,11 +155,49 @@ test('disposable PostgreSQL + fake SMTP execute durable delivery transitions',as
     });
     await t.test('forged acceptance receipt cannot mark emailed_at or finish an attempt',async()=>{
       await reset();resetCounts();await runContractDeliverySweep({...deps,maySend:()=>false});
-      const row=await store.nextReady();const sending=await store.claimSending(row!,pdf);assert.ok(sending);
+      const row=await store.nextReady(canary);const sending=await store.claimSending(row!,pdf,canary);assert.ok(sending);
       await assert.rejects(store.finishSending(sending!,{state:'accepted',receipt:{recipient:'other@example.invalid',messageId:sending!.message_id,responseSha256:'a'.repeat(64)}}),/RECEIPT_INVALID/);
       await assert.rejects(client.query(`UPDATE signed_contract_deliveries SET state='accepted',accepted_at=now(),receipt=$1::jsonb WHERE signed_contract_id=1`,
         [JSON.stringify({recipient:'other@example.invalid',messageId:sending!.message_id,responseSha256:'a'.repeat(64)})]));
       assert.equal((await state()).state,'sending');assert.equal((await client.query('SELECT emailed_at FROM signed_contracts WHERE id=1')).rows[0].emailed_at,null);
+    });
+    await t.test('canary selects only its exact row despite an older unrelated ready delivery',async()=>{
+      await reset();resetCounts();await runContractDeliverySweep({...deps,maySend:()=>false});
+      await client.query("INSERT INTO signed_contract_deliveries(signed_contract_id,signing_session_id,recipient,message_id) VALUES(2,2,'historical@example.invalid','<canary-second@findandstudy.com>')");
+      const second=await store.claimPreparation();assert.equal(second?.signed_contract_id,2);
+      await store.bindPrepared(second!,{key,evidenceHash:evidence,bytes:pdf},{subject:'TEST second',html:'TEST',text:'TEST'});
+      const scope:ContractSmtpScope={kind:'canary',signedContractId:2,recipient:'historical@example.invalid'};
+      const scoped={...deps,sendScope:()=>scope,transport:async()=>({close(){},send:async(message:any)=>{
+        sends++;assert.equal(message.signedContractId,2);assert.equal(message.recipient,'historical@example.invalid');
+        return contractSmtpOutcome({accepted:[message.recipient],rejected:[],messageId:message.messageId,response:'250 TEST'},message.recipient,message.messageId);
+      }})};
+      await runContractDeliverySweep(scoped);await runContractDeliverySweep(scoped);
+      assert.equal(sends,1);assert.equal((await state()).state,'ready');
+      assert.equal((await client.query('SELECT state FROM signed_contract_deliveries WHERE signed_contract_id=2')).rows[0].state,'accepted');
+    });
+    await t.test('future scope excludes old signatures even when enrolled later and excludes pre-cutover queue entries',async()=>{
+      await reset();resetCounts();await runContractDeliverySweep({...deps,maySend:()=>false});
+      await client.query("UPDATE signed_contracts SET signed_at='2000-01-01T00:00:00Z' WHERE id=1");
+      await runContractDeliverySweep({...deps,sendScope:()=>future});assert.equal(sends,0);assert.equal((await state()).state,'ready');
+      await client.query("UPDATE signed_contracts SET signed_at=now() WHERE id=1");
+      const afterEnrollment:ContractSmtpScope={kind:'future',from:new Date(Date.now()+60000).toISOString()};
+      await runContractDeliverySweep({...deps,sendScope:()=>afterEnrollment});assert.equal(sends,0);assert.equal((await state()).state,'ready');
+      await runContractDeliverySweep({...deps,sendScope:()=>future});assert.equal(sends,1);assert.equal((await state()).state,'accepted');
+    });
+    await t.test('scope change before atomic claim cannot consume or send the previous row',async()=>{
+      await reset();resetCounts();await runContractDeliverySweep({...deps,maySend:()=>false});
+      let scope:ContractSmtpScope=canary;
+      const scoped={...deps,sendScope:()=>scope,transport:async()=>{
+        scope={kind:'canary',signedContractId:2,recipient:'historical@example.invalid'};
+        return(await deps.transport());
+      }};
+      await runContractDeliverySweep(scoped);assert.equal(sends,0);assert.equal((await state()).state,'ready');
+    });
+    await t.test('scope veto after committed attempt is recorded without SMTP and never retried',async()=>{
+      await reset();resetCounts();let checks=0;
+      await runContractDeliverySweep({...deps,maySend:()=>++checks<3});
+      assert.equal(sends,0);assert.equal((await state()).state,'ambiguous');
+      await runContractDeliverySweep(deps);assert.equal(sends,0);
     });
   }finally{client.release();}
 });

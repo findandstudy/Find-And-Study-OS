@@ -8,7 +8,7 @@ import { pool } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { isLiveIntegrationsEnabled } from "./inbox/liveMode";
 import { isBlockedOutboundIp } from "./safeOutboundRequest";
-import { contractSmtpAllowed } from "./contractDeliveryPolicy";
+import { contractSmtpAllowed, contractSmtpMessageAllowed, type ContractSmtpIdentity } from "./contractDeliveryPolicy";
 import { contractSmtpOutcome, type ContractSmtpOutcome } from "./contractSmtpReceipt";
 
 let cachedTransporter: Transporter | null = null;
@@ -194,7 +194,7 @@ export interface EmailAttachment {
 
 /** Contract-only adapter. Never enters the legacy body-only retry queue. */
 export async function prepareContractSmtpTransport(): Promise<{
-  send: (message: { recipient: string; messageId: string; subject: string; html: string; text: string; pdf: Buffer }) => Promise<ContractSmtpOutcome>;
+  send: (message: ContractSmtpIdentity & { messageId: string; subject: string; html: string; text: string; pdf: Buffer }) => Promise<ContractSmtpOutcome>;
   close: () => void;
 } | null> {
   if (!contractSmtpAllowed()) return null;
@@ -206,7 +206,7 @@ export async function prepareContractSmtpTransport(): Promise<{
   return {
     close: () => transporter.close(),
     async send(message) {
-      if (!contractSmtpAllowed()) return { state: 'ambiguous', code: 'CONTRACT_DELIVERY_DISABLED_BEFORE_SEND' };
+      if (!contractSmtpMessageAllowed(message)) return { state: 'ambiguous', code: 'CONTRACT_DELIVERY_DISABLED_BEFORE_SEND' };
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         const result = await Promise.race([

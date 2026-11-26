@@ -1,5 +1,7 @@
 # Apply contract mail — local preparation, not activated
 
+Historical implementation record. The deployed prepare-only release and subsequent contract-only canary/future-scope changes are documented separately in [the SMTP rollout note](APPLY_CONTRACT_SMTP_CANARY_2026-11-26.md); that note supersedes the initial SMTP activation condition below.
+
 This compatibility implementation is for the attested Apply legacy source/67-entry ledger. Staging already has newer email infrastructure; do not copy this migration onto staging or replace its queue. Runtime user-facing behavior is intended to match: an immutable PDF attachment, truthful delivery state and no automatic resend after uncertain acceptance.
 
 ## What is connected
@@ -15,7 +17,7 @@ An attempt is committed as `sending` before SMTP starts. Only an exact recipient
 - `SIGNED_CONTRACT_DURABLE_DELIVERY_MODE=off` (also default when missing/invalid).
 - Both `SIGNED_CONTRACT_DELIVERY_ENABLED=false` and `SIGNED_CONTRACT_PDF_WORKER_ENABLED=false` are prerequisites for either new mode; they prevent legacy historical sweeps.
 - `prepare` may enroll and produce new PDFs, but cannot send.
-- `send` additionally requires `ALLOW_LIVE_INTEGRATIONS=true`, `EMAIL_DELIVERY_DISABLED` not equal to `true`, and `NODE_ENV` not equal to `test`.
+- The initial `send` gate required global `ALLOW_LIVE_INTEGRATIONS=true`. The reviewed contract-only scope extension replaces that requirement with explicit module permission and exact canary/future boundaries while preserving global explicit vetoes; see the newer rollout note.
 - Existing `BACKGROUND_JOBS_ENABLED` and the existing coordinator still control worker startup. No new process/service is required.
 
 ## Prepared migration, not applied to persistent environments
@@ -32,7 +34,7 @@ New signing sessions also require exact configured `CONTRACT_PDF_TRUSTED_LOGO_UR
 
 ## Rollback and limits
 
-Set mode `off` first and drain the worker. Retain the additive table and all receipts; do not clear ambiguous rows, delete signatures or restore the live database. Reverting code is safe while off because the old application does not read this table. Do not re-enable the legacy worker: its body-only queue and unconfirmed `emailed_at` behavior are deliberately not used by the new path.
+Set mode `off` first and drain the worker. Retain the additive table and all receipts; do not clear ambiguous rows, delete signatures or restore the live database. A code rollback must use the separately reviewed guarded rollback artifact: the original historical worker does not honor the new off flag. Do not re-enable the legacy worker: its body-only queue and unconfirmed `emailed_at` behavior are deliberately not used by the new path.
 
 TEST02/47 remains outside automatic enrollment. Its PDF recovery is a separate exact-record reviewed operation. Sending its recovered PDF needs a separate explicit request and durable enrollment/reconciliation procedure; this change cannot silently notify historical signers or administrators.
 
