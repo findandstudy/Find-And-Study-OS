@@ -4,9 +4,13 @@ import { sanitizeContractBranding, validateCompanySignatureDataUrl } from './con
 import { contractSigningIntakeRequirements, missingContractTemplateFields, normalizeContractSigningIntake } from './contractSigningFields';
 
 /** Frozen contract preparation only: no database, storage, queue or provider. */
-export function prepareFrozenContractPdf(snapshot: { contract: any; session: any }) {
+export function prepareFrozenContractPdf(
+  snapshot: { contract: any; session: any },
+  options: { allowExistingArtifact?: boolean } = {},
+) {
   const c = snapshot.contract, s = snapshot.session;
-  if (c.pdf_object_key || c.evidence_hash || s.status !== 'signed' || s.revoked_at || c.signing_session_id !== s.id
+  if (!options.allowExistingArtifact && (c.pdf_object_key || c.evidence_hash)) throw new Error('CONTRACT_FROZEN_ALREADY_FINALIZED');
+  if (s.status !== 'signed' || s.revoked_at || c.signing_session_id !== s.id
     || c.template_id !== s.template_id || typeof s.template_body_html_snapshot !== 'string' || !s.template_body_html_snapshot
     || Buffer.byteLength(s.template_body_html_snapshot)>2*1024*1024
     || !s.template_name_snapshot || !s.template_language_snapshot || !s.template_version_snapshot

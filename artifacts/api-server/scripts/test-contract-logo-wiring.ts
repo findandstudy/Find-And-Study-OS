@@ -77,8 +77,11 @@ test("only new session writers opt into capture; historical PDF generation remai
   assert.match(resolver, /options\.captureLogo && config\.logoUrl/);
   const signing = readFileSync(new URL("../src/lib/signContract.ts", import.meta.url), "utf8");
   assert.doesNotMatch(signing, /captureContractLogoSnapshot|captureLogo:/);
-  assert.match(signing, /session\?\.templateSigningPageConfigSnapshot \?\? template.signingPageConfig/);
-  assert.ok(signing.indexOf("if (row.pdfObjectKey && row.evidenceHash)") < signing.indexOf("const renderedHtml ="));
+  assert.match(signing, /template_signing_page_config_snapshot: session\.templateSigningPageConfigSnapshot/);
+  assert.match(signing, /preparePersistedFrozenPdf\(row, session, signatureBase64\)/);
+  const historicalRender = signing.slice(signing.indexOf("export async function ensureSignedContractPdf"));
+  assert.doesNotMatch(historicalRender, /template\.signingPageConfig/);
+  assert.ok(historicalRender.indexOf("if (row.pdfObjectKey && row.evidenceHash)") < historicalRender.indexOf("preparePersistedFrozenPdf(row, session, signatureBase64)"));
   const pdf = readFileSync(new URL("../src/lib/contractPdf.ts", import.meta.url), "utf8");
   assert.doesNotMatch(pdf, /captureContractLogoSnapshot|safeOutboundRequest/);
   assert.match(pdf, /return route\.abort\(\)/);

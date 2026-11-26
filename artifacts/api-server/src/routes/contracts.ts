@@ -12,6 +12,7 @@ import { hasContractCompanySignature } from "../lib/contractBranding";
 import { resolveContractTemplateBranding } from "../lib/contractTemplateBranding";
 import { backgroundJobsEnabled } from "../lib/backgroundJobs";
 import { decideMissingPdfRecovery, MISSING_PDF_LEASE_RESET, PDF_LEASE_MS } from "../lib/signedContractPdfRecovery";
+import { repairSignedContractPdfArtifact } from "../lib/signContract";
 
 const router: IRouter = Router();
 
@@ -310,6 +311,53 @@ router.post("/contracts/signed/:id/regenerate", requireAuth, requirePermission("
   } catch (err) {
     console.error("[contracts] regenerate pdf:", err);
     res.status(500).json({ error: "Failed to queue regeneration" });
+  }
+});
+
+// Explicit administrator repair for an absent/unreadable final artefact. This
+// does not create a signing session or signature and never changes signed_at,
+// signature bytes or frozen contract inputs. The old object is retained; the
+// new object/evidence pair and its reason are committed with one audit record.
+router.post("/contracts/signed/:id/repair-pdf", requireAuth, requirePermission("contracts.manage"), async (req, res): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    if (reason.length < 8 || reason.length > 500) {
+      res.status(400).json({ error: "A repair reason between 8 and 500 characters is required." });
+      return;
+    }
+    const [row] = await db.select({ agentId: signedContractsTable.agentId })
+      .from(signedContractsTable)
+      .where(eq(signedContractsTable.id, id));
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    if (row.agentId) {
+      const inScope = await isAgentInScope((req as any).user!.id, (req as any).user!.role, row.agentId);
+      if (!inScope) { res.status(403).json({ error: "Access denied: agent is outside your branch scope" }); return; }
+    }
+    const repaired = await repairSignedContractPdfArtifact(id, {
+      userId: (req as any).user?.id ?? null,
+      reason,
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip ?? null,
+    });
+    res.json({
+      status: "repaired",
+      evidenceHash: repaired.evidenceHash,
+      message: "The PDF artefact was rebuilt from frozen signing evidence. The original signature and signing time were preserved.",
+    });
+  } catch (error) {
+    const code = String((error as Error)?.message || error);
+    if (code === "SIGNED_ARTIFACT_HEALTHY") {
+      res.status(409).json({ code, error: "The stored PDF artefact is healthy and cannot be replaced." });
+      return;
+    }
+    if (code === "SIGNED_CONTRACT_NOT_FOUND") { res.status(404).json({ code, error: "Not found" }); return; }
+    if (code.startsWith("CONTRACT_FROZEN_") || code.startsWith("SIGNED_ARTIFACT_REPAIR_")) {
+      res.status(409).json({ code, error: "The frozen signing evidence is incomplete or changed; the PDF was not repaired." });
+      return;
+    }
+    console.error("[contracts] repair pdf artifact:", error);
+    res.status(500).json({ error: "Failed to repair the PDF artefact" });
   }
 });
 

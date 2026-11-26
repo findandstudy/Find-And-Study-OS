@@ -9,7 +9,8 @@ import { PassThrough } from "node:stream";
 import { syncBuiltinESMExports } from "node:module";
 import sharp from "sharp";
 import {
-  captureContractLogoSnapshot, validateContractLogoSnapshot, parseContractTrustedLogoUrls,
+  captureContractLogoSnapshot, captureContractTemplateAssetSnapshots,
+  validateContractLogoSnapshot, parseContractTrustedLogoUrls,
   MAX_CONTRACT_LOGO_BYTES, CONTRACT_LOGO_TIMEOUT_MS,
 } from "../src/lib/contractPdfAssets";
 import { safeOutboundRequest, type SafeOutboundResponse, type SafeOutboundRequestOptions } from "../src/lib/safeOutboundRequest";
@@ -105,6 +106,36 @@ test("approved PNG capture freezes bounded normalized bytes, source and hash", a
   const bytes = Buffer.from(snapshot.dataUrl.split(",")[1], "base64");
   assert.equal(snapshot.sha256, createHash("sha256").update(bytes).digest("hex"));
   assert.equal((await sharp(bytes).metadata()).format, "png");
+});
+
+test("template capture freezes every distinct trusted image and ignores local placeholders", async () => {
+  prohibitNetwork();
+  const second = "https://brand.example/legacy.png";
+  const calls: string[] = [];
+  const snapshots = await captureContractTemplateAssetSnapshots(
+    `<img src="${URL}"><img src="${second}"><img src="${URL}"><img src="data:image/png;base64,AAAA"><img src="{{signature}}">`,
+    {
+      trustedLogoUrls: [URL, second],
+      request: async (url) => {
+        calls.push(url);
+        return response({ url });
+      },
+    },
+  );
+  assert.deepEqual(calls, [URL, second]);
+  assert.deepEqual(snapshots.map(item => item.sourceUrl), [URL, second]);
+  assert.ok(snapshots.every(item => validateContractLogoSnapshot(item, item.sourceUrl)));
+});
+
+test("template capture fails closed for an untrusted legacy image", async () => {
+  prohibitNetwork();
+  await assert.rejects(
+    captureContractTemplateAssetSnapshots('<img src="https://legacy.example.invalid/logo.png">', {
+      trustedLogoUrls: [URL],
+      request: async () => response(),
+    }),
+    /contract_template_image_not_trusted/,
+  );
 });
 
 test("JPEG capture normalizes to a PNG snapshot", async () => {

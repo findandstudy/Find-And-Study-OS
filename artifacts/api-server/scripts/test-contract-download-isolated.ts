@@ -75,7 +75,8 @@ let exitCode = 1;
 const results: Record<string, unknown>[] = [];
 try {
   const workspace = await dependency("@workspace/db");
-  const { db, usersTable, agentsTable, contractTemplatesTable, signingSessionsTable, signedContractsTable } = workspace;
+  const { eq } = await dependency("drizzle-orm");
+  const { db, usersTable, agentsTable, contractTemplatesTable, signingSessionsTable, signedContractsTable, auditLogsTable } = workspace;
   pool = workspace.pool;
   const identity = (await pool.query("select current_database() as name, host(inet_server_addr()) as address, inet_server_port() as port")).rows[0];
   assert.equal(identity.name, databaseName);
@@ -134,6 +135,27 @@ try {
       signatureImageBase64: null, subjectType: "other", subjectLabel: `TEST ONLY ${runId}`, emailedAt: null }).returning();
     fixtures[name] = { session, signed, token };
   }
+  const repairSignature = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  const repairSignedAt = new Date("2026-11-26T12:00:00.000Z");
+  const corruptRelativeKey = `signed-contracts/test-corrupt-${runId}.pdf`;
+  await fs.writeFile(path.join(storageRoot, corruptRelativeKey), Buffer.from("BROKEN TEST PDF"), { mode: 0o600, flag: "wx" });
+  const [repairSession] = await db.insert(signingSessionsTable).values({
+    templateId: template.id, agentId: agencies.ready.id,
+    tokenHash: crypto.createHash("sha256").update(crypto.randomBytes(32)).digest("hex"), status: "signed", mode: "admin_driven",
+    signerEmail: principals.ready.email, expectedEmail: principals.ready.email, verifiedEmail: principals.ready.email,
+    signerName: "TEST ONLY repair", emailVerificationMethod: "test_fixture", emailVerifiedAt: repairSignedAt,
+    subjectType: "other", subjectLabel: `TEST ONLY repair ${runId}`, signedAt: repairSignedAt,
+    expiresAt: new Date("2027-11-26T12:00:00.000Z"), templateVersionSnapshot: 1,
+    templateNameSnapshot: "TEST ONLY repair", templateLanguageSnapshot: "en",
+    templateBodyHtmlSnapshot: "<style>.repair{color:#143591;border:2px solid #143591;padding:12px}</style><h1 class='repair'>TEST ONLY repair</h1><img src='{{signature}}'>",
+    templateIntakeSchemaSnapshot: [], templateSigningPageConfigSnapshot: {}, intakeData: {},
+  }).returning();
+  const [repairSigned] = await db.insert(signedContractsTable).values({
+    signingSessionId: repairSession.id, agentId: agencies.ready.id, templateId: template.id,
+    signerEmail: principals.ready.email, signerName: "TEST ONLY repair", signedAt: repairSignedAt,
+    pdfObjectKey: `/objects/${corruptRelativeKey}`, evidenceHash: "b".repeat(64), signatureImageBase64: repairSignature,
+    subjectType: "other", subjectLabel: `TEST ONLY repair ${runId}`, emailedAt: null,
+  }).returning();
   const { default: express } = await dependency("express");
   assert.equal(typeof express, "function", "Candidate Express default export unavailable");
   const adminRouter = (await source("routes/contracts.ts")).default;
@@ -141,8 +163,10 @@ try {
   const publicRouter = (await source("routes/publicSigning.ts")).default;
   for (const router of [adminRouter, agentRouter, publicRouter]) assert.equal(typeof router, "function", "Candidate router default export unavailable");
   const app = express();
+  app.use(express.json({ limit: "16kb" }));
   app.use((req: any, res: any, next: any) => {
-    if (req.method !== "GET") return res.status(405).json({ error: "GET_ONLY_TEST_HARNESS" });
+    const repairPath = new RegExp(`^/api/contracts/signed/${repairSigned.id}/repair-pdf$`).test(req.path);
+    if (req.method !== "GET" && !(req.method === "POST" && repairPath)) return res.status(405).json({ error: "BOUNDED_TEST_HARNESS" });
     const name = String(req.headers["x-test-principal"] ?? "");
     if (principals[name]) req.user = principals[name];
     req.cookies = {};
@@ -152,6 +176,32 @@ try {
   server = http.createServer(app);
   await new Promise<void>(resolve => server!.listen(0, "127.0.0.1", resolve));
   httpPort = (server.address() as net.AddressInfo).port;
+  const repairBefore = {
+    signatureImageBase64: repairSigned.signatureImageBase64,
+    signedAt: repairSigned.signedAt.toISOString(), signerEmail: repairSigned.signerEmail,
+    signingSessionId: repairSigned.signingSessionId, templateId: repairSigned.templateId,
+  };
+  const repairResponse = await fetch(`http://127.0.0.1:${httpPort}/api/contracts/signed/${repairSigned.id}/repair-pdf`, {
+    method: "POST", headers: { "content-type": "application/json", "x-test-principal": "admin" },
+    body: JSON.stringify({ reason: "Synthetic corrupt artifact recovery test" }), signal: AbortSignal.timeout(30_000),
+  });
+  const repairResponseBytes = Buffer.from(await repairResponse.arrayBuffer());
+  assert.equal(repairResponse.status, 200, repairResponseBytes.toString());
+  const repairBody = JSON.parse(repairResponseBytes.toString()) as any;
+  assert.match(repairBody.evidenceHash, /^[a-f0-9]{64}$/);
+  assert.notEqual(repairBody.evidenceHash, repairSigned.evidenceHash);
+  const [repairAfter] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, repairSigned.id));
+  assert.deepEqual({
+    signatureImageBase64: repairAfter.signatureImageBase64,
+    signedAt: repairAfter.signedAt.toISOString(), signerEmail: repairAfter.signerEmail,
+    signingSessionId: repairAfter.signingSessionId, templateId: repairAfter.templateId,
+  }, repairBefore, "repair changed immutable signature evidence");
+  assert.notEqual(repairAfter.pdfObjectKey, repairSigned.pdfObjectKey);
+  assert.equal((await fs.readFile(path.join(storageRoot, repairAfter.pdfObjectKey!.replace(/^\/objects\//, "")))).subarray(0, 5).toString(), "%PDF-");
+  const repairAudit = await db.select().from(auditLogsTable).where(eq(auditLogsTable.resourceId, repairSigned.id));
+  assert.equal(repairAudit.filter((row: any) => row.action === "contract.repair_pdf_artifact").length, 1);
+  results.push({ label: "admin-corrupt-artifact-repair", status: 200, signaturePreserved: true, signedAtPreserved: true,
+    evidenceReplaced: true, auditRecorded: true });
   // Existing one-connection pool becomes read-only before HTTP requests. Any future
   // connection is likewise set read-only before it can execute queued queries.
   pool.on("connect", (client: any) => { void client.query("SET default_transaction_read_only = on"); });

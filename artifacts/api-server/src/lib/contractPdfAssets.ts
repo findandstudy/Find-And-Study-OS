@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import sharp from "sharp";
+import { JSDOM } from "jsdom";
 import { parseSafeOutboundUrl, safeOutboundRequest } from "./safeOutboundRequest";
 import { readBoundedDocumentStream } from "./documentByteLimits";
 
@@ -78,6 +79,39 @@ export type ContractLogoCaptureOptions = {
   /** Synthetic transport only; explicitly rejected outside NODE_ENV=test. */
   request?: typeof safeOutboundRequest;
 };
+
+/**
+ * Freeze every external image referenced by a server-owned contract template.
+ * Only exact HTTPS URLs from the bounded contract logo allowlist are accepted.
+ * data:/blob placeholders stay local; Handlebars signature placeholders are
+ * resolved later. Any other external source fails session creation instead of
+ * becoming a broken image or a render-time network request.
+ */
+export async function captureContractTemplateAssetSnapshots(
+  bodyHtml: string,
+  options: ContractLogoCaptureOptions = {},
+): Promise<ContractLogoSnapshot[]> {
+  const dom = new JSDOM(bodyHtml);
+  const sources: string[] = [];
+  try {
+    for (const image of dom.window.document.querySelectorAll("img[src]")) {
+      const source = (image.getAttribute("src") || "").trim();
+      if (!source || source.startsWith("data:") || source.startsWith("blob:")
+        || source.includes("{{") || source.includes("}}")) continue;
+      if (!sources.includes(source)) sources.push(source);
+    }
+  } finally {
+    dom.window.close();
+  }
+  if (sources.length > MAX_TRUSTED_URLS) throw new Error("contract_template_image_limit_exceeded");
+  const snapshots: ContractLogoSnapshot[] = [];
+  for (const source of sources) {
+    const snapshot = await captureContractLogoSnapshot(source, options);
+    if (!snapshot) throw new Error("contract_template_image_not_trusted");
+    snapshots.push(snapshot);
+  }
+  return snapshots;
+}
 
 function untilAborted<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  applyContractBranding,
   contractRequiresEmailVerification,
   hasContractCompanySignature,
   publicContractBranding,
@@ -10,6 +11,7 @@ import {
   validateContractBrandingInput,
   validateCompanySignatureDataUrl,
 } from "../src/lib/contractBranding";
+import { createHash } from "node:crypto";
 
 const VALID_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
@@ -94,6 +96,28 @@ test("sanitization keeps valid presentation fields and drops invalid colors", ()
     companySignatureDataUrl: undefined,
     requireEmailVerification: undefined,
   });
+});
+
+test("frozen configured and template-body logos are embedded independently", () => {
+  const bytes = Buffer.from(VALID_PNG_BASE64, "base64");
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const configured = "https://branding.example.invalid/configured.png";
+  const bodyLogo = "https://branding.example.invalid/legacy-body.png";
+  const rendered = applyContractBranding(
+    `<section><img id="legacy" src="${bodyLogo}"><a href="${bodyLogo}">source</a></section>`,
+    {
+      logoUrl: configured,
+      logoSnapshot: { sourceUrl: configured, dataUrl: VALID_PNG_DATA_URL, sha256 },
+      assetSnapshots: [{ sourceUrl: bodyLogo, dataUrl: VALID_PNG_DATA_URL, sha256 }],
+    },
+  );
+  assert.match(rendered, /id="legacy" src="data:image\/png;base64,/);
+  assert.match(rendered, new RegExp(`href="${bodyLogo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+  assert.doesNotMatch(rendered, new RegExp(`src="${bodyLogo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+});
+
+test("server-managed asset snapshots cannot be submitted by an administrator", () => {
+  assert.equal(validateContractBrandingInput({ assetSnapshots: [] }), "Logo snapshots are managed by the server");
 });
 
 test("legacy templates require email verification by default", () => {

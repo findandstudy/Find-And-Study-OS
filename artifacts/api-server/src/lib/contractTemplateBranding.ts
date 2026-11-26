@@ -5,7 +5,7 @@ import {
   mergeContractBranding,
   type ContractBrandingConfig,
 } from "./contractBranding";
-import { captureContractLogoSnapshot } from "./contractPdfAssets";
+import { captureContractLogoSnapshot, captureContractTemplateAssetSnapshots } from "./contractPdfAssets";
 
 /**
  * Resolves the immutable branding snapshot used by a signing session.
@@ -32,15 +32,19 @@ export async function resolveContractTemplateBranding(
     profileConfig = sanitizeContractBranding(profile?.config);
   }
 
-  const config = mergeContractBranding(profileConfig, template.signingPageConfig);
-  if (!config) return null;
+  const config = mergeContractBranding(profileConfig, template.signingPageConfig) ?? {};
   // A template/profile is editable configuration, not an image snapshot.
   // Only NEW session creation opts in. Listing, policy checks and final PDF
   // reads never initiate an outbound logo request or refresh historical data.
   delete config.logoSnapshot;
+  delete config.assetSnapshots;
   if (options.captureLogo && config.logoUrl) {
     const logoSnapshot = await captureContractLogoSnapshot(config.logoUrl);
     if (logoSnapshot) config.logoSnapshot = logoSnapshot;
   }
-  return config;
+  if (options.captureLogo) {
+    const snapshots = await captureContractTemplateAssetSnapshots(template.bodyHtml);
+    if (snapshots.length) config.assetSnapshots = snapshots;
+  }
+  return Object.values(config).some(value => value !== undefined) ? config : null;
 }

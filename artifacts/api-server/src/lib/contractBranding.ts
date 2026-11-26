@@ -6,6 +6,14 @@ export type ContractBrandingConfig = {
   logoUrl?: string;
   /** Server-captured image bytes frozen with a NEW signing session, never refreshed during PDF generation. */
   logoSnapshot?: ContractLogoSnapshot;
+  /**
+   * Every allowlisted image referenced by the frozen template body.  These
+   * snapshots are server-owned and let older designed templates keep their
+   * logos without any network access during preview, final PDF rendering or
+   * artifact repair.  The configured header logo may be different from these
+   * body images; all exact source matches are embedded independently.
+   */
+  assetSnapshots?: ContractLogoSnapshot[];
   primaryColor?: string;
   accentColor?: string;
   pageTitle?: string;
@@ -58,10 +66,24 @@ export function sanitizeContractBranding(value: unknown): ContractBrandingConfig
     ? input.requireEmailVerification
     : undefined;
   const logoSnapshot = validateContractLogoSnapshot(input.logoSnapshot, text(input.logoUrl, 2000));
+  const assetSnapshots = Array.isArray(input.assetSnapshots) && input.assetSnapshots.length <= 8
+    ? input.assetSnapshots
+      .map(value => {
+        const sourceUrl = value && typeof value === "object" && !Array.isArray(value)
+          ? text((value as Record<string, unknown>).sourceUrl, 2000)
+          : undefined;
+        return validateContractLogoSnapshot(value, sourceUrl);
+      })
+      .filter((value): value is ContractLogoSnapshot => Boolean(value))
+    : [];
+  const uniqueAssetSnapshots = assetSnapshots.length === new Set(assetSnapshots.map(value => value.sourceUrl)).size
+    ? assetSnapshots
+    : [];
   const config: ContractBrandingConfig = {
     brandName: text(input.brandName, 200),
     logoUrl: text(input.logoUrl, 2000),
     ...(logoSnapshot ? { logoSnapshot } : {}),
+    ...(uniqueAssetSnapshots.length ? { assetSnapshots: uniqueAssetSnapshots } : {}),
     primaryColor: color("primaryColor"),
     accentColor: color("accentColor"),
     pageTitle: text(input.pageTitle, 500),
@@ -146,7 +168,7 @@ export function resolveContractEmailVerificationEvidence(
 export function validateContractBrandingInput(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
-  if (input.logoSnapshot !== undefined) return "Logo snapshots are managed by the server";
+  if (input.logoSnapshot !== undefined || input.assetSnapshots !== undefined) return "Logo snapshots are managed by the server";
   if (
     input.requireEmailVerification !== undefined
     && typeof input.requireEmailVerification !== "boolean"
@@ -207,15 +229,18 @@ export function applyContractBranding(innerHtml: string, value: unknown): string
   // the already-frozen signing-session config. Preserve legacy behaviour when
   // no snapshot exists, including already-signed, lazily generated documents.
   const logoSrc = config.logoSnapshot?.dataUrl || config.logoUrl;
-  if (config.logoSnapshot) {
-    // The same configured logo may also appear in the designed template body.
-    // Replace only exact image-source matches, never arbitrary text/links/CSS.
+  const frozenAssets = [config.logoSnapshot, ...(config.assetSnapshots ?? [])]
+    .filter((value): value is ContractLogoSnapshot => Boolean(value));
+  if (frozenAssets.length) {
+    // The configured logo and the designed template body may intentionally use
+    // different Find & Study marks. Replace every exact snapshotted image
+    // source, never arbitrary text, links, CSS URLs or similarly named attrs.
+    const bySource = new Map(frozenAssets.map(snapshot => [snapshot.sourceUrl, snapshot.dataUrl]));
     const dom = new JSDOM(innerHtml);
     try {
       for (const img of dom.window.document.querySelectorAll("img[src]")) {
-        if (img.getAttribute("src") === config.logoSnapshot.sourceUrl) {
-          img.setAttribute("src", config.logoSnapshot.dataUrl);
-        }
+        const replacement = bySource.get(img.getAttribute("src") || "");
+        if (replacement) img.setAttribute("src", replacement);
       }
       const doc = dom.window.document;
       innerHtml = /<(?:!doctype|html|head|body)\b/i.test(innerHtml)

@@ -29,10 +29,11 @@ const hero = `data:image/png;base64,${heroPng.toString("base64")}`;
 const header = `data:image/png;base64,${headerPng.toString("base64")}`;
 const stamp = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 const headerUrl = "https://branding.example.invalid/colored.png";
+const legacyBodyUrl = "https://branding.example.invalid/legacy-white.png";
 const template = `<!doctype html><html lang="en"><head><style>/* Example {{ignored_example}} */
 @page{size:A4;margin:16mm}.hero{background:#143591;padding:12px}.hero img{width:240px}
 .legal{color:#143591;font-size:18px;border:2px solid #143591;padding:14px}</style></head><body>
-<div class="hero"><img alt="Synthetic body logo" src="${hero}"></div>
+<div class="hero"><img alt="Synthetic body logo" src="${hero}"><img id="legacy-body-logo" alt="Legacy body logo" src="${legacyBodyUrl}"></div>
 <p class="legal">SYNTHETIC TEST — unchanged terms for {{agency_name}}. WhatsApp: {{whatsapp_phone}}</p>
 <img src="{{signature}}"><img src="{{main_agency_signature}}"></body></html>`;
 const snapshot = {
@@ -45,6 +46,7 @@ const snapshot = {
     intake_data: { companyName: "TEST COMPANY", whatsapp_phone: "+12025550123" },
     template_signing_page_config_snapshot: { logoUrl: headerUrl,
       logoSnapshot: { sourceUrl: headerUrl, dataUrl: header, sha256: createHash("sha256").update(headerPng).digest("hex") },
+      assetSnapshots: [{ sourceUrl: legacyBodyUrl, dataUrl: hero, sha256: createHash("sha256").update(heroPng).digest("hex") }],
       companySignatureDataUrl: `data:image/png;base64,${stamp}` } },
 };
 
@@ -55,6 +57,7 @@ test("inline body logo and CSS survive storage sanitization and frozen future-PD
   const dom = new JSDOM(prepared.bodyHtml);
   try {
     assert.equal(dom.window.document.querySelector(".hero img")?.getAttribute("src"), hero);
+    assert.equal(dom.window.document.querySelector("#legacy-body-logo")?.getAttribute("src"), hero);
     assert.equal(dom.window.document.querySelector("header img")?.getAttribute("src"), header);
     assert.match(dom.window.document.querySelector(".legal")!.textContent!, /unchanged terms for TEST COMPANY/);
     assert.match(dom.window.document.querySelector(".legal")!.textContent!, /WhatsApp: \+12025550123/);
@@ -75,6 +78,18 @@ test("inline-image path still rejects external source, MIME spoof and absent rea
   assert.throws(() => prepareFrozenContractPdf(missing), /CONTRACT_FROZEN_FIELD_MISSING/);
 });
 
+test("explicit repair preflight reuses frozen evidence without mutating the signed record", () => {
+  const existing = structuredClone(snapshot);
+  existing.contract.pdf_object_key = "/objects/signed-contracts/old.pdf";
+  existing.contract.evidence_hash = "a".repeat(64);
+  const before = JSON.stringify(existing);
+  assert.throws(() => prepareFrozenContractPdf(existing), /CONTRACT_FROZEN_ALREADY_FINALIZED/);
+  const prepared = prepareFrozenContractPdf(existing, { allowExistingArtifact: true });
+  assert.equal(prepared.signedAt.toISOString(), "2026-11-26T12:00:00.000Z");
+  assert.equal(prepared.signerName, "SYNTHETIC TEST");
+  assert.equal(JSON.stringify(existing), before, "repair preflight never changes signature, time or frozen input");
+});
+
 test("real Chromium shows embedded logos and design, then emits a valid PDF without outbound assets", { timeout: 90_000 }, async () => {
   const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
   assert.ok(executablePath, "use an existing installed Chromium; never download one");
@@ -93,11 +108,12 @@ test("real Chromium shows embedded logos and design, then emits a valid PDF with
     await page.emulateMedia({ media: "print" });
     const actual = await page.evaluate(() => ({
       hero: (document.querySelector(".hero img") as HTMLImageElement).naturalWidth,
+      legacy: (document.querySelector("#legacy-body-logo") as HTMLImageElement).naturalWidth,
       header: (document.querySelector("header img") as HTMLImageElement).naturalWidth,
       background: getComputedStyle(document.querySelector(".hero")!).backgroundColor,
       border: getComputedStyle(document.querySelector(".legal")!).borderTopWidth,
     }));
-    assert.deepEqual(actual, { hero: 320, header: 240, background: "rgb(20, 53, 145)", border: "2px" });
+    assert.deepEqual(actual, { hero: 320, legacy: 320, header: 240, background: "rgb(20, 53, 145)", border: "2px" });
     assert.equal(externalRequests, 0);
   } finally { await browser.close(); }
   const built = await buildSignedPdf(prepared);

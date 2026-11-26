@@ -1,13 +1,13 @@
-import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable } from "@workspace/db";
+import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, auditLogsTable } from "@workspace/db";
 import { and, eq, isNull, desc } from "drizzle-orm";
-import { preflightUnsignedContractPdf, signingSnapshotIdentity } from "./contractSigningPreflight";
-import { buildFinalSignedContractHtml, contractNumber } from "./contractRenderer";
+import { prepareFrozenContractPdf, preflightUnsignedContractPdf, signingSnapshotIdentity } from "./contractSigningPreflight";
 import { buildSignedPdf } from "./contractPdf";
 import { ObjectStorageService } from "./objectStorage";
 import { writeAudit } from "./auditLog";
 import { getAppBaseUrl } from "./email";
 import { withRenderLock } from "./renderLock";
 import { resolveContractEmailVerificationEvidence } from "./contractBranding";
+import { PDFDocument } from "pdf-lib";
 
 // Convert the canonical /objects/<entityId> key returned by uploadBuffer into a
 // browser-openable URL served by GET /api/storage/objects/*path (requireAuth).
@@ -224,16 +224,24 @@ export async function finalizeSign(opts: {
   return { ok: true, signedContractId: signed.id };
 }
 
-export async function readObjectBuffer(key: string): Promise<Buffer | null> {
+export async function readObjectBuffer(key: string, maxBytes = 10 * 1024 * 1024): Promise<Buffer | null> {
   try {
     let p = key;
     if (p.startsWith("/objects/")) p = p.slice("/objects/".length);
     if (p.startsWith("objects/")) p = p.slice("objects/".length);
     const file = await objectStorage.getObjectEntityFile(`/objects/${p}`);
     const chunks: Buffer[] = [];
+    let total = 0;
     await new Promise<void>((resolve, reject) => {
       file.createReadStream()
-        .on("data", (c: Buffer) => chunks.push(c))
+        .on("data", function (this: NodeJS.ReadableStream, c: Buffer) {
+          total += c.length;
+          if (total > maxBytes) {
+            (this as any).destroy(new Error("object_too_large"));
+            return;
+          }
+          chunks.push(c);
+        })
         .on("end", () => resolve())
         .on("error", reject);
     });
@@ -242,6 +250,45 @@ export async function readObjectBuffer(key: string): Promise<Buffer | null> {
     console.error("[ensureSignedContractPdf] failed to read signature image:", err);
     return null;
   }
+}
+
+function preparePersistedFrozenPdf(
+  row: typeof signedContractsTable.$inferSelect,
+  session: typeof signingSessionsTable.$inferSelect,
+  signatureBase64: string,
+  allowExistingArtifact = false,
+) {
+  return prepareFrozenContractPdf({
+    contract: {
+      signing_session_id: row.signingSessionId,
+      template_id: row.templateId,
+      pdf_object_key: row.pdfObjectKey,
+      evidence_hash: row.evidenceHash,
+      signature_image_base64: signatureBase64,
+      signed_at: row.signedAt,
+      signer_email: row.signerEmail,
+      signer_name: row.signerName,
+      signer_ip: row.signerIp,
+      signer_user_agent: row.signerUserAgent,
+      email_verification_required: row.emailVerificationRequired,
+      email_verification_method: row.emailVerificationMethod,
+      email_verified_at: row.emailVerifiedAt,
+    },
+    session: {
+      id: session.id,
+      template_id: session.templateId,
+      status: session.status,
+      revoked_at: session.revokedAt,
+      signed_at: session.signedAt,
+      template_body_html_snapshot: session.templateBodyHtmlSnapshot,
+      template_name_snapshot: session.templateNameSnapshot,
+      template_language_snapshot: session.templateLanguageSnapshot,
+      template_version_snapshot: session.templateVersionSnapshot,
+      template_intake_schema_snapshot: session.templateIntakeSchemaSnapshot,
+      template_signing_page_config_snapshot: session.templateSigningPageConfigSnapshot,
+      intake_data: session.intakeData,
+    },
+  }, { allowExistingArtifact });
 }
 
 /**
@@ -261,25 +308,12 @@ export async function ensureSignedContractPdf(
   if (row.pdfObjectKey && row.evidenceHash) {
     return { pdfObjectKey: row.pdfObjectKey, evidenceHash: row.evidenceHash };
   }
+  if (row.pdfObjectKey || row.evidenceHash) {
+    throw new Error("SIGNED_ARTIFACT_INCOMPLETE_REPAIR_REQUIRED");
+  }
 
   const [session] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, row.signingSessionId));
-  const [template] = await db.select().from(contractTemplatesTable).where(eq(contractTemplatesTable.id, row.templateId));
-  if (!template) throw new Error("Template missing");
-  const resolvedTemplate = {
-    ...template,
-    version: session?.templateVersionSnapshot ?? template.version,
-    name: session?.templateNameSnapshot ?? template.name,
-    language: session?.templateLanguageSnapshot ?? template.language,
-    entityType: session?.templateEntityTypeSnapshot ?? template.entityType,
-    bodyHtml: session?.templateBodyHtmlSnapshot ?? template.bodyHtml,
-    intakeSchema: session?.templateIntakeSchemaSnapshot ?? template.intakeSchema,
-    signingPageConfig: session?.templateSigningPageConfigSnapshot ?? template.signingPageConfig,
-  };
-  let agent: typeof agentsTable.$inferSelect | null = null;
-  if (row.agentId) {
-    const [a] = await db.select().from(agentsTable).where(eq(agentsTable.id, row.agentId));
-    agent = a || null;
-  }
+  if (!session) throw new Error("CONTRACT_FROZEN_INPUT_REQUIRED");
 
   // Signature source: new sign attempts store base64 directly in the DB row
   // (signatureImageBase64) to avoid a GCS upload on the hot sign path. Older
@@ -322,39 +356,8 @@ export async function ensureSignedContractPdf(
     }
   }
 
-  const signedAt = row.signedAt ? new Date(row.signedAt) : new Date();
-  const emailVerificationEvidence = row.emailVerificationRequired === null
-    ? resolveContractEmailVerificationEvidence(resolvedTemplate.signingPageConfig, {
-      verifiedEmail: session?.verifiedEmail,
-      method: session?.emailVerificationMethod,
-      verifiedAt: session?.emailVerifiedAt,
-    })
-    : {
-      required: row.emailVerificationRequired,
-      method: row.emailVerificationMethod,
-      verifiedAt: row.emailVerifiedAt ? new Date(row.emailVerifiedAt) : null,
-    };
-  // Single shared final-render path: every signed-PDF producer (this delivery
-  // worker, the legacy backfill sweep, and the admin force-regenerate, which all
-  // reach this function) funnels through buildFinalSignedContractHtml. That one
-  // function is the only place that stamps the main-agency seal
-  // ({{main_agency_signature}}) and the canonical contract number
-  // ({{contract_number}}) into the FINAL document, so no path can render a signed
-  // PDF that is missing either. The number is derived from contractNumber() —
-  // the identical source used for the download filename — so the body and the
-  // filename can never disagree.
-  const renderedHtml = buildFinalSignedContractHtml({
-    bodyHtml: resolvedTemplate.bodyHtml,
-    templateLanguage: resolvedTemplate.language,
-    signingPageConfig: resolvedTemplate.signingPageConfig,
-    agent,
-    intakeData: (session?.intakeData as any) || null,
-    signerEmail: row.signerEmail,
-    signerName: row.signerName,
-    signedAt,
-    signatureBase64,
-    contractNumber: contractNumber(row.signingSessionId, signedAt),
-  });
+  const signedAt = row.signedAt ? new Date(row.signedAt) : new Date(NaN);
+  const prepared = preparePersistedFrozenPdf(row, session, signatureBase64);
 
   // Serialize the heavy render: only one headless Chromium runs at a time across
   // the instance (see withRenderLock). The lock also lets concurrent downloads of
@@ -370,16 +373,7 @@ export async function ensureSignedContractPdf(
     // the browser on expiry, so the lock is held only until Chromium has actually
     // exited — a timed-out render frees its memory before the next one starts.
     const built = await buildSignedPdf({
-      templateName: resolvedTemplate.name,
-      bodyHtml: renderedHtml,
-      signerEmail: row.signerEmail,
-      signerName: row.signerName,
-      signerIp: row.signerIp,
-      signerUserAgent: row.signerUserAgent,
-      signedAt,
-      emailVerificationRequired: emailVerificationEvidence.required,
-      emailVerificationMethod: emailVerificationEvidence.method,
-      emailVerifiedAt: emailVerificationEvidence.verifiedAt,
+      ...prepared,
     });
 
     const pdfObjectKey = await objectStorage.uploadBuffer({
@@ -393,7 +387,11 @@ export async function ensureSignedContractPdf(
     // return the winner's key and discard our freshly uploaded duplicate object.
     const updated = await db.update(signedContractsTable)
       .set({ pdfObjectKey, evidenceHash: built.evidenceHash })
-      .where(and(eq(signedContractsTable.id, row.id), isNull(signedContractsTable.pdfObjectKey)))
+      .where(and(
+        eq(signedContractsTable.id, row.id),
+        isNull(signedContractsTable.pdfObjectKey),
+        isNull(signedContractsTable.evidenceHash),
+      ))
       .returning({ id: signedContractsTable.id });
 
     let finalPdfObjectKey = pdfObjectKey;
@@ -448,5 +446,140 @@ export async function ensureSignedContractPdf(
     }
 
     return { pdfObjectKey: finalPdfObjectKey, evidenceHash: finalEvidenceHash };
+  });
+}
+
+const MAX_SIGNED_PDF_BYTES = 10 * 1024 * 1024;
+
+export async function isStoredSignedPdfHealthy(
+  row: Pick<typeof signedContractsTable.$inferSelect, "pdfObjectKey" | "evidenceHash">,
+): Promise<boolean> {
+  if (!row.pdfObjectKey || !row.evidenceHash || !/^[a-f0-9]{64}$/.test(row.evidenceHash)) return false;
+  const bytes = await readObjectBuffer(row.pdfObjectKey, MAX_SIGNED_PDF_BYTES);
+  if (!bytes || bytes.length < 100 || bytes.length > MAX_SIGNED_PDF_BYTES
+    || bytes.subarray(0, 5).toString("ascii") !== "%PDF-") return false;
+  try {
+    const pdf = await PDFDocument.load(bytes, { ignoreEncryption: false, updateMetadata: false });
+    return pdf.getPageCount() > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Controlled artifact-only repair. The original signed row and signing
+ * session remain the authority: no signature, signed_at, signer, intake or
+ * template snapshot is changed. A new immutable object/evidence pair replaces
+ * only a missing or unreadable PDF reference; the caller records the audit
+ * receipt after this compare-and-set succeeds.
+ */
+export async function repairSignedContractPdfArtifact(
+  signedContractId: number,
+  audit: { userId: number | null; reason: string; ipAddress: string | null },
+): Promise<{
+  oldPdfObjectKey: string | null;
+  oldEvidenceHash: string | null;
+  pdfObjectKey: string;
+  evidenceHash: string;
+  signingSessionId: number;
+  agentId: number | null;
+}> {
+  const [row] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, signedContractId));
+  if (!row) throw new Error("SIGNED_CONTRACT_NOT_FOUND");
+  if (await isStoredSignedPdfHealthy(row)) throw new Error("SIGNED_ARTIFACT_HEALTHY");
+  const [session] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, row.signingSessionId));
+  if (!session) throw new Error("CONTRACT_FROZEN_INPUT_REQUIRED");
+
+  let signatureBase64 = row.signatureImageBase64 || null;
+  if (!signatureBase64 && row.signatureImageObjectKey) {
+    const bytes = await readObjectBuffer(row.signatureImageObjectKey, 2 * 1024 * 1024);
+    signatureBase64 = bytes?.toString("base64") || null;
+  }
+  if (!signatureBase64) throw new Error("CONTRACT_FROZEN_SIGNATURE_REQUIRED");
+
+  const prepared = preparePersistedFrozenPdf(row, session, signatureBase64, true);
+  const sessionIdentity = signingSnapshotIdentity(session);
+  const contractIdentity = JSON.stringify([
+    row.signingSessionId, row.templateId, row.agentId, row.signerEmail, row.signerName,
+    row.signerIp, row.signerUserAgent, row.signedAt, row.signatureImageBase64,
+    row.signatureImageObjectKey, row.emailVerificationRequired,
+    row.emailVerificationMethod, row.emailVerifiedAt,
+  ]);
+
+  return withRenderLock(async () => {
+    const [[fresh], [freshSession]] = await Promise.all([
+      db.select().from(signedContractsTable).where(eq(signedContractsTable.id, row.id)),
+      db.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, row.signingSessionId)),
+    ]);
+    if (!fresh || !freshSession
+      || fresh.pdfObjectKey !== row.pdfObjectKey
+      || fresh.evidenceHash !== row.evidenceHash
+      || signingSnapshotIdentity(freshSession) !== sessionIdentity
+      || JSON.stringify([
+        fresh.signingSessionId, fresh.templateId, fresh.agentId, fresh.signerEmail, fresh.signerName,
+        fresh.signerIp, fresh.signerUserAgent, fresh.signedAt, fresh.signatureImageBase64,
+        fresh.signatureImageObjectKey, fresh.emailVerificationRequired,
+        fresh.emailVerificationMethod, fresh.emailVerifiedAt,
+      ]) !== contractIdentity) throw new Error("SIGNED_ARTIFACT_REPAIR_SOURCE_CHANGED");
+
+    const built = await buildSignedPdf(prepared);
+    const pdfObjectKey = await objectStorage.uploadBuffer({
+      subdir: "signed-contracts",
+      filename: `contract-${row.signingSessionId}-repair-${built.evidenceHash.slice(0, 16)}.pdf`,
+      buffer: Buffer.from(built.pdfBytes),
+      contentType: "application/pdf",
+    });
+    const pdfCondition = row.pdfObjectKey
+      ? eq(signedContractsTable.pdfObjectKey, row.pdfObjectKey)
+      : isNull(signedContractsTable.pdfObjectKey);
+    const evidenceCondition = row.evidenceHash
+      ? eq(signedContractsTable.evidenceHash, row.evidenceHash)
+      : isNull(signedContractsTable.evidenceHash);
+    await db.transaction(async tx => {
+      const updated = await tx.update(signedContractsTable)
+        .set({ pdfObjectKey, evidenceHash: built.evidenceHash })
+        .where(and(eq(signedContractsTable.id, row.id), pdfCondition, evidenceCondition))
+        .returning({ id: signedContractsTable.id });
+      if (updated.length !== 1) throw new Error("SIGNED_ARTIFACT_REPAIR_COMPARE_AND_SET_FAILED");
+      await tx.insert(auditLogsTable).values({
+        userId: audit.userId,
+        action: "contract.repair_pdf_artifact",
+        resource: "signed_contract",
+        resourceId: row.id,
+        changes: JSON.stringify({
+          reason: audit.reason,
+          signingSessionId: row.signingSessionId,
+          agentId: row.agentId,
+          oldPdfObjectKey: row.pdfObjectKey,
+          oldEvidenceHash: row.evidenceHash,
+          newPdfObjectKey: pdfObjectKey,
+          newEvidenceHash: built.evidenceHash,
+          signaturePreserved: true,
+          signedAtPreserved: true,
+        }),
+        ipAddress: audit.ipAddress,
+      });
+    });
+
+    if (row.agentId) {
+      const [newest] = await db.select({ id: signedContractsTable.id })
+        .from(signedContractsTable)
+        .where(eq(signedContractsTable.agentId, row.agentId))
+        .orderBy(desc(signedContractsTable.signedAt), desc(signedContractsTable.id))
+        .limit(1);
+      if (newest?.id === row.id) {
+        await db.update(agentsTable)
+          .set({ contractUrl: objectKeyToStorageUrl(pdfObjectKey) })
+          .where(eq(agentsTable.id, row.agentId));
+      }
+    }
+    return {
+      oldPdfObjectKey: row.pdfObjectKey,
+      oldEvidenceHash: row.evidenceHash,
+      pdfObjectKey,
+      evidenceHash: built.evidenceHash,
+      signingSessionId: row.signingSessionId,
+      agentId: row.agentId,
+    };
   });
 }
