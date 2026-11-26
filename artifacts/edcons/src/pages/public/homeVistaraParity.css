@@ -408,7 +408,7 @@
 .home-future-page .home-university-slider-track > div {
   position: relative;
   display: grid;
-  flex: 0 0 max(180px,calc(18.1818% - 15px));
+  flex: 0 0 max(180px,calc(18.1818% - 18px));
   min-height: 230px;
   grid-template-rows: 96px 1fr;
   place-items: center;
