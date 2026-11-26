@@ -1,6 +1,6 @@
 # Apply sözleşme düzeltmesi — production ön kontrolü
 
-**Durum: production işlemi yapılmadı; son kullanıcı onayı henüz alınmadı.** Önerilen ilk aşama, yeni imzaların PDF'sini hazırlayan `prepare` modudur. Sözleşme e-postası gönderimi ve TEST02/47 kurtarması bu aşamaya dahil değildir.
+**26 Kasım güncellemesi: kullanıcı onayı alındı; dar 0067 + `prepare` production geçişi tamamlandı.** Güncel kanıt ve sınırlar [rollout kaydında](APPLY_CONTRACT_ROLLOUT_2026-11-26.md). Aşağıdaki metin geçiş öncesi plan/kanıtın tarihsel kaydıdır. Sözleşme e-postası gönderimi ve TEST02/47 kurtarması bu aşamaya dahil değildir.
 
 ## Paket ve korunacak kaynak
 
