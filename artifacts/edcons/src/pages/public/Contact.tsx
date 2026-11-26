@@ -209,6 +209,16 @@ export default function Contact() {
   const contactWorkspace = (
       <section id="offices" className="inner-contact-workspace scroll-mt-28 py-16">
         <div className="inner-contact-layout max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-2 gap-16">
+          <motion.aside className="inner-contact-intro" initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}>
+            <p className="inner-contact-kicker">Find And Study</p>
+            <h2>{t("contact.formTitle")}</h2>
+            <p>{t("contact.formSubtitle")}</p>
+            <div className="inner-contact-brand"><img src="/api/settings/branding/logo?variant=header" alt="Find And Study" loading="lazy" /></div>
+            {quickContactItems.length > 0 && <div className="inner-contact-channels">{quickContactItems.map((c, i) => {
+              const channel = <><span><c.icon /></span><div><small>{c.label}</small><strong>{c.value}</strong></div></>;
+              return c.href ? <a key={i} href={c.href}>{channel}</a> : <div key={i}>{channel}</div>;
+            })}</div>}
+          </motion.aside>
           <motion.div className="inner-contact-form-card" initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}>
             <h2 className="text-2xl font-display font-bold text-foreground mb-2">{t("contact.formTitle")}</h2>
             <p className="text-muted-foreground mb-8">{t("contact.formSubtitle")}</p>
@@ -317,31 +327,10 @@ export default function Contact() {
             )}
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} className="inner-contact-aside space-y-8">
-            {quickContactItems.length > 0 && (
-              <div>
-                <h2 className="text-2xl font-display font-bold text-foreground mb-6">{t("contact.quickContact")}</h2>
-                <div className="space-y-4">
-                  {quickContactItems.map((c, i) => (
-                    <a key={i} href={c.href || '#'}
-                      className="flex items-center gap-4 p-4 rounded-2xl bg-secondary/50 hover:bg-primary/5 transition-colors group">
-                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                        <c.icon className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground font-medium">{c.label}</p>
-                        <p className="text-foreground font-semibold">{c.value}</p>
-                      </div>
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {offices.length > 0 && (
+          {offices.length > 0 && <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="inner-contact-aside space-y-8 lg:col-span-2">
               <div>
                 <h3 className="text-xl font-display font-bold text-foreground mb-6">{t("contact.ourOffices")}</h3>
-                <div className="space-y-4">
+                <div className="inner-contact-office-grid">
                   {offices.map((office) => (
                     <div key={office.id} className="p-5 rounded-2xl border border-border/60 hover:border-primary/30 transition-colors">
                       <div className="flex items-center gap-2 mb-3">
@@ -355,8 +344,7 @@ export default function Contact() {
                   ))}
                 </div>
               </div>
-            )}
-          </motion.div>
+          </motion.div>}
         </div>
       </section>
   );

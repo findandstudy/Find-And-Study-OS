@@ -37,16 +37,37 @@ export function ManagedPublicPage({
     en: "Home", tr: "Ana Sayfa", fr: "Accueil", es: "Inicio",
     ru: "Главная", zh: "首页", ar: "الرئيسية", fa: "خانه",
   };
-  const decoratedBlocks = sourceBlocks.map(block => block.blockType === "hero" ? {
-    ...block,
-    content: {
-      ...block.content,
-      backgroundImage: block.content.backgroundImage || "/images/auth-bg.png",
-      breadcrumbHome: homeLabels[lang] || "Home",
-      breadcrumbHomeUrl: `/${lang}`,
-      breadcrumbLabel: page?.data.title || template,
-    },
-  } : block);
+  const decoratedBlocks = sourceBlocks.map(block => {
+    if (block.blockType === "hero") {
+      return {
+        ...block,
+        content: {
+          ...block.content,
+          backgroundImage: block.content.backgroundImage || "/images/auth-bg.png",
+          breadcrumbHome: homeLabels[lang] || "Home",
+          breadcrumbHomeUrl: `/${lang}`,
+          breadcrumbLabel: page?.data.title || template,
+        },
+      };
+    }
+
+    // Managed About pages previously rendered an empty "Image" placeholder
+    // whenever the editor had not selected media. Keep editor media
+    // authoritative, but provide a stable branded fallback for starter/legacy
+    // content so the public split layout never collapses visually.
+    if (template === "about" && block.blockType === "media_text" && !block.content.imageUrl) {
+      return {
+        ...block,
+        content: {
+          ...block.content,
+          imageUrl: "/images/auth-bg.png",
+          altText: block.content.altText || page?.data.title || SITE_NAME,
+        },
+      };
+    }
+
+    return block;
+  });
   const blocks = transformBlock ? decoratedBlocks.map(transformBlock) : decoratedBlocks;
   const hasSlot = Boolean(slotBlockType && blocks.some(block => block.blockType === slotBlockType));
   let insertedFallbackSlot = false;

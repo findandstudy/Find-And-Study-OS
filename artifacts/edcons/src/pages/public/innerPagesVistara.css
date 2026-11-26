@@ -88,6 +88,45 @@
 }
 .managed-agency-page [data-cms-block="hero"] .cms-action-row a:hover { transform: translateY(-3px); }
 
+/* Vistara inner pages use a compact, centred title masthead. The managed
+ * About, Countries and Contact pages intentionally suppress homepage-style
+ * marketing copy/actions here; the same content remains editable and is used
+ * by the page sections below the masthead. */
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="hero"],
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="hero"] > section {
+  min-height: 390px;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="hero"]::before {
+  background: linear-gradient(180deg,rgba(6,17,32,.68),rgba(6,17,32,.82));
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="hero"]::after { display: none; }
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="hero"] > section {
+  display: grid;
+  place-items: center;
+  padding: 64px max(24px,calc((100vw - 1180px)/2));
+  text-align: center;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="hero"] > section > img {
+  opacity: .72 !important;
+  filter: saturate(.85) contrast(1.06);
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="hero"] > section > div {
+  width: min(900px,100%);
+  margin: 0 auto;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) .cms-inner-breadcrumb {
+  justify-content: center;
+  margin-bottom: 24px;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="hero"] h1 {
+  max-width: 18ch;
+  margin: 0 auto;
+  font-size: clamp(44px,5vw,64px);
+  line-height: 1.02;
+  text-wrap: balance;
+}
+.managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="hero"] :is(section > div > p,.cms-action-row) { display: none; }
+
 .managed-agency-page .cms-editorial-block:not([data-cms-block="hero"]):not([data-cms-block="cta_banner"]) > section {
   width: min(1240px, calc(100% - 48px));
 }
@@ -106,10 +145,65 @@
 
 /* About */
 .managed-agency-page--about [data-cms-block="counter_grid"] > section { border-radius: 0 0 24px 24px; }
-.managed-agency-page--about [data-cms-block="media_text"] [class~="overflow-hidden"] { min-height: 430px; }
+.managed-agency-page--about [data-cms-block="media_text"] > section { gap: clamp(36px,6vw,78px); }
+.managed-agency-page--about [data-cms-block="media_text"] [class~="overflow-hidden"] { min-height: 430px; border-radius: 20px; box-shadow: var(--inner-shadow); }
 .managed-agency-page--about [data-cms-block="media_text"] img { transition: transform .7s cubic-bezier(.2,.7,.2,1); }
 .managed-agency-page--about [data-cms-block="media_text"]:hover img { transform: scale(1.035); }
-.managed-agency-page--about [data-cms-block="grid_box"] article { min-height: 260px; }
+.managed-agency-page--about [data-cms-block="media_text"] h2 { color: var(--inner-ink); line-height: 1.04; letter-spacing: -.045em; }
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-responsive-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:first-child { grid-column: auto; }
+.managed-agency-page--about [data-cms-block="grid_box"] article { min-height: 230px; }
+.managed-agency-page--about [data-cms-block="process_steps"] .cms-responsive-grid { grid-template-columns: repeat(4,minmax(0,1fr)); }
+
+/* Shared inner FAQ: the brand is part of the intro column, never an overlay. */
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq {
+  display: grid;
+  grid-template-columns: minmax(0,.78fr) minmax(0,1.22fr);
+  gap: clamp(42px,7vw,92px);
+  align-items: start;
+}
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-intro { position: sticky; top: 112px; }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-kicker,
+.inner-contact-kicker {
+  margin: 0 0 14px;
+  color: var(--inner-blue);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-intro h2 { color: var(--inner-ink); font-size: clamp(34px,4vw,52px); line-height: 1.06; letter-spacing: -.045em; }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-intro > p:not(.cms-inner-faq-kicker) { max-width: 42ch; line-height: 1.7; }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-brand {
+  width: min(250px,100%);
+  min-height: 0;
+  margin-top: 34px;
+  padding: 19px 22px;
+  overflow: visible;
+  border: 1px solid var(--inner-line);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 14px 36px rgba(21,45,78,.08);
+}
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-brand::before,
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-brand::after { display: none; }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-brand > span { display: block; width: 100%; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-brand img { display: block; width: 100%; max-height: 58px; object-fit: contain; }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-list { display: grid; gap: 0; margin: 0; }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-list details { padding: 24px 0; border: 0; border-bottom: 1px solid var(--inner-line); border-radius: 0; background: transparent; }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-list details:first-child { border-top: 1px solid var(--inner-line); }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-list summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; color: var(--inner-ink); font-size: 17px; list-style: none; }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-list summary::-webkit-details-marker { display: none; }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-list summary i { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #fff; background: var(--inner-blue); font-style: normal; transition: transform .22s ease; }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-list details[open] summary i { transform: rotate(45deg); }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-list details p { max-width: 68ch; line-height: 1.7; }
+
+.managed-agency-page [data-cms-block="cta_banner"] .home-future-cta {
+  color: #fff;
+  background: radial-gradient(circle at 78% 20%,rgba(63,123,235,.36),transparent 34%),linear-gradient(125deg,#0b172c,#173768);
+}
+.managed-agency-page [data-cms-block="cta_banner"] .home-future-cta :is(h2,p,svg) { color: #fff; }
+.managed-agency-page [data-cms-block="cta_banner"] .home-future-cta > p { color: rgba(255,255,255,.76) !important; }
 
 /* Destination directory */
 .inner-destination-directory { background: var(--inner-paper); }
@@ -139,7 +233,20 @@
 
 /* Contact */
 .inner-contact-workspace { background: var(--inner-paper); }
-.inner-contact-layout { gap: 28px !important; align-items: start; }
+.inner-contact-layout { grid-template-columns: minmax(0,.78fr) minmax(0,1.22fr) !important; gap: clamp(30px,5vw,64px) !important; align-items: start; }
+.inner-contact-intro { padding: clamp(18px,2vw,28px) 0; }
+.inner-contact-intro h2 { max-width: 12ch; margin: 0; color: var(--inner-ink); font-family: var(--font-display); font-size: clamp(38px,4.5vw,60px); font-weight: 800; line-height: 1.02; letter-spacing: -.05em; }
+.inner-contact-intro > p:not(.inner-contact-kicker) { max-width: 42ch; margin-top: 22px; color: var(--inner-muted); font-size: 17px; line-height: 1.75; }
+.inner-contact-brand { width: min(260px,100%); margin-top: 34px; padding: 18px 22px; border: 1px solid var(--inner-line); border-radius: 18px; background: #fff; box-shadow: 0 14px 36px rgba(21,45,78,.08); }
+.inner-contact-brand img { display: block; width: 100%; max-height: 60px; object-fit: contain; }
+.inner-contact-channels { display: grid; gap: 10px; margin-top: 30px; }
+.inner-contact-channels > :is(a,div) { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid var(--inner-line); color: var(--inner-ink); }
+.inner-contact-channels span { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 50%; color: var(--inner-blue); background: #eaf1ff; }
+.inner-contact-channels svg { width: 18px; height: 18px; }
+.inner-contact-channels div { min-width: 0; }
+.inner-contact-channels small,.inner-contact-channels strong { display: block; overflow-wrap: anywhere; }
+.inner-contact-channels small { color: var(--inner-muted); font-size: 11px; }
+.inner-contact-channels strong { font-size: 14px; }
 .inner-contact-form-card,
 .inner-contact-aside { border: 1px solid rgba(17,43,77,.08); border-radius: 28px; background: #fff; box-shadow: var(--inner-shadow); }
 .inner-contact-form-card { padding: clamp(26px, 4vw, 48px); }
@@ -152,6 +259,7 @@
 .inner-contact-aside a { border: 1px solid transparent; background: #f4f7fc !important; }
 .inner-contact-aside a:hover { border-color: rgba(40,107,230,.22); background: #eef4ff !important; transform: translateY(-2px); }
 .inner-contact-aside > div:last-child > div > div { border-radius: 18px; background: #fff; box-shadow: 0 10px 30px rgba(16,38,70,.06); }
+.inner-contact-office-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
 
 /* Blog directory */
 .inner-blog-directory { background: var(--inner-paper); }
@@ -211,7 +319,66 @@
 .inner-guide-back { display: inline-flex; align-items: center; gap: 8px; margin-top: 34px; color: var(--inner-blue); font-weight: 750; }
 .inner-guide-back svg { width: 17px; height: 17px; }
 
+/* Final inner-page cascade guards. CmsPageCanvas also carries the historical
+ * home-future-page class, so older homepage compatibility rules must not
+ * reposition the new inner FAQ or wash out its CTA. */
+.managed-agency-page [data-cms-block="faq"] {
+  min-height: 0 !important;
+  padding-block: 0 !important;
+  background: var(--inner-paper) !important;
+}
+.managed-agency-page [data-cms-block="faq"] > .cms-inner-faq {
+  display: grid !important;
+  grid-template-columns: minmax(0,.78fr) minmax(0,1.22fr) !important;
+  gap: clamp(42px,7vw,92px) !important;
+  padding-block: clamp(62px,8vw,94px) !important;
+}
+.managed-agency-page [data-cms-block="faq"] > .cms-inner-faq > .cms-inner-faq-intro {
+  grid-column: 1 !important;
+  grid-row: auto !important;
+  margin-top: 0 !important;
+}
+.managed-agency-page [data-cms-block="faq"] > .cms-inner-faq > .cms-inner-faq-list {
+  grid-column: 2 !important;
+  grid-row: auto !important;
+  margin-top: 0 !important;
+}
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-brand {
+  position: static !important;
+  display: block !important;
+  min-height: 0 !important;
+  grid-column: auto !important;
+  grid-row: auto !important;
+}
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-brand > span {
+  display: block !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-list details {
+  margin: 0 !important;
+  padding: 24px 0 !important;
+  border-width: 0 0 1px !important;
+  border-color: var(--inner-line) !important;
+  border-radius: 0 !important;
+  color: var(--inner-ink) !important;
+  background: transparent !important;
+}
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-list details:first-child { border-top-width: 1px !important; }
+.managed-agency-page [data-cms-block="faq"] .cms-inner-faq-list summary::after { display: none !important; content: none !important; }
+.managed-agency-page [data-cms-block="cta_banner"] > .home-future-cta {
+  color: #fff !important;
+  background: radial-gradient(circle at 78% 20%,rgba(63,123,235,.36),transparent 34%),linear-gradient(125deg,#0b172c,#173768) !important;
+}
+.managed-agency-page [data-cms-block="cta_banner"] > .home-future-cta :is(h2,p,svg) { color: #fff !important; }
+.managed-agency-page [data-cms-block="cta_banner"] > .home-future-cta > p { color: rgba(255,255,255,.76) !important; }
+
 @media (max-width: 1024px) {
+  .managed-agency-page--about [data-cms-block="process_steps"] .cms-responsive-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .inner-blog-layout { grid-template-columns: 1fr; }
   .inner-blog-sidebar { position: static; grid-row: 1; grid-template-columns: .8fr 1.2fr; }
   .inner-blog-categories { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -225,14 +392,25 @@
   .managed-agency-page .cms-inner-breadcrumb { margin-bottom: 24px; font-size: 13px; }
   .managed-agency-page [data-cms-block="hero"] h1 { max-width: 12ch; font-size: clamp(42px, 13vw, 58px); }
   .managed-agency-page [data-cms-block="hero"] .cms-action-row a { width: 100%; justify-content: center; }
+  .managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="hero"],
+  .managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="hero"] > section { min-height: 330px; }
+  .managed-agency-page:is(.managed-agency-page--about,.managed-agency-page--countries,.managed-agency-page--contact) [data-cms-block="hero"] h1 { max-width: 16ch; font-size: clamp(38px,12vw,52px); }
   .managed-agency-page .cms-editorial-block:not([data-cms-block="hero"]):not([data-cms-block="cta_banner"]) > section { width: calc(100% - 28px); }
+  .managed-agency-page--about [data-cms-block="grid_box"] .cms-responsive-grid,
+  .managed-agency-page--about [data-cms-block="process_steps"] .cms-responsive-grid { grid-template-columns: 1fr; }
+  .managed-agency-page [data-cms-block="faq"] .cms-inner-faq { grid-template-columns: 1fr; gap: 34px; }
+  .managed-agency-page [data-cms-block="faq"] .cms-inner-faq-intro { position: static; }
+  .managed-agency-page [data-cms-block="faq"] > .cms-inner-faq { grid-template-columns: 1fr !important; gap: 34px !important; }
+  .managed-agency-page [data-cms-block="faq"] > .cms-inner-faq > .cms-inner-faq-list { grid-column: 1 !important; }
   .inner-destination-directory > div, .inner-blog-layout { padding-inline: 14px !important; }
   .inner-destination-grid { gap: 16px !important; }
   .inner-destination-card { min-height: 370px !important; }
   .inner-destination-media { height: 190px !important; }
   .inner-contact-workspace { padding-block: 42px !important; }
   .inner-contact-layout { padding-inline: 14px !important; }
+  .inner-contact-layout { grid-template-columns: 1fr !important; }
   .inner-contact-form-card, .inner-contact-aside { border-radius: 22px; }
+  .inner-contact-office-grid { grid-template-columns: 1fr; }
   .inner-blog-sidebar { grid-template-columns: 1fr; }
   .inner-blog-categories { grid-template-columns: 1fr; }
   .inner-blog-grid { grid-template-columns: 1fr !important; }
