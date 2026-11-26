@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createRequire } from "node:module";
 import { applyRecovery47, assertRecovery47Database, canonicalJson, prepareRecovery47,
-  readRecovery47Snapshot, recovery47InputDigest, sha256, type Recovery47Manifest } from "../src/lib/contract47Recovery";
-import { testSnapshot, testManifest } from "./test-contract47-recovery";
+  readRecovery47Snapshot, recovery47InputDigest, recovery47AssetAudit, sha256, type Recovery47Manifest } from "../src/lib/contract47Recovery";
+import { testSnapshot, testManifest, testRecoveryAssets, testRecoverySnapshotWithImages, testAssetApproval } from "./test-contract47-recovery";
 const ownRequire = createRequire(import.meta.url);
 const pg = createRequire(ownRequire.resolve("@workspace/db"))("pg");
 
@@ -104,6 +104,47 @@ test("isolated PostgreSQL: exact-record recovery transaction and races", async t
     await t.test("wrong installation key cannot be persisted", async () => {
       await reset(); const before = canonicalJson(await allRows()); const manifest = await approved();
       await assert.rejects(applyRecovery47(client, manifest, pdf, async () => "/objects/other.pdf"), /object_key_mismatch/);
+      assert.equal(canonicalJson(await allRows()), before);
+    });
+    const reconstructed = async () => {
+      await reset();
+      const original = testRecoverySnapshotWithImages();
+      await client.query("UPDATE signing_sessions SET template_body_html_snapshot=$1, template_signing_page_config_snapshot=$2::jsonb WHERE id=165",
+        [original.session.template_body_html_snapshot, JSON.stringify(original.session.template_signing_page_config_snapshot)]);
+      const snapshot = await readRecovery47Snapshot(client);
+      const { assetRecovery, provenanceReceipts } = testRecoveryAssets();
+      const manifest: Recovery47Manifest = { ...testManifest(snapshot), database: identity, assetRecovery,
+        candidate: { pdfSha256: sha256(pdf), evidenceHash: "3".repeat(64),
+          renderedHtmlSha256: sha256(prepareRecovery47(snapshot, recovery47InputDigest(snapshot), assetRecovery).bodyHtml) } };
+      manifest.candidate!.assetAuditSha256 = sha256(recovery47AssetAudit(manifest));
+      const approvalReceipt = testAssetApproval(manifest); manifest.assetApprovalReceiptSha256 = sha256(approvalReceipt);
+      return { manifest, provenanceReceipts, approvalReceipt };
+    };
+    await t.test("reconstructed candidate requires exact approval and durable sidecar before one-record finalization", async () => {
+      const { manifest, provenanceReceipts, approvalReceipt } = await reconstructed();
+      const before = await allRows(); let persisted = false;
+      await applyRecovery47(client, manifest, pdf, install, { provenanceReceipts, approvalReceipt,
+        installAudit: async (audit, approvedBytes, provenance) => {
+          assert.equal(sha256(audit), manifest.candidate!.assetAuditSha256);
+          assert.equal(sha256(approvedBytes), manifest.assetApprovalReceiptSha256);
+          assert.deepEqual(provenance, provenanceReceipts);
+          assert.equal((await client.query("SELECT pdf_object_key FROM signed_contracts WHERE id=47")).rows[0].pdf_object_key, null);
+          persisted = true;
+          return `/objects/signed-contracts/recovery47-${manifest.candidate!.pdfSha256}.recovery-${sha256(audit)}.json`;
+        } });
+      assert.equal(persisted, true);
+      const after: any = await allRows();
+      after.signed_contracts[0].row.pdf_object_key = null; after.signed_contracts[0].row.evidence_hash = null;
+      assert.equal(canonicalJson(after), canonicalJson(before), "frozen session, signature, agency and unrelated rows remain unchanged");
+    });
+    await t.test("failed asset-audit persistence rolls back lease and leaves the original rows untouched", async () => {
+      const { manifest, provenanceReceipts, approvalReceipt } = await reconstructed();
+      const before = canonicalJson(await allRows());
+      await assert.rejects(applyRecovery47(client, manifest, pdf, install, { provenanceReceipts, approvalReceipt,
+        installAudit: async () => { throw new Error("TEST audit fsync failed"); } }), /TEST audit fsync failed/);
+      assert.equal(canonicalJson(await allRows()), before);
+      await assert.rejects(applyRecovery47(client, manifest, pdf, install, { provenanceReceipts, approvalReceipt,
+        installAudit: async () => "/objects/signed-contracts/wrong.json" }), /asset_audit_key_mismatch/);
       assert.equal(canonicalJson(await allRows()), before);
     });
   } finally { await second.end(); await client.end(); }

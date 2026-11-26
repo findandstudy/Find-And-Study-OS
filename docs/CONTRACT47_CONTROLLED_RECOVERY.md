@@ -17,11 +17,11 @@ gate still applies.
 - No current template, agent profile, company-signature file, or branding profile
   may fill missing historical inputs. A missing original base64 signature,
   snapshot, used template field, or frozen verification evidence stops recovery.
-- An external historical logo without frozen bytes is a distinct blocker:
-  `recovery47:unfrozen_image_source`. The tool does not replace it with today's
-  logo or download it. Restoring such a logo needs separate review of the exact
-  snapshot URL, original/approved static image bytes and SHA-256/provenance. This
-  tool intentionally does not implement that historical asset substitution.
+- An external historical logo without frozen bytes remains a default blocker:
+  `recovery47:unfrozen_image_source`. The tool never downloads it or silently
+  resolves current branding. The optional, record47-only asset manifest below
+  can prepare a separately labelled reconstruction for review; application
+  requires the exact user's decision receipt and durable audit sidecars.
 - A non-null final PDF key **or** evidence hash blocks recovery. Existing signed
   artifacts cannot be replaced. Any existing lease, even old, blocks it.
 
@@ -52,6 +52,81 @@ contains:
 7. After preparation, `candidate`: exact PDF SHA-256, evidence hash and final
    rendered-HTML SHA-256. Review the candidate visually before approving this
    second manifest. A different candidate requires another reviewed digest.
+
+## Explicit missing-brand-asset recovery (local implementation, not authorization)
+
+Read-only inspection found two distinct missing image sources in session165:
+
+- `https://www.findandstudy.com/wp-content/uploads/2025/10/logotest-scaled.png`
+- `https://www.findandstudy.com/wp-content/uploads/2024/12/Find-and-study-logo-wht-scaled.webp`
+
+Targeted local filename searches and existing release receipts did not establish
+the signing-time bytes. The current normalized canonical brand PNGs are **not**
+claimed to be those original images. A sample PDF or visually similar image is
+insufficient to establish original provenance.
+
+An optional `assetRecovery` object has `classification` equal to
+`reconstructed_branding` (the known current case) or `verified_historical_assets`
+(only with separately verified historical provenance), and at most two `assets`:
+
+```text
+requestedUrl               exact one of the two frozen URLs above
+sourceUrl                  actual reviewed public www.findandstudy.com/wp-content/uploads/ URL
+sourceSha256               hash recorded for source bytes in the provenance evidence
+normalizedSha256           hash of the actual bounded PNG embedded below
+dataUrl                    canonical image/png base64, <=256 KiB, <=1024 x 1024
+provenanceReceiptSha256     hash of the reviewed private provenance JSON
+```
+
+Each provenance JSON is supplied as `<hash>.json` in `--asset-evidence-dir`.
+It contains `schemaVersion: 1`, `classification`, `requestedUrl`, `sourceUrl`,
+`sourceSha256`, `normalizedSha256`, `referenceSha256` (the existing independently
+reviewed asset/backup receipt), `observedAt` and `operatorVerified: true`.
+The CLI checks the file hash, exact tuple and actual embedded PNG hash. Source
+and historical provenance are explicit operator attestations, not something a
+hash or current URL alone proves. Historical mode additionally requires source
+URL equality. Neither mode can map a signature, an arbitrary URL, duplicate
+mapping, unused mapping or a remaining unmapped external image.
+
+Only exact `img[src]` values in the prepared HTML change. Contractual text, links,
+styles and original signature inputs are retained; the frozen database rows are
+never rewritten. Reconstruction inserts a visible notice **outside the contract
+body** explaining that branding is reconstructed, the historical image bytes
+were not established, and this is not the original signing-time PDF artifact.
+The notice participates in the rendered-content/evidence hash. Verified
+historical mode and ordinary complete snapshots receive no reconstruction notice.
+
+`--prepare` may run without an asset approval to create the reviewable candidate.
+It reports `RECONSTRUCTED_CANDIDATE_REQUIRES_APPROVAL`, writes the PDF and a
+`.recovery-<hash>.json` sidecar, and strips any stale asset approval from its new
+review manifest. `candidate.assetAuditSha256` binds the exact sidecar, including
+all asset descriptors, input/source digests, final HTML, PDF and evidence hashes.
+
+`--apply` additionally requires `assetApprovalReceiptSha256` in the reviewed
+manifest and `--asset-approval <private-json>`. This receipt must contain:
+
+```text
+schemaVersion: 1
+userApproved: true
+decision: approve_exact_recovered_rendition_for_contract47
+target: the exact 47/165/48/12 target
+inputSha256: the original frozen input digest
+assetRecoverySha256: SHA-256 of canonical assetRecovery JSON
+candidate: the exact reviewed candidate object, including assetAuditSha256
+userDecisionEvidenceSha256: hash of the recorded explicit user decision
+recordedAt: the decision receipt timestamp
+```
+
+This is a recorded operator attestation of the user's decision, not a new login,
+digital signature, or automatic authority grant. Preparing a manifest does not
+authorize applying it. The actual deployment/recovery approval remains external.
+
+Before the final row CAS, the same private signed-contracts directory receives
+immutable PDF-bound recovery, approval and provenance JSON sidecars. A failed
+sidecar write or wrong storage key rolls the entire DB transaction back; an
+already-written orphan is preserved for inspection. Sidecar names start with
+`recovery47-<pdfSHA>.recovery-`, `.approval-` and `.provenance-`, each followed by
+its own SHA-256. No e-mail enrollment, SMTP call or agency approval is performed.
 
 The worker receipt must contain `schemaVersion: 1`, `operatorVerified: true`,
 the exact `target` and `database`, `sourceFilesSha256` (SHA-256 of canonical JSON
@@ -108,13 +183,23 @@ the recorded key/hash. Rollback never restores an old production database.
 ## Local verification
 
 - `tsx --test scripts/test-contract47-recovery.ts`: frozen-input, target,
-  identity/receipt, delivery-stop, artifact checks. Linux descriptor tests must
+  identity/receipt, delivery-stop, artifact checks; exact asset mapping, visible
+  reconstruction disclosure, immutable original inputs, provenance/approval
+  mismatches, missing mapping and audit digest changes. Linux descriptor tests must
   also pass in the candidate Linux image.
 - `tsx --test scripts/test-contract47-recovery-pg.ts`: requires dedicated
   `CONTRACT47_TEST_DATABASE_URL`, loopback and a fresh database whose name starts
   `fas_contract47_test_`; no application DB fallback. Exercises real row locks,
   same-target races, one-row updates, rollback and crash injection using only
   clearly synthetic TEST records.
+  Reconstructed-candidate cases additionally prove approval+sidecar persistence
+  before one-record finalization and rollback on failed sidecar persistence.
+
+2026-11-26 local extension validation: **39 PASS, 1 Linux-only SKIP** in the
+combined pure + disposable PostgreSQL run. The dedicated test database was
+`fas_contract47_test_assets_20261126a` on loopback PostgreSQL16; no real rows or
+assets were used. Linux fd checks and actual historical candidate visual review
+remain separate gates.
 
 The application-side recovery adapter and these local tests do not prove that
 the current Apply TEST02 snapshot is complete. Actual source/runtime/DB identity,

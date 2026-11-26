@@ -11,6 +11,7 @@ import {
   applyRecovery47, assertRecovery47Database, assertRecovery47ExecutingSource, canonicalJson, prepareRecovery47,
   readPinnedRecoveryFile, readRecovery47Snapshot, recovery47InputDigest, sha256,
   REQUIRED_RECOVERY_SOURCE_FILES, validateRecovery47Manifest, validateRecovery47WorkerReceipt, writeImmutableRecoveryFile,
+  recovery47AssetAudit, validateRecovery47AssetProvenance,
   type Recovery47Manifest,
 } from "../src/lib/contract47Recovery";
 
@@ -19,7 +20,7 @@ import {
 const ownRequire = createRequire(import.meta.url);
 const pg = createRequire(ownRequire.resolve("@workspace/db"))("pg");
 
-const allowed = new Set(["--manifest", "--manifest-sha256", "--source-root", "--prepare", "--apply", "--candidate-dir", "--storage-root", "--inspect", "--worker-receipt"]);
+const allowed = new Set(["--manifest", "--manifest-sha256", "--source-root", "--prepare", "--apply", "--candidate-dir", "--storage-root", "--inspect", "--worker-receipt", "--asset-evidence-dir", "--asset-approval"]);
 function args() {
   const values = new Map<string, string>();
   for (let i = 2; i < process.argv.length; i++) {
@@ -71,6 +72,17 @@ async function main() {
     if (!receipt) throw new Error("recovery47:verified_worker_receipt_required");
     validateRecovery47WorkerReceipt(await readPinnedRecoveryFile(receipt, 128 * 1024), manifest);
   }
+  const provenance: Buffer[] = [];
+  if (manifest.assetRecovery) {
+    const evidenceDirectory = options.get("--asset-evidence-dir");
+    if (!evidenceDirectory) throw new Error("recovery47:asset_evidence_directory_required");
+    for (let i = 0; i < manifest.assetRecovery.assets.length; i++) {
+      const asset = manifest.assetRecovery.assets[i];
+      const bytes = await readPinnedRecoveryFile(path.join(evidenceDirectory, `${asset.provenanceReceiptSha256}.json`), 128 * 1024);
+      validateRecovery47AssetProvenance(bytes, manifest.assetRecovery, i);
+      provenance.push(bytes);
+    }
+  } else if (options.has("--asset-evidence-dir") || options.has("--asset-approval")) throw new Error("recovery47:asset_manifest_missing");
   const client = new pg.Client({ connectionString, connectionTimeoutMillis: 5000, statement_timeout: 10000,
     query_timeout: 12000, application_name: "contract47-controlled-recovery" });
   try {
@@ -87,7 +99,7 @@ async function main() {
       console.log(JSON.stringify({ status: "READ_ONLY_INSPECTED", contractId: 47, inputSha256: observedDigest }));
       return;
     }
-    const params = prepareRecovery47(snapshot, manifest.inputSha256);
+    const params = prepareRecovery47(snapshot, manifest.inputSha256, manifest.assetRecovery);
     if (options.has("--apply")) {
       if (!manifest.candidate) throw new Error("recovery47:approved_candidate_required");
       const candidateDir = options.get("--candidate-dir");
@@ -95,13 +107,25 @@ async function main() {
       if (!candidateDir || !storageRoot) throw new Error("recovery47:candidate_and_storage_required");
       if (storageRoot !== manifest.storageRoot) throw new Error("recovery47:storage_identity_mismatch");
       const pdf = await readPinnedRecoveryFile(path.join(candidateDir, `${manifest.candidate.pdfSha256}.pdf`));
+      const approvalPath = options.get("--asset-approval");
+      if (manifest.assetRecovery && !approvalPath) throw new Error("recovery47:asset_approval_required");
+      const approval = approvalPath ? await readPinnedRecoveryFile(approvalPath, 128 * 1024) : undefined;
       await applyRecovery47(client, manifest, pdf, async (bytes, digest) => {
         const name = `recovery47-${digest}.pdf`;
         const targetDir = path.join(storageRoot, "signed-contracts");
         await writeImmutableRecoveryFile(targetDir, name, bytes);
         await writeImmutableRecoveryFile(targetDir, `${name}.ct`, Buffer.from("application/pdf"));
         return `/objects/signed-contracts/${name}`;
-      });
+      }, manifest.assetRecovery ? { provenanceReceipts: provenance, approvalReceipt: approval!,
+        installAudit: async (audit, approved, receipts) => {
+          const targetDir = path.join(storageRoot, "signed-contracts");
+          const prefix = `recovery47-${manifest.candidate!.pdfSha256}`;
+          const name = `${prefix}.recovery-${sha256(audit)}.json`;
+          await writeImmutableRecoveryFile(targetDir, name, audit);
+          await writeImmutableRecoveryFile(targetDir, `${prefix}.approval-${sha256(approved)}.json`, approved);
+          for (const receipt of receipts) await writeImmutableRecoveryFile(targetDir, `${prefix}.provenance-${sha256(receipt)}.json`, receipt);
+          return `/objects/signed-contracts/${name}`;
+        } } : undefined);
       console.log(JSON.stringify({ status: "APPLIED_ONE_RECORD", contractId: 47, pdfSha256: manifest.candidate.pdfSha256 }));
     } else if (options.has("--prepare")) {
       const directory = options.get("--candidate-dir");
@@ -115,12 +139,21 @@ async function main() {
         console.log = console.info = console.warn = console.error = () => {};
         built = await buildSignedPdf(params);
       } finally { Object.assign(console, previous); }
-      const candidate = { pdfSha256: sha256(built.pdfBytes), evidenceHash: built.evidenceHash, renderedHtmlSha256: sha256(params.bodyHtml) };
+      const candidate: NonNullable<Recovery47Manifest["candidate"]> = { pdfSha256: sha256(built.pdfBytes), evidenceHash: built.evidenceHash, renderedHtmlSha256: sha256(params.bodyHtml) };
       await writeImmutableRecoveryFile(directory, `${candidate.pdfSha256}.pdf`, built.pdfBytes);
-      const reviewManifest = Buffer.from(`${canonicalJson({ ...manifest, candidate })}\n`);
+      if (manifest.assetRecovery) {
+        const audit = recovery47AssetAudit({ ...manifest, candidate });
+        candidate.assetAuditSha256 = sha256(audit);
+        await writeImmutableRecoveryFile(directory, `${candidate.pdfSha256}.recovery-${candidate.assetAuditSha256}.json`, audit);
+        for (const receipt of provenance) await writeImmutableRecoveryFile(directory, `${sha256(receipt)}.json`, receipt);
+      }
+      // An old approval cannot carry over to a newly rendered candidate.
+      const { assetApprovalReceiptSha256: _oldApproval, ...unapproved } = manifest;
+      const reviewManifest = Buffer.from(`${canonicalJson({ ...unapproved, candidate })}\n`);
       const reviewHash = sha256(reviewManifest);
       await writeImmutableRecoveryFile(directory, `${reviewHash}.manifest.json`, reviewManifest);
-      console.log(JSON.stringify({ status: "CANDIDATE_REQUIRES_REVIEW", contractId: 47, ...candidate, manifestSha256: reviewHash }));
+      console.log(JSON.stringify({ status: manifest.assetRecovery?.classification === "reconstructed_branding"
+        ? "RECONSTRUCTED_CANDIDATE_REQUIRES_APPROVAL" : "CANDIDATE_REQUIRES_REVIEW", contractId: 47, ...candidate, manifestSha256: reviewHash }));
     } else {
       console.log(JSON.stringify({ status: "DRY_RUN_PASS", contractId: 47, inputSha256: observedDigest, renderedHtmlSha256: sha256(params.bodyHtml) }));
     }

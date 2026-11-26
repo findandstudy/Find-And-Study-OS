@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import { buildAgentContext, buildFinalSignedContractHtml, contractNumber } from "./contractRenderer";
 import { sanitizeContractBranding, validateCompanySignatureDataUrl } from "./contractBranding";
+import { validateContractLogoSnapshot } from "./contractPdfAssets";
 
 export const RECOVERY47_TARGET = Object.freeze({ contractId: 47, sessionId: 165, templateId: 48, applicationId: 12 });
 const HEX = /^[a-f0-9]{64}$/;
@@ -54,7 +55,88 @@ export interface Recovery47Manifest {
   inputSha256: string;
   sourceFiles: Record<string, string>;
   workerIsolationReceiptSha256: string;
-  candidate?: { pdfSha256: string; evidenceHash: string; renderedHtmlSha256: string };
+  assetRecovery?: Recovery47Assets;
+  assetApprovalReceiptSha256?: string;
+  candidate?: { pdfSha256: string; evidenceHash: string; renderedHtmlSha256: string; assetAuditSha256?: string };
+}
+
+// These are the two missing public brand images in session165, not a general
+// asset adapter. Signatures, arbitrary URLs and other historical records are
+// outside this operator-only recovery contract.
+export const RECOVERY47_IMAGE_URLS = Object.freeze([
+  "https://www.findandstudy.com/wp-content/uploads/2025/10/logotest-scaled.png",
+  "https://www.findandstudy.com/wp-content/uploads/2024/12/Find-and-study-logo-wht-scaled.webp",
+]);
+export interface Recovery47Assets {
+  classification: "verified_historical_assets" | "reconstructed_branding";
+  assets: Array<{ requestedUrl: string; sourceUrl: string; sourceSha256: string;
+    normalizedSha256: string; dataUrl: string; provenanceReceiptSha256: string }>;
+}
+function publicAssetUrl(value: unknown): boolean {
+  if (typeof value !== "string" || value.length > 2000) return false;
+  try { const u = new URL(value); return u.protocol === "https:" && u.hostname === "www.findandstudy.com"
+    && u.pathname.startsWith("/wp-content/uploads/") && !u.username && !u.password && !u.port
+    && !u.search && !u.hash && u.href === value; } catch { return false; }
+}
+function validateRecovery47Assets(value: Recovery47Assets): void {
+  if (!value || !["verified_historical_assets", "reconstructed_branding"].includes(value.classification)
+    || !Array.isArray(value.assets) || value.assets.length < 1 || value.assets.length > 2) FAIL("asset_manifest_invalid");
+  const seen = new Set<string>();
+  for (const asset of value.assets) {
+    if (!asset || !RECOVERY47_IMAGE_URLS.includes(asset.requestedUrl) || seen.has(asset.requestedUrl)
+      || !publicAssetUrl(asset.sourceUrl) || !HEX.test(asset.sourceSha256)
+      || !HEX.test(asset.normalizedSha256) || !HEX.test(asset.provenanceReceiptSha256)
+      || !validateContractLogoSnapshot({ sourceUrl: asset.requestedUrl, dataUrl: asset.dataUrl,
+        sha256: asset.normalizedSha256 }, asset.requestedUrl)
+      || (value.classification === "verified_historical_assets" && asset.sourceUrl !== asset.requestedUrl)) FAIL("asset_manifest_invalid");
+    seen.add(asset.requestedUrl);
+  }
+}
+
+/** A reviewed operator provenance receipt is an attestation, not proof that a
+ * current remote URL returned these bytes at signing time. Reconstruction is
+ * permanently labelled as such; neither this helper nor the CLI fetches URLs. */
+export function validateRecovery47AssetProvenance(raw: Uint8Array, assets: Recovery47Assets, index: number): void {
+  validateRecovery47Assets(assets);
+  const asset = assets.assets[index];
+  if (!asset || sha256(raw) !== asset.provenanceReceiptSha256) FAIL("asset_provenance_digest_mismatch");
+  let receipt: any;
+  try { receipt = JSON.parse(Buffer.from(raw).toString("utf8")); } catch { FAIL("asset_provenance_invalid"); }
+  if (receipt.schemaVersion !== 1 || receipt.classification !== assets.classification
+    || receipt.requestedUrl !== asset.requestedUrl || receipt.sourceUrl !== asset.sourceUrl
+    || receipt.sourceSha256 !== asset.sourceSha256 || receipt.normalizedSha256 !== asset.normalizedSha256
+    || !HEX.test(receipt.referenceSha256) || !Number.isFinite(Date.parse(receipt.observedAt))
+    || receipt.operatorVerified !== true) FAIL("asset_provenance_invalid");
+}
+
+/** Sidecar describes the recovered rendition. It does not change signed rows,
+ * original signature evidence or claim that substituted branding is original. */
+export function recovery47AssetAudit(manifest: Recovery47Manifest): Buffer {
+  if (!manifest.assetRecovery || !manifest.candidate) FAIL("asset_audit_requires_candidate");
+  validateRecovery47Assets(manifest.assetRecovery);
+  return Buffer.from(`${canonicalJson({ schemaVersion: 1, target: RECOVERY47_TARGET,
+    inputSha256: manifest.inputSha256, classification: manifest.assetRecovery.classification,
+    rendition: manifest.assetRecovery.classification === "reconstructed_branding"
+      ? "Reconstructed branding rendition; historical image bytes are not established."
+      : "Historical assets restored using separately reviewed provenance.",
+    assets: manifest.assetRecovery.assets.map(({ dataUrl: _dataUrl, ...asset }) => asset),
+    sourceFilesSha256: sha256(canonicalJson(manifest.sourceFiles)),
+    pdfSha256: manifest.candidate.pdfSha256, evidenceHash: manifest.candidate.evidenceHash,
+    renderedHtmlSha256: manifest.candidate.renderedHtmlSha256 })}\n`);
+}
+
+export function validateRecovery47AssetApproval(raw: Uint8Array, manifest: Recovery47Manifest): void {
+  if (!manifest.assetRecovery || !manifest.candidate || !manifest.assetApprovalReceiptSha256
+    || sha256(raw) !== manifest.assetApprovalReceiptSha256) FAIL("asset_approval_required");
+  let receipt: any;
+  try { receipt = JSON.parse(Buffer.from(raw).toString("utf8")); } catch { FAIL("asset_approval_invalid"); }
+  if (receipt.schemaVersion !== 1 || receipt.userApproved !== true
+    || receipt.decision !== "approve_exact_recovered_rendition_for_contract47"
+    || canonicalJson(receipt.target) !== canonicalJson(RECOVERY47_TARGET)
+    || receipt.inputSha256 !== manifest.inputSha256
+    || receipt.assetRecoverySha256 !== sha256(canonicalJson(manifest.assetRecovery))
+    || canonicalJson(receipt.candidate) !== canonicalJson(manifest.candidate)
+    || !HEX.test(receipt.userDecisionEvidenceSha256) || !Number.isFinite(Date.parse(receipt.recordedAt))) FAIL("asset_approval_invalid");
 }
 
 export const REQUIRED_RECOVERY_SOURCE_FILES = [
@@ -86,6 +168,12 @@ export function validateRecovery47Manifest(value: unknown): asserts value is Rec
   if (!v.sourceFiles || REQUIRED_RECOVERY_SOURCE_FILES.some(file => !HEX.test(v.sourceFiles[file] ?? ""))) FAIL("source_attestation_missing");
   if (v.candidate && (!HEX.test(v.candidate.pdfSha256) || !HEX.test(v.candidate.evidenceHash)
     || !HEX.test(v.candidate.renderedHtmlSha256))) FAIL("candidate_digest_invalid");
+  if (v.assetRecovery) {
+    validateRecovery47Assets(v.assetRecovery);
+    if (v.candidate && (!HEX.test(v.candidate.assetAuditSha256 ?? "")
+      || sha256(recovery47AssetAudit(v)) !== v.candidate.assetAuditSha256)) FAIL("asset_audit_digest_mismatch");
+    if (v.assetApprovalReceiptSha256 !== undefined && !HEX.test(v.assetApprovalReceiptSha256)) FAIL("asset_approval_invalid");
+  } else if (v.assetApprovalReceiptSha256 !== undefined || v.candidate?.assetAuditSha256 !== undefined) FAIL("asset_manifest_missing");
 }
 
 /** Verified operator receipt, not a claim that this CLI controls other processes. */
@@ -131,7 +219,7 @@ function scalar(ctx: any, key: string): boolean {
 /** Full digest includes nullable fields and exact original timestamp strings. */
 export function recovery47InputDigest(snapshot: Recovery47Snapshot): string { return sha256(canonicalJson(snapshot)); }
 
-export function prepareRecovery47(snapshot: Recovery47Snapshot, expectedDigest: string) {
+export function prepareRecovery47(snapshot: Recovery47Snapshot, expectedDigest: string, assetRecovery?: Recovery47Assets) {
   if (!HEX.test(expectedDigest) || recovery47InputDigest(snapshot) !== expectedDigest) FAIL("input_digest_mismatch");
   const { contract: c, session: s, application: a } = snapshot;
   if (c.id !== 47 || c.signing_session_id !== 165 || c.template_id !== 48 || s.id !== 165 || s.template_id !== 48
@@ -178,14 +266,34 @@ export function prepareRecovery47(snapshot: Recovery47Snapshot, expectedDigest: 
   const missing = [...new Set(variables.filter((key: string) => !scalar(ctx, key)))];
   // Variable names, never their values, may be reported to the operator.
   if (missing.length) FAIL(`missing_frozen_fields:${missing.sort().join(",")}`);
-  const bodyHtml = buildFinalSignedContractHtml({ bodyHtml: s.template_body_html_snapshot, templateLanguage: s.template_language_snapshot,
+  let bodyHtml = buildFinalSignedContractHtml({ bodyHtml: s.template_body_html_snapshot, templateLanguage: s.template_language_snapshot,
     agent: null, intakeData: s.intake_data, signerEmail: c.signer_email, signerName: c.signer_name,
     signedAt, signatureBase64: c.signature_image_base64, contractNumber: number, signingPageConfig: config });
   const rendered = new JSDOM(bodyHtml);
   try {
-    // Historical snapshots with a remote logo are not silently repaired from
-    // today's branding or the network. Their original static bytes need a
-    // separate, reviewed recovery decision; this CLI deliberately blocks them.
+    if (assetRecovery) {
+      validateRecovery47Assets(assetRecovery);
+      const replaced = new Set<string>();
+      for (const img of rendered.window.document.querySelectorAll("img[src]")) {
+        const src = img.getAttribute("src")!;
+        const asset = assetRecovery.assets.find(item => item.requestedUrl === src);
+        if (asset) { img.setAttribute("src", asset.dataUrl); replaced.add(src); }
+      }
+      if (replaced.size !== assetRecovery.assets.length) FAIL("unused_asset_mapping");
+      if (assetRecovery.classification === "reconstructed_branding") {
+        const notice = rendered.window.document.createElement("aside");
+        notice.setAttribute("data-recovery47-notice", "reconstructed-branding");
+        notice.setAttribute("role", "note");
+        notice.setAttribute("style", "border:1px solid #64748b;padding:8px;margin:0 0 12px;font-size:10px;color:#334155;background:#f8fafc");
+        notice.textContent = "Recovered TEST02 copy — branding reconstructed from separately reviewed assets. "
+          + "The original historical logo bytes were not established. This PDF was generated after signing; "
+          + "the frozen contract text, original signatures and signing date are retained. This is not the original signing-time PDF artifact.";
+        rendered.window.document.body.prepend(notice);
+      }
+      // Only the prepared rendition is serialized. No template or session
+      // update occurs; source text, CSS, signatures and links remain intact.
+      bodyHtml = `${rendered.window.document.head.innerHTML}${rendered.window.document.body.innerHTML}`;
+    }
     if (Array.from(rendered.window.document.querySelectorAll("img")).some(img =>
       validateCompanySignatureDataUrl(img.getAttribute("src")) !== null)) FAIL("unfrozen_image_source");
   } finally { rendered.window.close(); }
@@ -288,10 +396,17 @@ export async function writeImmutableRecoveryFile(directory: string, filename: st
  * it is never deleted or rewritten automatically.
  */
 export async function applyRecovery47(client: Recovery47SqlClient, manifest: Recovery47Manifest,
-  pdfBytes: Uint8Array, installArtifact: (bytes: Uint8Array, sha: string) => Promise<string>): Promise<void> {
+  pdfBytes: Uint8Array, installArtifact: (bytes: Uint8Array, sha: string) => Promise<string>,
+  assetEvidence?: { provenanceReceipts: Uint8Array[]; approvalReceipt: Uint8Array;
+    installAudit: (audit: Uint8Array, approval: Uint8Array, provenance: Uint8Array[]) => Promise<string> }): Promise<void> {
   validateRecovery47Manifest(manifest);
   if (!manifest.candidate) FAIL("approved_candidate_missing");
   validateRecovery47Pdf(pdfBytes, manifest.candidate.pdfSha256);
+  if (manifest.assetRecovery) {
+    if (!assetEvidence || assetEvidence.provenanceReceipts.length !== manifest.assetRecovery.assets.length) FAIL("asset_approval_required");
+    manifest.assetRecovery.assets.forEach((_asset, index) => validateRecovery47AssetProvenance(assetEvidence.provenanceReceipts[index], manifest.assetRecovery!, index));
+    validateRecovery47AssetApproval(assetEvidence.approvalReceipt, manifest);
+  }
   await client.query("BEGIN");
   try {
     await client.query("SET LOCAL lock_timeout = '3s'");
@@ -299,7 +414,7 @@ export async function applyRecovery47(client: Recovery47SqlClient, manifest: Rec
     await client.query("SET LOCAL search_path = pg_catalog, public");
     await assertRecovery47Database(client, manifest.database);
     const snapshot = await readRecovery47Snapshot(client, true);
-    const params = prepareRecovery47(snapshot, manifest.inputSha256);
+    const params = prepareRecovery47(snapshot, manifest.inputSha256, manifest.assetRecovery);
     if (sha256(params.bodyHtml) !== manifest.candidate.renderedHtmlSha256) FAIL("rendered_input_mismatch");
     const claim = await client.query(`UPDATE public.signed_contracts SET delivery_claimed_at = clock_timestamp()
       WHERE id = 47 AND pdf_object_key IS NULL AND evidence_hash IS NULL AND delivery_claimed_at IS NULL
@@ -307,6 +422,11 @@ export async function applyRecovery47(client: Recovery47SqlClient, manifest: Rec
     if (claim.rowCount !== 1) FAIL("claim_failed");
     const objectKey = await installArtifact(pdfBytes, manifest.candidate.pdfSha256);
     if (objectKey !== `/objects/signed-contracts/recovery47-${manifest.candidate.pdfSha256}.pdf`) FAIL("object_key_mismatch");
+    if (manifest.assetRecovery) {
+      const audit = recovery47AssetAudit(manifest);
+      const auditKey = await assetEvidence!.installAudit(audit, assetEvidence!.approvalReceipt, assetEvidence!.provenanceReceipts);
+      if (auditKey !== `/objects/signed-contracts/recovery47-${manifest.candidate.pdfSha256}.recovery-${manifest.candidate.assetAuditSha256}.json`) FAIL("asset_audit_key_mismatch");
+    }
     const beforeCommit = await readRecovery47Snapshot(client);
     beforeCommit.contract.delivery_claimed_at = null;
     if (recovery47InputDigest(beforeCommit) !== manifest.inputSha256) FAIL("input_changed_during_install");

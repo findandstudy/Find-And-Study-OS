@@ -11,7 +11,8 @@ import {
   sha256, validateRecovery47Manifest, validateRecovery47Pdf, readPinnedRecoveryFile, writeImmutableRecoveryFile,
   validateRecovery47WorkerReceipt,
   assertRecovery47ExecutingSource,
-  type Recovery47Snapshot, type Recovery47Manifest,
+  RECOVERY47_IMAGE_URLS, recovery47AssetAudit, validateRecovery47AssetProvenance, validateRecovery47AssetApproval,
+  applyRecovery47, type Recovery47Assets, type Recovery47Snapshot, type Recovery47Manifest,
 } from "../src/lib/contract47Recovery";
 import { signedContractDeliveryWorkerEnabled } from "../src/lib/signedContractDeliveryPolicy";
 
@@ -41,6 +42,95 @@ export function testManifest(snapshot = testSnapshot()): Recovery47Manifest {
     inputSha256: recovery47InputDigest(snapshot), workerIsolationReceiptSha256: "1".repeat(64),
     sourceFiles: Object.fromEntries(REQUIRED_RECOVERY_SOURCE_FILES.map(file => [file, "2".repeat(64)])) };
 }
+
+export function testRecoveryAssets(classification: Recovery47Assets["classification"] = "reconstructed_branding") {
+  const provenanceReceipts: Buffer[] = [];
+  const assets = RECOVERY47_IMAGE_URLS.map((requestedUrl, index) => {
+    const asset = { requestedUrl, sourceUrl: classification === "verified_historical_assets" ? requestedUrl
+      : `https://www.findandstudy.com/wp-content/uploads/2026/01/TEST-brand-${index}.png`,
+      sourceSha256: sha256(Buffer.from(TEST_PNG, "base64")), normalizedSha256: sha256(Buffer.from(TEST_PNG, "base64")),
+      dataUrl: `data:image/png;base64,${TEST_PNG}`, provenanceReceiptSha256: "" };
+    const receipt = Buffer.from(canonicalJson({ schemaVersion: 1, classification, requestedUrl,
+      sourceUrl: asset.sourceUrl, sourceSha256: asset.sourceSha256, normalizedSha256: asset.normalizedSha256,
+      referenceSha256: "b".repeat(64), observedAt: "2026-11-26T10:00:00Z", operatorVerified: true }));
+    asset.provenanceReceiptSha256 = sha256(receipt); provenanceReceipts.push(receipt);
+    return asset;
+  });
+  return { assetRecovery: { classification, assets } as Recovery47Assets, provenanceReceipts };
+}
+export function testRecoverySnapshotWithImages() {
+  const snapshot = testSnapshot();
+  snapshot.session.template_signing_page_config_snapshot.logoUrl = RECOVERY47_IMAGE_URLS[0];
+  snapshot.session.template_body_html_snapshot += `<img class="TEST-frozen-logo" src="${RECOVERY47_IMAGE_URLS[1]}"><a href="${RECOVERY47_IMAGE_URLS[1]}">TEST unchanged link</a>`;
+  return snapshot;
+}
+export function testAssetApproval(manifest: Recovery47Manifest) {
+  return Buffer.from(canonicalJson({ schemaVersion: 1, userApproved: true,
+    decision: "approve_exact_recovered_rendition_for_contract47", target: RECOVERY47_TARGET,
+    inputSha256: manifest.inputSha256, assetRecoverySha256: sha256(canonicalJson(manifest.assetRecovery)),
+    candidate: manifest.candidate, userDecisionEvidenceSha256: "c".repeat(64), recordedAt: "2026-11-26T11:00:00Z" }));
+}
+
+test("reconstructed preview maps exact two logos only and visibly discloses non-original branding", () => {
+  const snapshot = testRecoverySnapshotWithImages(); const before = canonicalJson(snapshot);
+  const { assetRecovery, provenanceReceipts } = testRecoveryAssets();
+  const params = prepareRecovery47(snapshot, recovery47InputDigest(snapshot), assetRecovery);
+  assert.match(params.bodyHtml, /Recovered TEST02 copy/);
+  assert.match(params.bodyHtml, /not the original signing-time PDF artifact/);
+  assert.match(params.bodyHtml, /TEST synthetic company TEST ACENTE 02 FAS-2026-00165/);
+  assert.match(params.bodyHtml, /#123456/);
+  assert.match(params.bodyHtml, new RegExp(`href="${RECOVERY47_IMAGE_URLS[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+  assert.equal((params.bodyHtml.match(/data:image\/png;base64,/g) ?? []).length, 4);
+  assert.equal(canonicalJson(snapshot), before);
+  provenanceReceipts.forEach((receipt, i) => validateRecovery47AssetProvenance(receipt, assetRecovery, i));
+  const historical = prepareRecovery47(snapshot, recovery47InputDigest(snapshot), testRecoveryAssets("verified_historical_assets").assetRecovery);
+  assert.doesNotMatch(historical.bodyHtml, /data-recovery47-notice|Recovered TEST02 copy/);
+  assert.doesNotMatch(prepareRecovery47(testSnapshot(), recovery47InputDigest(testSnapshot())).bodyHtml, /data-recovery47-notice/);
+});
+
+test("asset mapping never widens external URLs or accepts duplicate, unused, wrong bytes or fake original mapping", () => {
+  const snapshot = testRecoverySnapshotWithImages();
+  const run = (assets: Recovery47Assets) => prepareRecovery47(snapshot, recovery47InputDigest(snapshot), assets);
+  assert.throws(() => prepareRecovery47(snapshot, recovery47InputDigest(snapshot)), /unfrozen_image_source/);
+  for (const change of [
+    (v: Recovery47Assets) => { v.assets[0].requestedUrl = "https://example.invalid/logo.png"; },
+    (v: Recovery47Assets) => { v.assets[1].requestedUrl = v.assets[0].requestedUrl; },
+    (v: Recovery47Assets) => { v.assets[0].dataUrl = `data:image/png;base64,${TEST_PNG.slice(4)}`; },
+    (v: Recovery47Assets) => { v.assets[0].normalizedSha256 = "0".repeat(64); },
+    (v: Recovery47Assets) => { v.assets[0].sourceUrl = "https://www.findandstudy.com@private.invalid/test.png"; },
+    (v: Recovery47Assets) => { v.classification = "verified_historical_assets"; },
+  ]) { const { assetRecovery } = testRecoveryAssets(); change(assetRecovery); assert.throws(() => run(assetRecovery), /asset_manifest_invalid/); }
+  const { assetRecovery } = testRecoveryAssets(); assetRecovery.assets.pop();
+  assert.throws(() => run(assetRecovery), /unfrozen_image_source/);
+  assert.throws(() => prepareRecovery47(testSnapshot(), recovery47InputDigest(testSnapshot()), testRecoveryAssets().assetRecovery), /unused_asset_mapping/);
+});
+
+test("audit and user decision bind exact candidate, input, assets and provenance, not just a boolean", async () => {
+  const snapshot = testRecoverySnapshotWithImages(); const { assetRecovery, provenanceReceipts } = testRecoveryAssets();
+  const pdf = Buffer.from(`%PDF-1.7\n${"TEST ".repeat(30)}`);
+  const manifest: Recovery47Manifest = { ...testManifest(snapshot), assetRecovery, candidate: { pdfSha256: sha256(pdf), evidenceHash: "e".repeat(64),
+    renderedHtmlSha256: sha256(prepareRecovery47(snapshot, recovery47InputDigest(snapshot), assetRecovery).bodyHtml) } };
+  manifest.candidate!.assetAuditSha256 = sha256(recovery47AssetAudit(manifest));
+  validateRecovery47Manifest(manifest);
+  assert.match(recovery47AssetAudit(manifest).toString(), /historical image bytes are not established/);
+  const approvalReceipt = testAssetApproval(manifest); manifest.assetApprovalReceiptSha256 = sha256(approvalReceipt);
+  validateRecovery47AssetApproval(approvalReceipt, manifest);
+  for (const change of [
+    (v: any) => { v.userApproved = false; }, (v: any) => { v.target.contractId = 48; },
+    (v: any) => { v.inputSha256 = "0".repeat(64); }, (v: any) => { v.candidate.pdfSha256 = "0".repeat(64); },
+    (v: any) => { v.assetRecoverySha256 = "0".repeat(64); },
+  ]) { const changed = JSON.parse(approvalReceipt.toString()); change(changed); const bytes = Buffer.from(canonicalJson(changed));
+    assert.throws(() => validateRecovery47AssetApproval(bytes, { ...manifest, assetApprovalReceiptSha256: sha256(bytes) }), /asset_approval_invalid/); }
+  const noQueries = { query: async () => { throw new Error("must fail before DB"); } };
+  await assert.rejects(applyRecovery47(noQueries, manifest, pdf, async () => "never"), /asset_approval_required/);
+  const wrong = Buffer.from(provenanceReceipts[0]); wrong[0] = 0;
+  assert.throws(() => validateRecovery47AssetProvenance(wrong, assetRecovery, 0), /asset_provenance_digest_mismatch/);
+  const changed = structuredClone(manifest); changed.assetRecovery!.assets[0].provenanceReceiptSha256 = "a".repeat(64);
+  assert.throws(() => validateRecovery47Manifest(changed), /asset_audit_digest_mismatch/);
+  await assert.rejects(applyRecovery47(noQueries, manifest, pdf, async () => "never", {
+    provenanceReceipts, approvalReceipt: Buffer.from("{}"), installAudit: async () => "never",
+  }), /asset_approval_required/);
+});
 
 test("delivery emergency stop preserves unset policy and denies false/invalid values", () => {
   const old = process.env.SIGNED_CONTRACT_DELIVERY_ENABLED;
