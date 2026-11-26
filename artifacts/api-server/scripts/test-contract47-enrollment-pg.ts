@@ -38,16 +38,16 @@ test("disposable PostgreSQL verifies one-case prepared enrollment, race and roll
       for (const table of [...Object.values(tables), "signed_contract_deliveries"]) result[table] = (await a.query(`SELECT to_jsonb(t) AS row FROM public.${table} t ORDER BY 1::text`)).rows;
       return result;
     };
-    const reset = async () => {
+    const reset = async (preserveWhatsAppBlank = false) => {
       await a.query("TRUNCATE public.signed_contract_deliveries,public.signed_contracts,public.signing_sessions,public.agent_applications");
       for (const [section, table] of Object.entries(tables)) {
-        const row = fixture[section as keyof typeof fixture], keys = Object.keys(row);
+        const row = enrollmentTestSnapshot(preserveWhatsAppBlank)[section as keyof typeof fixture], keys = Object.keys(row);
         await a.query(`INSERT INTO public.${table} (${keys.map(k => `"${k}"`).join(",")}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(",")})`,
           keys.map(k => isJson(k) && row[k] !== null ? JSON.stringify(row[k]) : row[k]));
       }
       await a.query("INSERT INTO public.signing_sessions SELECT (jsonb_populate_record(NULL::signing_sessions,to_jsonb(ss)||'{\"id\":166}'::jsonb)).* FROM public.signing_sessions ss WHERE id=165");
       await a.query("INSERT INTO public.signed_contracts SELECT (jsonb_populate_record(NULL::signed_contracts,to_jsonb(sc)||'{\"id\":48,\"signing_session_id\":166}'::jsonb)).* FROM public.signed_contracts sc WHERE id=47");
-      return enrollmentTestEvidence(await readRecovery47Snapshot(a), identity);
+      return enrollmentTestEvidence(await readRecovery47Snapshot(a), identity, preserveWhatsAppBlank ? ["whatsapp_phone"] : undefined);
     };
     await t.test("default dry run reads and verifies but changes zero source/queue rows", async () => {
       const { manifest, evidence } = await reset(), before = canonicalJson(await all());
@@ -73,6 +73,15 @@ test("disposable PostgreSQL verifies one-case prepared enrollment, race and roll
       const before = canonicalJson(await all());
       await assert.rejects(enrollRecovery47(a, manifest, async () => evidence, true, ENROLLMENT_TEST_ENV), /existing_delivery_no_retry/);
       assert.equal(canonicalJson(await all()), before);
+    });
+    await t.test("explicit blank WhatsApp recovery becomes READY with matching frozen disclosure and unchanged snapshot", async () => {
+      const { manifest, evidence } = await reset(true), before = await all();
+      await enrollRecovery47(a, manifest, async () => evidence, true, ENROLLMENT_TEST_ENV);
+      const after: any = await all(), delivery = after.signed_contract_deliveries[0].row;
+      assert.equal(delivery.state, "ready");
+      assert.match(delivery.html_body, /original frozen WhatsApp value is absent and is preserved blank/);
+      assert.match(delivery.text_body, /no telephone number has been inferred/);
+      after.signed_contract_deliveries = []; assert.equal(canonicalJson(after), canonicalJson(before));
     });
     await t.test("two concurrent operators cannot enroll twice; waiting/preparing are never externally visible", async () => {
       const { manifest, evidence } = await reset(); let entered!: () => void, release!: () => void, reads = 0;

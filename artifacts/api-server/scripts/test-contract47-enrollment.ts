@@ -12,7 +12,7 @@ const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwA
 export const ENROLLMENT_TEST_ENV = { SIGNED_CONTRACT_DURABLE_DELIVERY_MODE: "prepare", SIGNED_CONTRACT_DELIVERY_ENABLED: "false",
   SIGNED_CONTRACT_PDF_WORKER_ENABLED: "false", SIGNED_CONTRACT_SMTP_ENABLED: "false" };
 export const ENROLLMENT_TEST_PDF = Buffer.from(`%PDF-1.7\n${"SYNTHETIC TEST PDF ONLY ".repeat(20)}`);
-export function enrollmentTestSnapshot(): Recovery47Snapshot {
+export function enrollmentTestSnapshot(preserveWhatsAppBlank = false): Recovery47Snapshot {
   return {
     contract: { id: 47, signing_session_id: 165, template_id: 48, agent_id: 902,
       subject_type: "agent_application", subject_id: 12,
@@ -25,14 +25,14 @@ export function enrollmentTestSnapshot(): Recovery47Snapshot {
       status: "signed", revoked_at: null, signed_at: "2026-11-25T17:00:00.000Z", signer_email: ENROLLMENT47_RECIPIENT,
       template_version_snapshot: 6, template_name_snapshot: "TEST Agreement", template_language_snapshot: "en",
       template_entity_type_snapshot: "company", template_intake_schema_snapshot: null,
-      template_body_html_snapshot: `<style>.box{color:#123456}</style><p class="box">{{agency_name}} {{signer_name}}</p><img src="${RECOVERY47_IMAGE_URLS[0]}"><img src="{{signature}}"><img src="{{main_agency_signature}}">`,
+      template_body_html_snapshot: `<style>.box{color:#123456}</style><p class="box">{{agency_name}} {{signer_name}}</p>${preserveWhatsAppBlank ? '<p>WhatsApp: {{whatsapp_phone}}</p>' : ''}<img src="${RECOVERY47_IMAGE_URLS[0]}"><img src="{{signature}}"><img src="{{main_agency_signature}}">`,
       template_signing_page_config_snapshot: { companySignatureDataUrl: `data:image/png;base64,${PNG}`, requireEmailVerification: true },
       intake_data: { companyName: "TEST synthetic company" } },
     application: { id: 12, signing_session_id: 165, signed_contract_id: 47, contract_template_id: 48,
       provisional_agent_id: 902, approved_agent_id: null, status: "contract_signed", approved_at: null, commercial_activated_at: null },
   };
 }
-export function enrollmentTestEvidence(snapshot = enrollmentTestSnapshot(), database = { database: "fixture", address: "127.0.0.1", port: 5433, role: "fixture" }) {
+export function enrollmentTestEvidence(snapshot = enrollmentTestSnapshot(), database = { database: "fixture", address: "127.0.0.1", port: 5433, role: "fixture" }, preservedBlankFields?: readonly ["whatsapp_phone"]) {
   const original = structuredClone(snapshot); original.contract.pdf_object_key = null; original.contract.evidence_hash = null;
   const asset = { requestedUrl: RECOVERY47_IMAGE_URLS[0], sourceUrl: RECOVERY47_IMAGE_URLS[0], sourceSha256: "4".repeat(64),
     normalizedSha256: sha256(Buffer.from(PNG, "base64")), dataUrl: `data:image/png;base64,${PNG}`, provenanceReceiptSha256: "" };
@@ -42,20 +42,20 @@ export function enrollmentTestEvidence(snapshot = enrollmentTestSnapshot(), data
   const recovery: Recovery47Manifest = { schemaVersion: 1, target: RECOVERY47_TARGET, database, storageRoot: "/tmp/TEST-private-storage",
     inputSha256: recovery47InputDigest(original), workerIsolationReceiptSha256: "1".repeat(64),
     sourceFiles: Object.fromEntries(REQUIRED_RECOVERY_SOURCE_FILES.map(file => [file, "2".repeat(64)])),
-    assetRecovery: { classification: "reconstructed_branding", assets: [asset] } };
+    assetRecovery: { classification: "reconstructed_branding", assets: [asset] }, ...(preservedBlankFields ? { preservedBlankFields } : {}) };
   recovery.candidate = { pdfSha256: sha256(ENROLLMENT_TEST_PDF), evidenceHash: "3".repeat(64),
-    renderedHtmlSha256: sha256(prepareRecovery47(original, recovery.inputSha256, recovery.assetRecovery).bodyHtml), assetAuditSha256: "0".repeat(64) };
+    renderedHtmlSha256: sha256(prepareRecovery47(original, recovery.inputSha256, recovery.assetRecovery, recovery.preservedBlankFields).bodyHtml), assetAuditSha256: "0".repeat(64) };
   const assetAudit = recovery47AssetAudit(recovery); recovery.candidate.assetAuditSha256 = sha256(assetAudit);
   const assetApproval = Buffer.from(JSON.stringify({ schemaVersion: 1, userApproved: true, decision: "approve_exact_recovered_rendition_for_contract47",
     target: RECOVERY47_TARGET, inputSha256: recovery.inputSha256, assetRecoverySha256: sha256(canonicalJson(recovery.assetRecovery)),
-    candidate: recovery.candidate, userDecisionEvidenceSha256: "6".repeat(64), recordedAt: "2026-11-25T18:00:00Z" }));
+    candidate: recovery.candidate, ...(preservedBlankFields ? { preservedBlankFields } : {}), userDecisionEvidenceSha256: "6".repeat(64), recordedAt: "2026-11-25T18:00:00Z" }));
   recovery.assetApprovalReceiptSha256 = sha256(assetApproval);
   const recoveryManifest = Buffer.from(JSON.stringify(recovery));
   const manifest: Enrollment47Manifest = { schemaVersion: 1, target: RECOVERY47_TARGET, database, storageRoot: recovery.storageRoot,
     recipient: ENROLLMENT47_RECIPIENT, messageId: ENROLLMENT47_MESSAGE_ID, recoveryManifestSha256: sha256(recoveryManifest),
     postRecoveryInputSha256: recovery47InputDigest(snapshot), pdfObjectKey: snapshot.contract.pdf_object_key,
     pdfSha256: recovery.candidate.pdfSha256, evidenceHash: recovery.candidate.evidenceHash,
-    operatorReceiptSha256: "0".repeat(64), sourceFiles: Object.fromEntries(ENROLLMENT47_SOURCE_FILES.map(file => [file, "7".repeat(64)])), email: enrollment47Email(true) };
+    operatorReceiptSha256: "0".repeat(64), sourceFiles: Object.fromEntries(ENROLLMENT47_SOURCE_FILES.map(file => [file, "7".repeat(64)])), email: enrollment47Email(true, preservedBlankFields !== undefined) };
   const receipt = { schemaVersion: 1, operatorVerified: true, enrollmentApproved: true, operation: "prepare_exact_recovered_test47_delivery",
     target: RECOVERY47_TARGET, database, recipient: manifest.recipient, messageId: manifest.messageId,
     postRecoveryInputSha256: manifest.postRecoveryInputSha256, recoveryManifestSha256: manifest.recoveryManifestSha256,
@@ -80,6 +80,36 @@ test("only prepare mode with explicit disabled SMTP and legacy workers is allowe
   for (const field of Object.keys(ENROLLMENT_TEST_ENV)) for (const value of [undefined, "true", "send", "off"]) {
     assert.throws(() => assertEnrollment47Mode({ ...ENROLLMENT_TEST_ENV, [field]: value }), /prepare_only_required/);
   }
+});
+test("explicit reviewed blank WhatsApp is preserved in recovery and frozen email without inferring a number", () => {
+  const snapshot = enrollmentTestSnapshot(true);
+  snapshot.session.intake_data.phone = "+1 202 555 0147";
+  const { manifest, evidence, recovery } = enrollmentTestEvidence(snapshot, undefined, ["whatsapp_phone"]);
+  verifyEnrollment47(snapshot, manifest, evidence);
+  assert.match(manifest.email.text, /original frozen WhatsApp value is absent and is preserved blank/);
+  assert.match(manifest.email.html, /no telephone number has been inferred/);
+  assert.doesNotMatch(manifest.email.text, /202 555/);
+  assert.deepEqual(recovery.preservedBlankFields, ["whatsapp_phone"]);
+  assert.throws(() => enrollmentTestEvidence(snapshot), /missing_frozen_fields:whatsapp_phone/);
+});
+test("blank WhatsApp disclosure cannot be omitted or falsely claimed even after rehashing approval content", () => {
+  for (const preserve of [true, false]) {
+    const snapshot = enrollmentTestSnapshot(preserve);
+    const { manifest, evidence, receipt } = enrollmentTestEvidence(snapshot, undefined, preserve ? ["whatsapp_phone"] : undefined);
+    manifest.email = enrollment47Email(true, !preserve);
+    receipt.emailSha256 = manifest.email.sha256;
+    evidence.operatorReceipt = Buffer.from(JSON.stringify(receipt)); manifest.operatorReceiptSha256 = sha256(evidence.operatorReceipt);
+    assert.throws(() => verifyEnrollment47(snapshot, manifest, evidence), /disclosure_email_mismatch/);
+  }
+});
+test("recovery approval must explicitly include the blank-field decision", () => {
+  const snapshot = enrollmentTestSnapshot(true), { manifest, evidence, recovery, receipt } = enrollmentTestEvidence(snapshot, undefined, ["whatsapp_phone"]);
+  const approval = JSON.parse(Buffer.from(evidence.assetApproval!).toString()); delete approval.preservedBlankFields;
+  evidence.assetApproval = Buffer.from(JSON.stringify(approval)); recovery.assetApprovalReceiptSha256 = sha256(evidence.assetApproval);
+  evidence.recoveryManifest = Buffer.from(JSON.stringify(recovery)); manifest.recoveryManifestSha256 = sha256(evidence.recoveryManifest);
+  receipt.recoveryManifestSha256 = manifest.recoveryManifestSha256;
+  evidence.operatorReceipt = Buffer.from(JSON.stringify(receipt)); manifest.operatorReceiptSha256 = sha256(evidence.operatorReceipt);
+  assert.throws(() => verifyEnrollment47(snapshot, manifest, evidence), /asset_approval_invalid/);
 });
 test("exact test identity, reviewed source, file key and email cannot be broadened", () => {
   const { manifest } = enrollmentTestEvidence();

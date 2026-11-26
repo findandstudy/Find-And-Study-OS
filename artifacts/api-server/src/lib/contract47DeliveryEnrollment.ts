@@ -32,11 +32,13 @@ export interface Enrollment47Evidence {
   assetAudit?: Uint8Array; assetApproval?: Uint8Array; assetProvenance?: Uint8Array[];
 }
 
-export function enrollment47Email(reconstructed: boolean): Enrollment47Manifest["email"] {
+export function enrollment47Email(reconstructed: boolean, preservedWhatsAppBlank = false): Enrollment47Manifest["email"] {
+  if (preservedWhatsAppBlank && !reconstructed) fail("blank_disclosure_requires_reconstruction");
   const subject = reconstructed ? "TEST02 — signed agreement copy with reconstructed branding" : "TEST02 — recovered signed agreement copy";
-  const disclosure = reconstructed
+  let disclosure = reconstructed
     ? "This PDF contains reconstructed branding. The historical logo image bytes have not been established. The original signing record and signature were not changed by this recovery."
     : "This recovered PDF uses separately reviewed historical asset evidence. The original signing record and signature were not changed by this recovery.";
+  if (preservedWhatsAppBlank) disclosure += " The original frozen WhatsApp value is absent and is preserved blank; no telephone number has been inferred.";
   const text = `Attached is the recovered PDF copy of your signed agreement.\n\n${disclosure}`;
   const html = `<p>Attached is the recovered PDF copy of your signed agreement.</p><p><strong>${disclosure}</strong></p>`;
   return { subject, html, text, sha256: sha256(canonicalJson({ subject, html, text })) };
@@ -114,7 +116,7 @@ export function verifyEnrollment47(snapshot: Recovery47Snapshot, m: Enrollment47
   const original = structuredClone(snapshot);
   original.contract.pdf_object_key = null; original.contract.evidence_hash = null;
   // No other field is reset: approval, identity, session or intake drift blocks.
-  const params = prepareRecovery47(original, recovery.inputSha256, recovery.assetRecovery);
+  const params = prepareRecovery47(original, recovery.inputSha256, recovery.assetRecovery, recovery.preservedBlankFields);
   if (sha256(params.bodyHtml) !== recovery.candidate.renderedHtmlSha256) fail("rendered_input_mismatch");
   if (recovery.assetRecovery) {
     if (!evidence.assetAudit || !evidence.assetApproval || evidence.assetProvenance?.length !== recovery.assetRecovery.assets.length
@@ -122,7 +124,7 @@ export function verifyEnrollment47(snapshot: Recovery47Snapshot, m: Enrollment47
     validateRecovery47AssetApproval(evidence.assetApproval, recovery);
     recovery.assetRecovery.assets.forEach((_, index) => validateRecovery47AssetProvenance(evidence.assetProvenance![index], recovery.assetRecovery!, index));
   }
-  if (canonicalJson(m.email) !== canonicalJson(enrollment47Email(recovery.assetRecovery?.classification === "reconstructed_branding"))) fail("disclosure_email_mismatch");
+  if (canonicalJson(m.email) !== canonicalJson(enrollment47Email(recovery.assetRecovery?.classification === "reconstructed_branding", recovery.preservedBlankFields?.includes("whatsapp_phone") === true))) fail("disclosure_email_mismatch");
   return recovery;
 }
 
