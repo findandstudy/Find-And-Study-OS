@@ -44,6 +44,7 @@ type SessionView = {
   template: { id: number; name: string; language: string; entityType: string; intakeSchema: any[] | null; signingPageConfig: SigningPageConfig };
   agent: any;
   intakeData: Record<string, string> | null;
+  missingIntakeFields?: string[];
 };
 
 type Step = "loading" | "expired" | "revoked" | "intake" | "review" | "sign" | "success" | "error";
@@ -104,6 +105,9 @@ export default function SignFlow({ token }: { token: string }) {
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [session, setSession] = useState<SessionView | null>(null);
   const [intake, setIntake] = useState<Record<string, string>>({});
+  const [intakeError, setIntakeError] = useState("");
+  const [sessionRefresh, setSessionRefresh] = useState(0);
+  const forceIntakeRef = useRef(false);
   const [signerName, setSignerName] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [brand, setBrand] = useState<Brand>({ companyName: "", hasLogo: false });
@@ -268,11 +272,16 @@ export default function SignFlow({ token }: { token: string }) {
         const ef = schema.find(isEmailLikeField);
         const prefEmail = data.verifiedEmail || (ef ? data.intakeData?.[ef.key] : "") || data.signerEmail || "";
         setEmail(prefEmail || "");
-        if (data.verifiedEmail) setVerified(true);
+        setVerified(Boolean(data.verifiedEmail));
         if (data.expired) { setStep("expired"); return; }
         if (data.status === "signed") { setStep("success"); return; }
         if (data.status === "revoked") { setStep("revoked"); return; }
-        if (data.mode === "self_fill" && data.status === "intake_pending") { setStep("intake"); return; }
+        const incomplete = schema.some((field: any) => field.required
+          && !String(isEmailLikeField(field) ? prefEmail : data.intakeData?.[field.key] ?? "").trim());
+        if (data.mode === "self_fill" && (data.status === "intake_pending" || data.missingIntakeFields?.length
+          || incomplete || forceIntakeRef.current)) {
+          forceIntakeRef.current = false; setStep("intake"); return;
+        }
         setStep("review");
       } catch (err: any) {
         const status = err?.status || err?.response?.status;
@@ -285,7 +294,7 @@ export default function SignFlow({ token }: { token: string }) {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, sessionRefresh]);
 
   // The contract preview is loaded directly into a sandboxed <iframe src> from
   // a dedicated HTML endpoint so it carries its own (inline-style-allowing) CSP
@@ -302,6 +311,9 @@ export default function SignFlow({ token }: { token: string }) {
   const intakeEmailField = fields.find(isEmailLikeField);
   const emailVerificationRequired = session?.emailVerificationRequired !== false;
   const emailReady = !emailVerificationRequired || verified;
+  const missingRequiredFields = fields.filter(field => field.required
+    && !String(intakeEmailField?.key === field.key ? email : intake[field.key] ?? "").trim());
+  const requiredMessage = `${getTranslation(lang, "common.required")}: ${missingRequiredFields.map(field => field.label).join(", ")}`;
 
   function setEmailValue(v: string) {
     setEmail(v);
@@ -341,6 +353,8 @@ export default function SignFlow({ token }: { token: string }) {
   }
 
   async function submitIntake() {
+    if (missingRequiredFields.length) { setIntakeError(requiredMessage); return; }
+    setIntakeError("");
     setSubmitting(true);
     try {
       const effectiveName = intakeNameField ? (intake[intakeNameField.key] || "").trim() : signerName;
@@ -354,13 +368,16 @@ export default function SignFlow({ token }: { token: string }) {
         signerEmail: email.trim(),
       };
       if (intakeEmailField) intakePayload[intakeEmailField.key] = email.trim();
-      await customFetch(`/api/public/sign/${encodeURIComponent(token)}/intake`, {
+      const result: any = await customFetch(`/api/public/sign/${encodeURIComponent(token)}/intake`, {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ intake: intakePayload }),
       });
+      const saved = result.intakeData || intakePayload;
+      setIntake(saved);
+      setSession(current => current ? { ...current, intakeData: saved, missingIntakeFields: [], status: "review_pending" } : current);
       setStep("review");
     } catch (err: any) {
-      alert(err?.message || t("saveError"));
+      setIntakeError(err?.body?.error || err?.message || t("saveError"));
     }
     setSubmitting(false);
   }
@@ -380,7 +397,15 @@ export default function SignFlow({ token }: { token: string }) {
       });
       setStep("success");
     } catch (err: any) {
-      alert(err?.body?.error || err?.message || t("signError"));
+      const body = err?.body || err?.response?.data || err?.data;
+      if (session?.mode === "self_fill" && body?.code === "CONTRACT_INTAKE_REQUIRED") {
+        // Reload the server-owned schema and saved values. A newly required
+        // field must be collectable, not an alert-only dead end after signing.
+        forceIntakeRef.current = true;
+        setIntakeError(body.error || t("saveError"));
+        setStep("loading");
+        setSessionRefresh(value => value + 1);
+      } else alert(body?.error || err?.message || t("signError"));
     }
     setSubmitting(false);
   }
@@ -441,7 +466,7 @@ export default function SignFlow({ token }: { token: string }) {
     const nameOk = intakeNameField
       ? (intake[intakeNameField.key] || "").trim().length > 0
       : signerName.trim().length > 0;
-    const canContinue = nameOk && EMAIL_RE.test(email.trim()) && emailReady;
+    const canContinue = nameOk && EMAIL_RE.test(email.trim()) && emailReady && missingRequiredFields.length === 0;
     const intakeTitle = brand.pageTitle || t("title");
     const intakeSubtitle = brand.pageSubtitle
       ? <span className="font-semibold text-foreground">{brand.pageSubtitle}</span>
@@ -461,6 +486,9 @@ export default function SignFlow({ token }: { token: string }) {
         }
       >
         <div className="space-y-6">
+          {(missingRequiredFields.length > 0 || intakeError) && (
+            <p role="alert" className="text-sm text-red-600">{missingRequiredFields.length ? requiredMessage : intakeError}</p>
+          )}
           {!intakeNameField && (
             <div>
               <FieldLabel required>{t("fullName")}</FieldLabel>
@@ -528,7 +556,7 @@ export default function SignFlow({ token }: { token: string }) {
                 </div>
               )
             ) : (
-              <div key={f.key}>
+              <div key={f.key} data-intake-field={f.key} role="group" aria-label={f.label}>
                 <FieldLabel required={f.required}>{f.label}</FieldLabel>
                 {f.type === "textarea" ? (
                   <Textarea className="mt-1.5" placeholder={f.placeholder} value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} rows={3} />
