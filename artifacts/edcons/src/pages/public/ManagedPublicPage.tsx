@@ -33,11 +33,32 @@ export function ManagedPublicPage({
   const sourceBlocks = page?.data.blocks?.length
     ? enrichManagedPageBlocks(template, page.data.blocks, lang)
     : managedPageStarterBlocks(template, lang);
+  const aboutBlockOrder = new Map([
+    ["hero", 0],
+    ["media_text", 1],
+    ["counter_grid", 2],
+    ["grid_box", 3],
+    ["process_steps", 4],
+    ["team_grid", 5],
+    ["logo_marquee", 6],
+    ["office_list", 7],
+    ["faq", 8],
+    ["cta_banner", 9],
+  ]);
+  // The About template has a fixed presentation narrative: masthead, visual
+  // introduction, proof, values, process, people and next action. Content is
+  // still CMS-owned, but historical block order can no longer break that flow.
+  const orderedBlocks = template === "about"
+    ? sourceBlocks
+      .map((entry, sourceIndex) => ({ entry, sourceIndex }))
+      .sort((a, b) => (aboutBlockOrder.get(a.entry.blockType) ?? 50) - (aboutBlockOrder.get(b.entry.blockType) ?? 50) || a.sourceIndex - b.sourceIndex)
+      .map(({ entry }) => entry)
+    : sourceBlocks;
   const homeLabels: Partial<Record<Language, string>> = {
     en: "Home", tr: "Ana Sayfa", fr: "Accueil", es: "Inicio",
     ru: "Главная", zh: "首页", ar: "الرئيسية", fa: "خانه",
   };
-  const decoratedBlocks = sourceBlocks.map(block => {
+  const decoratedBlocks = orderedBlocks.map(block => {
     if (block.blockType === "hero") {
       return {
         ...block,
@@ -62,7 +83,15 @@ export function ManagedPublicPage({
           ...block.content,
           imageUrl: "/images/auth-bg.png",
           altText: block.content.altText || page?.data.title || SITE_NAME,
+          imagePosition: "left",
         },
+      };
+    }
+
+    if (template === "about" && block.blockType === "media_text") {
+      return {
+        ...block,
+        content: { ...block.content, imagePosition: "left" },
       };
     }
 

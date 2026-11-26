@@ -235,6 +235,8 @@ test("managed inner pages share the Vistara-inspired responsive presentation con
   assert.match(css, /cms-inner-faq-brand/);
   assert.match(css, /--inner-card-shadow-hover/);
   assert.match(css, /inner-destination-flag/);
+  assert.match(css, /About page: Vistara reference composition/);
+  assert.match(css, /--about-deep/);
   assert.match(css, /@media \(max-width: 760px\)/);
   assert.match(css, /prefers-reduced-motion: reduce/);
 });
