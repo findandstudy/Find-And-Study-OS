@@ -56,6 +56,7 @@ export interface Recovery47Manifest {
   sourceFiles: Record<string, string>;
   workerIsolationReceiptSha256: string;
   assetRecovery?: Recovery47Assets;
+  preservedBlankFields?: readonly ["whatsapp_phone"];
   assetApprovalReceiptSha256?: string;
   candidate?: { pdfSha256: string; evidenceHash: string; renderedHtmlSha256: string; assetAuditSha256?: string };
 }
@@ -93,6 +94,13 @@ function validateRecovery47Assets(value: Recovery47Assets): void {
   }
 }
 
+function validatePreservedBlankFields(value: unknown, assets?: Recovery47Assets): readonly string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length !== 1 || value[0] !== "whatsapp_phone"
+    || assets?.classification !== "reconstructed_branding") FAIL("preserved_blank_fields_invalid");
+  return value;
+}
+
 /** A reviewed operator provenance receipt is an attestation, not proof that a
  * current remote URL returned these bytes at signing time. Reconstruction is
  * permanently labelled as such; neither this helper nor the CLI fetches URLs. */
@@ -111,15 +119,17 @@ export function validateRecovery47AssetProvenance(raw: Uint8Array, assets: Recov
 
 /** Sidecar describes the recovered rendition. It does not change signed rows,
  * original signature evidence or claim that substituted branding is original. */
-export function recovery47AssetAudit(manifest: Pick<Recovery47Manifest, "inputSha256" | "sourceFiles" | "assetRecovery" | "candidate">): Buffer {
+export function recovery47AssetAudit(manifest: Pick<Recovery47Manifest, "inputSha256" | "sourceFiles" | "assetRecovery" | "candidate" | "preservedBlankFields">): Buffer {
   if (!manifest.assetRecovery || !manifest.candidate) FAIL("asset_audit_requires_candidate");
   validateRecovery47Assets(manifest.assetRecovery);
+  validatePreservedBlankFields(manifest.preservedBlankFields, manifest.assetRecovery);
   return Buffer.from(`${canonicalJson({ schemaVersion: 1, target: RECOVERY47_TARGET,
     inputSha256: manifest.inputSha256, classification: manifest.assetRecovery.classification,
     rendition: manifest.assetRecovery.classification === "reconstructed_branding"
       ? "Reconstructed branding rendition; historical image bytes are not established."
       : "Historical assets restored using separately reviewed provenance.",
     assets: manifest.assetRecovery.assets.map(({ dataUrl: _dataUrl, ...asset }) => asset),
+    ...(manifest.preservedBlankFields ? { preservedBlankFields: manifest.preservedBlankFields } : {}),
     sourceFilesSha256: sha256(canonicalJson(manifest.sourceFiles)),
     pdfSha256: manifest.candidate.pdfSha256, evidenceHash: manifest.candidate.evidenceHash,
     renderedHtmlSha256: manifest.candidate.renderedHtmlSha256 })}\n`);
@@ -135,6 +145,7 @@ export function validateRecovery47AssetApproval(raw: Uint8Array, manifest: Recov
     || canonicalJson(receipt.target) !== canonicalJson(RECOVERY47_TARGET)
     || receipt.inputSha256 !== manifest.inputSha256
     || receipt.assetRecoverySha256 !== sha256(canonicalJson(manifest.assetRecovery))
+    || canonicalJson(receipt.preservedBlankFields ?? null) !== canonicalJson(manifest.preservedBlankFields ?? null)
     || canonicalJson(receipt.candidate) !== canonicalJson(manifest.candidate)
     || !HEX.test(receipt.userDecisionEvidenceSha256) || !Number.isFinite(Date.parse(receipt.recordedAt))) FAIL("asset_approval_invalid");
 }
@@ -168,6 +179,7 @@ export function validateRecovery47Manifest(value: unknown): asserts value is Rec
   if (!v.sourceFiles || REQUIRED_RECOVERY_SOURCE_FILES.some(file => !HEX.test(v.sourceFiles[file] ?? ""))) FAIL("source_attestation_missing");
   if (v.candidate && (!HEX.test(v.candidate.pdfSha256) || !HEX.test(v.candidate.evidenceHash)
     || !HEX.test(v.candidate.renderedHtmlSha256))) FAIL("candidate_digest_invalid");
+  validatePreservedBlankFields(v.preservedBlankFields, v.assetRecovery);
   if (v.assetRecovery) {
     validateRecovery47Assets(v.assetRecovery);
     if (v.candidate && (!HEX.test(v.candidate.assetAuditSha256 ?? "")
@@ -219,7 +231,42 @@ function scalar(ctx: any, key: string): boolean {
 /** Full digest includes nullable fields and exact original timestamp strings. */
 export function recovery47InputDigest(snapshot: Recovery47Snapshot): string { return sha256(canonicalJson(snapshot)); }
 
-export function prepareRecovery47(snapshot: Recovery47Snapshot, expectedDigest: string, assetRecovery?: Recovery47Assets) {
+/** Remove CSS comments only; quoted content such as content:"{{field}}" is
+ * still a real template value, even when it contains comment-looking text. */
+function withoutCssComments(css: string): string {
+  let out = "", quote = "";
+  for (let i = 0; i < css.length; i++) {
+    const char = css[i];
+    if (quote) {
+      out += char;
+      if (char === "\\" && i + 1 < css.length) out += css[++i];
+      else if (char === quote) quote = "";
+    } else if (char === "\\" && i + 1 < css.length) { out += char + css[++i]; }
+    else if (char === "\"" || char === "'") { quote = char; out += char; }
+    else if (char === "/" && css[i + 1] === "*") {
+      const end = css.indexOf("*/", i + 2);
+      if (end < 0) return out;
+      out += " "; i = end + 1;
+    } else out += char;
+  }
+  return out;
+}
+function renderedTemplateVariables(html: string): string[] {
+  const parsed = new JSDOM(html);
+  try {
+    const doc = parsed.window.document;
+    const walker = doc.createTreeWalker(doc, parsed.window.NodeFilter.SHOW_COMMENT);
+    const comments: Array<typeof walker.currentNode> = [];
+    while (walker.nextNode()) comments.push(walker.currentNode);
+    for (const comment of comments) comment.parentNode?.removeChild(comment);
+    for (const style of doc.querySelectorAll("style")) style.textContent = withoutCssComments(style.textContent || "");
+    for (const element of doc.querySelectorAll("[style]")) element.setAttribute("style", withoutCssComments(element.getAttribute("style") || ""));
+    return [...doc.documentElement.outerHTML.matchAll(/\{\{\{?\s*([\w.]+)\s*\}\}\}?/g)].map(match => match[1]);
+  } finally { parsed.window.close(); }
+}
+
+export function prepareRecovery47(snapshot: Recovery47Snapshot, expectedDigest: string, assetRecovery?: Recovery47Assets,
+  preservedBlankFields?: readonly ["whatsapp_phone"]) {
   if (!HEX.test(expectedDigest) || recovery47InputDigest(snapshot) !== expectedDigest) FAIL("input_digest_mismatch");
   const { contract: c, session: s, application: a } = snapshot;
   if (c.id !== 47 || c.signing_session_id !== 165 || c.template_id !== 48 || s.id !== 165 || s.template_id !== 48
@@ -262,8 +309,17 @@ export function prepareRecovery47(snapshot: Recovery47Snapshot, expectedDigest: 
   const ctx = buildAgentContext(null, s.intake_data, { signerEmail: c.signer_email, signerName: c.signer_name, date: signedAt.toISOString().slice(0, 10), number });
   ctx.signature = signature;
   ctx.main_agency_signature = branding.companySignatureDataUrl;
-  const variables = [...s.template_body_html_snapshot.matchAll(/\{\{\{?\s*([\w.]+)\s*\}\}\}?/g)].map((m: RegExpMatchArray) => m[1]);
-  const missing = [...new Set(variables.filter((key: string) => !scalar(ctx, key)))];
+  const variables = renderedTemplateVariables(s.template_body_html_snapshot);
+  const preserve = validatePreservedBlankFields(preservedBlankFields, assetRecovery);
+  for (const field of preserve) {
+    if (!variables.includes(field)) FAIL("unused_preserved_blank_field");
+    const absent = (value: unknown) => value === undefined || value === null || (typeof value === "string" && !value.trim());
+    // The schema's camelCase key may carry an explicit frozen answer. Never
+    // discard that answer, infer agencyPhone/phone, or query a current agent.
+    if (scalar(ctx, field) || !absent(s.intake_data.whatsapp_phone)
+      || !absent(s.intake_data.whatsappPhone)) FAIL("preserved_blank_has_frozen_value");
+  }
+  const missing = [...new Set(variables.filter((key: string) => !scalar(ctx, key) && !preserve.includes(key)))];
   // Variable names, never their values, may be reported to the operator.
   if (missing.length) FAIL(`missing_frozen_fields:${missing.sort().join(",")}`);
   let bodyHtml = buildFinalSignedContractHtml({ bodyHtml: s.template_body_html_snapshot, templateLanguage: s.template_language_snapshot,
@@ -288,6 +344,7 @@ export function prepareRecovery47(snapshot: Recovery47Snapshot, expectedDigest: 
         notice.textContent = "Recovered TEST02 copy — branding reconstructed from separately reviewed assets. "
           + "The original historical logo bytes were not established. This PDF was generated after signing; "
           + "the frozen contract text, original signatures and signing date are retained. This is not the original signing-time PDF artifact.";
+        if (preserve.length) notice.textContent += " The original frozen WhatsApp value is absent and is preserved blank; no telephone number has been inferred.";
         rendered.window.document.body.prepend(notice);
       }
       // Only the prepared rendition is serialized. No template or session
@@ -414,7 +471,7 @@ export async function applyRecovery47(client: Recovery47SqlClient, manifest: Rec
     await client.query("SET LOCAL search_path = pg_catalog, public");
     await assertRecovery47Database(client, manifest.database);
     const snapshot = await readRecovery47Snapshot(client, true);
-    const params = prepareRecovery47(snapshot, manifest.inputSha256, manifest.assetRecovery);
+    const params = prepareRecovery47(snapshot, manifest.inputSha256, manifest.assetRecovery, manifest.preservedBlankFields);
     if (sha256(params.bodyHtml) !== manifest.candidate.renderedHtmlSha256) FAIL("rendered_input_mismatch");
     const claim = await client.query(`UPDATE public.signed_contracts SET delivery_claimed_at = clock_timestamp()
       WHERE id = 47 AND pdf_object_key IS NULL AND evidence_hash IS NULL AND delivery_claimed_at IS NULL

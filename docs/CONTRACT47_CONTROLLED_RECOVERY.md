@@ -96,6 +96,29 @@ were not established, and this is not the original signing-time PDF artifact.
 The notice participates in the rendered-content/evidence hash. Verified
 historical mode and ordinary complete snapshots receive no reconstruction notice.
 
+Actual TEST02 preflight also found `{{...}}` only inside a CSS documentation
+comment and an absent rendered `{{whatsapp_phone}}`. Required-field inspection
+now ignores HTML comments and CSS comments only within style contexts; rendered
+text, attributes and quoted CSS content remain fail-closed. The original CSS
+and frozen HTML are not edited by this inspection.
+
+For this exact test record, optional top-level
+`preservedBlankFields: ["whatsapp_phone"]` explicitly preserves the original
+blank. It requires `reconstructed_branding`, an actually used placeholder, and
+absence of both frozen `whatsapp_phone` and `whatsappPhone` values. Other field
+names, duplicates, supplied values, unused options and any other missing field
+are rejected. `phone`, `agencyPhone` and `agency_phone` are **never** inferred as
+WhatsApp. The existing renderer still receives a null agent and the original
+unchanged intake. The visible reconstruction notice additionally explains the
+absent WhatsApp value and preserved blank.
+
+The exact selection appears in the recovery manifest, audit sidecar and approval
+receipt, and changes the rendered HTML/PDF hashes. Removing or changing it
+invalidates the reviewed candidate. The offline operator preview wrapper reads
+this optional top-level field from the private asset JSON, separates it from
+`assetRecovery`, and copies it into the authority-free preview manifest. Omission
+retains the original missing-field denial.
+
 `--prepare` may run without an asset approval to create the reviewable candidate.
 It reports `RECONSTRUCTED_CANDIDATE_REQUIRES_APPROVAL`, writes the PDF and a
 `.recovery-<hash>.json` sidecar, and strips any stale asset approval from its new
@@ -113,6 +136,7 @@ target: the exact 47/165/48/12 target
 inputSha256: the original frozen input digest
 assetRecoverySha256: SHA-256 of canonical assetRecovery JSON
 candidate: the exact reviewed candidate object, including assetAuditSha256
+preservedBlankFields: ["whatsapp_phone"] only when the reviewed manifest explicitly uses it
 userDecisionEvidenceSha256: hash of the recorded explicit user decision
 recordedAt: the decision receipt timestamp
 ```
@@ -195,11 +219,14 @@ the recorded key/hash. Rollback never restores an old production database.
   Reconstructed-candidate cases additionally prove approval+sidecar persistence
   before one-record finalization and rollback on failed sidecar persistence.
 
-2026-11-26 local extension validation: **39 PASS, 1 Linux-only SKIP** in the
+2026-11-26 local extension validation: **42 PASS, 1 Linux-only SKIP** in the
 combined pure + disposable PostgreSQL run. The dedicated test database was
-`fas_contract47_test_assets_20261126a` on loopback PostgreSQL16; no real rows or
+`fas_contract47_test_blank_20261126a` on loopback PostgreSQL16; no real rows or
 assets were used. Linux fd checks and actual historical candidate visual review
-remain separate gates.
+remain separate gates. API TypeScript also passed. Tests cover misleading CSS
+comment markers in visible text and CSS strings, absent/present WhatsApp values,
+the exact blank allowlist, no phone inference, immutable original inputs and
+approval/audit mutation denial.
 
 The application-side recovery adapter and these local tests do not prove that
 the current Apply TEST02 snapshot is complete. Actual source/runtime/DB identity,

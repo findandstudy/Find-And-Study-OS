@@ -106,22 +106,25 @@ test("isolated PostgreSQL: exact-record recovery transaction and races", async t
       await assert.rejects(applyRecovery47(client, manifest, pdf, async () => "/objects/other.pdf"), /object_key_mismatch/);
       assert.equal(canonicalJson(await allRows()), before);
     });
-    const reconstructed = async () => {
+    const reconstructed = async (preserveWhatsApp = false) => {
       await reset();
       const original = testRecoverySnapshotWithImages();
+      const preservedBlankFields = preserveWhatsApp ? ["whatsapp_phone"] as const : undefined;
+      if (preserveWhatsApp) original.session.template_body_html_snapshot += '<p>WhatsApp: {{whatsapp_phone}}</p>';
       await client.query("UPDATE signing_sessions SET template_body_html_snapshot=$1, template_signing_page_config_snapshot=$2::jsonb WHERE id=165",
         [original.session.template_body_html_snapshot, JSON.stringify(original.session.template_signing_page_config_snapshot)]);
       const snapshot = await readRecovery47Snapshot(client);
       const { assetRecovery, provenanceReceipts } = testRecoveryAssets();
       const manifest: Recovery47Manifest = { ...testManifest(snapshot), database: identity, assetRecovery,
+        ...(preservedBlankFields ? { preservedBlankFields } : {}),
         candidate: { pdfSha256: sha256(pdf), evidenceHash: "3".repeat(64),
-          renderedHtmlSha256: sha256(prepareRecovery47(snapshot, recovery47InputDigest(snapshot), assetRecovery).bodyHtml) } };
+          renderedHtmlSha256: sha256(prepareRecovery47(snapshot, recovery47InputDigest(snapshot), assetRecovery, preservedBlankFields).bodyHtml) } };
       manifest.candidate!.assetAuditSha256 = sha256(recovery47AssetAudit(manifest));
       const approvalReceipt = testAssetApproval(manifest); manifest.assetApprovalReceiptSha256 = sha256(approvalReceipt);
       return { manifest, provenanceReceipts, approvalReceipt };
     };
     await t.test("reconstructed candidate requires exact approval and durable sidecar before one-record finalization", async () => {
-      const { manifest, provenanceReceipts, approvalReceipt } = await reconstructed();
+      const { manifest, provenanceReceipts, approvalReceipt } = await reconstructed(true);
       const before = await allRows(); let persisted = false;
       await applyRecovery47(client, manifest, pdf, install, { provenanceReceipts, approvalReceipt,
         installAudit: async (audit, approvedBytes, provenance) => {

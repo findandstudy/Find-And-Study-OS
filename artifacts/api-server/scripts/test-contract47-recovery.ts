@@ -68,6 +68,7 @@ export function testAssetApproval(manifest: Recovery47Manifest) {
   return Buffer.from(canonicalJson({ schemaVersion: 1, userApproved: true,
     decision: "approve_exact_recovered_rendition_for_contract47", target: RECOVERY47_TARGET,
     inputSha256: manifest.inputSha256, assetRecoverySha256: sha256(canonicalJson(manifest.assetRecovery)),
+    ...(manifest.preservedBlankFields ? { preservedBlankFields: manifest.preservedBlankFields } : {}),
     candidate: manifest.candidate, userDecisionEvidenceSha256: "c".repeat(64), recordedAt: "2026-11-26T11:00:00Z" }));
 }
 
@@ -86,6 +87,66 @@ test("reconstructed preview maps exact two logos only and visibly discloses non-
   const historical = prepareRecovery47(snapshot, recovery47InputDigest(snapshot), testRecoveryAssets("verified_historical_assets").assetRecovery);
   assert.doesNotMatch(historical.bodyHtml, /data-recovery47-notice|Recovered TEST02 copy/);
   assert.doesNotMatch(prepareRecovery47(testSnapshot(), recovery47InputDigest(testSnapshot())).bodyHtml, /data-recovery47-notice/);
+});
+
+test("variable scanner ignores HTML/CSS comments but rejects unresolved rendered text, attributes and CSS content", () => {
+  const snapshot = testSnapshot();
+  snapshot.session.template_body_html_snapshot += '<!-- {{unused_comment}} --><style>/* PDF render must keep <img src="{{...}}"> */ .a {color:red; /* {{css_comment}} */}</style><p style="color:blue; /* {{inline_comment}} */">TEST text preserved</p>';
+  const before = canonicalJson(snapshot);
+  const result = prepareRecovery47(snapshot, recovery47InputDigest(snapshot));
+  assert.match(result.bodyHtml, /TEST text preserved/);
+  assert.equal(canonicalJson(snapshot), before);
+  for (const suffix of ['<p>/* {{missing_field}} */</p>', '<img alt="{{missing_field}}" src="{{signature}}">',
+    '<style>.a::before {content:"/* {{missing_field}} */"}</style>', '<p style="--test: \u0027/* {{missing_field}} */\u0027">TEST</p>',
+    '<style>.a::before{content: \\/\\* {{missing_field}} *\\/}</style>']) {
+    const bad = structuredClone(snapshot); bad.session.template_body_html_snapshot += suffix;
+    assert.throws(() => prepareRecovery47(bad, recovery47InputDigest(bad)), /missing_frozen_fields:missing_field/);
+  }
+});
+
+test("only explicit absent WhatsApp preservation renders blank; no phone alias or frozen value is substituted", () => {
+  const snapshot = testRecoverySnapshotWithImages();
+  snapshot.session.template_body_html_snapshot += '<p id="test-whatsapp">WhatsApp: {{whatsapp_phone}}</p>';
+  snapshot.session.intake_data = { ...snapshot.session.intake_data, agencyPhone: "+12025550123", agency_phone: "+12025550124", phone: "+12025550125" };
+  const before = canonicalJson(snapshot), digest = recovery47InputDigest(snapshot), { assetRecovery } = testRecoveryAssets();
+  assert.throws(() => prepareRecovery47(snapshot, digest, assetRecovery), /missing_frozen_fields:whatsapp_phone/);
+  const rendered = prepareRecovery47(snapshot, digest, assetRecovery, ["whatsapp_phone"]);
+  assert.match(rendered.bodyHtml, /id="test-whatsapp">WhatsApp: <\/p>/);
+  assert.match(rendered.bodyHtml, /WhatsApp value is absent and is preserved blank/);
+  assert.doesNotMatch(rendered.bodyHtml, /1202555012[345]/);
+  assert.equal((rendered.bodyHtml.match(/data:image\/png;base64,/g) ?? []).length, 4);
+  assert.equal(canonicalJson(snapshot), before);
+  for (const value of [["phone"], [], ["whatsapp_phone", "phone"], ["whatsapp_phone", "whatsapp_phone"]]) {
+    assert.throws(() => prepareRecovery47(snapshot, digest, assetRecovery, value as any), /preserved_blank_fields_invalid/);
+  }
+  assert.throws(() => prepareRecovery47(snapshot, digest, testRecoveryAssets("verified_historical_assets").assetRecovery, ["whatsapp_phone"]), /preserved_blank_fields_invalid/);
+  const noField = testRecoverySnapshotWithImages();
+  assert.throws(() => prepareRecovery47(noField, recovery47InputDigest(noField), assetRecovery, ["whatsapp_phone"]), /unused_preserved_blank_field/);
+  for (const [key, value] of [["whatsapp_phone", "+12025550126"], ["whatsappPhone", "+12025550127"], ["whatsapp_phone", {}], ["whatsappPhone", false]] as const) {
+    const supplied = structuredClone(snapshot); supplied.session.intake_data[key] = value;
+    assert.throws(() => prepareRecovery47(supplied, recovery47InputDigest(supplied), assetRecovery, ["whatsapp_phone"]), /preserved_blank_has_frozen_value/);
+  }
+  const otherMissing = structuredClone(snapshot); otherMissing.session.template_body_html_snapshot += '{{tax_number}}';
+  assert.throws(() => prepareRecovery47(otherMissing, recovery47InputDigest(otherMissing), assetRecovery, ["whatsapp_phone"]), /missing_frozen_fields:tax_number/);
+});
+
+test("explicit blank field selection changes audit and requires its own exact candidate approval", () => {
+  const snapshot = testRecoverySnapshotWithImages();
+  snapshot.session.template_body_html_snapshot += '<p>WhatsApp: {{whatsapp_phone}}</p>';
+  const { assetRecovery } = testRecoveryAssets();
+  const manifest: Recovery47Manifest = { ...testManifest(snapshot), assetRecovery, preservedBlankFields: ["whatsapp_phone"],
+    candidate: { pdfSha256: "a".repeat(64), evidenceHash: "b".repeat(64), renderedHtmlSha256: sha256(prepareRecovery47(snapshot, recovery47InputDigest(snapshot), assetRecovery, ["whatsapp_phone"]).bodyHtml) } };
+  manifest.candidate!.assetAuditSha256 = sha256(recovery47AssetAudit(manifest));
+  validateRecovery47Manifest(manifest);
+  assert.deepEqual(JSON.parse(recovery47AssetAudit(manifest).toString()).preservedBlankFields, ["whatsapp_phone"]);
+  const approval = testAssetApproval(manifest); manifest.assetApprovalReceiptSha256 = sha256(approval);
+  validateRecovery47AssetApproval(approval, manifest);
+  const changed = structuredClone(manifest); delete changed.preservedBlankFields;
+  assert.throws(() => validateRecovery47Manifest(changed), /asset_audit_digest_mismatch/);
+  assert.throws(() => validateRecovery47AssetApproval(approval, changed), /asset_approval_invalid/);
+  const receipt = JSON.parse(approval.toString()); delete receipt.preservedBlankFields;
+  const bytes = Buffer.from(canonicalJson(receipt));
+  assert.throws(() => validateRecovery47AssetApproval(bytes, { ...manifest, assetApprovalReceiptSha256: sha256(bytes) }), /asset_approval_invalid/);
 });
 
 test("asset mapping never widens external URLs or accepts duplicate, unused, wrong bytes or fake original mapping", () => {

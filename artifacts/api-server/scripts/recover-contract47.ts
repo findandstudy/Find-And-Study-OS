@@ -99,7 +99,7 @@ async function main() {
       console.log(JSON.stringify({ status: "READ_ONLY_INSPECTED", contractId: 47, inputSha256: observedDigest }));
       return;
     }
-    const params = prepareRecovery47(snapshot, manifest.inputSha256, manifest.assetRecovery);
+    const params = prepareRecovery47(snapshot, manifest.inputSha256, manifest.assetRecovery, manifest.preservedBlankFields);
     if (options.has("--apply")) {
       if (!manifest.candidate) throw new Error("recovery47:approved_candidate_required");
       const candidateDir = options.get("--candidate-dir");
