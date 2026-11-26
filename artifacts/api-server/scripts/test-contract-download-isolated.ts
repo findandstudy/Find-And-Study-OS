@@ -143,17 +143,21 @@ try {
     templateId: template.id, agentId: agencies.ready.id,
     tokenHash: crypto.createHash("sha256").update(crypto.randomBytes(32)).digest("hex"), status: "signed", mode: "admin_driven",
     signerEmail: principals.ready.email, expectedEmail: principals.ready.email, verifiedEmail: principals.ready.email,
-    signerName: "TEST ONLY repair", emailVerificationMethod: "test_fixture", emailVerifiedAt: repairSignedAt,
+    signerName: "TEST ONLY repair", emailVerificationMethod: "authenticated_portal_session", emailVerifiedAt: repairSignedAt,
     subjectType: "other", subjectLabel: `TEST ONLY repair ${runId}`, signedAt: repairSignedAt,
     expiresAt: new Date("2027-11-26T12:00:00.000Z"), templateVersionSnapshot: 1,
     templateNameSnapshot: "TEST ONLY repair", templateLanguageSnapshot: "en",
-    templateBodyHtmlSnapshot: "<style>.repair{color:#143591;border:2px solid #143591;padding:12px}</style><h1 class='repair'>TEST ONLY repair</h1><img src='{{signature}}'>",
-    templateIntakeSchemaSnapshot: [], templateSigningPageConfigSnapshot: {}, intakeData: {},
+    templateBodyHtmlSnapshot: "<style>.repair{color:#143591;border:2px solid #143591;padding:12px}</style><img class='brand' src='{{main_agency_signature}}'><h1 class='repair'>TEST ONLY repair</h1><img src='{{signature}}'>",
+    templateIntakeSchemaSnapshot: [], templateSigningPageConfigSnapshot: {
+      companySignatureDataUrl: `data:image/png;base64,${repairSignature}`,
+    }, intakeData: {},
   }).returning();
   const [repairSigned] = await db.insert(signedContractsTable).values({
     signingSessionId: repairSession.id, agentId: agencies.ready.id, templateId: template.id,
     signerEmail: principals.ready.email, signerName: "TEST ONLY repair", signedAt: repairSignedAt,
     pdfObjectKey: `/objects/${corruptRelativeKey}`, evidenceHash: "b".repeat(64), signatureImageBase64: repairSignature,
+    emailVerificationRequired: true, emailVerificationMethod: "authenticated_portal_session",
+    emailVerifiedAt: repairSignedAt,
     subjectType: "other", subjectLabel: `TEST ONLY repair ${runId}`, emailedAt: null,
   }).returning();
   const { default: express } = await dependency("express");
