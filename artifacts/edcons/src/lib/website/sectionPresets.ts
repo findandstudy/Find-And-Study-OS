@@ -2,7 +2,8 @@ import type { BlockFieldDef, PageBlock } from "./blockTypes";
 import { managedHomePageBlocks } from "./managedPageStarters";
 import { independentAboutSections } from "./independentAboutSections";
 import type { Language } from "../i18n";
-export type SectionPreset = { id: string; label: string; family: "Home"|"About"; block: PageBlock };
+import { contactDesignBlocks, servicePageBlocks } from "./studentServices";
+export type SectionPreset = { id: string; label: string; family: "Home"|"About"|"Contact"|"Services"; block: PageBlock };
 const home:PageBlock[]=managedHomePageBlocks().map((b,i)=>({...b,content:{...b.content,dataMode:[6,10].includes(i)?"live":"manual",imageUrl:"/images/auth-bg.png",secondaryImageUrl:"/images/hero-bg.png",backgroundImage:"/images/hero-bg.png",...(Array.isArray(b.content.cards)?{cards:b.content.cards.map(c=>({...c as Record<string,unknown>,imageUrl:"/images/auth-bg.png"}))}:{}),...(b.blockType==="home_fallback_stats"?{stats:[{value:"01",label:"Explore your options"},{value:"02",label:"Prepare your application"},{value:"03",label:"Plan your next step"}]}:{})}}));
 const homeLabels=["Hero & journey panel","Image story & statistics","Service cards","Offer & benefits","Journey steps","Why choose us","Study destinations","Student support cards","Support network","FAQ with branding","Country tabs & university carousel","Journal cards","Call to action"];
 for (const block of home) {
@@ -23,6 +24,9 @@ const about=independentAboutSections([
   {blockType:"cta_banner",content:{title:"Plan your next step",subtitle:"Speak with our team.",ctaLabel:"Contact us",ctaUrl:"/en/contact",secondaryLabel:"Explore programs",secondaryUrl:"/en/programs"},settings:{},isVisible:true,sortOrder:8},
 ],"en");
 export const SECTION_PRESETS: SectionPreset[]=[
+  ...contactDesignBlocks().slice(1).map((block,i)=>({id:String(block.content.variant),label:i===0?"Image, contact details & enquiry form":"Location map",family:"Contact" as const,block:{...block,content:{...block.content,dataMode:"live"}}})),
+  {id:"service-cards",label:"Service cards",family:"Services",block:servicePageBlocks("services")[1]},
+  {id:"service-detail",label:"Service detail with sidebar",family:"Services",block:servicePageBlocks("airport-transfer")[1]},
   ...home.map((block,i)=>({id:`home-${i}`,label:homeLabels[i]||block.blockType,family:"Home" as const,block:{...block,content:{...block.content,sectionPreset:`home-${i}`}}})),
   ...about.map((block,i)=>({id:String(block.content.variant),label:aboutLabels[i]||block.blockType,family:"About" as const,block:{...block,content:{...block.content,...(["team_grid","office_list"].includes(block.blockType)?{dataMode:"manual"}:{}),...(["about-intro","about-why","about-panorama","about-faq"].includes(String(block.content.variant))?{altText:""}:{}),...(block.content.variant==="about-intro"?{secondaryAltText:""}:{}),...(["about-approach","about-end","about-enquiry"].includes(String(block.content.variant))?{backgroundImage:`/images/about-reference/${block.content.variant==="about-enquiry"?"globe-bg-1.png":"footer-bg.png"}`}:{})}}})),
 ];

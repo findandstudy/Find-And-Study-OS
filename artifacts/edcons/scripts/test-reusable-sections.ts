@@ -11,7 +11,7 @@ import { getTranslation, loadLanguage } from "../src/lib/i18n/index";
 test("every Home and About design has a reusable editable preset, including empty lists", () => {
   assert.equal(SECTION_PRESETS.filter(p => p.family === "Home").length, 13);
   assert.equal(SECTION_PRESETS.filter(p => p.family === "About").length, 12);
-  assert.equal(new Set(SECTION_PRESETS.map(p => p.id)).size, 25);
+  assert.equal(new Set(SECTION_PRESETS.map(p => p.id)).size, SECTION_PRESETS.length);
   for (const preset of SECTION_PRESETS) {
     const definition = getBlockTypeDef(preset.block.blockType, preset.block.content);
     assert.ok(definition, preset.id);

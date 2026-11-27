@@ -14,6 +14,7 @@ import { useLocation } from "wouter";
 import DetailTemplates, { type DetailTemplatesHandle } from "./DetailTemplates";
 import CatalogPagesInventory from "./CatalogPagesInventory";
 import { canOpenManagedPage, isInternalWebsitePage, isSystemManagedPage, managedPagePublicPath } from "@/lib/website/managedPageRoutes";
+import { STUDENT_SERVICES, canonicalServiceSlug } from "@/lib/website/studentServices";
 
 const WebsiteBlog = lazy(() => import("./Blog"));
 
@@ -98,6 +99,18 @@ export default function WebsitePages() {
       setLocation(`/admin/website/pages/${page.id}/edit`);
     },
   });
+  const servicePagesMutation = useMutation({
+    mutationFn: async () => {
+      const existing = await customFetch<WebsitePage[]>("/api/website/pages");
+      const known = new Set(existing.map(page=>page.slug));
+      const definitions=[{slug:"services",title:"Our Services",starter:"student-services"},...STUDENT_SERVICES.map(service=>({slug:canonicalServiceSlug(service.slug),title:service.en.name,starter:`student-service:${canonicalServiceSlug(service.slug)}`}))];
+      let created=0;
+      for(const definition of definitions){if(known.has(definition.slug))continue;await customFetch("/api/website/pages/drafts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...definition,locale:"en"})});known.add(definition.slug);created++;}
+      return created;
+    },
+    onSuccess:()=>{setArea("managed");setStatusFilter("all");setSearchTerm("");setLocaleFilter("en");},
+    onSettled:()=>{queryClient.invalidateQueries({queryKey:["website-pages"]});},
+  });
 
   const filtered = pages.filter(p => {
     if (isInternalWebsitePage(p)) return false;
@@ -174,9 +187,11 @@ export default function WebsitePages() {
               <p className="text-sm text-muted-foreground">{copy("Manage your website pages and their content.", "Web sitesi sayfalarını ve içeriklerini yönetin.")}</p>
             </div>
           </div>
-          {area === "managed" && <Button onClick={() => requestLeave(() => { createMutation.reset(); setCreateOpen(true); })}><Plus className="w-4 h-4 me-2" />{copy("New page", "Yeni sayfa")}</Button>}
+          {area === "managed" && <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={servicePagesMutation.isPending||isLoading} onClick={()=>servicePagesMutation.mutate()}>{servicePagesMutation.isPending?copy("Creating service drafts…","Hizmet taslakları oluşturuluyor…"):copy("Create service pages","Hizmet sayfalarını oluştur")}</Button><Button onClick={() => requestLeave(() => { createMutation.reset(); setCreateOpen(true); })}><Plus className="w-4 h-4 me-2" />{copy("New page", "Yeni sayfa")}</Button></div>}
         </div>
 
+        {servicePagesMutation.isSuccess&&<p role="status" className="text-sm text-muted-foreground">{copy(`${servicePagesMutation.data} service drafts created. Existing pages were preserved. Review each draft before publishing.`,`${servicePagesMutation.data} hizmet taslağı oluşturuldu. Mevcut sayfalar korundu. Yayınlamadan önce taslakları inceleyin.`)}</p>}
+        {servicePagesMutation.isError&&<p role="alert" className="text-sm text-destructive">{copy("Service drafts could not all be created. You may retry; existing addresses will be skipped.","Hizmet taslaklarının tamamı oluşturulamadı. Tekrar deneyebilirsiniz; mevcut adresler atlanır.")}</p>}
         <Dialog open={createOpen} onOpenChange={open => { if (!createMutation.isPending) setCreateOpen(open); }}>
           <DialogContent className="max-h-[90dvh] overflow-y-auto">
             <DialogHeader>

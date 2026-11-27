@@ -10,6 +10,7 @@ import { loadCriticalPublicLanguage } from "@/lib/i18n/context";
 import { prefetchPublicDetailForLanguage } from "@/pages/public/publicDetailQuery";
 import { CountryFlag } from "@/components/CountryFlag";
 import { CookieBanner } from "@/components/CookieBanner";
+import { STUDENT_SERVICES, serviceCopy, servicePath } from "@/lib/website/studentServices";
 
 export function PublicLayout({ children }: { children: ReactNode }) {
   const { t, lang, setLang, localePath, isRTL } = useI18n();
@@ -18,6 +19,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
+  const [servicesOpen, setServicesOpen] = useState(false);
   const [switchingTo, setSwitchingTo] = useState<Language | null>(null);
   const [langSwitchFailed, setLangSwitchFailed] = useState(false);
   const [headerLogoFailed, setHeaderLogoFailed] = useState(false);
@@ -53,12 +55,14 @@ export function PublicLayout({ children }: { children: ReactNode }) {
 
   const currentMeta = LANGUAGE_META[lang];
 
-  const navLinks = [
+  const serviceLocale=lang==="tr"?"tr":"en";
+  const navLinks: {href:string;label:string;children?:{href:string;label:string}[]}[] = [
     { href: localePath("/"), label: t("nav.home") },
     { href: localePath("/about"), label: t("nav.about") },
     { href: localePath("/countries"), label: t("nav.countries") },
     { href: localePath("/programs"), label: t("nav.programs") },
     { href: localePath("/blog"), label: t("nav.blog") },
+    { href: servicePath("services",serviceLocale), label: lang==="tr"?"Hizmetler":"Services", children:STUDENT_SERVICES.map(service=>({href:servicePath(service.slug,serviceLocale),label:serviceCopy(service,serviceLocale).name})) },
     { href: localePath("/contact"), label: t("nav.contact") },
   ];
 
@@ -147,7 +151,12 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           </Link>
 
           <nav aria-label="Main navigation" className="hidden xl:flex items-center gap-6 font-medium text-sm text-muted-foreground">
-            {navLinks.map((link) => (
+            {navLinks.map((link) => link.children ? (
+              <div key={link.href} className="relative py-3" onMouseEnter={()=>setServicesOpen(true)} onMouseLeave={()=>setServicesOpen(false)} onKeyDown={event=>{if(event.key==="Escape")setServicesOpen(false);}}>
+                <div className="flex items-center gap-1"><Link href={link.href} onClick={()=>setServicesOpen(false)} className="hover:text-primary transition-colors">{link.label}</Link><button type="button" aria-label={lang==="tr"?"Hizmet seçenekleri":"Service options"} aria-expanded={servicesOpen} onClick={()=>setServicesOpen(!servicesOpen)}><ChevronDown className="h-3.5 w-3.5"/></button></div>
+                {servicesOpen&&<div className="absolute start-0 top-full z-[110] min-w-[250px] rounded-xl border bg-card p-2 shadow-xl">{link.children.map(child=><Link key={child.href} href={child.href} className="block rounded-lg px-4 py-3 text-sm text-foreground transition-colors hover:bg-primary/5 hover:text-primary focus-visible:bg-primary/5" onClick={()=>setServicesOpen(false)}>{child.label}</Link>)}</div>}
+              </div>
+            ) : (
               <Link key={link.href} href={link.href} className="hover:text-primary transition-colors">
                 {link.label}
               </Link>
@@ -204,14 +213,16 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           <div className="xl:hidden border-t bg-background/95 backdrop-blur-md">
             <nav className="max-w-7xl mx-auto px-4 py-4 flex flex-col gap-1">
               {navLinks.map((link) => (
+                <div key={link.href} className="flex flex-col">
                 <Link
-                  key={link.href}
                   href={link.href}
                   className="px-4 py-3 rounded-lg hover:bg-secondary/80 text-foreground font-medium transition-colors"
                   onClick={() => setMobileOpen(false)}
                 >
                   {link.label}
                 </Link>
+                {link.children && <div className="ms-4 border-s ps-2 flex flex-col">{link.children.map(child=><Link key={child.href} href={child.href} className="px-4 py-2 text-sm text-muted-foreground hover:text-primary" onClick={()=>setMobileOpen(false)}>{child.label}</Link>)}</div>}
+                </div>
               ))}
               <div className="border-t mt-2 pt-2">
                 <p className="px-4 py-2 text-xs text-muted-foreground font-semibold uppercase tracking-wider">
@@ -315,7 +326,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
               <ul className="space-y-3">
                 <li><Link href={localePath("/programs")} className="hover:text-primary transition-colors">{t("footer.findPrograms")}</Link></li>
                 <li><Link href={localePath("/countries")} className="hover:text-primary transition-colors">{t("footer.studyDestinations")}</Link></li>
-                <li><Link href={localePath("/about")} className="hover:text-primary transition-colors">{t("footer.ourServices")}</Link></li>
+                <li><Link href={servicePath("services",serviceLocale)} className="hover:text-primary transition-colors">{t("footer.ourServices")}</Link></li>
                 <li><Link href={localePath("/blog")} className="hover:text-primary transition-colors">{t("footer.studentBlog")}</Link></li>
                 <li><Link href={localePath("/agency/apply")} className="hover:text-primary transition-colors">{t("footer.becomePartner")}</Link></li>
               </ul>

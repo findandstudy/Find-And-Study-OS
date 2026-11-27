@@ -1,0 +1,25 @@
+import { ArrowUpRight, Check, MapPin } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
+import { useI18n } from "@/hooks/use-i18n";
+import { safeSectionImage, safeSectionUrl } from "@/lib/website/sectionUrls";
+import "./studentServices.css";
+const s=(v:unknown)=>typeof v==="string"?v:"";
+const rows=(v:unknown):Record<string,unknown>[]=>Array.isArray(v)?v.filter(x=>x&&typeof x==="object").slice(0,30):[];
+const media=(v:unknown)=>safeSectionImage(s(v).replace("/accommodation.jpg","/accommodation.png"));
+function Image({src,alt,className=""}:{src:unknown;alt?:unknown;className?:string}){const url=media(src);return url?<img src={url} alt={s(alt)} loading="lazy" className={className}/>:null;}
+function Action({href,children}:{href:unknown;children:React.ReactNode}){const url=safeSectionUrl(href);return url?<a className="sd-button" href={url}>{children}<ArrowUpRight aria-hidden="true"/></a>:null;}
+export function ContactMapSection({content:c,preview=false}:{content:Record<string,unknown>;preview?:boolean}){
+ const {lang}=useI18n();const {data:offices=[]}=useQuery<{address?:string}[]>({queryKey:["cms-offices",lang],queryFn:()=>customFetch(`/api/cms/offices?lang=${lang}`),enabled:c.dataMode!=="manual",staleTime:300000,retry:false});
+ const address=(c.dataMode!=="manual"&&offices[0]?.address)||s(c.address);
+ if(!address)return null;
+ const href=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+ return <section className="sd-map sd-design"><div className="sd-container"><div className="sd-map-caption"><h2><MapPin aria-hidden="true"/>{s(c.title)}</h2><a href={href} target="_blank" rel="noopener noreferrer">{s(c.linkLabel)}<ArrowUpRight aria-hidden="true"/></a></div>{preview?<div className="sd-map-preview">{address}</div>:<iframe loading="lazy" title={`${s(c.title)} — ${address}`} referrerPolicy="no-referrer" src={`https://maps.google.com/maps?q=${encodeURIComponent(address)}&output=embed`}/>}</div></section>;
+}
+export function ServiceEditorialSection({variant,content:c}:{variant:string;content:Record<string,unknown>}){
+ if(variant==="service-cards")return <section className="sd-services sd-design"><div className="sd-container"><header className="sd-service-intro"><span className="sd-kicker">{s(c.eyebrow)}</span><h2>{s(c.title)}</h2><p>{s(c.subtitle)}</p></header><div className="sd-service-grid">{rows(c.cards).map((card,i)=>{const href=safeSectionUrl(card.linkUrl);return <article key={i} className="sd-service-card">{href?<a className="sd-card-image" href={href} aria-label={s(card.title)}><Image src={card.imageUrl} alt={card.altText||card.title}/></a>:<div className="sd-card-image"><Image src={card.imageUrl} alt={card.altText||card.title}/></div>}<div className="sd-card-copy"><h2>{href?<a href={href}>{s(card.title)}</a>:s(card.title)}</h2><p>{s(card.description)}</p>{href&&<a className="sd-card-arrow" href={href} aria-label={s(card.title)}><ArrowUpRight aria-hidden="true"/></a>}</div></article>;})}</div></div></section>;
+ if(variant!=="service-detail")return null;
+ const gallery=rows(c.gallery);
+ return <section className="sd-service-detail sd-design"><div className="sd-container sd-detail-grid"><aside className="sd-service-sidebar"><nav aria-label={s(c.sidebarTitle)}><h2>{s(c.sidebarTitle)}</h2>{rows(c.menuItems).map((item,i)=>{const href=safeSectionUrl(item.url);return href?<a key={i} href={href} aria-current={href===c.currentUrl?"page":undefined}>{s(item.title)}<ArrowUpRight aria-hidden="true"/></a>:null;})}</nav><div className="sd-sidebar-contact"><Image src={c.contactImage} alt=""/><div><img className="sd-sidebar-logo" src="/api/settings/branding/logo?variant=header" alt="Find And Study" loading="lazy"/><h3>{s(c.contactTitle)}</h3><p>{s(c.contactText)}</p><Action href={c.contactUrl}>{s(c.contactLabel)}</Action></div></div></aside><div className="sd-service-main"><Image src={c.imageUrl} alt={c.altText||c.title} className="sd-detail-cover"/><p className="sd-detail-lead">{s(c.intro)}</p><section><span className="sd-kicker">{s(c.title)}</span><h2>{s(c.sectionTitle)}</h2><p>{s(c.body)}</p></section><section><h2>{s(c.benefitsTitle)}</h2><ul className="sd-benefits">{rows(c.benefits).map((item,i)=><li key={i}><Check aria-hidden="true"/>{s(item.title)}</li>)}</ul></section>{gallery.length>0&&<div className="sd-detail-gallery">{gallery.map((image,i)=><Image key={i} src={image.imageUrl} alt={image.altText}/>)}</div>}<section><h2>{s(c.processTitle)}</h2><ol className="sd-service-steps">{rows(c.steps).map((step,i)=><li key={i}><span>{String(i+1).padStart(2,"0")}</span><h3>{s(step.title)}</h3><p>{s(step.description)}</p></li>)}</ol></section><section><h2>{s(c.faqTitle)}</h2><div className="sd-faq">{rows(c.questions).map((q,i)=><details key={i}><summary>{s(q.question)}<span aria-hidden="true">+</span></summary><p>{s(q.answer)}</p></details>)}</div></section><div className="sd-detail-actions"><Action href={c.contactUrl}>{s(c.contactLabel)}</Action>{Boolean(c.externalLabel)&&<Action href={c.externalUrl}>{s(c.externalLabel)}</Action>}</div></div></div></section>;
+}
+

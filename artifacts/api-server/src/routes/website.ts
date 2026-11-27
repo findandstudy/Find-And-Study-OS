@@ -504,7 +504,7 @@ const createPageDraft: RequestHandler = async (req, res): Promise<void> => {
   catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Invalid page draft" }); return; }
   try {
     const page = await db.transaction(async tx => {
-      const [created] = await tx.insert(websitePagesTable).values({ ...draft.page, createdBy: req.user?.id }).returning();
+      const [created] = await tx.insert(websitePagesTable).values({ ...draft.page, createdBy: req.user?.id, updatedBy: req.user?.id }).returning();
       if (draft.blocks.length) await tx.insert(websitePageBlocksTable).values(draft.blocks.map(block => ({ ...block, pageId: created.id })));
       return created;
     });

@@ -1,6 +1,7 @@
 import { projectPublicTuition, publicMinorAmount, publicCurrency } from "./publicCatalogTuition";
 import { JSDOM } from "jsdom";
 import { renderReusableEditorial } from "./reusableEditorialRender";
+import { renderServiceEditorial } from "./serviceEditorialRender";
 import { publicCatalogRequirements } from "./publicCatalogRequirements";
 import { detailContentPresentationOverrides, parseDetailContent, resolveDetailTemplateContent, type DetailContent, type DetailContentSection } from "./websiteDetailContentContract";
 import type { DetailSectionPresentation } from "./websiteDetailLayoutContract";
@@ -1252,6 +1253,8 @@ function spacerHeightClass(value: unknown): string {
 
 function renderPublicPageBlockBody(block: PublicPageBlock, index: number): string {
   const content = block.content;
+  const serviceEditorial = renderServiceEditorial(content, { escape: escapeHtml, image: safePublicImageUrl, url: safePublicUrl });
+  if (serviceEditorial !== null) return serviceEditorial;
   const editorial = renderReusableEditorial(content, { escape: escapeHtml, image: safePublicImageUrl, url: safePublicUrl });
   if (editorial !== null) return editorial;
   if (block.blockType === "home_fallback_hero") {
@@ -2004,7 +2007,7 @@ export function publicCatalogCsp(nonce: string): string {
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     "connect-src 'self' https:",
-    "frame-src 'self'",
+    "frame-src 'self' https://maps.google.com",
     "frame-ancestors 'self'",
     "object-src 'none'",
     "base-uri 'self'",

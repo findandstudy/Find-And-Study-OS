@@ -84,7 +84,7 @@ test("authoring wiring preserves admin authorization, public read projection and
   assert.match(routes, /status: "in_review"/);
   assert.match(routes, /current\.status !== "in_review"/);
   assert.match(routes, /current\.updatedBy === req\.user\?\.id/);
-  assert.match(routes, /approval: \{ digest, authorId: current\.updatedBy, reviewerId: req\.user\?\.id, preflight: preflight\.publication \}/);
+  assert.match(routes, /approval: \{ digest, authorId: current\.updatedBy, reviewerId: req\.user\?\.id, mode: current\.updatedBy === req\.user\?\.id \? "STAGING_EXPLICIT_SINGLE_ADMIN" : "DUAL_REVIEW", preflight: preflight\.publication \}/);
   assert.match(routes, /\/website\/pages\/:id\/publication-preflight/);
   assert.match(routes, /VISIBLE_CONTENT_REQUIRED/);
   assert.match(routes, /PUBLICATION_PREFLIGHT_FAILED/);

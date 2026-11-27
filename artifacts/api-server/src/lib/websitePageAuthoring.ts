@@ -1,5 +1,6 @@
 import { isReservedPublicPageSlug, parsePublicCatalogPageBlockSource } from "./publicCatalogRenderContract";
 import { PROGRAM_SUPPORTED_LOCALES, type ProgramSupportedLocale } from "./programTranslationContract";
+import { STUDENT_SERVICES, canonicalServiceSlug, serviceCopy, servicePageBlocks } from "@workspace/api-zod/student-services";
 
 /** Authoring input only: never accepts catalogue facts, publication state or actor IDs. */
 export function parseWebsitePageDraft(input: unknown) {
@@ -16,6 +17,16 @@ export function parseWebsitePageDraft(input: unknown) {
   }
   const locale = authoringLocale(body.locale ?? "en");
   const starter = body.starter ?? "blank";
+  const serviceSlug = starter === "student-services" ? "services" : typeof starter === "string" && starter.startsWith("student-service:") ? starter.slice("student-service:".length) : null;
+  if (serviceSlug !== null) {
+    const service = STUDENT_SERVICES.find(s=>canonicalServiceSlug(s.slug)===serviceSlug);
+    if(serviceSlug!=="services"&&!service)throw new Error("Invalid service starter");
+    if(!["en","tr"].includes(locale))throw new Error("Service starters support English and Turkish; translate the saved draft for other languages");
+    const other=locale==="en"?"tr":"en", translatedTitle=service?serviceCopy(service,other).name:other==="tr"?"Hizmetlerimiz":"Our Services";
+    const description=service?serviceCopy(service,locale).summary:locale==="tr"?"Find And Study ile transfer, sigorta, SIM kart, konaklama, tercüme ve öğrenci hizmet paketlerini keşfedin.":"Explore Find And Study student services: airport transfers, health insurance, SIM cards, accommodation, translation and service packages.";
+    const translatedDescription=service?serviceCopy(service,other).summary:other==="tr"?"Find And Study öğrenci hizmetlerini keşfedin: karşılama, konaklama, sigorta, iletişim ve belge desteği.":"Explore Find And Study support for your arrival, accommodation, insurance, connectivity and document preparation.";
+    return {page:{title,slug,locale,template:"default",status:"draft",robotsIndex:false,robotsFollow:true,metaTitle:`${title} | Find And Study`,metaDescription:description,translationsJson:{[other]:{title:translatedTitle,metaTitle:`${translatedTitle} | Find And Study`,metaDescription:translatedDescription,blocks:servicePageBlocks(serviceSlug,other)}}},blocks:servicePageBlocks(serviceSlug,locale)};
+  }
   const source = starter === "blank" ? null : parsePublicCatalogPageBlockSource(starter);
   if (starter !== "blank" && !source) throw new Error("Invalid page starter");
   const country = text(body.country ?? "", 120);

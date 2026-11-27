@@ -50,7 +50,7 @@ const cspDirectives = {
   imgSrc: ["'self'", "data:", "https:"],
   fontSrc: ["'self'", "data:"],
   connectSrc: ["'self'", "https:"],
-  frameSrc: ["'self'"],
+      frameSrc: ["'self'", "https://maps.google.com"],
   frameAncestors: ["'self'"],
   objectSrc: ["'none'"],
   baseUri: ["'self'"],

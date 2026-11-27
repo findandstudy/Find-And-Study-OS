@@ -598,7 +598,7 @@ export function getBlockTypeDef(type: string, content?: Record<string,unknown>):
       },
     };
   }
-  const preset=content&&SECTION_PRESETS.find(p=>p.id===content.sectionPreset||p.id===content.variant);
+  const preset=content&&(SECTION_PRESETS.find(p=>p.id===content.sectionPreset)||SECTION_PRESETS.find(p=>p.id===content.variant));
   if (preset && definition) {
     const originalFields = definition.fields;
     const inferred = presetFields({ ...preset.block.content, ...content });

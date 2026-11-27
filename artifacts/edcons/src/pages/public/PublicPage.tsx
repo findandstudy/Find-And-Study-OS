@@ -14,6 +14,9 @@ import { catalogLayoutClass } from "@/lib/website/catalogPresentation";
 import { resolveCmsValue, type CmsTextVariableValues } from "@/lib/website/cmsTextVariables";
 import { ABOUT_SECTION_VARIANTS } from "@/lib/website/independentAboutSections";
 import { ReusableEditorialSection } from "./ReusableEditorialSection";
+import { ContactWorkspaceSection } from "./Contact";
+import { ServiceEditorialSection, ContactMapSection } from "./ServiceEditorialSection";
+import { SERVICE_PRESET_VARIANTS } from "@/lib/website/studentServices";
 import { hydrateManagedHomeDestinations, hydrateManagedHomeUniversities, type HomeDestination, type HomeUniversity } from "@/lib/website/homeDestinationCards";
 import "./cmsEditorial.css";
 import "./homeVistaraParity.css";
@@ -155,7 +158,8 @@ export function CmsBlock({ block, index, variables, preview = false }: { block: 
   const customAbout=about&&!['about-team','about-offices','about-logos'].includes(variant);
   const home=String(resolved.content.sectionPreset||"").startsWith("home-");
   const collection=about&&["team_grid","office_list"].includes(resolved.blockType)&&resolved.content.dataMode==="live";
-  const body=<div className="cms-editorial-block" data-section-preset={resolved.content.sectionPreset?String(resolved.content.sectionPreset):about?variant:undefined} data-cms-block={resolved.blockType} data-cms-index={index} style={blockStyle(resolved)}>{customAbout?<ReusableEditorialSection variant={variant} content={resolved.content} preview={preview}/>:about?<div className="about-reference">{collection?<EditorialCollectionBody block={resolved} index={index}/>:<Block block={resolved} index={index}/>}</div>:home?<HomePresetBody block={resolved} index={index}/>:<Block block={resolved} index={index} />}</div>;
+  const service=SERVICE_PRESET_VARIANTS.has(variant);
+  const body=<div className="cms-editorial-block" data-section-preset={resolved.content.sectionPreset?String(resolved.content.sectionPreset):about||service?variant:undefined} data-cms-block={resolved.blockType} data-cms-index={index} style={blockStyle(resolved)}>{variant==="contact-workspace"?<ContactWorkspaceSection content={resolved.content} preview={preview}/>:variant==="contact-map"?<ContactMapSection content={resolved.content} preview={preview}/>:service?<ServiceEditorialSection variant={variant} content={resolved.content}/>:customAbout?<ReusableEditorialSection variant={variant} content={resolved.content} preview={preview}/>:about?<div className="about-reference">{collection?<EditorialCollectionBody block={resolved} index={index}/>:<Block block={resolved} index={index}/>}</div>:home?<HomePresetBody block={resolved} index={index}/>:<Block block={resolved} index={index} />}</div>;
   return String(resolved.content.sectionPreset||"").startsWith("home-")?<div className="home-future-page cms-reusable-home">{body}</div>:body;
 }
 function HomePresetBody({block,index}:{block:PageBlock;index:number}) {

@@ -22,6 +22,7 @@ import { useLocation } from "wouter";
 import { BLOCK_APPEARANCE_KEYS, BLOCK_TYPES, getBlockTypeDef, getDefaultContent, type PageBlock } from "@/lib/website/blockTypes";
 import { SECTION_PRESETS, createSectionPreset, editableHomeSections } from "@/lib/website/sectionPresets";
 import { independentAboutSections } from "@/lib/website/independentAboutSections";
+import { contactPageSections } from "@/lib/website/contactPageSections";
 import { SUPPORTED_LANGUAGES, LANGUAGE_META, type Language } from "@/lib/i18n";
 import { loadLanguage } from "@/lib/i18n/index";
 import DOMPurify from "isomorphic-dompurify";
@@ -203,7 +204,7 @@ function PageEditorSession({ id }: { id: number }) {
   const [mobilePane, setMobilePane] = useState<"blocks" | "editor" | "preview">("preview");
   const [showAddBlock, setShowAddBlock] = useState(false);
   const [blockSearch, setBlockSearch] = useState("");
-  const [blockCategory, setBlockCategory] = useState<"all" | "content" | "media" | "data" | "layout" | "reference" | "Home" | "About">("all");
+  const [blockCategory, setBlockCategory] = useState<"all" | "content" | "media" | "data" | "layout" | "reference" | "Home" | "About" | "Contact" | "Services">("all");
   const [dirty, setDirty] = useState(false);
   const [starterLoaded, setStarterLoaded] = useState(false);
   const [revisionConflict, setRevisionConflict] = useState(false);
@@ -288,7 +289,7 @@ function PageEditorSession({ id }: { id: number }) {
     queryKey: ["website-page", id],
     queryFn: async () => {
       const result = await customFetch<WebsitePage>(`/api/website/pages/${id}`);
-      if (result.template === "about") await Promise.all(SUPPORTED_LANGUAGES.map(locale => loadLanguage(locale)));
+      if (["about","contact"].includes(result.template)) await Promise.all(SUPPORTED_LANGUAGES.map(locale => loadLanguage(locale)));
       return result;
     },
   });
@@ -342,7 +343,7 @@ function PageEditorSession({ id }: { id: number }) {
     const enrichedBase = page && isSystemManagedPage(page)
       ? normalizeBlocks(enrichManagedPageBlocks(page.template, parsedBase, page.locale as Language))
       : parsedBase;
-    const parsed = page?.template === "about" ? normalizeBlocks(independentAboutSections(enrichedBase,page.locale as Language)) : page?.template === "home" ? editableHomeSections(enrichedBase) : enrichedBase;
+    const parsed = page?.template === "contact" ? normalizeBlocks(contactPageSections(enrichedBase,page.locale as Language)) : page?.template === "about" ? normalizeBlocks(independentAboutSections(enrichedBase,page.locale as Language)) : page?.template === "home" ? editableHomeSections(enrichedBase) : enrichedBase;
     const managedStructureEnriched = JSON.stringify(parsed) !== JSON.stringify(parsedBase);
     setBlocks(parsed);
     defaultBlocksRef.current = JSON.parse(JSON.stringify(parsed));
@@ -358,10 +359,10 @@ function PageEditorSession({ id }: { id: number }) {
         const tj = page.translationsJson as Record<string, unknown>;
         for (const [loc, data] of Object.entries(tj)) {
           if (Array.isArray(data)) {
-            translationsRef.current[loc] = normalizeBlocks(page?.template === "about" ? independentAboutSections(data as PageBlock[],loc as Language) : data as PageBlock[]);
+            translationsRef.current[loc] = normalizeBlocks(page?.template === "contact" ? contactPageSections(data as PageBlock[],loc as Language) : page?.template === "about" ? independentAboutSections(data as PageBlock[],loc as Language) : data as PageBlock[]);
           } else if (data && typeof data === "object" && "blocks" in (data as Record<string, unknown>)) {
             const translated=(data as {blocks:PageBlock[]}).blocks;
-            translationsRef.current[loc] = normalizeBlocks(page?.template === "about" ? independentAboutSections(translated,loc as Language) : translated);
+            translationsRef.current[loc] = normalizeBlocks(page?.template === "contact" ? contactPageSections(translated,loc as Language) : page?.template === "about" ? independentAboutSections(translated,loc as Language) : translated);
           }
         }
       } catch {}
@@ -1202,10 +1203,10 @@ function PageEditorSession({ id }: { id: number }) {
                   </DialogHeader>
                   <div className="border-b bg-muted/30 px-6 py-4">
                     <div className="relative"><Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={blockSearch} onChange={event => setBlockSearch(event.target.value)} placeholder={copy("Search sections...", "Bölümlerde ara...")} className="ps-9" /></div>
-                    <div className="mt-3 flex flex-wrap gap-2">{(["all", "Home", "About", "content", "media", "data", "layout", "reference"] as const).map(category => <Button key={category} type="button" size="sm" variant={blockCategory === category ? "default" : "outline"} className="h-7 rounded-full text-xs" onClick={() => setBlockCategory(category)}>{category === "all" ? copy("All", "Tümü") : category === "Home" ? copy("Home designs", "Anasayfa tasarımları") : category === "About" ? copy("About designs", "Hakkımızda tasarımları") : copy(category[0].toUpperCase() + category.slice(1))}</Button>)}</div>
+                    <div className="mt-3 flex flex-wrap gap-2">{(["all", "Home", "About", "Contact", "Services", "content", "media", "data", "layout", "reference"] as const).map(category => <Button key={category} type="button" size="sm" variant={blockCategory === category ? "default" : "outline"} className="h-7 rounded-full text-xs" onClick={() => setBlockCategory(category)}>{category === "all" ? copy("All", "Tümü") : category === "Home" ? copy("Home designs", "Anasayfa tasarımları") : category === "About" ? copy("About designs", "Hakkımızda tasarımları") : category === "Contact" ? copy("Contact designs","İletişim tasarımları") : category === "Services" ? copy("Service designs","Hizmet tasarımları") : copy(category[0].toUpperCase() + category.slice(1))}</Button>)}</div>
                   </div>
                   <div className="grid max-h-[58vh] grid-cols-1 gap-3 overflow-y-auto p-6 sm:grid-cols-2 lg:grid-cols-3">
-                    {SECTION_PRESETS.filter(p=>(blockCategory==="all"||blockCategory===p.family)&&(!blockSearch.trim()||`${p.family} ${p.label}`.toLowerCase().includes(blockSearch.trim().toLowerCase()))).map(p=><button key={p.id} type="button" onClick={()=>addBlock(p.block.blockType,p.id)} className="group flex min-h-28 flex-col items-start rounded-2xl border border-primary/25 bg-primary/5 p-4 text-start transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md"><span className="text-[10px] font-bold uppercase tracking-wider text-primary">{p.family === "Home"?copy("Home","Anasayfa"):copy("About","Hakkımızda")} · {copy("Ready design","Hazır tasarım")}</span><strong className="mt-3 text-sm">{p.label}</strong><span className="mt-2 text-[11px] text-muted-foreground">{copy("Independent content, media and appearance","Bağımsız içerik, görsel ve görünüm")}</span></button>)}
+                    {SECTION_PRESETS.filter(p=>(blockCategory==="all"||blockCategory===p.family)&&(!blockSearch.trim()||`${p.family} ${p.label}`.toLowerCase().includes(blockSearch.trim().toLowerCase()))).map(p=><button key={p.id} type="button" onClick={()=>addBlock(p.block.blockType,p.id)} className="group flex min-h-28 flex-col items-start rounded-2xl border border-primary/25 bg-primary/5 p-4 text-start transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md"><span className="text-[10px] font-bold uppercase tracking-wider text-primary">{p.family === "Home"?copy("Home","Anasayfa"):p.family==="Contact"?copy("Contact","İletişim"):p.family==="Services"?copy("Services","Hizmetler"):copy("About","Hakkımızda")} · {copy("Ready design","Hazır tasarım")}</span><strong className="mt-3 text-sm">{p.label}</strong><span className="mt-2 text-[11px] text-muted-foreground">{copy("Independent content, media and appearance","Bağımsız içerik, görsel ve görünüm")}</span></button>)}
                     {BLOCK_TYPES.filter(bt => (blockCategory === "all" || bt.category === blockCategory) && (!blockSearch.trim() || `${bt.label} ${bt.category}`.toLowerCase().includes(blockSearch.trim().toLowerCase()))).map(bt => (
                       <button
                         key={bt.type}
