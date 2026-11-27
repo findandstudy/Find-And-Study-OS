@@ -3,6 +3,7 @@ import { pool } from "@workspace/db";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import { STAFF_ROLES } from "./roles";
+import { workPipelineEnvironmentAllowed } from "./workPipelineEnvironment";
 
 export const WP_UUID = z.string().uuid();
 const text = (max: number) => z.string().trim().max(max);
@@ -126,17 +127,10 @@ export class WorkError extends Error {
 }
 export function workPipelineTenant(): string | null {
   if (process.env.WORK_PIPELINES_ENABLED !== "true") return null;
-  const u = new URL(process.env.DATABASE_URL || "invalid:");
-  if (
-    process.env.NODE_ENV === "production" ||
-    process.env.ALLOW_LIVE_INTEGRATIONS !== "false" ||
-    u.hostname !== "127.0.0.1" ||
-    u.port !== "5433" ||
-    u.pathname !== "/fasos_apply_local"
-  )
+  if (!workPipelineEnvironmentAllowed(process.env))
     throw new WorkError(
       503,
-      "Work pipelines are enabled only in the isolated local environment",
+      "Work pipelines require the isolated local or explicit staging environment",
     );
   return WP_UUID.parse(process.env.WORK_PIPELINES_TENANT_ID);
 }
@@ -148,6 +142,12 @@ export async function workTx<T>(
   const c = await pool.connect();
   try {
     await c.query("BEGIN");
+    if (process.env.WORK_PIPELINES_ENV === "staging") {
+      const identity = await c.query("SELECT current_database() AS name, current_user AS actor, inet_server_port() AS port");
+      const row = identity.rows[0];
+      if (row?.name !== "fasos_staging" || row?.actor !== "fas_app" || row?.port !== 5432)
+        throw new WorkError(503, "Work pipeline database identity mismatch");
+    }
     await c.query("SELECT set_config('app.work_pipeline_tenant',$1,true)", [
       tenant,
     ]);

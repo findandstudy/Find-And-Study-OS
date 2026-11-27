@@ -3479,6 +3479,9 @@ async function seedClaudeIntegration() {
     }
   }
 
+  const { startWorkPipelineReminderWorker } = await import("./lib/workPipelineReminderWorker");
+  const stopWorkPipelineReminders = startWorkPipelineReminderWorker();
+
   serveStaticFrontend();
 
   const [{ feedBus }, { inboxBus }, { notificationBus }, { invalidateNotificationCounts }, { publicCatalogInvalidationBus }, { applyPublicCatalogRenderCacheInvalidation }, { clearPublicCatalogPolicyCache }, { facetCacheInvalidationBus }, { invalidateFacetCache }] = await Promise.all([
@@ -3526,6 +3529,7 @@ async function seedClaudeIntegration() {
         if (drainTimer) clearTimeout(drainTimer);
       }
     }
+    if (stopWorkPipelineReminders) await stopWorkPipelineReminders();
     try { await backgroundJobs.shutdown(); } catch (error) {
       console.error("[shutdown] Background-job shutdown failed:", error);
       exitCode = 1;
