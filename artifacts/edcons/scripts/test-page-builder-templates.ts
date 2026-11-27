@@ -77,7 +77,7 @@ test("Home and About reuse published blocks while preserving static fallbacks an
   assert.match(editorialCss, /cms-preview-viewport\[data-preview-size="tablet"\] \.home-bento-card:first-child \{ grid-column: 1 \/ -1; \}/);
   assert.match(editorialCss, /\.cms-editorial-block \.cms-responsive-grid > \* \{ min-width: 0; max-width: 100%; \}/);
   assert.match(editorialCss, /managed-agency-page--about[\s\S]*--about-ease/);
-  assert.match(editorialCss, /managed-agency-page--about \[data-cms-block="grid_box"\] \.cms-grid-box-card:first-child \{ grid-column: auto; \}/);
+  assert.match(editorialCss, /managed-agency-page--about \[data-cms-block="grid_box"\] \.cms-grid-box-card:first-child \{ grid-column: auto !important; \}/);
   assert.match(editorialCss, /managed-agency-page--about \[data-cms-block="process_steps"\][\s\S]*grid-template-columns: repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(editorialCss, /managed-agency-page--about \[data-cms-block="grid_box"\] \.cms-grid-box-card:has\(> a\):active/);
   assert.match(editorialCss, /managed-agency-page--about :is\(a,button,summary\):focus-visible/);
