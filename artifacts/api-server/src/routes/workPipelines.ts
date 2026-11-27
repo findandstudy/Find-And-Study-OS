@@ -139,20 +139,37 @@ router.get(
           .min(0)
           .max(1000000)
           .parse(req.query.offset || 0);
-        // Access is evaluated before pagination; unauthorized boards never consume a page.
+        const q = z
+          .string()
+          .trim()
+          .max(120)
+          .parse(req.query.q || "");
+        const ids =
+          req.query.ids === undefined
+            ? null
+            : z
+                .array(WP_UUID)
+                .max(100)
+                .parse(String(req.query.ids).split(",").filter(Boolean));
+        const pageSize = ids ? 100 : 50;
+        // Access is evaluated before search/ID filtering and pagination.
         const r = await c.query(
-          "SELECT document,revision FROM local_work_pipelines.boards WHERE tenant_id=$1 AND ($2::boolean OR document->>'createdBy'=$3 OR document->'memberIds' @> $4::jsonb) ORDER BY document->>'createdAt',id LIMIT 51 OFFSET $5",
+          "SELECT document,revision FROM local_work_pipelines.boards WHERE tenant_id=$1 AND ($2::boolean OR document->>'createdBy'=$3 OR document->'memberIds' @> $4::jsonb) AND ($6='' OR document->>'name' ILIKE $7) AND ($8::uuid[] IS NULL OR id=ANY($8::uuid[])) ORDER BY document->>'createdAt',id LIMIT $9 OFFSET $5",
           [
             t,
             isWorkAdmin(req.user),
             String(req.user.id),
             JSON.stringify([req.user.id]),
             offset,
+            q,
+            `%${q}%`,
+            ids,
+            pageSize + 1,
           ],
         );
         return {
-          items: r.rows.slice(0, 50),
-          nextOffset: r.rows.length > 50 ? offset + 50 : null,
+          items: r.rows.slice(0, pageSize),
+          nextOffset: r.rows.length > pageSize ? offset + pageSize : null,
         };
       }),
     ),

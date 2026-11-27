@@ -1,5 +1,6 @@
 import { WorkPipelineActivity } from "./WorkPipelineActivity";
 import { WorkPipelineExcel } from "./WorkPipelineExcel";
+import { WorkPipelinePicker } from "./WorkPipelinePicker";
 import { useState } from "react";
 import {
   DndContext,
@@ -447,41 +448,17 @@ export default function WorkPipelines() {
         </div>
       </div>
       <div className="flex items-center gap-2 mb-4 shrink-0">
-        <nav
-          aria-label={l.title}
-          className="flex-1 flex items-center gap-2 overflow-x-auto pb-1"
-        >
-          {m.allBoards.map((r) => (
-            <button
-              key={r.document.id}
-              aria-current={r.document.id === m.selected ? "page" : undefined}
-              onClick={() => selectBoard(r.document.id)}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${r.document.id === m.selected ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted"}`}
-            >
-              {r.document.name}
-            </button>
-          ))}
-          {m.boards.hasNextPage && (
-            <Button
-              variant="ghost"
-              onClick={() => void m.boards.fetchNextPage()}
-            >
-              {l.more}
-            </Button>
-          )}
-          {m.options.data?.canManage && (
-            <Button
-              variant="outline"
-              size="icon"
-              className="rounded-full shrink-0"
-              aria-label={l.create}
-              title={l.create}
-              onClick={() => openSettings("create")}
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
-          )}
-        </nav>
+        <WorkPipelinePicker
+          key={m.user?.id ?? "anonymous"}
+          userId={m.user?.id}
+          selected={m.selected}
+          current={b}
+          lang={m.lang}
+          choose={selectBoard}
+          create={
+            m.options.data?.canManage ? () => openSettings("create") : undefined
+          }
+        />
         {m.options.data?.canManage && b && (
           <Popover>
             <PopoverTrigger asChild>

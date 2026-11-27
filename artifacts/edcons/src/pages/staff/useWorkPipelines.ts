@@ -178,6 +178,8 @@ export function useWorkPipelines() {
   const allBoards = boards.data?.pages.flatMap((p) => p.items) || [];
   const cards = useInfiniteQuery({
     queryKey: ["work-pipeline-cards", user?.id, selected, query],
+    // Switching boards must never display/export the previous board's data.
+    placeholderData: undefined,
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       request<{

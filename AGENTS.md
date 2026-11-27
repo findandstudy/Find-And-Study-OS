@@ -781,3 +781,11 @@ açmaz; hatalı veya stale preview hiçbir kayıt yazmaz. 14 local API/DB + XLSX
 round-trip kontrolü PASS. İç tarayıcı navigation/focus timeout nedeniyle UI
 indirme/yükleme doğrulaması tamamlanmadı; UI PASS iddiası yoktur.
 Kapsam/sınırlar: LOCAL_WORK_PIPELINE_EXCEL_2026-11-27.md. Deploy/push yok.
+
+### 27 Kasım — pipeline seçici/favoriler
+Tüm board'ların yatay listesi yerine sunucuda aranan açılır seçici kullanılır;
+yalnız kullanıcı favorileri yataydır. Tercihler kullanıcı ID'sine göre bu
+tarayıcıda saklanır; yetki artışı veya cihazlar arası sync yoktur. 14 hedefli
+kontrol PASS. İzole local SSE development lease + cleanup 2 test PASS;
+production stream/launcher değişmedi. İç tarayıcı reload/focus timeout nedeniyle
+yeni görünüm UI doğrulaması tamamlanmadı. LOCAL_WORK_PIPELINE_PICKER_2026-11-27.md.
