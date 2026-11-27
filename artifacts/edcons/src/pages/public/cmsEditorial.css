@@ -1182,6 +1182,236 @@
 .managed-agency-page--blog { --agency-electric: #c79ee8; }
 .managed-agency-page--contact { --agency-electric: #6ed4c4; }
 
+/* About page interaction system ---------------------------------------
+   Information cards stay calm and non-clickable. Cards that contain a
+   real link receive pointer/focus/press feedback, so motion never implies
+   an action that does not exist. */
+.managed-agency-page--about {
+  --about-ease: cubic-bezier(.2,.72,.24,1);
+  --about-card-shadow: 0 18px 48px rgba(17,44,72,.09);
+  --about-card-shadow-hover: 0 28px 70px rgba(17,44,72,.16);
+}
+
+.managed-agency-page--about [data-cms-block="counter_grid"] article {
+  position: relative;
+  overflow: hidden;
+  transition: background-color .32s var(--about-ease), box-shadow .32s var(--about-ease), transform .32s var(--about-ease);
+}
+.managed-agency-page--about [data-cms-block="counter_grid"] article::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg,var(--agency-blue),var(--agency-mint));
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition: transform .32s var(--about-ease);
+}
+
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:first-child { grid-column: auto; }
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-grid { align-items: stretch; }
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 248px;
+  padding: 26px;
+  border-color: rgba(8,23,39,.09);
+  background: linear-gradient(155deg,rgba(255,255,255,.98),rgba(245,249,255,.94));
+  box-shadow: var(--about-card-shadow);
+  transition: border-color .34s var(--about-ease), box-shadow .34s var(--about-ease), transform .34s var(--about-ease);
+}
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg,var(--agency-blue),var(--agency-mint));
+  transform: scaleX(.28);
+  transform-origin: left;
+  transition: transform .42s var(--about-ease);
+}
+[dir="rtl"] .managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card::before { transform-origin: right; }
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 190px;
+  aspect-ratio: 1;
+  inset: auto -92px -104px auto;
+  border: 1px solid rgba(36,95,229,.13);
+  border-radius: 50%;
+  box-shadow: 0 0 0 34px rgba(95,141,255,.035);
+  transition: transform .5s var(--about-ease);
+}
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-media {
+  width: 58px;
+  min-height: 58px;
+  border: 1px solid rgba(36,95,229,.1);
+  border-radius: 18px;
+  background: linear-gradient(145deg,#f4f8ff,#e6f7f5);
+  transition: background .34s var(--about-ease), transform .34s var(--about-ease);
+}
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-media > span { font-size: 15px; letter-spacing: .08em; }
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-copy { margin-top: 28px; }
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-copy .home-card-index { display: none; }
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-copy h3 { font-size: clamp(20px,2vw,25px); letter-spacing: -.025em; }
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-copy p { max-width: 36ch; margin-top: 12px; line-height: 1.7; }
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card > a { display: flex; min-height: 100%; flex-direction: column; color: inherit; }
+
+.managed-agency-page--about [data-cms-block="process_steps"] { background: var(--agency-ink) !important; }
+.managed-agency-page--about [data-cms-block="process_steps"] .home-timeline {
+  min-height: 0;
+  padding: clamp(76px,8vw,104px) 20px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 82% 14%,rgba(95,141,255,.2),transparent 28%),
+    radial-gradient(circle at 12% 88%,rgba(141,229,219,.12),transparent 25%),
+    var(--agency-ink) !important;
+}
+.managed-agency-page--about [data-cms-block="process_steps"] .home-process-intro {
+  max-width: 860px;
+  grid-template-columns: 96px minmax(0,1fr);
+  margin: 0;
+  text-align: start;
+}
+.managed-agency-page--about [data-cms-block="process_steps"] .home-process-emblem {
+  width: 86px;
+  height: 86px;
+  border-radius: 24px 24px 48px 24px;
+}
+.managed-agency-page--about [data-cms-block="process_steps"] .home-process-intro h2 {
+  max-width: 18ch;
+  margin: 12px 0 0;
+  color: #fff;
+}
+.managed-agency-page--about [data-cms-block="process_steps"] .home-process-intro > div:last-child > p:last-child {
+  max-width: 64ch;
+  margin-inline: 0;
+  color: rgba(255,255,255,.66);
+}
+.managed-agency-page--about [data-cms-block="process_steps"] ol.cms-responsive-grid {
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 14px;
+  margin-top: 46px;
+}
+.managed-agency-page--about [data-cms-block="process_steps"] ol::before { display: none; }
+.managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step,
+.managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step:nth-child(2),
+.managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step:nth-child(3) {
+  min-height: 270px;
+  padding: 28px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 24px;
+  background: linear-gradient(145deg,rgba(255,255,255,.085),rgba(255,255,255,.035));
+  box-shadow: inset 0 1px rgba(255,255,255,.08);
+  text-align: start;
+  transform: none;
+  backdrop-filter: blur(12px);
+  transition: border-color .34s var(--about-ease), background .34s var(--about-ease), box-shadow .34s var(--about-ease), transform .34s var(--about-ease);
+}
+.managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step + .home-timeline-step::before { display: none; }
+.managed-agency-page--about [data-cms-block="process_steps"] .home-step-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 0 42px;
+  border: 1px solid rgba(141,229,219,.3);
+  border-radius: 16px;
+  color: var(--agency-mint);
+  background: rgba(141,229,219,.09);
+  box-shadow: none;
+}
+.managed-agency-page--about [data-cms-block="process_steps"] .home-step-icon svg { width: 22px; height: 22px; }
+.managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step > span {
+  top: 30px;
+  inset-inline: auto 28px;
+  width: auto;
+  height: auto;
+  border: 0;
+  color: rgba(255,255,255,.5);
+  background: transparent;
+  font-size: 11px;
+  letter-spacing: .14em;
+}
+.managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step > i { width: 36px; height: 2px; margin: 0 0 22px; background: var(--agency-mint); }
+.managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step h3 { color: #fff; font-size: 21px; }
+.managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step p { color: rgba(255,255,255,.62); line-height: 1.65; }
+
+.managed-agency-page--about [data-cms-block="faq"] details {
+  transition: border-color .26s ease, background-color .26s ease, padding-inline .26s ease;
+}
+.managed-agency-page--about [data-cms-block="faq"] details[open] {
+  padding-inline: 18px;
+  border-color: rgba(36,95,229,.2);
+  background: rgba(36,95,229,.035);
+}
+.managed-agency-page--about [data-cms-block="faq"] details > p {
+  transform: translateY(-4px);
+  opacity: 0;
+  transition: opacity .24s ease, transform .24s ease;
+}
+.managed-agency-page--about [data-cms-block="faq"] details[open] > p { transform: none; opacity: 1; }
+.managed-agency-page--about :is(a,button,summary):focus-visible {
+  outline: 3px solid color-mix(in srgb,var(--agency-electric) 70%,white);
+  outline-offset: 4px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .managed-agency-page--about [data-cms-block="counter_grid"] article:hover { background: #fff; box-shadow: 0 18px 38px rgba(17,44,72,.1); transform: translateY(-5px); }
+  .managed-agency-page--about [data-cms-block="counter_grid"] article:hover::before { transform: scaleY(1); }
+  .managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:hover,
+  .managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:focus-within {
+    color: var(--agency-ink);
+    border-color: rgba(36,95,229,.24);
+    background: linear-gradient(155deg,#fff,#f2f7ff);
+    box-shadow: var(--about-card-shadow-hover);
+    transform: translateY(-8px);
+  }
+  .managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:hover :is(p,a),
+  .managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:focus-within :is(p,a) { color: inherit !important; }
+  .managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:hover::before,
+  .managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:focus-within::before { transform: scaleX(1); }
+  .managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:hover::after,
+  .managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:focus-within::after { transform: translate3d(-14px,-12px,0) scale(1.08); }
+  .managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:hover .cms-grid-box-media,
+  .managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:focus-within .cms-grid-box-media { background: linear-gradient(145deg,#e8f0ff,#dff5f1); transform: rotate(-3deg) scale(1.04); }
+  .managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step:hover,
+  .managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step:nth-child(2):hover,
+  .managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step:nth-child(3):hover {
+    border-color: rgba(141,229,219,.42);
+    background: linear-gradient(145deg,rgba(255,255,255,.13),rgba(255,255,255,.055));
+    box-shadow: 0 24px 58px rgba(0,0,0,.22),inset 0 1px rgba(255,255,255,.1);
+    transform: translateY(-7px);
+  }
+  .managed-agency-page--about [data-cms-block="faq"] summary:hover { color: var(--agency-blue); }
+}
+
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:has(> a) { cursor: pointer; }
+.managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card:has(> a):active { box-shadow: 0 10px 24px rgba(17,44,72,.12); transform: translateY(-2px) scale(.992); }
+.managed-agency-page--about [data-cms-block="hero"] a:active,
+.managed-agency-page--about [data-cms-block="media_text"] a:active,
+.managed-agency-page--about [data-cms-block="cta_banner"] a:active { transform: translateY(1px) scale(.985); }
+
+@media (max-width: 1024px) {
+  .managed-agency-page--about [data-cms-block="process_steps"] ol.cms-responsive-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 640px) {
+  .managed-agency-page--about [data-cms-block="grid_box"] .cms-grid-box-card { min-height: 220px; padding: 22px; }
+  .managed-agency-page--about [data-cms-block="process_steps"] .home-process-intro { display: block; }
+  .managed-agency-page--about [data-cms-block="process_steps"] .home-process-emblem { margin-bottom: 28px; }
+  .managed-agency-page--about [data-cms-block="process_steps"] ol.cms-responsive-grid { grid-template-columns: minmax(0,1fr); }
+  .managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step,
+  .managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step:nth-child(2),
+  .managed-agency-page--about [data-cms-block="process_steps"] .home-timeline-step:nth-child(3) { min-height: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .managed-agency-page--about *,
+  .managed-agency-page--about *::before,
+  .managed-agency-page--about *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}
+
 @media (max-width: 1024px) {
   .managed-agency-page [data-cms-block="hero"]::after { width: 32vw; opacity: .7; }
   .managed-agency-page [data-cms-block="hero"] > section { padding-inline-end: 34vw; }
