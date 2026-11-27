@@ -1,3 +1,4 @@
+import { whilePageVisible } from "@/lib/visibleSubscription";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useI18n } from "@/hooks/use-i18n";
@@ -95,25 +96,28 @@ export function ActivityFeed({ context, id, className = "" }: ActivityFeedProps)
 
   // SSE for real-time updates
   useEffect(() => {
-    const url = `${BASE_URL}/api/persons/feed/stream?context=${context}&id=${id}`;
-    let es: EventSource | null = null;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    return whilePageVisible(() => {
+      const url = `${BASE_URL}/api/persons/feed/stream?context=${context}&id=${id}`;
+      let es: EventSource | null = null;
+      let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-    function connect() {
-      es = new EventSource(url, { withCredentials: true });
-      es.addEventListener("feed_update", () => {
-        qc.invalidateQueries({ queryKey: feedKey });
-      });
-      es.onerror = () => {
+      function connect() {
+        es = new EventSource(url, { withCredentials: true });
+        es.addEventListener("feed_update", () => {
+          qc.invalidateQueries({ queryKey: feedKey });
+        });
+        es.onerror = () => {
+          es?.close();
+          retryTimer = setTimeout(connect, 8000);
+        };
+      }
+      qc.invalidateQueries({ queryKey: feedKey });
+      connect();
+      return () => {
         es?.close();
-        retryTimer = setTimeout(connect, 8000);
+        if (retryTimer) clearTimeout(retryTimer);
       };
-    }
-    connect();
-    return () => {
-      es?.close();
-      if (retryTimer) clearTimeout(retryTimer);
-    };
+    });
   }, [context, id]);
 
   // ── Complete follow-up ────────────────────────────────────────────────────

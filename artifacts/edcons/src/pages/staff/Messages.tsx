@@ -1,3 +1,4 @@
+import { whilePageVisible } from "@/lib/visibleSubscription";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { inboxListFilters } from "@/lib/inboxListFilters";
@@ -983,113 +984,117 @@ function InboxTab() {
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof EventSource === "undefined") return;
-    setLiveStatus("connecting");
-    let failureCount = 0;
-    let inboxRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-    let detailRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-    let pendingDetailConversationId: number | null = null;
-    const es = new EventSource("/api/inbox/events", { withCredentials: true });
+    return whilePageVisible(() => {
+      setLiveStatus("connecting");
+      let failureCount = 0;
+      let inboxRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+      let detailRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+      let pendingDetailConversationId: number | null = null;
+      const es = new EventSource("/api/inbox/events", { withCredentials: true });
 
-    // One inbound action can emit message, assignment and read-state events.
-    // The inbox list is an enriched query of up to 200 conversations, so
-    // coalesce only these live-event refreshes into one request. Explicit user
-    // actions continue to refresh immediately.
-    const scheduleInboxRefresh = () => {
-      if (inboxRefreshTimer !== null) return;
-      inboxRefreshTimer = setTimeout(() => {
-        inboxRefreshTimer = null;
+      // One inbound action can emit message, assignment and read-state events.
+      // The inbox list is an enriched query of up to 200 conversations, so
+      // coalesce only these live-event refreshes into one request. Explicit user
+      // actions continue to refresh immediately.
+      const scheduleInboxRefresh = () => {
+        if (inboxRefreshTimer !== null) return;
+        inboxRefreshTimer = setTimeout(() => {
+          inboxRefreshTimer = null;
+          void fetchInboxRef.current({ background: true });
+        }, 200);
+      };
+
+      const scheduleDetailRefresh = (conversationId: number) => {
+        pendingDetailConversationId = conversationId;
+        if (detailRefreshTimer !== null) return;
+        detailRefreshTimer = setTimeout(() => {
+          detailRefreshTimer = null;
+          const pendingId = pendingDetailConversationId;
+          pendingDetailConversationId = null;
+          if (pendingId !== null && selectedIdRef.current === pendingId) {
+            void fetchDetailRef.current(pendingId);
+          }
+        }, 200);
+      };
+
+      const refresh = (raw: MessageEvent) => {
+        setLastEventAt(Date.now());
+        let convId: number | null = null;
+        try {
+          const payload = JSON.parse(raw.data || "{}");
+          if (typeof payload.conversationId === "number") convId = payload.conversationId;
+        } catch {
+          // ignore malformed frames; still refresh the list as a safety net.
+        }
+        scheduleInboxRefresh();
+        if (convId !== null && selectedIdRef.current === convId) {
+          scheduleDetailRefresh(convId);
+        }
+      };
+
+      const refreshReadState = (raw: MessageEvent) => {
+        setLastEventAt(Date.now());
+        try {
+          const payload = JSON.parse(raw.data || "{}");
+          // Read cursors are user-specific. Refresh only the actor's other tabs
+          // and never refetch the open detail here: GET detail itself marks the
+          // thread read and would undo a just-requested "mark as unread".
+          if (payload.actorUserId === actorUserIdRef.current) {
+            scheduleInboxRefresh();
+          }
+        } catch {
+          // A malformed read-state event cannot safely identify its owner.
+        }
+      };
+
+      // Heartbeats arrive every ~25s and don't trigger any data refresh — they
+      // just keep proxies happy and let the client prove the stream is alive.
+      const onHeartbeat = () => {
+        setLastEventAt(Date.now());
+      };
+
+      es.onopen = () => {
+        failureCount = 0;
         void fetchInboxRef.current({ background: true });
-      }, 200);
-    };
+        if (selectedIdRef.current !== null) void fetchDetailRef.current(selectedIdRef.current);
+        setLiveStatus("open");
+        // The server emits an initial heartbeat right after connect, but mark
+        // "now" too so a freshly opened indicator never shows "no updates yet".
+        setLastEventAt(Date.now());
+      };
 
-    const scheduleDetailRefresh = (conversationId: number) => {
-      pendingDetailConversationId = conversationId;
-      if (detailRefreshTimer !== null) return;
-      detailRefreshTimer = setTimeout(() => {
-        detailRefreshTimer = null;
-        const pendingId = pendingDetailConversationId;
-        pendingDetailConversationId = null;
-        if (pendingId !== null && selectedIdRef.current === pendingId) {
-          void fetchDetailRef.current(pendingId);
+      es.onerror = () => {
+        // The browser auto-reconnects EventSource while readyState is CONNECTING.
+        // Give it a few attempts before declaring the stream offline and forcing
+        // a manual retry, so a single proxy hiccup doesn't scare staff.
+        if (es.readyState === EventSource.CLOSED) {
+          setLiveStatus("offline");
+          return;
         }
-      }, 200);
-    };
-
-    const refresh = (raw: MessageEvent) => {
-      setLastEventAt(Date.now());
-      let convId: number | null = null;
-      try {
-        const payload = JSON.parse(raw.data || "{}");
-        if (typeof payload.conversationId === "number") convId = payload.conversationId;
-      } catch {
-        // ignore malformed frames; still refresh the list as a safety net.
-      }
-      scheduleInboxRefresh();
-      if (convId !== null && selectedIdRef.current === convId) {
-        scheduleDetailRefresh(convId);
-      }
-    };
-
-    const refreshReadState = (raw: MessageEvent) => {
-      setLastEventAt(Date.now());
-      try {
-        const payload = JSON.parse(raw.data || "{}");
-        // Read cursors are user-specific. Refresh only the actor's other tabs
-        // and never refetch the open detail here: GET detail itself marks the
-        // thread read and would undo a just-requested "mark as unread".
-        if (payload.actorUserId === actorUserIdRef.current) {
-          scheduleInboxRefresh();
+        failureCount += 1;
+        if (failureCount >= 4) {
+          es.close();
+          setLiveStatus("offline");
+        } else {
+          setLiveStatus("connecting");
         }
-      } catch {
-        // A malformed read-state event cannot safely identify its owner.
-      }
-    };
+      };
 
-    // Heartbeats arrive every ~25s and don't trigger any data refresh — they
-    // just keep proxies happy and let the client prove the stream is alive.
-    const onHeartbeat = () => {
-      setLastEventAt(Date.now());
-    };
+      es.addEventListener("inbox_message", refresh);
+      es.addEventListener("inbox_assigned", refresh);
+      es.addEventListener("inbox_read_state", refreshReadState);
+      es.addEventListener("heartbeat", onHeartbeat);
 
-    es.onopen = () => {
-      failureCount = 0;
-      setLiveStatus("open");
-      // The server emits an initial heartbeat right after connect, but mark
-      // "now" too so a freshly opened indicator never shows "no updates yet".
-      setLastEventAt(Date.now());
-    };
-
-    es.onerror = () => {
-      // The browser auto-reconnects EventSource while readyState is CONNECTING.
-      // Give it a few attempts before declaring the stream offline and forcing
-      // a manual retry, so a single proxy hiccup doesn't scare staff.
-      if (es.readyState === EventSource.CLOSED) {
-        setLiveStatus("offline");
-        return;
-      }
-      failureCount += 1;
-      if (failureCount >= 4) {
+      return () => {
+        if (inboxRefreshTimer !== null) clearTimeout(inboxRefreshTimer);
+        if (detailRefreshTimer !== null) clearTimeout(detailRefreshTimer);
+        es.removeEventListener("inbox_message", refresh);
+        es.removeEventListener("inbox_assigned", refresh);
+        es.removeEventListener("inbox_read_state", refreshReadState);
+        es.removeEventListener("heartbeat", onHeartbeat);
         es.close();
-        setLiveStatus("offline");
-      } else {
-        setLiveStatus("connecting");
-      }
-    };
-
-    es.addEventListener("inbox_message", refresh);
-    es.addEventListener("inbox_assigned", refresh);
-    es.addEventListener("inbox_read_state", refreshReadState);
-    es.addEventListener("heartbeat", onHeartbeat);
-
-    return () => {
-      if (inboxRefreshTimer !== null) clearTimeout(inboxRefreshTimer);
-      if (detailRefreshTimer !== null) clearTimeout(detailRefreshTimer);
-      es.removeEventListener("inbox_message", refresh);
-      es.removeEventListener("inbox_assigned", refresh);
-      es.removeEventListener("inbox_read_state", refreshReadState);
-      es.removeEventListener("heartbeat", onHeartbeat);
-      es.close();
-    };
+      };
+    });
   }, [reconnectKey]);
 
   const reconnectLive = useCallback(() => {

@@ -1,3 +1,4 @@
+import { whilePageVisible } from "@/lib/visibleSubscription";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -549,20 +550,23 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isStaff) return;
     if (typeof window === "undefined" || typeof EventSource === "undefined") return;
-    const es = new EventSource("/api/inbox/events", { withCredentials: true });
-    const refresh = () => {
-      queryClient.invalidateQueries({ queryKey: ["unread-messages-count"] });
-      queryClient.invalidateQueries({ queryKey: ["notification-section-counts"] });
-    };
-    es.addEventListener("inbox_message", refresh);
-    es.addEventListener("inbox_assigned", refresh);
-    es.addEventListener("inbox_read_state", refresh);
-    return () => {
-      es.removeEventListener("inbox_message", refresh);
-      es.removeEventListener("inbox_assigned", refresh);
-      es.removeEventListener("inbox_read_state", refresh);
-      es.close();
-    };
+    return whilePageVisible(() => {
+      const es = new EventSource("/api/inbox/events", { withCredentials: true });
+      const refresh = () => {
+        queryClient.invalidateQueries({ queryKey: ["unread-messages-count"] });
+        queryClient.invalidateQueries({ queryKey: ["notification-section-counts"] });
+      };
+      refresh();
+      es.addEventListener("inbox_message", refresh);
+      es.addEventListener("inbox_assigned", refresh);
+      es.addEventListener("inbox_read_state", refresh);
+      return () => {
+        es.removeEventListener("inbox_message", refresh);
+        es.removeEventListener("inbox_assigned", refresh);
+        es.removeEventListener("inbox_read_state", refresh);
+        es.close();
+      };
+    });
   }, [isStaff, queryClient]);
 
   const { data: studentUnreadData } = useQuery({

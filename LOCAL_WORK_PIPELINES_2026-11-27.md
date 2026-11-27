@@ -107,3 +107,6 @@ bu UI revizyonunda değiştirilmedi. Gerçek dış gönderim yoktur.
 Yerel ürün değerlendirmesi → UI/UX düzeltmeleri → genişletilecek alanların kararı
 → bağımsız yetki/tenant ve inbound recovery incelemesi → migration release planı.
 Bu iş staging/production deployment onayı içermez.
+
+### Yerel çoklu sekme yükleme düzeltmesi
+27 Kasım: Sürekli inbox/notification/feed SSE bağlantıları gizli sekmelerde kapanır; görünür sekmeye dönüldüğünde yeniden bağlanıp kaçırılan verileri sorgular. Böylece HTTP/1.1 origin bağlantı havuzunun arka plan sekmeleriyle dolması önlenir. Yerel Vite yeniden başlatıldı. Hedefli visibility lifecycle testi PASS, Edcons typecheck PASS. İç tarayıcıda yeni /staff/pipelines sekmesi, reload ve tablo/pano geçişi doğrulandı; console error yok. Staging/Apply değişmedi.

@@ -1,3 +1,4 @@
+import { whilePageVisible } from "@/lib/visibleSubscription";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -126,41 +127,45 @@ export function NotificationCenter() {
   // Push-based updates via SSE. Initial fetch + window-focus refetch are kept
   // as belt-and-braces for the case where the EventSource silently drops.
   useEffect(() => {
-    let es: EventSource | null = null;
-    let reconnectTimer: number | undefined;
+    return whilePageVisible(() => {
+      refreshNotificationCounts();
+      if (openRef.current) void fetchNotifications();
+      let es: EventSource | null = null;
+      let reconnectTimer: number | undefined;
 
-    const connect = () => {
-      try {
-        es = new EventSource("/api/notifications/events", { withCredentials: true });
-        es.addEventListener("notification", (ev) => {
-          refreshNotificationCounts();
-          if (openRef.current) fetchNotifications();
-          // Surface a toast so the user sees the new notification even when
-          // the bell panel is closed. Throttled by the toast hook itself.
-          try {
-            const data = JSON.parse((ev as MessageEvent).data || "{}") as NotificationItem;
-            const localized = localizeNotification(data, lang);
-            if (localized.title && data.priority !== "normal") {
-              toast({ title: localized.title });
-            }
-          } catch { /* ignore malformed payload */ }
-        });
-        es.onerror = () => {
-          try { es?.close(); } catch { /* ignore */ }
-          es = null;
+      const connect = () => {
+        try {
+          es = new EventSource("/api/notifications/events", { withCredentials: true });
+          es.addEventListener("notification", (ev) => {
+            refreshNotificationCounts();
+            if (openRef.current) fetchNotifications();
+            // Surface a toast so the user sees the new notification even when
+            // the bell panel is closed. Throttled by the toast hook itself.
+            try {
+              const data = JSON.parse((ev as MessageEvent).data || "{}") as NotificationItem;
+              const localized = localizeNotification(data, lang);
+              if (localized.title && data.priority !== "normal") {
+                toast({ title: localized.title });
+              }
+            } catch { /* ignore malformed payload */ }
+          });
+          es.onerror = () => {
+            try { es?.close(); } catch { /* ignore */ }
+            es = null;
+            reconnectTimer = window.setTimeout(connect, 5000);
+          };
+        } catch {
           reconnectTimer = window.setTimeout(connect, 5000);
-        };
-      } catch {
-        reconnectTimer = window.setTimeout(connect, 5000);
-      }
-    };
-    connect();
+        }
+      };
+      connect();
 
-    return () => {
-      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
-      try { es?.close(); } catch { /* ignore */ }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      return () => {
+        if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+        try { es?.close(); } catch { /* ignore */ }
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    });
   }, [refreshNotificationCounts, fetchNotifications, lang, toast]);
 
   useEffect(() => {
