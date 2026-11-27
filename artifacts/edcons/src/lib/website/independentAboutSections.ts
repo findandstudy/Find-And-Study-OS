@@ -6,9 +6,29 @@ const text = (v: unknown) => typeof v === "string" ? v : "";
 const list = (v: unknown): Record<string, unknown>[] => Array.isArray(v) ? v.filter(x => x && typeof x === "object") : [];
 export const ABOUT_SECTION_VARIANTS = new Set(["about-banner","about-intro","about-approach","about-why","about-pillars","about-panorama","about-enquiry","about-faq","about-end","about-team","about-offices","about-logos"]);
 
+/** Repair only untouched, generated labels from the first preset conversion. */
+function localiseGeneratedLabels(blocks: PageBlock[], locale: Language): PageBlock[] {
+  return structuredClone(blocks).map(block => {
+    if (block.settings.aboutLocaleDefaults === 1 || !ABOUT_SECTION_VARIANTS.has(text(block.content.variant))) return block;
+    const en=(key:string)=>getTranslation("en",key), t=(key:string)=>getTranslation(locale,key);
+    const labels: Record<string,Record<string,[string,string]>> = {
+      "about-banner": {title:[en("about.badge"),t("about.badge")],breadcrumbLabel:[en("nav.home"),t("nav.home")]},
+      "about-intro": {eyebrow:[`${en("about.badge")} · Find And Study`,`${t("about.badge")} · Find And Study`]},
+      "about-approach": {ctaLabel:[en("about.getStarted"),t("about.getStarted")]},
+      "about-why": {eyebrow:[en("about.badge"),t("about.badge")]},
+      "about-panorama": {ctaLabel:[en("about.bookConsultation"),t("about.bookConsultation")]},
+      "about-enquiry": {eyebrow:[en("contact.badge"),t("contact.badge")],title:[`${en("contact.title")} ${en("contact.titleHighlight")}`,`${t("contact.title")} ${t("contact.titleHighlight")}`],formTitle:[en("contact.formTitle"),t("contact.formTitle")],submitLabel:[en("contact.send"),t("contact.send")],successMessage:[en("contact.successTitle"),t("contact.successTitle")]},
+      "about-faq": {eyebrow:[en("about.badge"),t("about.badge")]},
+    };
+    for (const [key,[original,translated]] of Object.entries(labels[text(block.content.variant)]||{})) if (block.content[key]===original) block.content[key]=translated;
+    block.settings.aboutLocaleDefaults=1;
+    return block;
+  });
+}
+
 /** One-time, non-destructive expansion. Once saved, every section owns its data. */
 export function independentAboutSections(source: PageBlock[], locale: Language): PageBlock[] {
-  if (source.some(b => ABOUT_SECTION_VARIANTS.has(text(b.content.variant)))) return structuredClone(source);
+  if (source.some(b => ABOUT_SECTION_VARIANTS.has(text(b.content.variant)))) return localiseGeneratedLabels(source,locale);
   const byType = (type: string) => source.find(b => b.blockType === type);
   const get = (type: string) => byType(type)?.content || {};
   const hero=get("hero"), story=get("media_text"), values=get("grid_box"), process=get("process_steps"), cta=get("cta_banner"), faq=get("faq");
@@ -30,5 +50,5 @@ export function independentAboutSections(source: PageBlock[], locale: Language):
     block("cta_banner","about-end",{eyebrow:"Find And Study",title:cta.title,subtitle:cta.subtitle,ctaLabel:cta.ctaLabel||t("about.bookConsultation"),ctaUrl:cta.ctaUrl||contact,secondaryLabel:cta.secondaryLabel||t("about.browsePrograms"),secondaryUrl:cta.secondaryUrl||`/${locale}/programs`},byType("cta_banner")),
     ...source.filter(b=>!["team_grid","office_list","logo_marquee"].includes(b.blockType) && (!["hero","counter_grid","media_text","grid_box","process_steps","faq","cta_banner"].includes(b.blockType) || byType(b.blockType) !== b)),
   ];
-  return structuredClone(output.map((b,i)=>({...b,id:undefined,sortOrder:i})));
+  return localiseGeneratedLabels(output.map((b,i)=>({...b,id:undefined,sortOrder:i})),locale);
 }

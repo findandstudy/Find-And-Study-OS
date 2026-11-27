@@ -22,7 +22,7 @@ import { useLocation } from "wouter";
 import { BLOCK_APPEARANCE_KEYS, BLOCK_TYPES, getBlockTypeDef, getDefaultContent, type PageBlock } from "@/lib/website/blockTypes";
 import { SECTION_PRESETS, createSectionPreset, editableHomeSections } from "@/lib/website/sectionPresets";
 import { independentAboutSections } from "@/lib/website/independentAboutSections";
-import { SUPPORTED_LANGUAGES, LANGUAGE_META, type Language } from "@/lib/i18n";
+import { SUPPORTED_LANGUAGES, LANGUAGE_META, loadLanguage, type Language } from "@/lib/i18n";
 import DOMPurify from "isomorphic-dompurify";
 import { CatalogBlockFields } from "./CatalogBlockFields";
 import { CatalogBlockPreview } from "./CatalogBlockPreview";
@@ -285,7 +285,11 @@ function PageEditorSession({ id }: { id: number }) {
 
   const { data: page, isLoading: pageLoading, refetch: reloadPage } = useQuery<WebsitePage>({
     queryKey: ["website-page", id],
-    queryFn: () => customFetch(`/api/website/pages/${id}`),
+    queryFn: async () => {
+      const result = await customFetch<WebsitePage>(`/api/website/pages/${id}`);
+      if (result.template === "about") await Promise.all(SUPPORTED_LANGUAGES.map(locale => loadLanguage(locale)));
+      return result;
+    },
   });
   const sourceLocale = page?.locale || "en";
   useEffect(() => {

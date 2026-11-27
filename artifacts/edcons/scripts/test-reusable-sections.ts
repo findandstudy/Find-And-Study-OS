@@ -6,6 +6,7 @@ import { independentAboutSections } from "../src/lib/website/independentAboutSec
 import { hydrateManagedHomeDestinations } from "../src/lib/website/homeDestinationCards";
 import { safeSectionImage, safeSectionUrl } from "../src/lib/website/sectionUrls";
 import { renderReusableEditorial } from "../../api-server/src/lib/reusableEditorialRender";
+import { getTranslation, loadLanguage } from "../src/lib/i18n/index";
 
 test("every Home and About design has a reusable editable preset, including empty lists", () => {
   assert.equal(SECTION_PRESETS.filter(p => p.family === "Home").length, 13);
@@ -49,6 +50,16 @@ test("media and links reject executable or ambiguous URLs", () => {
   for(const url of ["javascript:alert(1)","//evil.test/x","/../secret","/a\\x","data:text/html,abc"]) assert.equal(safeSectionUrl(url),null);
   assert.equal(safeSectionImage("mailto:test@example.test"),null);
   assert.equal(safeSectionImage("/images/hero.png"),"/images/hero.png");
+});
+test("generated labels use the loaded locale once and preserve later editorial choices", async () => {
+  await loadLanguage("fr");
+  const stale:PageBlock={blockType:"hero",content:{variant:"about-banner",title:getTranslation("en","about.badge"),breadcrumbLabel:"Custom breadcrumb"},settings:{},sortOrder:0,isVisible:true};
+  const fixed=independentAboutSections([stale],"fr");
+  assert.equal(fixed[0].content.title,getTranslation("fr","about.badge"));
+  assert.equal(fixed[0].content.breadcrumbLabel,"Custom breadcrumb");
+  fixed[0].content.title="My own title";
+  assert.equal(independentAboutSections(fixed,"fr")[0].content.title,"My own title");
+  assert.equal(stale.content.title,getTranslation("en","about.badge"));
 });
 test("editorial server rendering retains independent content and escapes author input", () => {
   const escape=(s:string)=>s.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll('"',"&quot;");
