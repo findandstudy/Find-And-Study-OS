@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { configureProxyCleanup } from "./dev/proxyCleanup";
 
 const isBuild = process.argv.includes("build");
 // A deployable public build must not inherit NODE_ENV=test from the CI test
@@ -144,6 +145,7 @@ export default defineConfig({
       "/api": {
         target: process.env.API_PROXY_TARGET || "http://localhost:8080",
         changeOrigin: true,
+        configure: configureProxyCleanup,
       },
     },
     fs: {

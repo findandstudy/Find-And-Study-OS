@@ -13,12 +13,14 @@
 - Ön yüz typecheck PASS; API typecheck yalnız önceden mevcut
   `embedLeadFormI18n.ts:41` `ur` locale tipi hatasında kalır. Board kart sorgusu
   önceki board placeholder'ını kullanmaz; geçişte eski kartlar gösterilmez.
-- Local HTTP/1 sekme takılması için yalnız izole local launcher SSE yanıtlarını
-  15 sn lease ile sonlandırır. Development istemcisi 15 sn sonra bağlantıyı
-  bırakıp 1 sn sonra görünürse açar; hidden/dispose timer'ları temizlenir.
-  İstemcide production lease kapalıdır; production launcher değiştirilmedi.
-  Timer/visibility lifecycle 2 test PASS. Stream yeniden açılmasında mevcut
-  missed-data refresh davranışları kullanılır.
-- İç tarayıcı eski ekranı tuttu, reload/focus timeout devam etti. Yeni seçiciye
-  görsel/UI PASS verilmedi; otomatik UI doğrulaması açık sınırdır.
+- Sekme takılmasının somut nedeni: Vite proxy, API kesildiğinde headers gönderilmiş
+  SSE yanıtını kapatmıyordu. Tarayıcı→Vite bağlantıları açıkken API tarafında
+  karşılığı kalmamıştı. Proxy aborted/error cleanup eklendi; normal headers öncesi
+  500 davranışı korundu. Geçici 15 saniyelik server/client lease kaldırıldı.
+  Hidden-tab abonelik duraklatması korunur.
+- Gerçek HTTP upstream kesintisi testi PASS: başlamış SSE kapanır, ardından health
+  isteği başarılı olur, headers öncesi hata 500 kalır.
+- İç tarayıcı UI doğrulandı: giriş, pipeline arama, ksks seçimi, yıldızla favoriye
+  ekleme, yalnız favorinin yatay görünmesi ve reload sonrası kalıcılık PASS.
+  Pipeline aşamaları ve Excel kontrolleri görünür. Test yalnız sentetik local hesapla yapıldı.
 - Staging/Apply deploy veya remote push yoktur.
