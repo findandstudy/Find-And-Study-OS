@@ -165,9 +165,9 @@ export default function AgentAccount() {
         body: JSON.stringify({ avatarUrl }),
       });
       await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "Profile photo updated" });
+      toast({ title: t("account.toastPhotoUpdated") });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: t("account.toastUploadFailed"), description: err.message, variant: "destructive" });
     } finally { setAvatarUploading(false); }
   }
 
@@ -180,9 +180,9 @@ export default function AgentAccount() {
         body: JSON.stringify({ avatarUrl: null }),
       });
       await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "Profile photo removed" });
+      toast({ title: t("agentAccount.photoRemoved") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("account.toastError"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -203,9 +203,9 @@ export default function AgentAccount() {
         body: JSON.stringify(payload),
       });
       await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "Profile updated", description: "Your information has been saved." });
+      toast({ title: t("account.toastProfileUpdated"), description: t("account.toastProfileUpdatedDesc") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("account.toastError"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -213,11 +213,11 @@ export default function AgentAccount() {
 
   async function handleChangePassword() {
     if (pwForm.newPassword !== pwForm.confirmPassword) {
-      toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
+      toast({ title: t("account.toastError"), description: t("agentAccount.passwordMismatch"), variant: "destructive" });
       return;
     }
     if (pwForm.newPassword.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+      toast({ title: t("account.toastError"), description: t("agentAccount.passwordMinLength"), variant: "destructive" });
       return;
     }
     setChangingPw(true);
@@ -228,9 +228,9 @@ export default function AgentAccount() {
         body: JSON.stringify({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword }),
       });
       setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
-      toast({ title: "Password changed", description: "Your password has been updated successfully." });
+      toast({ title: t("agentAccount.passwordChanged"), description: t("agentAccount.passwordChangedDesc") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("account.toastError"), description: err.message, variant: "destructive" });
     } finally { setChangingPw(false); }
   }
 
@@ -399,7 +399,7 @@ export default function AgentAccount() {
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">{t("login.newPassword")}</Label>
-                      <Input type="password" value={pwForm.newPassword} onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Min 6 characters" className="h-10" />
+                      <Input type="password" value={pwForm.newPassword} onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))} placeholder={t("agentAccount.passwordMinLength")} className="h-10" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">{t("login.confirmPassword")}</Label>
@@ -504,6 +504,7 @@ export default function AgentAccount() {
 }
 
 function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfile: any; agentLoading: boolean; isStaff?: boolean }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [businessName, setBusinessName] = useState("");
@@ -533,9 +534,9 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
         }),
       });
       await qc.invalidateQueries({ queryKey: ["agent-me"] });
-      toast({ title: "Agency updated", description: "Your business name has been saved." });
+      toast({ title: t("agentAccount.agencyUpdated"), description: t("agentAccount.agencyUpdatedDesc") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("account.toastError"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -550,9 +551,9 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
         body: JSON.stringify({ [field]: url }),
       });
       await qc.invalidateQueries({ queryKey: ["agent-me"] });
-      toast({ title: "Document uploaded" });
+      toast({ title: t("account.toastDocUploaded") });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: t("account.toastUploadFailed"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -564,16 +565,16 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
         body: JSON.stringify({ [field]: "" }),
       });
       await qc.invalidateQueries({ queryKey: ["agent-me"] });
-      toast({ title: "Document removed" });
+      toast({ title: t("agentAccount.documentRemoved") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("account.toastError"), description: err.message, variant: "destructive" });
     }
   }
 
   if (agentLoading) {
     return (
       <Card className="border shadow-sm p-6">
-        <h3 className="font-display font-semibold text-base mb-6">Agency Information</h3>
+        <h3 className="font-display font-semibold text-base mb-6">{t("agentAccount.agencyInformation")}</h3>
         <div className="space-y-3">
           {[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-secondary animate-pulse rounded-lg" />)}
         </div>
@@ -584,11 +585,11 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
   if (!agentProfile) {
     return (
       <Card className="border shadow-sm p-6">
-        <h3 className="font-display font-semibold text-base mb-6">Agency Information</h3>
+        <h3 className="font-display font-semibold text-base mb-6">{t("agentAccount.agencyInformation")}</h3>
         <div className="text-center py-12 text-muted-foreground">
           <Briefcase className="w-12 h-12 mx-auto mb-3 text-muted-foreground/20" />
-          <p className="font-medium">No agency profile yet</p>
-          <p className="text-sm mt-1">Your agency details will appear here once set up by an admin</p>
+          <p className="font-medium">{t("agentAccount.noAgencyProfile")}</p>
+          <p className="text-sm mt-1">{t("agentAccount.agencySetupHint")}</p>
         </div>
       </Card>
     );
@@ -598,50 +599,50 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
     <div className="space-y-6">
       <div className="grid lg:grid-cols-[1fr_280px] gap-6">
         <Card className="border shadow-sm p-6">
-          <h3 className="font-display font-semibold text-base mb-5">Agency Details</h3>
+          <h3 className="font-display font-semibold text-base mb-5">{t("agentAccount.agencyDetails")}</h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between p-3.5 rounded-lg bg-secondary/40 border border-border/50">
               <div className="flex items-center gap-3">
                 <Briefcase className="w-4 h-4 text-primary" />
                 <div>
-                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Agency Code</p>
+                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{t("agentAccount.agencyCode")}</p>
                   <p className="text-sm font-bold text-foreground font-mono">
-                    {agentProfile.agencyCode || <span className="text-muted-foreground italic font-normal text-xs">Not assigned</span>}
+                    {agentProfile.agencyCode || <span className="text-muted-foreground italic font-normal text-xs">{t("agentAccount.notAssigned")}</span>}
                   </p>
                 </div>
               </div>
-              <Badge variant="outline" className="text-[10px] shrink-0">Admin</Badge>
+              <Badge variant="outline" className="text-[10px] shrink-0">{t("agentAccount.admin")}</Badge>
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                Business Name
+                {t("agentAccount.businessName")}
                 {isStaff && <Lock className="w-3 h-3 text-muted-foreground/60" />}
               </Label>
               <Input
                 value={businessName}
                 onChange={e => !isStaff && setBusinessName(e.target.value)}
-                placeholder="Your legal company name"
+                placeholder={t("agentAccount.legalCompanyNamePlaceholder")}
                 className="h-10"
                 disabled={isStaff}
               />
               <p className="text-[11px] text-muted-foreground">
                 {isStaff
-                  ? "Only the account owner can edit the business name"
-                  : "Enter your registered legal company / business name"}
+                  ? t("agentAccount.ownerOnlyBusinessName")
+                  : t("agentAccount.registeredBusinessNameHint")}
               </p>
             </div>
 
             {agentProfile?.effectiveFeatures?.custom_branding && <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">Primary brand color</Label>
+                <Label className="text-xs font-medium text-muted-foreground">{t("agentAccount.primaryBrandColor")}</Label>
                 <div className="flex gap-2">
                   <input type="color" value={primaryBrandColor} onChange={e => !isStaff && setPrimaryBrandColor(e.target.value.toUpperCase())} disabled={isStaff} className="h-10 w-12 rounded border p-1" />
                   <Input value={primaryBrandColor} onChange={e => !isStaff && setPrimaryBrandColor(e.target.value.toUpperCase())} disabled={isStaff} className="h-10 font-mono" />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">Secondary brand color</Label>
+                <Label className="text-xs font-medium text-muted-foreground">{t("agentAccount.secondaryBrandColor")}</Label>
                 <div className="flex gap-2">
                   <input type="color" value={secondaryBrandColor} onChange={e => !isStaff && setSecondaryBrandColor(e.target.value.toUpperCase())} disabled={isStaff} className="h-10 w-12 rounded border p-1" />
                   <Input value={secondaryBrandColor} onChange={e => !isStaff && setSecondaryBrandColor(e.target.value.toUpperCase())} disabled={isStaff} className="h-10 font-mono" />
@@ -653,7 +654,7 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
               <div className="flex justify-end pt-3 border-t border-border/50">
                 <Button onClick={handleSaveAgency} disabled={saving} size="sm" className="gap-2 px-6">
                   {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  Save Changes
+                  {t("account.saveChanges")}
                 </Button>
               </div>
             )}
@@ -662,9 +663,9 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
 
         <div className="space-y-3">
           {[
-            { label: "Country",         icon: MapPin,      value: agentProfile.country, color: "bg-blue-500/10 text-blue-600" },
-            { label: "Commission Rate", icon: TrendingUp,  value: agentProfile.commissionRate ? `${agentProfile.commissionRate}%` : null, color: "bg-green-500/10 text-green-600" },
-            { label: "Status",          icon: Check,        value: agentProfile.status, color: "bg-emerald-500/10 text-emerald-600" },
+            { label: t("agentAccount.country"), icon: MapPin, value: agentProfile.country, color: "bg-blue-500/10 text-blue-600" },
+            { label: t("agentAccount.commissionRate"), icon: TrendingUp, value: agentProfile.commissionRate ? `${agentProfile.commissionRate}%` : null, color: "bg-green-500/10 text-green-600" },
+            { label: t("agentAccount.status"), icon: Check, value: agentProfile.status, color: "bg-emerald-500/10 text-emerald-600" },
           ].map((f, i) => (
             <Card key={i} className="border shadow-sm p-4">
               <div className="flex items-center gap-3">
@@ -674,7 +675,7 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
                 <div className="flex-1">
                   <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{f.label}</p>
                   <p className="text-sm font-semibold text-foreground capitalize">
-                    {f.value || <span className="text-muted-foreground italic font-normal text-xs">Not set</span>}
+                    {f.value || <span className="text-muted-foreground italic font-normal text-xs">{t("agentAccount.notSet")}</span>}
                   </p>
                 </div>
               </div>
@@ -684,10 +685,10 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
       </div>
 
       <Card className="border shadow-sm p-6">
-        <h3 className="font-display font-semibold text-base mb-5">Documents</h3>
+        <h3 className="font-display font-semibold text-base mb-5">{t("agentAccount.documents")}</h3>
         <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-5">
           <DocumentUploader
-            label="Logo for Agent Panel"
+            label={t("agentAccount.logoForAgentPanel")}
             accept="image/*"
             value={agentProfile.logoUrl}
             onUpload={file => handleDocUpload("logoUrl", file)}
@@ -697,17 +698,17 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
             readOnly={isStaff}
           />
           <DocumentViewer
-            label="Representative ID"
+            label={t("agentAccount.representativeId")}
             value={agentProfile.agentIdProofUrl}
           />
           {agentProfile.signedContract ? (
             <SignedAgencyContract contract={agentProfile.signedContract} />
           ) : (
-            <DocumentViewer label="Contract" value={agentProfile.contractUrl}
+            <DocumentViewer label={t("agentAccount.contract")} value={agentProfile.contractUrl}
               startDate={agentProfile.contractStartDate} endDate={agentProfile.contractEndDate} />
           )}
           <DocumentUploader
-            label="Business Certificate"
+            label={t("agentAccount.businessCertificate")}
             accept="image/*,.pdf"
             value={agentProfile.businessCertUrl}
             onUpload={file => handleDocUpload("businessCertUrl", file)}
@@ -842,6 +843,7 @@ function DocumentViewer({
   endDate?: string | null;
   adminOnly?: boolean;
 }) {
+  const { t } = useI18n();
   // Derive a friendly file name from the storage URL (strip query/hash, take
   // last path segment, decode URI). Falls back to "contract" if unparseable.
   const fileName = (() => {
@@ -859,7 +861,7 @@ function DocumentViewer({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
-        {adminOnly && <Badge variant="outline" className="text-[9px] px-1.5 py-0">Admin Only</Badge>}
+        {adminOnly && <Badge variant="outline" className="text-[9px] px-1.5 py-0">{t("agentAccount.adminOnly")}</Badge>}
       </div>
       <div className="relative w-full aspect-[4/3] rounded-lg border-2 border-dashed border-border/60 bg-secondary/30 flex items-center justify-center overflow-hidden">
         {value ? (
@@ -884,7 +886,7 @@ function DocumentViewer({
         ) : (
           <div className="flex flex-col items-center gap-1.5 text-muted-foreground/40 p-4">
             <FileText className="w-7 h-7" />
-            <span className="text-[10px] font-medium text-center">Not uploaded</span>
+            <span className="text-[10px] font-medium text-center">{t("agentAccount.notUploaded")}</span>
           </div>
         )}
       </div>
@@ -909,6 +911,7 @@ function AgencyIntegrationCard({
   record?: AgencyIntegrationRecord;
   onSaved: () => void;
 }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [enabled, setEnabled] = useState(false);
   const [config, setConfig] = useState<Record<string, string>>({});
@@ -938,9 +941,9 @@ function AgencyIntegrationCard({
         body: JSON.stringify({ isEnabled: enabled, config }),
       });
       onSaved();
-      toast({ title: `${title} saved` });
+      toast({ title: t("agentAccount.integrationSaved", { title }) });
     } catch (error: any) {
-      toast({ title: "Integration could not be saved", description: error.message, variant: "destructive" });
+      toast({ title: t("agentAccount.integrationSaveFailed"), description: error.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -951,11 +954,11 @@ function AgencyIntegrationCard({
       <div className="flex items-center justify-between gap-4">
         <div>
           <h3 className="font-display font-semibold">{title}</h3>
-          <p className="text-xs text-muted-foreground mt-1">Credentials are encrypted and isolated to this agency.</p>
+          <p className="text-xs text-muted-foreground mt-1">{t("agentAccount.credentialsNote")}</p>
         </div>
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} className="h-4 w-4 accent-primary" />
-          Enabled
+          {t("agentAccount.enabled")}
         </label>
       </div>
       <div className="grid sm:grid-cols-2 gap-3">
@@ -974,7 +977,7 @@ function AgencyIntegrationCard({
       <div className="flex justify-end pt-2">
         <Button onClick={save} disabled={saving} className="gap-2">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Save integration
+          {t("agentAccount.saveIntegration")}
         </Button>
       </div>
     </Card>
@@ -982,6 +985,7 @@ function AgencyIntegrationCard({
 }
 
 function AgencyIntegrationsTab({ features }: { features: Record<string, boolean> }) {
+  const { t } = useI18n();
   const query = useQuery<{ integrations: AgencyIntegrationRecord[] }>({
     queryKey: ["agent-integrations"],
     queryFn: () => customFetch("/api/agents/me/integrations"),
@@ -991,10 +995,10 @@ function AgencyIntegrationsTab({ features }: { features: Record<string, boolean>
   return (
     <div className="space-y-6">
       {features.email_integration && (
-        <AgencyIntegrationCard kind="email" title="Agency Email" record={integrations.find(item => item.kind === "email")} onSaved={() => query.refetch()} />
+        <AgencyIntegrationCard kind="email" title={t("agentAccount.agencyEmail")} record={integrations.find(item => item.kind === "email")} onSaved={() => query.refetch()} />
       )}
       {features.whatsapp_integration && (
-        <AgencyIntegrationCard kind="whatsapp" title="Agency WhatsApp" record={integrations.find(item => item.kind === "whatsapp")} onSaved={() => query.refetch()} />
+        <AgencyIntegrationCard kind="whatsapp" title={t("agentAccount.agencyWhatsApp")} record={integrations.find(item => item.kind === "whatsapp")} onSaved={() => query.refetch()} />
       )}
     </div>
   );
