@@ -36,6 +36,7 @@ export interface PublicProgramCardData {
 
 export interface PublicProgramCardProps {
   program: PublicProgramCardData;
+  appearance?: "default" | "directory";
   index: number;
   onApply?: () => void;
   onDetails?: () => void;
@@ -88,7 +89,7 @@ function fixStorageUrl(url: string | null | undefined): string | null {
 const detailsClassName = "w-9 h-9 rounded-full border-2 border-border/60 flex items-center justify-center text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all shrink-0";
 const applyClassName = "flex-1 min-w-0 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300";
 
-export function PublicProgramCard({ program: prog, index: _index, onApply, onDetails, applyHref, applyDisabled = false, tuitionContent, omitLegacyTiming = false, selectedForProposal = false, onToggleProposalSelection }: PublicProgramCardProps) {
+export function PublicProgramCard({ program: prog, appearance = "default", index: _index, onApply, onDetails, applyHref, applyDisabled = false, tuitionContent, omitLegacyTiming = false, selectedForProposal = false, onToggleProposalSelection }: PublicProgramCardProps) {
   const { t, lang } = useI18n();
   const effectiveFee = prog.discountedFee ?? prog.tuitionFee;
   const hasDiscount = !!(prog.discountedFee && prog.tuitionFee && prog.discountedFee < prog.tuitionFee);
@@ -117,12 +118,14 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
     <Building2 className={`w-5 h-5 text-muted-foreground ${logoSrc ? "hidden" : ""}`} aria-hidden="true" />
   </>;
   const title = <h3 className="font-bold text-foreground text-[15px] leading-snug line-clamp-2 break-words group-hover:text-primary transition-colors duration-200"><bdi>{programName}</bdi></h3>;
+  const detailsContent = <><Info className="w-4 h-4" aria-hidden="true" />{appearance === "directory" ? <span>{t("programs.programDetails")}</span> : null}</>;
   const applyLabel = <>{t("courseFinderPage.apply")} <span aria-hidden="true" className="inline-block rtl:rotate-180">→</span></>;
 
   return (
     <div
+      data-card-appearance={appearance}
       className="public-program-card group min-w-0 bg-card rounded-2xl overflow-hidden shadow-md shadow-black/[0.04] hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary/[0.08] transition-all duration-300 border border-border/40 hover:border-primary/20 flex flex-col">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 bg-card">
+      <div className="program-card-heading flex items-center gap-3 px-4 py-3 border-b border-border/50 bg-card">
         {onToggleProposalSelection ? <button type="button" onClick={onToggleProposalSelection}
           aria-pressed={selectedForProposal} aria-label={t("common.select")}
           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors ${selectedForProposal ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-transparent hover:border-primary/60"}`}>
@@ -135,7 +138,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
         ) : (
           <div className="w-10 h-10 rounded-xl border border-border/60 bg-background flex items-center justify-center shrink-0 overflow-hidden">{logo}</div>
         )}
-        <div className="min-w-0 flex-1">
+        <div className="program-card-institution min-w-0 flex-1">
           {universityPath ? (
             <Link href={universityPath} className="block truncate text-[12px] font-bold leading-tight text-foreground/80 hover:text-primary hover:underline"><bdi>{institutionName}</bdi></Link>
           ) : (
@@ -148,7 +151,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
             </div>
           )}
         </div>
-        <div className="flex flex-col items-end gap-1 shrink-0 max-w-[40%]">
+        <div className="program-card-badges flex flex-col items-end gap-1 shrink-0 max-w-[40%]">
           {institutionType && (
             <Badge variant="outline" className="text-[10px] px-2 py-0 h-[18px] font-medium max-w-full"><bdi className="truncate">{institutionType}</bdi></Badge>
           )}
@@ -158,7 +161,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
         </div>
       </div>
 
-      <div className="p-4 flex-1 flex flex-col gap-3 min-w-0">
+      <div className="program-card-body p-4 flex-1 flex flex-col gap-3 min-w-0">
         {programPath ? <Link href={programPath} className="block">{title}</Link> : title}
 
         {hasTuitionOverride ? tuitionContent : effectiveFee != null && (
@@ -202,7 +205,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
           </div>
         )}
 
-        <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 gap-2 bg-muted/40 rounded-xl p-3">
+        <div className="program-card-facts grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 gap-2 bg-muted/40 rounded-xl p-3">
           {prog.degree && (
             <div className="flex flex-col gap-0.5 min-w-0">
               <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium"><GraduationCap className="w-3 h-3 text-violet-500 shrink-0" aria-hidden="true" />{t("courseFinderPage.degree")}</span>
@@ -241,13 +244,13 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
           )}
         </div>
 
-        <div className="mt-auto flex items-center gap-2 pt-1">
+        <div className="program-card-actions mt-auto flex items-center gap-2 pt-1">
           {onDetails ? (
-            <button type="button" onClick={onDetails} className={detailsClassName} aria-label={t("programs.programDetails")}><Info className="w-4 h-4" aria-hidden="true" /></button>
+            <button type="button" onClick={onDetails} className={detailsClassName} aria-label={t("programs.programDetails")}>{detailsContent}</button>
           ) : programPath ? (
-            <Link href={programPath} className={detailsClassName} aria-label={t("programs.programDetails")}><Info className="w-4 h-4" aria-hidden="true" /></Link>
+            <Link href={programPath} className={detailsClassName} aria-label={t("programs.programDetails")}>{detailsContent}</Link>
           ) : (
-            <button type="button" disabled className={`${detailsClassName} opacity-50`} aria-label={t("programs.programDetails")}><Info className="w-4 h-4" aria-hidden="true" /></button>
+            <button type="button" disabled className={`${detailsClassName} opacity-50`} aria-label={t("programs.programDetails")}>{detailsContent}</button>
           )}
           {!applicationDisabled && !onApply && applicationPath ? (
             <Button asChild className={applyClassName}><Link href={applicationPath}>{applyLabel}</Link></Button>

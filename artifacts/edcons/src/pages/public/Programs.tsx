@@ -390,7 +390,7 @@ export default function Programs() {
           ) : (
             <>
               <div className="programs-results-grid">
-                {programs.map((prog, i) => <PublicProgramCard key={prog.id} program={prog} index={i} onDetails={() => setDetailProgram(prog)} onApply={() => setApplyProgram(prog)} />)}
+                {programs.map((prog, i) => <PublicProgramCard appearance="directory" key={prog.id} program={prog} index={i} onDetails={() => setDetailProgram(prog)} onApply={() => setApplyProgram(prog)} />)}
               </div>
 
               {totalPages > 1 && (

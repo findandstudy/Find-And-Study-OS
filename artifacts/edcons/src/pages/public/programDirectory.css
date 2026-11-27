@@ -16,3 +16,28 @@
 .managed-agency-page--programs .cms-editorial-block:has(.public-page-header){min-height:0!important}
 @media(max-width:1000px){.programs-results-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.programs-directory{padding:20px 0 36px}.programs-directory .public-program-filters{padding:16px;border-radius:14px}.programs-results-grid{grid-template-columns:minmax(0,1fr);gap:18px}.programs-directory-results{margin-top:20px}}
+
+/* Directory-specific card treatment; embedded detail-page cards keep their layout. */
+.programs-directory [data-card-appearance=directory]{border:1px solid #dce5f1;border-radius:20px;background:#fff;box-shadow:0 4px 18px #10233f08;transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+.programs-directory [data-card-appearance=directory]:hover{transform:translateY(-3px);border-color:#a6c1f2;box-shadow:0 12px 28px #17356812}
+.programs-directory .program-card-heading{display:grid;grid-template-columns:48px minmax(0,1fr);gap:8px 12px;padding:16px;background:#fff;border-color:#edf1f6;align-items:center}
+.programs-directory .program-card-heading>a,.programs-directory .program-card-heading>div:first-child{width:48px;height:48px;border-radius:12px}
+.programs-directory .program-card-institution>a,.programs-directory .program-card-institution>span{font-size:13px;line-height:1.45;white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.programs-directory .program-card-institution>div{font-size:11px;margin-top:4px}
+.programs-directory .program-card-badges{grid-column:2;flex-direction:row;align-items:center;flex-wrap:wrap;max-width:none;gap:5px}
+.programs-directory .program-card-badges>span{font-size:10px;height:auto;min-height:20px;padding:2px 8px;border-radius:6px;line-height:1.3}
+.programs-directory .program-card-body{padding:16px;gap:14px}
+.programs-directory .program-card-body h3{font-size:17px;line-height:1.4;min-height:2.8em;color:#152c50}
+.programs-directory .program-card-body>p,.programs-directory .program-card-body>div>p{font-size:12px;line-height:1.5}
+.programs-directory .program-card-facts{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 10px;background:#f5f8fc;padding:13px;border:1px solid #edf2f8;border-radius:12px}
+.programs-directory .program-card-facts>div>span:first-child{font-size:11px;line-height:1.4}
+.programs-directory .program-card-facts>div>span:last-child{font-size:12px;line-height:1.4;white-space:normal;overflow-wrap:anywhere;font-weight:600}
+.programs-directory .program-card-actions{gap:8px;padding-top:2px}
+.programs-directory .program-card-actions>*{height:44px;min-width:0;border-radius:12px;font-size:12px;line-height:1.25;font-weight:600;transition:background-color .18s ease,color .18s ease,box-shadow .18s ease}
+.programs-directory .program-card-actions>:first-child{width:auto;flex:1;gap:6px;border:1px solid #d7e2f2;color:#24416c;background:#fff;padding:8px}
+.programs-directory .program-card-actions>:last-child{flex:1.2;background:#245ef0;color:#fff;box-shadow:0 3px 8px #245ef018}
+.programs-directory .program-card-actions>:first-child:hover{background:#edf4ff;color:#194db5;border-color:#9bb8ed}
+.programs-directory .program-card-actions>:last-child:hover{background:#164dd5;box-shadow:0 5px 12px #245ef02b}
+.programs-directory .public-program-card :is(a,button):focus-visible{outline:3px solid #93b4fa;outline-offset:3px}
+@media(min-width:1200px){.programs-directory .program-card-facts{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.programs-directory [data-card-appearance=directory],.programs-directory .public-program-card *{transition:none!important}.programs-directory [data-card-appearance=directory]:hover{transform:none}}
