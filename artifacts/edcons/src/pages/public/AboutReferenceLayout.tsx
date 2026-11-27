@@ -46,12 +46,12 @@ export function AboutReferenceLayout({ lang, page, transformBlock }: {
       <div className="ar-container ar-two-col">
         <div className="ar-intro-visual" data-reveal>
           <img src={asset("about-image.jpg")} alt="" className="ar-photo" />
-          <div className="ar-photo-caption"><h3>{str(cards[0]?.title) || t("about.studentFirst")}</h3><p>{str(cards[0]?.description) || t("about.studentFirstDesc")}</p></div>
+          <div className="ar-photo-caption"><h3>{str(cards[1]?.title) || t("about.studentFirst")}</h3><p>{str(cards[1]?.description) || t("about.studentFirstDesc")}</p></div>
         </div>
         <div data-reveal><span className="ar-kicker">{t("about.badge")} · Find And Study</span>
-          <h2>{t("about.title")} <em>{t("about.titleHighlight")}</em></h2>
+          <h2>{str(hero.title) || `${t("about.title")} ${t("about.titleHighlight")}`}</h2>
           <p>{paragraphs[0]}</p>
-          <div className="ar-intro-detail"><div><h3>{str(cards[1]?.title) || t("about.excellence")}</h3><p>{paragraphs[1] || str(cards[1]?.description)}</p></div><img src={asset("about-image-1.jpg")} alt="" loading="lazy" /></div>
+          <div className="ar-intro-detail"><div><h3>{str(cards[2]?.title) || t("about.excellence")}</h3><p>{paragraphs[1] || str(cards[2]?.description)}</p></div><img src={asset("about-image-1.jpg")} alt="" loading="lazy" /></div>
           <ButtonLink href={contact}>{str(story.ctaLabel) || t("about.getStarted")}</ButtonLink>
         </div>
       </div>
@@ -59,12 +59,12 @@ export function AboutReferenceLayout({ lang, page, transformBlock }: {
     <section className="ar-section ar-approach" data-cms-block="grid_box">
       <div className="ar-container ar-two-col">
         <div data-reveal><span className="ar-kicker">{str(values.eyebrow) || t("about.missionTitle")}</span>
-          <h2>{str(hero.title) || `${t("about.title")} ${t("about.titleHighlight")}`}</h2>
+          <h2>{str(values.title) || `${t("about.title")} ${t("about.titleHighlight")}`}</h2>
           <p>{str(values.subtitle) || t("about.description")}</p><ButtonLink href={contact}>{t("about.getStarted")}</ButtonLink>
         </div>
         <div className="ar-approach-cards">
-          <article data-reveal><span className="ar-icon"><Target /></span><h3>{str(story.title) || t("about.missionTitle")}</h3><p>{paragraphs[0]}</p></article>
-          <article data-reveal><span className="ar-icon"><Rocket /></span><h3>{str(cards[0]?.title) || t("about.studentFirst")}</h3><p>{paragraphs[1] || str(cards[0]?.description)}</p></article>
+          <article data-reveal><span className="ar-icon"><Target /></span><h3>{str(story.title) || t("about.missionTitle")}</h3><p>{paragraphs[2] || paragraphs[0]}</p></article>
+          <article data-reveal><span className="ar-icon"><Rocket /></span><h3>{str(cards[0]?.title) || t("about.studentFirst")}</h3><p>{paragraphs[3] || str(cards[0]?.description)}</p></article>
         </div>
       </div>
       <div className="ar-container ar-strip"><Check size={20} /><p>{str(cta.subtitle) || t("about.ctaSubtitle")} <a href={contact}>{t("about.bookConsultation")} ↗</a></p></div>
@@ -76,9 +76,9 @@ export function AboutReferenceLayout({ lang, page, transformBlock }: {
         </div>
       </div>
     </section>
-    <section className="ar-stat-band"><div className="ar-container">{["studentsPlaced","partnerUniversities","countriesServed"].map(key=><div key={key}><strong>{t(`about.${key}Num`)}</strong><span>{t(`about.${key}`)}</span></div>)}</div></section>
+    <section className="ar-stat-band"><div className="ar-container">{cards.slice(3,6).map((card,i)=><div key={i}><strong>{str(card.title)}</strong><span>{str(card.description)}</span></div>)}</div></section>
     <section className="ar-panorama" aria-label={t("about.titleHighlight")}><img src={asset("video-bg.jpg")} alt="" loading="lazy" /><a href={contact} className="ar-panorama-action" aria-label={t("about.bookConsultation")}><ArrowUpRight size={38} /></a></section>
-    <section className="ar-section ar-enquiry"><div className="ar-container ar-two-col"><div data-reveal><span className="ar-kicker">{t("contact.badge")}</span><h2>{t("contact.title")} <em>{t("contact.titleHighlight")}</em></h2><p>{t("contact.subtitle")}</p><ul className="ar-check-list">{cards.slice(0,3).map((card,index)=><li key={index}><Check size={20}/>{str(card.description)}</li>)}</ul></div><InquiryForm /></div></section>
+    <section className="ar-section ar-enquiry"><div className="ar-container ar-two-col"><div data-reveal><span className="ar-kicker">{t("contact.badge")}</span><h2>{t("contact.title")} <em>{t("contact.titleHighlight")}</em></h2><p>{str(cta.subtitle) || str(hero.subtitle)}</p><ul className="ar-check-list">{steps.slice(0,3).map((step,index)=><li key={index}><Check size={20}/>{str(step.title)}</li>)}</ul></div><InquiryForm /></div></section>
     {blocks.filter(b => b.blockType === "team_grid" && rows(b.content.members).length).map((b,i) => <section className="ar-section ar-team" key={i}><div className="ar-container"><span className="ar-kicker">{t("about.teamTitle")}</span><h2>{str(b.content.title) || t("about.teamTitle")}</h2><p>{str(b.content.subtitle) || t("about.teamSubtitle")}</p><CmsBlock block={b} index={i} /></div></section>)}
     {blocks.filter(b=>b.blockType === "office_list" && rows(b.content.offices).length).map((b,i)=><section className="ar-section" key={`office-${i}`}><div className="ar-container"><CmsBlock block={b} index={i}/></div></section>)}
     {faq && <section className="ar-section ar-faq" data-cms-block="faq"><div className="ar-container ar-two-col"><div data-reveal><span className="ar-kicker">{t("about.badge")}</span><h2>{str(faq.content.title)}</h2><p>{str(faq.content.subtitle)}</p><img className="ar-faq-image" src={asset("faqs-img.jpg")} alt="" loading="lazy" /></div><div className="ar-faq-list">{rows(faq.content.items).map((item,i)=><details key={i}><summary>{str(item.question)}</summary><p>{str(item.answer)}</p></details>)}</div></div></section>}
