@@ -12,6 +12,8 @@ export const IMPORTANT_NOTIFICATION_TYPES = [
   "application.visa_update",
   "lead.assigned",
   "lead.follow_up_due",
+  "pipeline.follow_up_due",
+  "pipeline.follow_up_scheduled",
   "student.assigned",
   "task.assigned",
   "task.mention",

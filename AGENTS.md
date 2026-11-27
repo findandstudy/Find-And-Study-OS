@@ -758,3 +758,17 @@ Sekmelerle geçiş ve `+` ile yalnız ad girerek pipeline ekleme vardır.
 Yerel browser'da pano/tablo, aşama yönetimi, pointer drag/drop ve geri alma,
 kart kaydetme doğrulandı. Kanal/source ve CRM ayrımı değişmedi. Ayrıntılar:
 `LOCAL_WORK_PIPELINES_2026-11-27.md`.
+
+### 27 Kasım — yerel pipeline etkinlikleri
+Bağımsız pipeline kartlarına Lead ekranı dilinde ayrı not/takip/geçmiş sekmeleri,
+aynı sistem içi notifications + transaction-bound bus bildirimi ve admin/staff
+dashboard projection eklendi. Takiplerde tarih/saat, sorumlu, açıklama, düzenle,
+tamamla/yeniden aç vardır. Local launcher 30 sn reminder tick çalıştırır;
+marker + notification atomiktir; üyelik kaldırma/archive hatırlatmayı engeller.
+CRM follow-up/lead/student/application tabloları kullanılmaz. Mevcut Embed
+formları source seçimi gruplandırıldı; /admin/embeds yönetim linki, yenile ve
+başka board'a bağlı kaynağı kilitleme eklendi. 15 hedefli local API/DB senaryosu
+PASS; UI not/dashboard/link/tamamlama/source PASS; frontend typecheck PASS.
+API typecheck yalnız eski embedLeadFormI18n.ts:41 ur hatasında kalır.
+Staging/Apply, dış e-posta/WhatsApp ve production wiring değişmedi.
+Ayrıntılar LOCAL_WORK_PIPELINES_2026-11-27.md içinde.

@@ -127,6 +127,10 @@ export function localizeNotification(
     title: notification.title || "",
     body: notification.body || null,
   };
+  if (notification.type?.startsWith("pipeline.")) {
+    const tr = String(requestedLanguage || "en").split("-")[0] === "tr";
+    return { title: notification.type === "pipeline.note_added" ? (tr ? "Pipeline’a yeni not eklendi" : "New pipeline note") : notification.type === "pipeline.follow_up_due" ? (tr ? "Pipeline takip zamanı geldi" : "Pipeline follow-up due") : (tr ? "Pipeline takibi planlandı" : "Pipeline follow-up scheduled"), body: tr ? "İlgili pipeline kaydını açın." : "Open the related pipeline record." };
+  }
   if (notification.type !== "application.offer_letter_expiring") return fallback;
 
   const lang = COPY[requestedLanguage] ? requestedLanguage : "en";

@@ -1,3 +1,4 @@
+import { WorkPipelineActivity } from "./WorkPipelineActivity";
 import { useState } from "react";
 import {
   DndContext,
@@ -62,6 +63,7 @@ import {
   ArrowUp,
   ArrowDown,
   X,
+  CalendarClock,
   Trophy,
   XCircle,
 } from "lucide-react";
@@ -145,6 +147,17 @@ function ContactCard({
           </p>
         )}
       </div>
+      {c.followUps?.some((f) => !f.completed) && (
+        <p className="px-4 pb-2 flex items-center gap-1 text-xs text-muted-foreground">
+          <CalendarClock className="w-3 h-3" />
+          {new Date(
+            [...c.followUps]
+              .filter((f) => !f.completed)
+              .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))[0]
+              .scheduledAt,
+          ).toLocaleString(m.lang, { dateStyle: "short", timeStyle: "short" })}
+        </p>
+      )}
       <div className="px-4 pb-3 flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           {m.b?.archived ? (
@@ -772,42 +785,114 @@ export default function WorkPipelines() {
               )}
               {settings === "sources" && (
                 <>
-                  <p className="text-xs text-muted-foreground">
-                    {l.simpleSourceHelp}
+                  <p className="text-sm text-muted-foreground">
+                    {m.lang === "tr"
+                      ? "Formu sistemdeki Embed alanında oluşturun. Burada seçip kaydettiğiniz formun yeni gönderimleri bu pipeline’a kayıt olur; öğrenci lead’i oluşturmaz."
+                      : "Create the form in the existing Embed area. Select and save it here to send new submissions to this pipeline instead of student leads."}
                   </p>
-                  <div className="space-y-3">
-                    {m.options.data?.sources.map((s) => (
-                      <label
-                        key={s.kind + s.key}
-                        className="flex items-center gap-2 text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={m.boardDraft!.document.sources.some(
-                            (x) => x.kind === s.kind && x.key === s.key,
-                          )}
-                          onChange={(e) =>
-                            m.boardEdit({
-                              sources: e.target.checked
-                                ? [
-                                    ...m.boardDraft!.document.sources,
-                                    { kind: s.kind, key: s.key },
-                                  ]
-                                : m.boardDraft!.document.sources.filter(
-                                    (x) => x.kind !== s.kind || x.key !== s.key,
-                                  ),
-                            })
-                          }
-                        />
-                        {s.label}
-                      </label>
-                    ))}
-                    {!m.options.data?.sources.length && (
-                      <p className="text-sm text-muted-foreground">
-                        {l.noSources}
-                      </p>
-                    )}
+                  <div className="flex items-center gap-3">
+                    <a
+                      className="text-sm text-primary hover:underline"
+                      href="/admin/embeds"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {m.lang === "tr"
+                        ? "Embed formlarını yönet ↗"
+                        : "Manage embed forms ↗"}
+                    </a>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={m.options.isFetching}
+                      onClick={() => void m.options.refetch()}
+                    >
+                      {m.lang === "tr" ? "Listeyi yenile" : "Refresh list"}
+                    </Button>
                   </div>
+                  {(["embed", "channel", "web"] as const).map((kind) => (
+                    <div key={kind} className="space-y-2">
+                      <h3 className="font-medium text-sm">
+                        {kind === "embed"
+                          ? m.lang === "tr"
+                            ? "Embed formları"
+                            : "Embed forms"
+                          : kind === "channel"
+                            ? m.lang === "tr"
+                              ? "Mesaj kanalları"
+                              : "Message channels"
+                            : "Web-to-lead"}
+                      </h3>
+                      {m.options.data?.sources
+                        .filter((s) => s.kind === kind)
+                        .map((s) => {
+                          const binding = m.options.data?.bindings?.find(
+                            (x) => x.kind === s.kind && x.source_key === s.key,
+                          );
+                          const elsewhere =
+                            binding &&
+                            binding.board_id !== m.boardDraft!.document.id;
+                          return (
+                            <label
+                              key={s.kind + s.key}
+                              className={
+                                "flex items-start gap-2 text-sm rounded-lg border p-3 " +
+                                (elsewhere ? "opacity-60" : "")
+                              }
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-1"
+                                disabled={Boolean(elsewhere) || m.busy}
+                                checked={m.boardDraft!.document.sources.some(
+                                  (x) => x.kind === s.kind && x.key === s.key,
+                                )}
+                                onChange={(e) =>
+                                  m.boardEdit({
+                                    sources: e.target.checked
+                                      ? [
+                                          ...m.boardDraft!.document.sources,
+                                          { kind: s.kind, key: s.key },
+                                        ]
+                                      : m.boardDraft!.document.sources.filter(
+                                          (x) =>
+                                            x.kind !== s.kind ||
+                                            x.key !== s.key,
+                                        ),
+                                  })
+                                }
+                              />
+                              <span>
+                                {s.label}
+                                {elsewhere && (
+                                  <span className="block text-xs text-muted-foreground">
+                                    {m.lang === "tr"
+                                      ? "Bağlı pipeline: "
+                                      : "Connected pipeline: "}
+                                    {binding.board_name}
+                                  </span>
+                                )}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      {!m.options.data?.sources.some(
+                        (s) => s.kind === kind,
+                      ) && (
+                        <p className="text-xs text-muted-foreground">
+                          {m.lang === "tr"
+                            ? "Aktif kaynak yok."
+                            : "No active sources."}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  {m.options.isError && (
+                    <p role="alert" className="text-sm text-destructive">
+                      {l.error}
+                    </p>
+                  )}
                 </>
               )}
               <DialogFooter>
@@ -937,45 +1022,18 @@ export default function WorkPipelines() {
                 />
               </div>
               {m.cardDraft.revision > 0 && (
-                <details className="text-sm">
-                  <summary className="cursor-pointer font-medium">
-                    {l.notes} / {l.history}
-                  </summary>
-                  <div className="space-y-3 mt-3">
-                    {[
-                      ...m.cardDraft.document.notes,
-                      ...m.cardDraft.document.history,
-                    ]
-                      .sort((a, b) => b.at.localeCompare(a.at))
-                      .map((e) => (
-                        <div key={e.id} className="text-xs border-s-2 ps-3">
-                          <p className="text-muted-foreground">
-                            {m.person(e.by)} ·{" "}
-                            {new Date(e.at).toLocaleString(m.lang)}
-                          </p>
-                          <p className="whitespace-pre-line">
-                            {e.action === "note"
-                              ? e.text
-                              : e.action === "captured"
-                                ? l.captured
-                                : e.action === "created"
-                                  ? l.created
-                                  : l.updated}
-                            {e.action !== "note" && e.text
-                              ? ` · ${e.text}`
-                              : ""}
-                          </p>
-                        </div>
-                      ))}
-                    <Textarea
-                      placeholder={l.newNote}
-                      aria-label={l.newNote}
-                      rows={2}
-                      value={m.note}
-                      onChange={(e) => m.setNote(e.target.value)}
-                    />
-                  </div>
-                </details>
+                <WorkPipelineActivity
+                  key={m.cardDraft.document.id}
+                  row={m.cardDraft}
+                  lang={m.lang}
+                  person={m.person}
+                  busy={m.busy}
+                  disabled={b.archived}
+                  people={(m.options.data?.people ?? []).filter(
+                    (p) => p.id === b.createdBy || b.memberIds.includes(p.id),
+                  )}
+                  save={m.saveActivity}
+                />
               )}
               <DialogFooter>
                 <Button

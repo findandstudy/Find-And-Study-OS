@@ -1,3 +1,7 @@
+import {
+  changeWorkActivity,
+  workActivityDashboard,
+} from "../lib/workPipelineActivity";
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -47,18 +51,16 @@ const wrap = (fn: any) => async (req: any, res: any) => {
           : e.code === "23505"
             ? 409
             : 503;
-    res
-      .status(status)
-      .json({
-        error:
-          status === 503
-            ? "Pipeline service unavailable"
-            : e instanceof z.ZodError
-              ? e.issues.map((x: any) => x.message).join("; ")
-              : e.code === "23505"
-                ? "This source is already connected to another pipeline"
-                : e.message,
-      });
+    res.status(status).json({
+      error:
+        status === 503
+          ? "Pipeline service unavailable"
+          : e instanceof z.ZodError
+            ? e.issues.map((x: any) => x.message).join("; ")
+            : e.code === "23505"
+              ? "This source is already connected to another pipeline"
+              : e.message,
+    });
   }
 };
 router.get(
@@ -87,7 +89,11 @@ router.get(
         const forms = await c.query(
           "SELECT id,company_name,plan_tier,feature_overrides FROM agents WHERE status='active' AND embed_token IS NOT NULL ORDER BY id LIMIT 500",
         );
+        const bindings = await c.query(
+          "SELECT s.kind,s.source_key,s.board_id,b.document->>'name' AS board_name FROM local_work_pipelines.sources s JOIN local_work_pipelines.boards b ON b.tenant_id=s.tenant_id AND b.id=s.board_id",
+        );
         return {
+          bindings: bindings.rows,
           people: people.rows,
           canManage: true,
           sources: [
@@ -385,6 +391,43 @@ router.put(
           [t, b.id, old.id, card],
         );
         return { document: card, revision: r.rows[0].revision + 1 };
+      }),
+    );
+  }),
+);
+router.get(
+  "/work-pipelines/dashboard",
+  wrap(async (req: any, res: any) =>
+    res.json(await workActivityDashboard(req.user)),
+  ),
+);
+router.post(
+  "/work-pipelines/:id/cards/:cardId/activity",
+  wrap(async (req: any, res: any) =>
+    res.json(
+      await changeWorkActivity(
+        req.user,
+        req.params.id,
+        req.params.cardId,
+        req.body.revision,
+        req.body.activity,
+      ),
+    ),
+  ),
+);
+router.get(
+  "/work-pipelines/:id/cards/:cardId",
+  wrap(async (req: any, res: any) => {
+    WP_UUID.parse(req.params.cardId);
+    res.json(
+      await workTx(async (c, t) => {
+        await readWorkBoard(c, t, req.params.id, req.user);
+        const r = await c.query(
+          "SELECT document,revision FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND id=$3",
+          [t, req.params.id, req.params.cardId],
+        );
+        if (!r.rowCount) throw new WorkError(404, "Card not found");
+        return r.rows[0];
       }),
     );
   }),

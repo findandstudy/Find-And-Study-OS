@@ -102,10 +102,15 @@ export type WorkEvent = {
   action: string;
   text: string;
 };
+export type WorkFollowUp = {
+  id: string; title: string; notes: string; scheduledAt: string; assigneeId: number;
+  completed: boolean; createdBy: number; remindedAt: string | null;
+};
 export type WorkCard = z.infer<typeof workCardInput> & {
   id: string;
   createdAt: string;
   updatedAt: string;
+  followUps?: WorkFollowUp[];
   notes: WorkEvent[];
   history: WorkEvent[];
   source?: { kind: string; key: string; conversationId?: number };

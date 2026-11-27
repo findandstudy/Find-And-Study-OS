@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
+import { subscribeToNavigation } from "@/lib/navigation";
+import { useEffect, useRef, useState } from "react";
 import {
   useInfiniteQuery,
   useQuery,
@@ -33,6 +35,16 @@ export type Board = {
   createdBy: number;
   history: Event[];
 };
+export type FollowUp = {
+  id: string;
+  title: string;
+  notes: string;
+  scheduledAt: string;
+  assigneeId: number;
+  completed: boolean;
+  createdBy: number;
+  remindedAt: string | null;
+};
 export type Card = {
   id: string;
   title: string;
@@ -46,6 +58,7 @@ export type Card = {
   email: string;
   phone: string;
   tasks: { id: string; title: string; done: boolean }[];
+  followUps?: FollowUp[];
   notes: Event[];
   history: Event[];
   source?: { kind: string; key: string; conversationId?: number };
@@ -93,9 +106,32 @@ export function useWorkPipelines() {
     { user } = useAuth();
   const l = lang === "tr" ? workPipelinesTr : workPipelinesEn;
   const qc = useQueryClient();
+  const [route] = useLocation();
+  const [urlSearch, setUrlSearch] = useState(location.search);
+  useEffect(() => {
+    const sync = () => setUrlSearch(location.search);
+    const off = subscribeToNavigation(sync);
+    window.addEventListener("popstate", sync);
+    return () => {
+      off();
+      window.removeEventListener("popstate", sync);
+    };
+  }, []);
+  const linkParams = new URLSearchParams(
+    route.includes("?") ? route.slice(route.indexOf("?")) : urlSearch,
+  );
+  const linkedBoard = linkParams.get("pipeline");
+  const linkedCard = linkParams.get("card");
   const [selected, setSelected] = useState(
     () => new URLSearchParams(location.search).get("pipeline") || "",
   );
+  useEffect(() => {
+    if (linkedBoard && linkedBoard !== selected) {
+      setSelected(linkedBoard);
+      setCardDraft(null);
+      setQuery("");
+    }
+  }, [linkedBoard, selected]);
   const [view, setView] = useState<"board" | "table">(() =>
       localStorage.getItem("work-pipeline-view") === "table"
         ? "table"
@@ -118,9 +154,16 @@ export function useWorkPipelines() {
       request<{
         people: { id: number; name: string; role: string }[];
         sources: (Source & { label: string })[];
+        bindings?: {
+          kind: string;
+          source_key: string;
+          board_id: string;
+          board_name: string;
+        }[];
         canManage: boolean;
       }>("/options"),
     enabled: feature.data?.enabled === true,
+    refetchOnWindowFocus: true,
   });
   const boards = useInfiniteQuery({
     queryKey: ["work-pipeline-boards", user?.id],
@@ -273,6 +316,55 @@ export function useWorkPipelines() {
       setCardDraft(null);
       await refresh();
     });
+  const saveActivity = async (activity: unknown) => {
+    if (!cardDraft || busy) return false;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await request<Row<Card>>(
+        "/" + selected + "/cards/" + cardDraft.document.id + "/activity",
+        "POST",
+        { revision: cardDraft.revision, activity },
+      );
+      setCardDraft({
+        ...result,
+        document: { ...result.document, ...cardData(cardDraft.document) },
+      });
+      await refresh();
+      await qc.invalidateQueries({ queryKey: ["work-pipeline-dashboard"] });
+      await qc.invalidateQueries({ queryKey: ["notification-section-counts"] });
+      return true;
+    } catch (e: any) {
+      setError(e.message || l.error);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const openedLink = useRef("");
+  useEffect(() => {
+    const id = linkedCard;
+    if (
+      !id ||
+      !b ||
+      (linkedBoard && linkedBoard !== selected) ||
+      openedLink.current === selected + id
+    )
+      return;
+    openedLink.current = selected + id;
+    let disposed = false;
+    request<Row<Card>>("/" + selected + "/cards/" + encodeURIComponent(id))
+      .then((r) => {
+        if (!disposed) setCardDraft(r);
+      })
+      .catch((e) => {
+        if (!disposed) setError(e.message || l.error);
+      });
+    return () => {
+      disposed = true;
+      openedLink.current = "";
+    };
+  }, [selected, b?.id, linkedBoard, linkedCard]);
   const boardEdit = (patch: Partial<Board>) =>
     setBoardDraft((d) =>
       d ? { ...d, document: { ...d.document, ...patch } } : d,
@@ -318,6 +410,7 @@ export function useWorkPipelines() {
     move,
     saveBoard,
     saveCard,
+    saveActivity,
     boardEdit,
     cardEdit,
   };
