@@ -11,7 +11,8 @@
 .cms-editorial-block[data-section-preset][style*="--cms-section-bg"] .ar-section{background:var(--cms-section-bg)}
 .cms-editorial-block[data-section-preset][style*="--cms-section-text"] .ar-section{color:var(--cms-section-text)}
 .cms-editorial-block[data-section-preset] .ar-container{max-width:var(--cms-section-max,1320px)}
-.cms-editorial-block[data-section-preset] .ar-button{background:var(--cms-section-button-bg,var(--ar-blue));color:var(--cms-section-button-text,#fff)}
+.public-cms-page .cms-editorial-block[data-section-preset] .cms-independent-editorial .ar-button{display:inline-flex;align-items:center;gap:12px;border-radius:30px!important;background:var(--cms-section-button-bg,var(--ar-blue))!important;color:var(--cms-section-button-text,#fff)!important;padding:14px 24px;text-decoration:none;font-weight:700}
+.public-cms-page .cms-editorial-block[data-section-preset] .cms-independent-editorial .ar-button-outline{background:transparent!important;color:var(--cms-section-button-text,#fff)!important;border:1px solid currentColor}
 .cms-editorial-block[data-section-preset] .ar-approach-cards article{min-height:0;border:0;border-radius:16px;background-color:var(--cms-card-bg,#15284e);box-shadow:none}
 .cms-editorial-block[data-section-preset] .ar-photo{height:650px}
 .cms-editorial-block[data-section-preset] .ar-section p{color:var(--cms-section-text,#717986)}
