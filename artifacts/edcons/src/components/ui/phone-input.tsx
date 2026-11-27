@@ -31,12 +31,15 @@ function parsePhone(fullPhone: string): { dialCode: string; number: string } {
 }
 
 interface PhoneInputProps {
+  id?: string;
+  name?: string;
+  disabled?: boolean;
   value: string;
   onChange: (fullPhone: string) => void;
   className?: string;
 }
 
-export function PhoneInput({ value, onChange, className }: PhoneInputProps) {
+export function PhoneInput({ id, name, disabled, value, onChange, className }: PhoneInputProps) {
   const parsed = useMemo(() => parsePhone(value), [value]);
   const [dialCode, setDialCode] = useState(parsed.dialCode);
   const [number, setNumber] = useState(parsed.number);
@@ -119,6 +122,7 @@ export function PhoneInput({ value, onChange, className }: PhoneInputProps) {
     <div ref={containerRef} className={cn("relative flex", className)}>
       <button
         type="button"
+        disabled={disabled}
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 px-3 h-9 rounded-l-xl border border-r-0 border-input bg-secondary/40 hover:bg-secondary/60 transition-colors text-sm shrink-0"
       >
@@ -127,7 +131,12 @@ export function PhoneInput({ value, onChange, className }: PhoneInputProps) {
         <ChevronDown className="h-3 w-3 opacity-50" />
       </button>
       <input
+        id={id}
+        name={name}
+        disabled={disabled}
         type="tel"
+        autoComplete="tel-national"
+        inputMode="tel"
         value={number}
         onChange={e => handleNumberChange(e.target.value)}
         placeholder="555 123 4567"

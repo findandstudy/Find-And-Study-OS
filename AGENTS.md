@@ -800,3 +800,11 @@ typecheck PASS, API yalnız eski ur locale hatasında kalır. Local read-state u
 indeksi eksikliği ayrıca onarıldı; staging/Apply/deploy/push yoktur. Ayrıntılar
 LOCAL_WORK_PIPELINE_INBOX_2026-11-28.md. Önceki UI timeout notları, seçici için
 LOCAL_WORK_PIPELINE_PICKER_2026-11-27.md içindeki doğrulamayla supersede edilir.
+
+### 28 Kasım — local pipeline ortak iletişim alanı
+Elle kayıt ekleme/düzenleme aynı ortak PhoneInput bileşenini kullanır: katalog
+ülke kodu araması, bayrak/kod, sayısal telefon girişi. Telefon ve e-posta tam
+genişliktedir; PhoneInput'a geriye uyumlu id/name/disabled desteği eklendi.
+Sentetik UI kaydında +1 koduyla kaydetme ve tekrar düzenlemede kodun korunması
+doğrulandı; frontend typecheck PASS. ksks kullanıcı pipeline'ına test kaydı
+eklenmedi; sentetik kayıt mevcut TEST pipeline'ında tutuldu. Deploy/push yok.

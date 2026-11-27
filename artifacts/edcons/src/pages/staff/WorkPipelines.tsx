@@ -23,6 +23,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -948,21 +949,24 @@ export default function WorkPipelines() {
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="record-email">{l.email}</Label>
                   <Input
                     id="record-email"
                     type="email"
+                    autoComplete="email"
                     value={m.cardDraft.document.email}
                     onChange={(e) => m.cardEdit({ email: e.target.value })}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="record-phone">{l.phone}</Label>
-                  <Input
+                  <PhoneInput
                     id="record-phone"
+                    name="phone"
+                    disabled={m.busy}
                     value={m.cardDraft.document.phone}
-                    onChange={(e) => m.cardEdit({ phone: e.target.value })}
+                    onChange={(phone) => m.cardEdit({ phone })}
                   />
                 </div>
                 <div className="space-y-2">
