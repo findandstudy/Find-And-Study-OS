@@ -1807,6 +1807,7 @@
     ,"credentialsNote": "Kredensial dienkripsi dan diisolasi untuk agensi ini."
     ,"enabled": "Aktif"
     ,"saveIntegration": "Simpan integrasi"
+    ,"activeStatus": "Aktif"
     ,"pendingStatus": "Menunggu peninjauan"
     ,"suspendedStatus": "Ditangguhkan"
     ,"agencyEmail": "Email Agensi"

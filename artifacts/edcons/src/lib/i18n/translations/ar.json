@@ -1807,6 +1807,7 @@
     ,"credentialsNote": "بيانات الاعتماد مشفرة ومعزولة لهذه الوكالة."
     ,"enabled": "مفعّل"
     ,"saveIntegration": "حفظ التكامل"
+    ,"activeStatus": "نشط"
     ,"pendingStatus": "قيد المراجعة"
     ,"suspendedStatus": "معلّق"
     ,"agencyEmail": "بريد الوكالة"

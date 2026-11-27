@@ -595,9 +595,9 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
     );
   }
 
-  const normalizedStatus = String(agentProfile.status || "").toLowerCase();
+  const normalizedStatus = String(agentProfile.status || "").trim().toLowerCase();
   const statusLabel = normalizedStatus === "active"
-    ? t("settingsPage.active")
+    ? t("agentAccount.activeStatus")
     : normalizedStatus === "pending" || normalizedStatus === "under_review"
       ? t("agentAccount.pendingStatus")
       : normalizedStatus === "suspended"

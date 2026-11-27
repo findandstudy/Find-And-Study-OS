@@ -1807,6 +1807,7 @@
     ,"credentialsNote": "凭据已加密，并与此代理机构隔离。"
     ,"enabled": "已启用"
     ,"saveIntegration": "保存集成"
+    ,"activeStatus": "已启用"
     ,"pendingStatus": "待审核"
     ,"suspendedStatus": "已暂停"
     ,"agencyEmail": "代理机构邮箱"

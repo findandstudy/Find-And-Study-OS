@@ -1807,6 +1807,7 @@
     ,"credentialsNote": "क्रेडेंशियल एन्क्रिप्टेड हैं और इस एजेंसी तक सीमित हैं।"
     ,"enabled": "सक्षम"
     ,"saveIntegration": "इंटीग्रेशन सहेजें"
+    ,"activeStatus": "सक्रिय"
     ,"pendingStatus": "समीक्षा लंबित"
     ,"suspendedStatus": "निलंबित"
     ,"agencyEmail": "एजेंसी ईमेल"

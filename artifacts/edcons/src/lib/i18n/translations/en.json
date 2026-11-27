@@ -1807,6 +1807,7 @@
     ,"credentialsNote": "Credentials are encrypted and isolated to this agency."
     ,"enabled": "Enabled"
     ,"saveIntegration": "Save integration"
+    ,"activeStatus": "Active"
     ,"pendingStatus": "Pending review"
     ,"suspendedStatus": "Suspended"
     ,"agencyEmail": "Agency Email"
