@@ -789,3 +789,14 @@ tarayıcıda saklanır; yetki artışı veya cihazlar arası sync yoktur. 14 hed
 kontrol PASS. İzole local SSE development lease + cleanup 2 test PASS;
 production stream/launcher değişmedi. İç tarayıcı reload/focus timeout nedeniyle
 yeni görünüm UI doğrulaması tamamlanmadı. LOCAL_WORK_PIPELINE_PICKER_2026-11-27.md.
+
+### 28 Kasım — yalnız local pipeline/Inbox eşleşmesi
+Pipeline ekip erişimi seçimi ve ortak dar aşama/atama PATCH eklendi. Açık
+conversationId bağı olan kartın aşama ve sorumlusu Mesajlar sağ panelinde görünür;
+Mesajlar ataması aynı karta ve konuşmaya atomik yazılır, CRM zincirine yazılmaz.
+Commit-bound inbox olayı, üyelik/revision doğrulaması ve atanmış üyeyi çıkarma
+guardı vardır. 12 local API/DB kontrolü ve sentetik UI iki yön akışı PASS; frontend
+typecheck PASS, API yalnız eski ur locale hatasında kalır. Local read-state unique
+indeksi eksikliği ayrıca onarıldı; staging/Apply/deploy/push yoktur. Ayrıntılar
+LOCAL_WORK_PIPELINE_INBOX_2026-11-28.md. Önceki UI timeout notları, seçici için
+LOCAL_WORK_PIPELINE_PICKER_2026-11-27.md içindeki doğrulamayla supersede edilir.

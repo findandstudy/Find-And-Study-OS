@@ -35,6 +35,8 @@ try {
   await client.query(
     "GRANT USAGE ON SCHEMA public TO fas_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO fas_app; GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO fas_app;",
   );
+  // Inbox read-state upserts require the same identity key as the runtime.
+  await client.query("CREATE UNIQUE INDEX IF NOT EXISTS conversation_participants_conversation_user_unique ON conversation_participants(conversation_id,user_id)");
   const password = randomBytes(18).toString("base64url") + "!aA1";
   const hash = await bcrypt.hash(password, 10);
   const people = [];

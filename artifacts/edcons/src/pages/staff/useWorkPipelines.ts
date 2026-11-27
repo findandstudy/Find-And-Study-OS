@@ -178,6 +178,8 @@ export function useWorkPipelines() {
   const allBoards = boards.data?.pages.flatMap((p) => p.items) || [];
   const cards = useInfiniteQuery({
     queryKey: ["work-pipeline-cards", user?.id, selected, query],
+    refetchInterval: 3000,
+    refetchIntervalInBackground: false,
     // Switching boards must never display/export the previous board's data.
     placeholderData: undefined,
     initialPageParam: 0,
@@ -216,6 +218,7 @@ export function useWorkPipelines() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["work-pipeline-boards"] }),
       qc.invalidateQueries({ queryKey: ["work-pipeline-cards"] }),
+      qc.invalidateQueries({ queryKey: ["work-pipeline-options"] }),
     ]);
   };
   const run = async (fn: () => Promise<void>) => {

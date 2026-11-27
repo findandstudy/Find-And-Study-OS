@@ -1,3 +1,4 @@
+import { workConversationState, updateWorkCard } from "../lib/workPipelineInbox";
 import {
   changeWorkActivity,
   workActivityDashboard,
@@ -240,6 +241,12 @@ router.put(
         );
         if (invalid.rowCount)
           throw new WorkError(409, "Move cards before removing their stage");
+        const allowed = [old.document.createdBy, ...input.memberIds];
+        const stranded = await c.query(
+          "SELECT id FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND ((document->>'assigneeId' IS NOT NULL AND NOT ((document->>'assigneeId')::int=ANY($3::int[]))) OR EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(document->'followUps','[]'::jsonb)) f WHERE f->>'completed'='false' AND NOT ((f->>'assigneeId')::int=ANY($3::int[])))) LIMIT 1",
+          [t, req.params.id, allowed],
+        );
+        if (stranded.rowCount) throw new WorkError(409, "Reassign records and open follow-ups before removing a team member");
         const b = {
           ...old.document,
           ...input,
@@ -341,81 +348,21 @@ router.post(
 router.put(
   "/work-pipelines/:id/cards/:cardId",
   wrap(async (req: any, res: any) => {
-    const input = workCardInput.parse(req.body.data);
-    const note = z
-      .string()
-      .trim()
-      .max(5000)
-      .parse(req.body.note || "");
     WP_UUID.parse(req.params.cardId);
-    res.json(
-      await workTx(async (c, t) => {
-        const { document: b } = await readWorkBoard(
-          c,
-          t,
-          req.params.id,
-          req.user,
-          true,
-        );
-        if (b.archived) throw new WorkError(409, "Pipeline is archived");
-        const r = await c.query(
-          "SELECT document,revision FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND id=$3 FOR UPDATE",
-          [t, b.id, req.params.cardId],
-        );
-        if (!r.rowCount) throw new WorkError(404, "Card not found");
-        assertWorkRevision(r.rows[0].revision, req.body.revision);
-        if (!b.stages.some((s) => s.id === input.stageId))
-          throw new WorkError(400, "Invalid stage");
-        if (input.assigneeId !== null) {
-          await validateWorkMembers(c, [input.assigneeId]);
-          if (
-            input.assigneeId !== b.createdBy &&
-            !b.memberIds.includes(input.assigneeId)
-          )
-            throw new WorkError(400, "Assignee must belong to this pipeline");
-        }
-        const old: WorkCard = r.rows[0].document;
-        const changed = Object.keys(input).filter(
-          (k) =>
-            JSON.stringify((input as any)[k]) !==
-            JSON.stringify((old as any)[k]),
-        );
-        const history = changed.length
-          ? [
-              ...old.history,
-              event(
-                req.user.id,
-                "updated",
-                changed
-                  .map((k) =>
-                    k === "stageId"
-                      ? `${b.stages.find((s) => s.id === old.stageId)?.name} → ${b.stages.find((s) => s.id === input.stageId)?.name}`
-                      : k,
-                  )
-                  .join(", "),
-              ),
-            ]
-          : old.history;
-        const card = {
-          ...old,
-          ...input,
-          updatedAt: new Date().toISOString(),
-          notes: note
-            ? [...old.notes, event(req.user.id, "note", note)]
-            : old.notes,
-          history: note
-            ? [...history, event(req.user.id, "note-added", "")]
-            : history,
-        };
-        await c.query(
-          "UPDATE local_work_pipelines.cards SET document=$4,revision=revision+1 WHERE tenant_id=$1 AND board_id=$2 AND id=$3",
-          [t, b.id, old.id, card],
-        );
-        return { document: card, revision: r.rows[0].revision + 1 };
-      }),
-    );
+    const note = z.string().trim().max(5000).parse(req.body.note || "");
+    res.json(await updateWorkCard(req.user, req.params.id, req.params.cardId,
+      req.body.revision, req.body.data, note));
   }),
 );
+router.get("/work-pipelines/conversation/:conversationId", wrap(async (req: any, res: any) => {
+  const id = z.coerce.number().int().positive().parse(req.params.conversationId);
+  res.json(await workConversationState(req.user, id));
+}));
+router.patch("/work-pipelines/:id/cards/:cardId", wrap(async (req: any, res: any) => {
+  WP_UUID.parse(req.params.cardId);
+  res.json(await updateWorkCard(req.user, req.params.id, req.params.cardId,
+    req.body.revision, req.body.patch, "", true));
+}));
 router.get(
   "/work-pipelines/dashboard",
   wrap(async (req: any, res: any) =>

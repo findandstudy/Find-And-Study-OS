@@ -1,3 +1,5 @@
+import { workConversationState, assignWorkConversation } from "../lib/workPipelineInbox";
+import { WorkError } from "../lib/workPipelines";
 import { Router, raw, type IRouter, type Request, type Response as ExpressResponse } from "express";
 import {
   db,
@@ -917,7 +919,7 @@ router.get(
         ? "inbox_message"
         : event.type === "assigned"
           ? "inbox_assigned"
-          : "inbox_read_state";
+          : event.type === "pipeline" ? "inbox_pipeline" : "inbox_read_state";
       try {
         res.write(`event: ${eventName}\n`);
         res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -1215,6 +1217,9 @@ router.get(
       res.status(404).json({ error: "Not found" });
       return;
     }
+    let workPipeline: Awaited<ReturnType<typeof workConversationState>>;
+    try { workPipeline = await workConversationState(req.user!, id); }
+    catch (e) { if (e instanceof WorkError) { res.status(e.status).json({ error: e.message }); return; } throw e; }
     const rawLimit = parseInt(String(req.query.limit ?? ""), 10);
     const msgLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
     const beforeId = parseInt(String(req.query.before ?? ""), 10);
@@ -1249,7 +1254,7 @@ router.get(
           .from(channelAccountsTable)
           .where(eq(channelAccountsTable.id, conv.channelAccountId))
         : Promise.resolve([]),
-      conv.externalContactId
+      conv.externalContactId && !workPipeline.linked
         ? syncConversationOwner(id, req.user!.id, req.ip)
         : Promise.resolve(conv.assignedToId ?? null),
       db.execute(sql`
@@ -1481,6 +1486,7 @@ router.get(
       agent: agent ?? null,
       stage,
       aiSummary,
+      ...(workPipeline.linked ? { workPipeline } : {}),
     });
   },
 );
@@ -1573,6 +1579,16 @@ router.patch(
       return;
     }
     const assignedToId = userId === null ? null : (typeof userId === "number" ? userId : req.user!.id);
+    try {
+      if (assignedToId !== null && (!Number.isInteger(assignedToId) || assignedToId <= 0)) {
+        res.status(400).json({ error: "Invalid assignee" }); return;
+      }
+      const work = await assignWorkConversation(req.user!, id, assignedToId);
+      if (work) {
+        const [data] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, id));
+        res.json({ data }); return;
+      }
+    } catch (e) { if (e instanceof WorkError) { res.status(e.status).json({ error: e.message }); return; } throw e; }
     const [previous] = await db
       .select({ assignedToId: conversationsTable.assignedToId })
       .from(conversationsTable)

@@ -2,6 +2,7 @@ import { EventEmitter } from "events";
 import { pool } from "@workspace/db";
 
 export type InboxBusEvent =
+  | { type: "pipeline"; conversationId: number }
   | {
       type: "message";
       conversationId: number;

@@ -1,3 +1,4 @@
+import { WorkPipelineInboxSidebar, type WorkConversationState } from "@/components/inbox/WorkPipelineInboxSidebar";
 import { whilePageVisible } from "@/lib/visibleSubscription";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
@@ -12,7 +13,7 @@ import {
   useSummarizeInboxConversation,
   useAddInboxConversationNote,
   useAddInboxConversationTask,
-  type InboxConversationDetailResponse,
+  type InboxConversationDetailResponse as ApiInboxDetail,
   type ConversationAiSummary,
 } from "@workspace/api-client-react";
 import { LeadDetailSidebar } from "@/components/inbox/LeadDetailSidebar";
@@ -91,6 +92,8 @@ interface MessageAttachment {
   mimeType?: string;
   voiceNote?: boolean;
 }
+
+type InboxConversationDetailResponse = ApiInboxDetail & { workPipeline?: WorkConversationState };
 
 const TRANSIENT_MEDIA_STATUSES = new Set([502, 503, 504]);
 const WHATSAPP_TEMPLATE_BODY_MAX_CHARACTERS = 1024;
@@ -1082,6 +1085,7 @@ function InboxTab() {
 
       es.addEventListener("inbox_message", refresh);
       es.addEventListener("inbox_assigned", refresh);
+      es.addEventListener("inbox_pipeline", refresh);
       es.addEventListener("inbox_read_state", refreshReadState);
       es.addEventListener("heartbeat", onHeartbeat);
 
@@ -1090,6 +1094,7 @@ function InboxTab() {
         if (detailRefreshTimer !== null) clearTimeout(detailRefreshTimer);
         es.removeEventListener("inbox_message", refresh);
         es.removeEventListener("inbox_assigned", refresh);
+        es.removeEventListener("inbox_pipeline", refresh);
         es.removeEventListener("inbox_read_state", refreshReadState);
         es.removeEventListener("heartbeat", onHeartbeat);
         es.close();
@@ -2712,6 +2717,7 @@ function InboxTab() {
                       currentId={conv.assignedToId ?? null}
                       currentName={conv.assignedTo ? `${conv.assignedTo.firstName ?? ""} ${conv.assignedTo.lastName ?? ""}`.trim() : null}
                       onSelect={assignTo}
+                      allowedIds={detail.workPipeline?.linked ? detail.workPipeline.items.flatMap(item => item.people.map(p => p.id)) : undefined}
                       t={t}
                     />
                   ) : (
@@ -3361,7 +3367,7 @@ function InboxTab() {
             className="hidden h-full min-h-0 overflow-hidden border-l border-border/50 bg-muted/20 lg:flex lg:shrink-0 lg:flex-col"
             style={{ width: 238 }}
           >
-            <LeadDetailSidebar
+            {detail.workPipeline?.linked ? <WorkPipelineInboxSidebar key={selectedId} state={detail.workPipeline} onUpdated={() => { if (selectedId) { void fetchDetail(selectedId); void fetchInbox(); } }} /> : <LeadDetailSidebar
               detail={detail}
               conversationId={selectedId}
               documentLevel={
@@ -3377,7 +3383,7 @@ function InboxTab() {
               onUpdated={() => { if (selectedId) fetchDetail(selectedId); }}
               onSendApplicationDocument={sendApplicationDocument}
               applicationDocumentSendingDisabled={metaReplyWindowClosed || sending || uploading}
-            />
+            />}
           </div>
         )}
       </div>
@@ -3392,7 +3398,7 @@ function InboxTab() {
               <SheetTitle className="text-sm">{t("inbox.sidebar.leadInfoTitle")}</SheetTitle>
             </SheetHeader>
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-              <LeadDetailSidebar
+              {detail.workPipeline?.linked ? <WorkPipelineInboxSidebar key={selectedId} state={detail.workPipeline} onUpdated={() => { if (selectedId) { void fetchDetail(selectedId); void fetchInbox(); } }} /> : <LeadDetailSidebar
                 detail={detail}
                 conversationId={selectedId}
                 documentLevel={
@@ -3408,7 +3414,7 @@ function InboxTab() {
                 onUpdated={() => { if (selectedId) fetchDetail(selectedId); }}
                 onSendApplicationDocument={sendApplicationDocument}
                 applicationDocumentSendingDisabled={metaReplyWindowClosed || sending || uploading}
-              />
+              />}
             </div>
           </SheetContent>
         </Sheet>
@@ -6331,7 +6337,9 @@ function AssignStaffDropdown({
   currentName,
   onSelect,
   t,
+  allowedIds,
 }: {
+  allowedIds?: number[];
   currentId: number | null;
   currentName: string | null;
   onSelect: (userId: number | null) => void;
@@ -6357,9 +6365,10 @@ function AssignStaffDropdown({
   }, [open]);
 
   const q = search.trim().toLowerCase();
+  const eligibleStaff = allowedIds ? staff.filter(u => allowedIds.includes(u.id)) : staff;
   const filtered = q
-    ? staff.filter((u) => `${u.firstName ?? ""} ${u.lastName ?? ""}`.toLowerCase().includes(q))
-    : staff;
+    ? eligibleStaff.filter((u) => `${u.firstName ?? ""} ${u.lastName ?? ""}`.toLowerCase().includes(q))
+    : eligibleStaff;
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>

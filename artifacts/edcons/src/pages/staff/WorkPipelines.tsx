@@ -170,10 +170,11 @@ function ContactCard({
             <AssignPopover
               assignedUserName={people.find((p) => p.id === c.assigneeId)?.name}
               staffUsers={people}
+              currentUserId={m.user?.id}
               onAssign={(id) =>
                 void m.run(async () => {
-                  await request(`/${m.selected}/cards/${c.id}`, "PUT", {
-                    data: { ...cardData(c), assigneeId: id },
+                  await request(`/${m.selected}/cards/${c.id}`, "PATCH", {
+                    patch: { assigneeId: id },
                     revision: row.revision,
                   });
                   await m.refresh();
@@ -266,7 +267,7 @@ export default function WorkPipelines() {
   const m = useWorkPipelines(),
     { l, b } = m;
   const [settings, setSettings] = useState<
-    "create" | "rename" | "stages" | "sources"
+    "create" | "rename" | "stages" | "sources" | "team"
   >("create");
   const [assignment, setAssignment] = useState("all"),
     [stageFilter, setStageFilter] = useState("all"),
@@ -472,7 +473,7 @@ export default function WorkPipelines() {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-52 p-1" align="end">
-              {(["rename", "stages", "sources"] as const).map((kind) => (
+              {(["rename", "stages", "team", "sources"] as const).map((kind) => (
                 <button
                   key={kind}
                   className="w-full text-start px-3 py-2 rounded-md text-sm hover:bg-muted"
@@ -482,7 +483,7 @@ export default function WorkPipelines() {
                     ? l.rename
                     : kind === "stages"
                       ? l.stages
-                      : l.sources}
+                      : kind === "team" ? l.team : l.sources}
                 </button>
               ))}
             </PopoverContent>
@@ -639,7 +640,7 @@ export default function WorkPipelines() {
                   ? l.rename
                   : settings === "stages"
                     ? l.stages
-                    : l.sources}
+                    : settings === "team" ? l.team : l.sources}
             </DialogTitle>
           </DialogHeader>
           {m.boardDraft && (
@@ -664,6 +665,13 @@ export default function WorkPipelines() {
                   />
                 </div>
               )}
+              {(settings === "create" || settings === "team") && <div className="space-y-2">
+                <Label>{l.team}</Label>
+                <p className="text-xs text-muted-foreground">{m.lang === "tr" ? "Atanabilecek ve bu pipeline'a erişebilecek ekip üyelerini seçin." : "Choose team members who can access this pipeline and be assigned records."}</p>
+                {m.options.data?.people.filter(p => p.id !== m.boardDraft!.document.createdBy).map(p => <label key={p.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={m.boardDraft!.document.memberIds.includes(p.id)} onChange={e => m.boardEdit({ memberIds: e.target.checked ? [...m.boardDraft!.document.memberIds, p.id] : m.boardDraft!.document.memberIds.filter(id => id !== p.id) })} />{p.name}
+                </label>)}
+              </div>}
               {settings === "stages" && (
                 <>
                   <div className="space-y-3">
