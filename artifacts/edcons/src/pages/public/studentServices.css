@@ -13,3 +13,4 @@
 .sd-design .sd-detail-cover{object-fit:contain;background:#fff}
 
 .cms-editorial-block:is([data-section-preset="contact-workspace"],[data-section-preset="contact-map"],[data-section-preset="service-cards"],[data-section-preset="service-detail"]){--cms-section-bg:#f1f4f9;--cms-section-text:#667085;--cms-card-bg:#fff;background:var(--cms-section-bg)!important;padding:0!important}.cms-editorial-block[data-section-preset]>.sd-design{width:100%!important;max-width:none!important;margin:0!important;background:var(--cms-section-bg,#f1f4f9)!important}.cms-editorial-block .sd-design .sd-service-sidebar nav h2{color:#fff!important}.cms-editorial-block .sd-design .sd-kicker{color:#2b63ed!important}
+.cms-editorial-block .sd-design :is(h2,h3){color:var(--sd-ink,#101828)!important}.cms-editorial-block .sd-design .sd-sidebar-contact h3{color:#fff!important}
