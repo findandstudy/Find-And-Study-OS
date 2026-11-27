@@ -34,3 +34,12 @@ test('About and Contact use the system embed renderer; editor preview cannot sub
 test('embed enquiry messages preserve paragraphs, bound input and use local labels',()=>{
  assert.equal(normalizeEmbedEnquiryMessage('  First\r\n\r\nSecond  '),'First\n\nSecond');assert.equal(normalizeEmbedEnquiryMessage('   '),null);assert.equal(normalizeEmbedEnquiryMessage({message:'wrong shape'}),null);assert.equal(normalizeEmbedEnquiryMessage('x'.repeat(5001))?.length,5000);assert.equal(normalizeEmbedEnquiryMessage('A\u0000B'),'AB');assert.equal(getEmbedLeadFormCopy('tr').message,'Mesaj');assert.equal(getEmbedLeadFormCopy('ar').message,'الرسالة');
 });
+
+test('program directory follows its header in every locale without dropping editorial blocks',()=>{
+ const source:PageBlock[]=[{blockType:'hero',content:{title:'Programs'},settings:{},sortOrder:0,isVisible:true},{blockType:'progress_bars',content:{title:'Introduction'},settings:{},sortOrder:1,isVisible:true},{blockType:'catalog_grid',content:{source:'programs'},settings:{},sortOrder:2,isVisible:true},{blockType:'cta_banner',content:{title:'Help'},settings:{},sortOrder:3,isVisible:true}];
+ const before=structuredClone(source);
+ for(const locale of ['en','tr','ar']){
+  const result=sharedPageHeaderBlocks(source,'Programs',locale,'programs');assert.deepEqual(result.map(b=>b.blockType),['hero','catalog_grid','progress_bars','cta_banner']);assert.deepEqual(result.map(b=>b.sortOrder),[0,1,2,3]);assert.deepEqual(sharedPageHeaderBlocks(result,'Programs',locale,'programs'),result);assert.deepEqual(result[2].content,source[1].content);
+ }
+ assert.deepEqual(source,before);assert.deepEqual(sharedPageHeaderBlocks(source,'Countries','en','countries').map(b=>b.blockType),source.map(b=>b.blockType));
+});

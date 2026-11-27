@@ -1,0 +1,18 @@
+.managed-agency-page--programs [data-managed-live-slot]{background:#f3f6fb}
+.programs-directory{background:#f3f6fb;color:#101828;padding:30px 0 56px}
+.programs-directory-search{padding:0!important;border:0!important;background:transparent!important}
+.programs-directory-results{padding:0!important;margin-top:24px}
+.programs-directory .public-program-filters{border:1px solid #e0e7f0;background:#fff;border-radius:18px;padding:22px;box-shadow:0 6px 24px #10182806;backdrop-filter:none}
+.programs-directory .public-program-filters input{background:#f8faff;border-color:#dce3ee;color:#101828;box-shadow:none}
+.programs-directory .public-program-filters input:focus{background:#fff;border-color:#2563eb}
+.programs-directory .public-program-filters button[aria-expanded]{border-color:#dce3ee;background:#f8faff;color:#24344b;box-shadow:none}
+.programs-directory .public-program-filters button[aria-expanded=true]{background:#2563eb;color:#fff;border-color:#2563eb}
+.programs-results-summary{display:flex;align-items:center;justify-content:space-between;margin:0 0 20px;padding:0 2px;gap:16px}
+.programs-results-summary p{font-size:14px;font-weight:600;color:#475467}
+.programs-results-summary>div>div{width:34px;height:34px;border-radius:10px;background:#e5edff;color:#2563eb}
+.programs-results-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
+.programs-results-grid>div{min-width:0}
+.programs-directory .programs-results-pagination{margin-top:30px}
+.managed-agency-page--programs .cms-editorial-block:has(.public-page-header){min-height:0!important}
+@media(max-width:1000px){.programs-results-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.programs-directory{padding:20px 0 36px}.programs-directory .public-program-filters{padding:16px;border-radius:14px}.programs-results-grid{grid-template-columns:minmax(0,1fr);gap:18px}.programs-directory-results{margin-top:20px}}

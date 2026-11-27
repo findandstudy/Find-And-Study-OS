@@ -33,7 +33,7 @@ export function ManagedPublicPage({
 }: ManagedPublicPageProps) {
   const sourceBlocks = sharedPageHeaderBlocks(page?.data.blocks?.length
     ? enrichManagedPageBlocks(template, page.data.blocks, lang)
-    : managedPageStarterBlocks(template, lang), page?.data.title || template, lang);
+    : managedPageStarterBlocks(template, lang), page?.data.title || template, lang, template);
   const isIndependentPreset = (block: PageBlock) => Boolean(block.content.sectionPreset || String(block.content.variant || "").startsWith("about-"));
   const blocks = transformBlock ? sourceBlocks.map(block => isIndependentPreset(block) ? block : transformBlock(block)) : sourceBlocks;
   const hasSlot = Boolean(slotBlockType && blocks.some(block => block.blockType === slotBlockType && !isIndependentPreset(block)));

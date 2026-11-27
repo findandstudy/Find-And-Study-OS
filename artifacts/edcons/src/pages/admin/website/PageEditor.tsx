@@ -344,7 +344,7 @@ function PageEditorSession({ id }: { id: number }) {
     const enrichedBase = page && isSystemManagedPage(page)
       ? normalizeBlocks(enrichManagedPageBlocks(page.template, parsedBase, page.locale as Language))
       : parsedBase;
-    const normalizeHeader=(data:PageBlock[],locale:string,title?:string)=>page&&["countries","programs","blog"].includes(page.template)?sharedPageHeaderBlocks(data,title||getTranslation(locale as Language,"nav."+page.template),locale):data;
+    const normalizeHeader=(data:PageBlock[],locale:string,title?:string)=>page&&["countries","programs","blog"].includes(page.template)?sharedPageHeaderBlocks(data,title||getTranslation(locale as Language,"nav."+page.template),locale,page.template):data;
     const parsed = normalizeHeader(page?.template === "contact" ? normalizeBlocks(contactPageSections(enrichedBase,page.locale as Language)) : page?.template === "about" ? normalizeBlocks(independentAboutSections(enrichedBase,page.locale as Language)) : page?.template === "home" ? editableHomeSections(enrichedBase) : enrichedBase,page?.locale||"en",page?.title);
     const managedStructureEnriched = JSON.stringify(parsed) !== JSON.stringify(parsedBase);
     setBlocks(parsed);

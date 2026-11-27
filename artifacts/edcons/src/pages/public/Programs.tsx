@@ -1,3 +1,4 @@
+import "./programDirectory.css";
 import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
@@ -330,7 +331,7 @@ export default function Programs() {
 
   const programDirectory = (
     <>
-      <section id="program-directory" className="scroll-mt-28 border-y bg-slate-50/70 py-10 dark:bg-slate-950/30">
+      <div className="programs-directory"><section id="program-directory" aria-label={t("nav.programs")} className="programs-directory-search scroll-mt-28">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <PublicProgramFilters
             filters={filters}
@@ -341,22 +342,22 @@ export default function Programs() {
           />
         </div>
       </section>
-      <section className="pb-16 pt-8">
+      <section className="programs-directory-results" aria-busy={isLoading}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div
-            className="flex items-center justify-between mb-8 bg-card/60 backdrop-blur-sm rounded-2xl px-6 py-4 border border-border/30 shadow-sm">
+            className="programs-results-summary">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                 <BookOpen className="w-4 h-4 text-primary" />
               </div>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground" role="status" aria-live="polite">
                 {t("programs.showingResults", { count: String(total) })}
               </p>
             </div>
           </div>
 
           {isLoading ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="programs-results-grid">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="rounded-2xl overflow-hidden border border-border/30 bg-card">
                   <div className="h-20 bg-gradient-to-r from-secondary via-secondary/50 to-secondary animate-pulse relative overflow-hidden">
@@ -393,7 +394,7 @@ export default function Programs() {
               </div>
 
               {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-1.5 mt-12">
+                <div className="programs-results-pagination flex items-center justify-center gap-1.5 mt-12">
                   <Button variant="outline" size="icon" disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="rounded-full w-10 h-10" aria-label={t("programs.prevPage")}>
                     <ChevronLeft className="w-4 h-4" aria-hidden="true" />
                   </Button>
@@ -425,6 +426,7 @@ export default function Programs() {
           )}
         </div>
       </section>
+    </div>
     </>
   );
 
