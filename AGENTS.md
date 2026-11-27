@@ -819,3 +819,14 @@ typecheck PASS. Canlı
 tarayıcı dil ekranı navigation/focus timeout nedeniyle görsel doğrulanamadı;
 local servisler HTTP200/health başarılıdır. LOCAL_WORK_PIPELINE_I18N_2026-11-28.md.
 Staging/Apply/deploy/push yoktur.
+
+### 28 Kasım — bağımsız pipeline staging yayını
+Kullanıcının staging yayın talebiyle explicit staging-only environment gate,
+0144 additive schema/RLS ve Inbox read-state unique index, in-app reminder
+startup/shutdown eklendi. Local feature source 94f4c61a; staging integration
+8c44bafee32f37474b81284493ed328587762f50. Health ve 145/145 migration PASS;
+27 gerçek staging sentetik API kontrolü, 23 locale parity/render PASS. Dış
+iletişim ve Apply production kapalı/değişmedi. Test board'lar arşivlidir.
+Oturum içi browser görsel kontrolü login gerektirdiği için tamamlanmadı.
+Staging integration remote push mevcut sunucu GitHub auth yokluğu nedeniyle
+bekler; committed source + bundle korunur. Detay: STAGING_WORK_PIPELINES_2026-11-28.md.
