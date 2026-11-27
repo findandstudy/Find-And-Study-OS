@@ -60,7 +60,8 @@
   padding: 8px 14px !important; border-radius: 30px; background: #fff; color: #2864ed !important;
   font-size: 11px !important; font-weight: 750; letter-spacing: .12em;
 }
-.managed-agency-page.managed-agency-page--about [data-cms-block="grid_box"] { background: var(--about-night) !important; }
+.managed-agency-page.managed-agency-page--about [data-cms-block="grid_box"] { background: var(--about-night) !important; padding: 0 !important; }
+.managed-agency-page.managed-agency-page--about :is([data-cms-block="media_text"],[data-cms-block="process_steps"]) { padding: 0 !important; }
 .managed-agency-page.managed-agency-page--about .about-native-values {
   display: block !important; max-width: 1280px !important; margin: auto !important;
   padding: 80px 24px !important; background: transparent !important;
@@ -97,12 +98,14 @@
 .managed-agency-page.managed-agency-page--about .about-native-process .home-process-intro p:last-child { color: #657184 !important; }
 .managed-agency-page.managed-agency-page--about .about-native-process ol { margin: 0 !important; grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 0 30px !important; }
 .managed-agency-page.managed-agency-page--about .about-native-process .home-timeline-step {
+  position: relative !important;
   min-height: 0 !important; border: 0 !important; border-bottom: 1px solid #d5dce8 !important;
   border-radius: 0 !important; background: transparent !important; padding: 26px 0 !important;
   box-shadow: none !important; backdrop-filter: none !important;
 }
 .managed-agency-page.managed-agency-page--about .about-native-process .home-step-icon { margin-bottom: 24px !important; background: #e5edff !important; color: #2864ed !important; border: 0 !important; }
-.managed-agency-page.managed-agency-page--about .about-native-process .home-timeline-step > span { color: #71809a !important; font-size: 20px !important; }
+.managed-agency-page.managed-agency-page--about .about-native-process .home-timeline-step > span { position: absolute !important; inset: 30px 4px auto auto !important; color: #71809a !important; font-size: 20px !important; }
+[dir="rtl"] .managed-agency-page.managed-agency-page--about .about-native-process .home-timeline-step > span { inset: 30px auto auto 4px !important; }
 .managed-agency-page.managed-agency-page--about .about-native-process .home-timeline-step > i { display: none; }
 .managed-agency-page.managed-agency-page--about .about-native-process .home-timeline-step h3 { color: #101828 !important; font-size: 21px !important; }
 .managed-agency-page.managed-agency-page--about .about-native-process .home-timeline-step p { color: #657184 !important; font-size: 15px; }
