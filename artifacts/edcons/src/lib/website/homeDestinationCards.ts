@@ -34,6 +34,7 @@ export function hydrateManagedHomeDestinations(blocks: PageBlock[], destinations
     .slice(0, 3)
     .map(item => ({ title: item.title, imageUrl: item.imageUrl, canonicalPath: item.canonicalPath, flagEmoji: item.flagEmoji }));
   return blocks.map(block => {
+    if (block.content.dataMode === "manual") return block;
     if (block.blockType === "catalog_grid" && block.content.source === "destinations") {
       return { ...block, content: { ...block.content, items } };
     }
@@ -71,7 +72,7 @@ export function hydrateManagedHomeUniversities(blocks: PageBlock[], universities
     return [{ name, imageUrl, country: university.country || "" }];
   }).slice(0, 8);
   if (!logos.length) return blocks;
-  return blocks.map(block => block.blockType === "logo_grid" && block.content.variant === "home-universities"
+  return blocks.map(block => block.content.dataMode !== "manual" && block.blockType === "logo_grid" && block.content.variant === "home-universities"
     ? { ...block, content: { ...block.content, logos } }
     : block);
 }

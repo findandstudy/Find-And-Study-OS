@@ -34,7 +34,7 @@ function HomeBlocks({ blocks, version, pageTitle, locale }: { blocks: PageBlock[
   useEffect(() => {
     const root = contentRef.current;
     if (!root) return;
-    const blocks = Array.from(root.querySelectorAll<HTMLElement>(":scope > .cms-editorial-block"));
+    const blocks = Array.from(root.querySelectorAll<HTMLElement>(":scope > .cms-editorial-block, :scope > .cms-reusable-home > .cms-editorial-block"));
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     root.classList.add("home-motion-ready");
     blocks.forEach((block, index) => block.style.setProperty("--home-reveal-order", String(Math.min(index, 8))));

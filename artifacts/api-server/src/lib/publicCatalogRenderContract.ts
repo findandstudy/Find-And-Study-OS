@@ -1,5 +1,6 @@
 import { projectPublicTuition, publicMinorAmount, publicCurrency } from "./publicCatalogTuition";
 import { JSDOM } from "jsdom";
+import { renderReusableEditorial } from "./reusableEditorialRender";
 import { publicCatalogRequirements } from "./publicCatalogRequirements";
 import { detailContentPresentationOverrides, parseDetailContent, resolveDetailTemplateContent, type DetailContent, type DetailContentSection } from "./websiteDetailContentContract";
 import type { DetailSectionPresentation } from "./websiteDetailLayoutContract";
@@ -1251,6 +1252,8 @@ function spacerHeightClass(value: unknown): string {
 
 function renderPublicPageBlockBody(block: PublicPageBlock, index: number): string {
   const content = block.content;
+  const editorial = renderReusableEditorial(content, { escape: escapeHtml, image: safePublicImageUrl, url: safePublicUrl });
+  if (editorial !== null) return editorial;
   if (block.blockType === "home_fallback_hero") {
     const title = pageText(content.title, 500);
     const subtitle = pageText(content.subtitle, 2_000);
@@ -1452,7 +1455,9 @@ function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
   const body = renderPublicPageBlockBody(block, index);
   if (!body) return "";
   const style = publicPageBlockStyle(block);
-  return `<div class="cms-editorial-block" data-cms-block="${escapeHtml(block.blockType)}"${style ? ` style="${escapeHtml(style)}"` : ""}>${body}</div>`;
+  const preset = pageText(block.content.sectionPreset || block.content.variant, 100);
+  const rendered = `<div class="cms-editorial-block"${preset ? ` data-section-preset="${escapeHtml(preset)}"` : ""} data-cms-block="${escapeHtml(block.blockType)}"${style ? ` style="${escapeHtml(style)}"` : ""}>${body}</div>`;
+  return preset.startsWith("home-") && block.content.sectionPreset ? `<div class="home-future-page cms-reusable-home">${rendered}</div>` : rendered;
 }
 
 const CMS_TEXT_TOKEN = /\{\{\s*(site\.name|page\.(?:title|slug|locale)|date\.year)\s*(?:\|\s*([^{}]{1,160}?))?\s*\}\}/g;

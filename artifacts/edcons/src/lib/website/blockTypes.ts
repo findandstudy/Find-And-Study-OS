@@ -1,3 +1,4 @@
+import { presetFields, SECTION_PRESETS } from "./sectionPresets";
 export interface BlockFieldDef {
   key: string;
   label: string;
@@ -557,7 +558,7 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
   },
 ];
 
-export function getBlockTypeDef(type: string): BlockTypeDef | undefined {
+export function getBlockTypeDef(type: string, content?: Record<string,unknown>): BlockTypeDef | undefined {
   const managedHomeAliases: Record<string, { base: string; label: string }> = {
     home_fallback_hero: { base: "hero", label: "Hero" },
     home_fallback_stats: { base: "stats_strip", label: "Statistics" },
@@ -597,6 +598,20 @@ export function getBlockTypeDef(type: string): BlockTypeDef | undefined {
       },
     };
   }
+  const preset=content&&SECTION_PRESETS.find(p=>p.id===content.sectionPreset||p.id===content.variant);
+  if (preset && definition) {
+    const originalFields = definition.fields;
+    const inferred = presetFields({ ...preset.block.content, ...content });
+    definition = { ...definition, label: `${preset.family} · ${preset.label}`, fields: inferred.map(field => {
+      const original = originalFields.find(candidate => candidate.key === field.key);
+      if (field.key === "dataMode") return { ...field, type: "select" as const, options: [{ label: "Manual content and media", value: "manual" }, { label: "Live collection data", value: "live" }] };
+      if (field.type === "items") {
+        const combined = [...(original?.itemFields || []), ...(field.itemFields || [])];
+        return { ...field, itemFields: [...new Map(combined.map(item => [item.key, item])).values()] };
+      }
+      return original ? { ...original, ...field, type: original.type === "select" ? original.type : field.type } : field;
+    }) };
+  }
   if (!definition || !SECTION_STYLE_BLOCKS.has(type)) return definition;
   const existing = new Set(definition.fields.map(field => field.key));
   return { ...definition, fields: [...definition.fields, ...SECTION_STYLE_FIELDS.filter(field => !existing.has(field.key))] };
@@ -604,7 +619,7 @@ export function getBlockTypeDef(type: string): BlockTypeDef | undefined {
 
 export function getDefaultContent(type: string): Record<string, unknown> {
   const def = getBlockTypeDef(type);
-  return def ? { ...def.defaultContent } : {};
+  return def ? structuredClone(def.defaultContent) : {};
 }
 
 export interface PageBlock {

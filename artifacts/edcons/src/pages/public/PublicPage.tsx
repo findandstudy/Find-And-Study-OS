@@ -12,6 +12,9 @@ import type { Language } from "@/lib/i18n";
 import { sanitizePublicHtmlContent, sanitizePublicRichText } from "@/lib/publicHtmlSanitizer";
 import { catalogLayoutClass } from "@/lib/website/catalogPresentation";
 import { resolveCmsValue, type CmsTextVariableValues } from "@/lib/website/cmsTextVariables";
+import { ABOUT_SECTION_VARIANTS } from "@/lib/website/independentAboutSections";
+import { ReusableEditorialSection } from "./ReusableEditorialSection";
+import { hydrateManagedHomeDestinations, hydrateManagedHomeUniversities, type HomeDestination, type HomeUniversity } from "@/lib/website/homeDestinationCards";
 import "./cmsEditorial.css";
 import "./homeVistaraParity.css";
 
@@ -112,7 +115,7 @@ function themeStyle(tokens: Record<string, string> | undefined): CmsStyle {
 function blockStyle(block: PageBlock): CmsStyle {
   const style: CmsStyle = {};
   const appearance = { ...block.content, ...block.settings };
-  if (block.blockType === "cta_banner" && appearance.useThemeColors !== false) {
+  if (block.blockType === "cta_banner" && appearance.useThemeColors !== false && !ABOUT_SECTION_VARIANTS.has(String(block.content.variant||""))) {
     style["--cms-section-bg"] = "linear-gradient(125deg, var(--cms-hero-start), var(--cms-hero-end))";
     style["--cms-section-text"] = "#ffffff";
   }
@@ -145,9 +148,30 @@ export function CmsPageCanvas({ children, className = "" }: { children: ReactNod
   const query = useQuery<{ tokens: Record<string, string> }>({ queryKey: ["public-cms-theme"], queryFn: () => customFetch("/api/public/web/theme"), staleTime: 30_000, retry: false });
   return <main className={`public-cms-page ${className}`.trim()} style={themeStyle(query.data?.tokens)}>{children}</main>;
 }
-export function CmsBlock({ block, index, variables }: { block: PageBlock; index: number; variables?: CmsTextVariableValues }) {
+export function CmsBlock({ block, index, variables, preview = false }: { block: PageBlock; index: number; variables?: CmsTextVariableValues; preview?: boolean }) {
   const resolved = variables ? { ...block, content: resolveCmsValue(block.content, variables) } : block;
-  return <div className="cms-editorial-block" data-cms-block={resolved.blockType} data-cms-index={index} style={blockStyle(resolved)}><Block block={resolved} index={index} /></div>;
+  const variant=String(resolved.content.variant||"");
+  const about=ABOUT_SECTION_VARIANTS.has(variant);
+  const customAbout=about&&!['about-team','about-offices','about-logos'].includes(variant);
+  const home=String(resolved.content.sectionPreset||"").startsWith("home-");
+  const collection=about&&["team_grid","office_list"].includes(resolved.blockType)&&resolved.content.dataMode==="live";
+  const body=<div className="cms-editorial-block" data-section-preset={resolved.content.sectionPreset?String(resolved.content.sectionPreset):about?variant:undefined} data-cms-block={resolved.blockType} data-cms-index={index} style={blockStyle(resolved)}>{customAbout?<ReusableEditorialSection variant={variant} content={resolved.content} preview={preview}/>:about?<div className="about-reference">{collection?<EditorialCollectionBody block={resolved} index={index}/>:<Block block={resolved} index={index}/>}</div>:home?<HomePresetBody block={resolved} index={index}/>:<Block block={resolved} index={index} />}</div>;
+  return String(resolved.content.sectionPreset||"").startsWith("home-")?<div className="home-future-page cms-reusable-home">{body}</div>:body;
+}
+function HomePresetBody({block,index}:{block:PageBlock;index:number}) {
+  const {lang}=useI18n();const live=block.content.dataMode==="live";
+  const destinations=useQuery<HomeDestination[]>({queryKey:["home-featured-destinations",lang],queryFn:()=>customFetch(`/api/public/destinations?locale=${encodeURIComponent(lang)}`),enabled:live,staleTime:300000,retry:false});
+  const universities=useQuery<{data:HomeUniversity[]}>({queryKey:["home-featured-universities"],queryFn:()=>customFetch("/api/universities?limit=100&offset=0"),enabled:live&&block.blockType==="logo_grid",staleTime:300000,retry:false});
+  const enriched=live?hydrateManagedHomeUniversities(hydrateManagedHomeDestinations([{...block,isVisible:true}],destinations.data||[]),universities.data?.data||[])[0]:block;
+  return <Block block={enriched} index={index}/>;
+}
+function EditorialCollectionBody({block,index}:{block:PageBlock;index:number}) {
+  const {lang}=useI18n();
+  const team=block.blockType==="team_grid";
+  const key=team?"team-members":"offices";
+  const query=useQuery<Record<string,unknown>[]>({queryKey:[`cms-${key}`,lang],queryFn:()=>customFetch(`/api/cms/${key}?lang=${encodeURIComponent(lang)}`),staleTime:300000,retry:false});
+  const content=team?{...block.content,members:(query.data||[]).map(m=>({name:m.name,role:m.title,bio:m.bio,photo:m.photoUrl}))}:{...block.content,offices:(query.data||[]).map(o=>({...o,city:[o.city,o.country].filter(Boolean).join(", ")}))};
+  return <Block block={{...block,content}} index={index}/>;
 }
 
 function text(value: unknown, maximum = 2_000): string {
@@ -287,7 +311,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
               <div className="home-console-flow">
                 {journeySignals.map((signal, signalIndex) => <article key={signalIndex}><span>{String(signalIndex + 1).padStart(2, "0")}</span><div><strong>{text(signal.label, 120)}</strong><p>{text(signal.detail, 240)}</p></div>{signalIndex < journeySignals.length - 1 ? <i aria-hidden="true" /> : null}</article>)}
               </div>
-              <p className="home-console-foot"><span aria-hidden="true" /> Human guidance, connected to one clear view</p>
+              <p className="home-console-foot"><span aria-hidden="true" /> {text(content.consoleFooter ?? "Human guidance, connected to one clear view")}</p>
               </div>
             </aside>
           </div>
@@ -316,7 +340,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
               <div className="home-about-visual" aria-hidden="true">
                 {image ? <img className="home-about-image-primary" src={image} alt="" loading="lazy" /> : null}
                 {secondaryImage ? <img className="home-about-image-secondary" src={secondaryImage} alt="" loading="lazy" /> : null}
-                <div className="home-about-experience"><strong>10+</strong><span>years of education guidance</span></div>
+                {(content.experienceValue === undefined || content.experienceValue) ? <div className="home-about-experience"><strong>{text(content.experienceValue ?? "10+", 80)}</strong><span>{text(content.experienceLabel ?? "years of education guidance", 200)}</span></div> : null}
               </div>
               <div className="home-about-copy">
                 <p className="home-section-kicker">{text(content.eyebrow, 200)}</p>
@@ -509,7 +533,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
       if (content.variant === "home-offer") {
         const image = safeImageUrl(content.imageUrl);
         const secondaryImage = safeImageUrl(content.secondaryImageUrl);
-        return <section className="home-offer-section"><div className="home-offer-inner"><div className="home-offer-copy"><p className="home-section-kicker">{text(content.eyebrow, 200)}</p><h2>{text(content.title, 500)}</h2><p>{text(content.subtitle, 2_000)}</p><div className="home-offer-metrics">{items(content.items, 16).map((item, itemIndex) => <article key={itemIndex}><strong>{text(item.value, 80)}</strong><div><h3>{text(item.label, 300)}</h3><p>{text(item.description, 1_000)}</p></div></article>)}</div><a href={safeUrl(content.ctaUrl) || "/en/contact"}>Start your journey <ArrowRight /></a></div><div className="home-offer-visual">{image ? <img src={image} alt="" loading="lazy" /> : null}<div className="home-offer-highlight"><strong>One connected plan</strong><span>Research, preparation and progress</span></div>{secondaryImage ? <img src={secondaryImage} alt="" loading="lazy" /> : null}</div></div></section>;
+        return <section className="home-offer-section"><div className="home-offer-inner"><div className="home-offer-copy"><p className="home-section-kicker">{text(content.eyebrow, 200)}</p><h2>{text(content.title, 500)}</h2><p>{text(content.subtitle, 2_000)}</p><div className="home-offer-metrics">{items(content.items, 16).map((item, itemIndex) => <article key={itemIndex}><strong>{text(item.value, 80)}</strong><div><h3>{text(item.label, 300)}</h3><p>{text(item.description, 1_000)}</p></div></article>)}</div><a href={safeUrl(content.ctaUrl) || "/en/contact"}>{text(content.ctaLabel ?? "Start your journey")} <ArrowRight /></a></div><div className="home-offer-visual">{image ? <img src={image} alt="" loading="lazy" /> : null}<div className="home-offer-highlight"><strong>{text(content.highlightTitle ?? "One connected plan")}</strong><span>{text(content.highlightText ?? "Research, preparation and progress")}</span></div>{secondaryImage ? <img src={secondaryImage} alt="" loading="lazy" /> : null}</div></div></section>;
       }
       return <section className="cms-layout-section cms-counter-section"><div className="cms-section-heading"><h2>{text(content.title, 500)}</h2>{content.subtitle ? <p>{text(content.subtitle)}</p> : null}</div><div className={`cms-responsive-grid cms-counter-grid ${responsiveColumns(content.columns)}`}>{items(content.items, 16).map((item, itemIndex) => <article key={itemIndex}><p className="cms-counter-value"><span>{text(item.prefix, 40)}</span>{text(item.value, 80)}<span>{text(item.suffix, 40)}</span></p><h3>{text(item.label, 300)}</h3>{item.description ? <p>{text(item.description, 1_000)}</p> : null}</article>)}</div></section>;
     }

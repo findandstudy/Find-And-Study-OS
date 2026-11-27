@@ -68,6 +68,7 @@ export default function About() {
     lang={lang}
     page={page}
     transformBlock={block => {
+      if (block.content.dataMode === "manual") return block;
       if (block.blockType === "team_grid") return {
         ...block,
         content: { ...block.content, members: teamMembers.map(member => ({ name: member.name, role: member.title || "", bio: member.bio || "", photo: member.photoUrl || "" })) },

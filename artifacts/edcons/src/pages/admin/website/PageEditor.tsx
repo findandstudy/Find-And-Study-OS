@@ -20,6 +20,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { BLOCK_APPEARANCE_KEYS, BLOCK_TYPES, getBlockTypeDef, getDefaultContent, type PageBlock } from "@/lib/website/blockTypes";
+import { SECTION_PRESETS, createSectionPreset, editableHomeSections } from "@/lib/website/sectionPresets";
+import { independentAboutSections } from "@/lib/website/independentAboutSections";
 import { SUPPORTED_LANGUAGES, LANGUAGE_META, type Language } from "@/lib/i18n";
 import DOMPurify from "isomorphic-dompurify";
 import { CatalogBlockFields } from "./CatalogBlockFields";
@@ -84,6 +86,7 @@ type CmsTeamMember = { id: number; name: string; title: string | null; bio: stri
 type CmsOffice = { id: number; name: string; city: string | null; country: string | null; address: string | null; phone: string | null; email: string | null };
 
 function hydrateCollectionBlock(block: PageBlock, teamMembers: CmsTeamMember[], offices: CmsOffice[]): PageBlock {
+  if (block.content.dataMode === "manual" || String(block.content.variant || "").startsWith("home-")) return block;
   if (block.blockType === "team_grid") return {
     ...block,
     content: { ...block.content, members: teamMembers.map(member => ({ name: member.name, role: member.title || "", bio: member.bio || "", photo: member.photoUrl || "" })) },
@@ -96,6 +99,7 @@ function hydrateCollectionBlock(block: PageBlock, teamMembers: CmsTeamMember[], 
 }
 
 function collectionDependency(block: PageBlock): "team" | "offices" | "logos" | null {
+  if (block.content.dataMode === "manual" || String(block.content.variant || "").startsWith("home-")) return null;
   if (block.blockType === "team_grid") return "team";
   if (block.blockType === "office_list") return "offices";
   if (block.blockType === "logo_marquee") return "logos";
@@ -198,7 +202,7 @@ function PageEditorSession({ id }: { id: number }) {
   const [mobilePane, setMobilePane] = useState<"blocks" | "editor" | "preview">("preview");
   const [showAddBlock, setShowAddBlock] = useState(false);
   const [blockSearch, setBlockSearch] = useState("");
-  const [blockCategory, setBlockCategory] = useState<"all" | "content" | "media" | "data" | "layout" | "reference">("all");
+  const [blockCategory, setBlockCategory] = useState<"all" | "content" | "media" | "data" | "layout" | "reference" | "Home" | "About">("all");
   const [dirty, setDirty] = useState(false);
   const [starterLoaded, setStarterLoaded] = useState(false);
   const [revisionConflict, setRevisionConflict] = useState(false);
@@ -330,10 +334,11 @@ function PageEditorSession({ id }: { id: number }) {
       ? normalizeBlocks(managedPageStarterBlocks(page.template, page.locale as Language))
       : [];
     const parsedBase = persisted.length > 0 ? persisted : starter;
-    const parsed = page && isSystemManagedPage(page)
+    const enrichedBase = page && isSystemManagedPage(page)
       ? normalizeBlocks(enrichManagedPageBlocks(page.template, parsedBase, page.locale as Language))
       : parsedBase;
-    const managedStructureEnriched = parsed.length > parsedBase.length;
+    const parsed = page?.template === "about" ? normalizeBlocks(independentAboutSections(enrichedBase,page.locale as Language)) : page?.template === "home" ? editableHomeSections(enrichedBase) : enrichedBase;
+    const managedStructureEnriched = JSON.stringify(parsed) !== JSON.stringify(parsedBase);
     setBlocks(parsed);
     defaultBlocksRef.current = JSON.parse(JSON.stringify(parsed));
     if (starter.length > 0 || managedStructureEnriched) {
@@ -348,9 +353,10 @@ function PageEditorSession({ id }: { id: number }) {
         const tj = page.translationsJson as Record<string, unknown>;
         for (const [loc, data] of Object.entries(tj)) {
           if (Array.isArray(data)) {
-            translationsRef.current[loc] = normalizeBlocks(data as PageBlock[]);
+            translationsRef.current[loc] = normalizeBlocks(page?.template === "about" ? independentAboutSections(data as PageBlock[],loc as Language) : data as PageBlock[]);
           } else if (data && typeof data === "object" && "blocks" in (data as Record<string, unknown>)) {
-            translationsRef.current[loc] = normalizeBlocks((data as { blocks: PageBlock[] }).blocks);
+            const translated=(data as {blocks:PageBlock[]}).blocks;
+            translationsRef.current[loc] = normalizeBlocks(page?.template === "about" ? independentAboutSections(translated,loc as Language) : translated);
           }
         }
       } catch {}
@@ -675,10 +681,10 @@ function PageEditorSession({ id }: { id: number }) {
     onError: () => toast({ title: copy("Error", "Hata"), description: copy("Failed to restore version.", "Sürüm geri yüklenemedi."), variant: "destructive" }),
   });
 
-  const addBlock = useCallback((blockType: string) => {
+  const addBlock = useCallback((blockType: string, presetId?: string) => {
     const newBlock: PageBlock = normalizeBlockAppearance({
-      blockType,
-      content: getDefaultContent(blockType),
+      blockType: presetId ? createSectionPreset(presetId,editLocale as Language).blockType : blockType,
+      content: presetId ? createSectionPreset(presetId,editLocale as Language).content : getDefaultContent(blockType),
       settings: {},
       sortOrder: blocks.length,
       isVisible: true,
@@ -690,7 +696,7 @@ function PageEditorSession({ id }: { id: number }) {
     setBlockSearch("");
     setBlockCategory("all");
     markDirty();
-  }, [blocks.length, markDirty]);
+  }, [blocks.length, markDirty, editLocale]);
 
   const removeBlock = useCallback((idx: number) => {
     setBlocks(prev => prev.filter((_, i) => i !== idx));
@@ -744,7 +750,7 @@ function PageEditorSession({ id }: { id: number }) {
   }, [markDirty]);
 
   const selectedBlock = selectedBlockIdx !== null ? blocks[selectedBlockIdx] : null;
-  const selectedTypeDef = selectedBlock ? getBlockTypeDef(selectedBlock.blockType) : null;
+  const selectedTypeDef = selectedBlock ? getBlockTypeDef(selectedBlock.blockType,selectedBlock.content) : null;
   const latestPublished = versions.find(version => Boolean(version.publishedAt));
   const publishedBlocks = Array.isArray(latestPublished?.blocksSnapshot) ? latestPublished.blocksSnapshot : [];
   const compareRows = Array.from({ length: Math.max(blocks.length, publishedBlocks.length) }, (_, index) => {
@@ -1191,9 +1197,10 @@ function PageEditorSession({ id }: { id: number }) {
                   </DialogHeader>
                   <div className="border-b bg-muted/30 px-6 py-4">
                     <div className="relative"><Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={blockSearch} onChange={event => setBlockSearch(event.target.value)} placeholder={copy("Search sections...", "Bölümlerde ara...")} className="ps-9" /></div>
-                    <div className="mt-3 flex flex-wrap gap-2">{(["all", "content", "media", "data", "layout", "reference"] as const).map(category => <Button key={category} type="button" size="sm" variant={blockCategory === category ? "default" : "outline"} className="h-7 rounded-full text-xs" onClick={() => setBlockCategory(category)}>{category === "all" ? copy("All", "Tümü") : copy(category[0].toUpperCase() + category.slice(1))}</Button>)}</div>
+                    <div className="mt-3 flex flex-wrap gap-2">{(["all", "Home", "About", "content", "media", "data", "layout", "reference"] as const).map(category => <Button key={category} type="button" size="sm" variant={blockCategory === category ? "default" : "outline"} className="h-7 rounded-full text-xs" onClick={() => setBlockCategory(category)}>{category === "all" ? copy("All", "Tümü") : category === "Home" ? copy("Home designs", "Anasayfa tasarımları") : category === "About" ? copy("About designs", "Hakkımızda tasarımları") : copy(category[0].toUpperCase() + category.slice(1))}</Button>)}</div>
                   </div>
                   <div className="grid max-h-[58vh] grid-cols-1 gap-3 overflow-y-auto p-6 sm:grid-cols-2 lg:grid-cols-3">
+                    {SECTION_PRESETS.filter(p=>(blockCategory==="all"||blockCategory===p.family)&&(!blockSearch.trim()||`${p.family} ${p.label}`.toLowerCase().includes(blockSearch.trim().toLowerCase()))).map(p=><button key={p.id} type="button" onClick={()=>addBlock(p.block.blockType,p.id)} className="group flex min-h-28 flex-col items-start rounded-2xl border border-primary/25 bg-primary/5 p-4 text-start transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md"><span className="text-[10px] font-bold uppercase tracking-wider text-primary">{p.family === "Home"?copy("Home","Anasayfa"):copy("About","Hakkımızda")} · {copy("Ready design","Hazır tasarım")}</span><strong className="mt-3 text-sm">{p.label}</strong><span className="mt-2 text-[11px] text-muted-foreground">{copy("Independent content, media and appearance","Bağımsız içerik, görsel ve görünüm")}</span></button>)}
                     {BLOCK_TYPES.filter(bt => (blockCategory === "all" || bt.category === blockCategory) && (!blockSearch.trim() || `${bt.label} ${bt.category}`.toLowerCase().includes(blockSearch.trim().toLowerCase()))).map(bt => (
                       <button
                         key={bt.type}
@@ -1205,7 +1212,7 @@ function PageEditorSession({ id }: { id: number }) {
                         <p className="mt-1 text-[11px] capitalize text-muted-foreground">{copy(bt.category)} · {bt.fields.length} {copy("settings", "ayar")}</p>
                       </button>
                     ))}
-                    {BLOCK_TYPES.filter(bt => (blockCategory === "all" || bt.category === blockCategory) && (!blockSearch.trim() || `${bt.label} ${bt.category}`.toLowerCase().includes(blockSearch.trim().toLowerCase()))).length === 0 && <div className="col-span-full rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">{copy("No section matches this search.", "Bu aramayla eşleşen bölüm yok.")}</div>}
+                    {BLOCK_TYPES.filter(bt => (blockCategory === "all" || bt.category === blockCategory) && (!blockSearch.trim() || `${bt.label} ${bt.category}`.toLowerCase().includes(blockSearch.trim().toLowerCase()))).length === 0 && SECTION_PRESETS.filter(p=>(blockCategory==="all"||blockCategory===p.family)&&(!blockSearch.trim()||`${p.family} ${p.label}`.toLowerCase().includes(blockSearch.trim().toLowerCase()))).length===0 && <div className="col-span-full rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">{copy("No section matches this search.", "Bu aramayla eşleşen bölüm yok.")}</div>}
                   </div>
                 </DialogContent>
               </Dialog>
@@ -1213,7 +1220,7 @@ function PageEditorSession({ id }: { id: number }) {
             <ScrollArea className="min-h-0 flex-1 overscroll-contain">
               <div className="p-2 space-y-1">
                 {blocks.map((block, idx) => {
-                  const def = getBlockTypeDef(block.blockType);
+                  const def = getBlockTypeDef(block.blockType,block.content);
                   const hydratedBlock = hydrateCollectionBlock(block, teamMembersQuery.data || [], officesQuery.data || []);
                   const dependency = collectionDependency(hydratedBlock);
                   const dependencyLoading = dependency === "team" ? teamMembersQuery.isLoading : dependency === "offices" ? officesQuery.isLoading : false;
@@ -1368,16 +1375,16 @@ function BlockPreview({ blocks, locale, template, pageTitle, pageSlug, teamMembe
         <div key={idx} className="relative">
           <div className="absolute top-1 right-1 z-10">
             <Badge variant="outline" className="text-[9px] bg-white/80 dark:bg-card/80">
-              {getBlockTypeDef(block.blockType)?.label || block.blockType}
+              {getBlockTypeDef(block.blockType,block.content)?.label || block.blockType}
             </Badge>
           </div>
           {collectionDependency(block) && !hasCollectionItems(block) ? (
             <div role="status" className="m-4 rounded-xl border border-dashed border-amber-400 bg-amber-50 p-5 text-sm text-amber-900">
               {collectionsLoading ? "Collection data is loading…" : `This visible ${getBlockTypeDef(block.blockType)?.label || block.blockType} section is not rendered publicly until its collection contains data.`}
             </div>
-          ) : block.blockType === "catalog_grid"
+          ) : block.blockType === "catalog_grid" && !block.content.sectionPreset
             ? <CatalogBlockPreview content={block.content} locale={locale} />
-            : <CmsBlock block={block} index={idx} variables={{ siteName: SITE_NAME, pageTitle, pageSlug, pageLocale: locale }} />}
+            : <CmsBlock block={block} index={idx} preview variables={{ siteName: SITE_NAME, pageTitle, pageSlug, pageLocale: locale }} />}
         </div>
       ))}
     </div>;
@@ -1387,7 +1394,7 @@ function BlockPreview({ blocks, locale, template, pageTitle, pageSlug, teamMembe
     : null;
   return isExactHome
     ? <CmsPageCanvas className="home-future-page cms-editor-preview">{preview}</CmsPageCanvas>
-    : <CmsPageCanvas className={`cms-editor-preview${managedTemplate ? ` managed-agency-page managed-agency-page--${managedTemplate}` : ""}`}>
+    : <CmsPageCanvas className={`cms-editor-preview${managedTemplate === "about" ? " cms-independent-about-page" : managedTemplate ? ` managed-agency-page managed-agency-page--${managedTemplate}` : ""}`}>
         <div data-managed-template={managedTemplate || undefined}>{preview}</div>
       </CmsPageCanvas>;
 }
