@@ -33,15 +33,16 @@ export function ManagedPublicPage({
   const sourceBlocks = page?.data.blocks?.length
     ? enrichManagedPageBlocks(template, page.data.blocks, lang)
     : managedPageStarterBlocks(template, lang);
-  const blocks = transformBlock ? sourceBlocks.map(transformBlock) : sourceBlocks;
-  const hasSlot = Boolean(slotBlockType && blocks.some(block => block.blockType === slotBlockType));
+  const isIndependentPreset = (block: PageBlock) => Boolean(block.content.sectionPreset || String(block.content.variant || "").startsWith("about-"));
+  const blocks = transformBlock ? sourceBlocks.map(block => isIndependentPreset(block) ? block : transformBlock(block)) : sourceBlocks;
+  const hasSlot = Boolean(slotBlockType && blocks.some(block => block.blockType === slotBlockType && !isIndependentPreset(block)));
   let insertedFallbackSlot = false;
 
   return (
     <CmsPageCanvas className={`managed-public-page managed-agency-page managed-agency-page--${template}`}>
       <div data-managed-template={template} data-public-page-version={page?.data.versionNumber ?? "starter"}>
         {blocks.map((block, index) => {
-          if (slotBlockType && block.blockType === slotBlockType) {
+          if (slotBlockType && block.blockType === slotBlockType && !isIndependentPreset(block)) {
             return <div key={`live-slot-${slotBlockType}-${index}`} data-managed-live-slot={slotBlockType}>{slotContent}</div>;
           }
           const rendered = <CmsBlock block={block} index={index} variables={{ siteName: SITE_NAME, pageTitle: page?.data.title ?? template, pageSlug: page?.data.slug ?? template, pageLocale: lang }} key={`${block.blockType}-${block.sortOrder}-${index}`} />;
