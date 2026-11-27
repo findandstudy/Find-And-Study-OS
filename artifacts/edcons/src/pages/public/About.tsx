@@ -3,7 +3,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useJsonLd, ORG_SCHEMA, SITE_NAME, SITE_URL } from "@/hooks/use-json-ld";
 import { useSeo } from "@/hooks/use-seo";
-import { ManagedPublicPage } from "./ManagedPublicPage";
+import { AboutReferenceLayout } from "./AboutReferenceLayout";
 import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
 
 type TeamMember = {
@@ -63,7 +63,7 @@ export default function About() {
     },
   ]);
 
-  return <ManagedPublicPage
+  return <AboutReferenceLayout
     template="about"
     lang={lang}
     page={page}
