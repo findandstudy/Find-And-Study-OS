@@ -772,3 +772,12 @@ PASS; UI not/dashboard/link/tamamlama/source PASS; frontend typecheck PASS.
 API typecheck yalnız eski embedLeadFormI18n.ts:41 ur hatasında kalır.
 Staging/Apply, dış e-posta/WhatsApp ve production wiring değişmedi.
 Ayrıntılar LOCAL_WORK_PIPELINES_2026-11-27.md içinde.
+
+### 27 Kasım — pipeline'a özel Excel
+Yerel pipeline toolbar'ına XLSX export + önizlemeli XLSX/XLS/CSV import eklendi.
+Export/import tüm sorgularda explicit board ID ve mevcut erişim kontrolünü
+kullanır; başka board metadata/record ID reddedilir. Tekrarlı import kopya
+açmaz; hatalı veya stale preview hiçbir kayıt yazmaz. 14 local API/DB + XLSX
+round-trip kontrolü PASS. İç tarayıcı navigation/focus timeout nedeniyle UI
+indirme/yükleme doğrulaması tamamlanmadı; UI PASS iddiası yoktur.
+Kapsam/sınırlar: LOCAL_WORK_PIPELINE_EXCEL_2026-11-27.md. Deploy/push yok.

@@ -3,6 +3,10 @@ import {
   workActivityDashboard,
 } from "../lib/workPipelineActivity";
 import { Router, type IRouter } from "express";
+import {
+  exportWorkRecords,
+  importWorkRecords,
+} from "../lib/workPipelineTransfer";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../lib/auth";
@@ -431,5 +435,23 @@ router.get(
       }),
     );
   }),
+);
+router.get(
+  "/work-pipelines/:id/transfer/export",
+  wrap(async (req: any, res: any) =>
+    res.json(await exportWorkRecords(req.user, req.params.id, req.query)),
+  ),
+);
+router.post(
+  "/work-pipelines/:id/transfer/preview",
+  wrap(async (req: any, res: any) =>
+    res.json(await importWorkRecords(req.user, req.params.id, req.body)),
+  ),
+);
+router.post(
+  "/work-pipelines/:id/transfer/import",
+  wrap(async (req: any, res: any) =>
+    res.json(await importWorkRecords(req.user, req.params.id, req.body, true)),
+  ),
 );
 export default router;

@@ -1,4 +1,5 @@
 import { WorkPipelineActivity } from "./WorkPipelineActivity";
+import { WorkPipelineExcel } from "./WorkPipelineExcel";
 import { useState } from "react";
 import {
   DndContext,
@@ -405,6 +406,19 @@ export default function WorkPipelines() {
               </div>
             </PopoverContent>
           </Popover>
+          {b && (
+            <WorkPipelineExcel
+              key={b.id}
+              id={b.id}
+              name={b.name}
+              lang={m.lang}
+              archived={b.archived}
+              query={m.query}
+              stage={stageFilter}
+              assignee={assignment}
+              refresh={m.refresh}
+            />
+          )}
           <div className="flex items-center border rounded-full overflow-hidden">
             {(["board", "table"] as const).map((v) => (
               <button
