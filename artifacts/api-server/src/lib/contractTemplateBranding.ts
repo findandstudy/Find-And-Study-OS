@@ -38,6 +38,10 @@ export async function resolveContractTemplateBranding(
   // reads never initiate an outbound logo request or refresh historical data.
   delete config.logoSnapshot;
   delete config.assetSnapshots;
+  if (options.captureLogo) {
+    config.showGeneratedHeader = false;
+    config.templateLogoPolicy = "hide";
+  }
   if (options.captureLogo && config.logoUrl) {
     const logoSnapshot = await captureContractLogoSnapshot(config.logoUrl);
     if (logoSnapshot) config.logoSnapshot = logoSnapshot;

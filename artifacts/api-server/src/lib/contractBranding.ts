@@ -3,6 +3,9 @@ import { validateContractLogoSnapshot, type ContractLogoSnapshot } from "./contr
 
 export type ContractBrandingConfig = {
   brandName?: string;
+  /** Frozen only for new sessions; absent flags retain historical rendering. */
+  showGeneratedHeader?: boolean;
+  templateLogoPolicy?: "hide";
   logoUrl?: string;
   /** Server-captured image bytes frozen with a NEW signing session, never refreshed during PDF generation. */
   logoSnapshot?: ContractLogoSnapshot;
@@ -81,6 +84,8 @@ export function sanitizeContractBranding(value: unknown): ContractBrandingConfig
     : [];
   const config: ContractBrandingConfig = {
     brandName: text(input.brandName, 200),
+    ...(typeof input.showGeneratedHeader === "boolean" ? { showGeneratedHeader: input.showGeneratedHeader } : {}),
+    ...(input.templateLogoPolicy === "hide" ? { templateLogoPolicy: "hide" as const } : {}),
     logoUrl: text(input.logoUrl, 2000),
     ...(logoSnapshot ? { logoSnapshot } : {}),
     ...(uniqueAssetSnapshots.length ? { assetSnapshots: uniqueAssetSnapshots } : {}),
@@ -231,13 +236,24 @@ export function applyContractBranding(innerHtml: string, value: unknown): string
   const logoSrc = config.logoSnapshot?.dataUrl || config.logoUrl;
   const frozenAssets = [config.logoSnapshot, ...(config.assetSnapshots ?? [])]
     .filter((value): value is ContractLogoSnapshot => Boolean(value));
-  if (frozenAssets.length) {
+  if (frozenAssets.length || config.templateLogoPolicy === "hide") {
     // The configured logo and the designed template body may intentionally use
     // different Find & Study marks. Replace every exact snapshotted image
     // source, never arbitrary text, links, CSS URLs or similarly named attrs.
     const bySource = new Map(frozenAssets.map(snapshot => [snapshot.sourceUrl, snapshot.dataUrl]));
     const dom = new JSDOM(innerHtml);
     try {
+      if (config.templateLogoPolicy === "hide") {
+        const logoSources = new Set([
+          "https://www.findandstudy.com/wp-content/uploads/2025/10/logotest-scaled.png",
+          "https://www.findandstudy.com/wp-content/uploads/2024/12/Find-and-study-logo-wht-scaled.webp",
+          "https://www.findandstudy.com/wp-content/uploads/2026/07/find-and-study-4.png",
+        ]);
+        for (const img of dom.window.document.querySelectorAll("img")) {
+          const alt = (img.getAttribute("alt") || "").trim().replace(/\s+/g, " ").toLowerCase();
+          if (alt === "find and study" || alt === "find & study" || logoSources.has(img.getAttribute("src") || "")) img.remove();
+        }
+      }
       for (const img of dom.window.document.querySelectorAll("img[src]")) {
         const replacement = bySource.get(img.getAttribute("src") || "");
         if (replacement) img.setAttribute("src", replacement);
@@ -250,7 +266,7 @@ export function applyContractBranding(innerHtml: string, value: unknown): string
       dom.window.close();
     }
   }
-  const header = (config.logoUrl || config.brandName || config.pdfHeaderText) ? `
+  const header = config.showGeneratedHeader !== false && (config.logoUrl || config.brandName || config.pdfHeaderText) ? `
     <header class="fas-contract-brand-header">
       ${logoSrc ? `<img src="${escapeBrandingHtml(logoSrc)}" alt="" />` : ""}
       <div><strong>${escapeBrandingHtml(config.brandName || "")}</strong>${config.pdfHeaderText ? `<span>${escapeBrandingHtml(config.pdfHeaderText)}</span>` : ""}</div>

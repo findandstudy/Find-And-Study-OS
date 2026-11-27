@@ -32,12 +32,13 @@ test("designed fragment and full-document contracts retain styling and embedded 
     pdfFooterText: "LOCAL TEST ONLY - NOT A SIGNED CONTRACT",
   };
   const css = '<style>@page{size:A4;margin:18mm}.contract-title{color:#143591;font-size:28px}.terms-box{border:2px solid #143591;background:#eaf1ff;padding:18px;border-radius:8px}td{padding:8px;border-bottom:1px solid #cbd5e1}html[data-contract-layout="agency-v6"] body.contract-page .terms-box{border-radius:12px}</style>';
-  const body = `<h1 class="contract-title">Sözleşme tasarım kontrolü</h1><p>SENTETİK TEST - İMZALI BELGE DEĞİLDİR</p><img src="${sourceUrl}" width="180"><div class="terms-box"><h2>Koşullar / Terms</h2><p>{{company}} metni değişmeden korunur.</p><table><tr><td>Hizmet</td><td>Örnek danışmanlık</td></tr><tr><td>Süre</td><td>12 ay</td></tr></table></div><p dir="rtl">اختبار تنسيق العقد</p>`;
+  const body = `<h1 class="contract-title">Sözleşme tasarım kontrolü</h1><p>SENTETİK TEST - İMZALI BELGE DEĞİLDİR</p><img alt="Find and Study" src="${sourceUrl}" width="180"><img alt="Campus illustration" src="${sourceUrl}" width="60"><div class="terms-box"><h2>Koşullar / Terms</h2><p>{{company}} metni değişmeden korunur.</p><table><tr><td>Hizmet</td><td>Örnek danışmanlık</td></tr><tr><td>Süre</td><td>12 ay</td></tr></table></div><p dir="rtl">اختبار تنسيق العقد</p>`;
   for (const [name, template] of [
     ["fragment", `${css}${body}`],
+    ["new-session", `${css}${body}`],
     ["full-document", `<!doctype html><html lang="ar" dir="rtl" data-contract-layout="agency-v6"><head>${css}</head><body class="contract-page">${body}</body></html>`],
   ] as const) {
-    const rendered = applyContractBranding(renderTemplate(template, { company: "Örnek Şirket" }), branding);
+    const rendered = applyContractBranding(renderTemplate(template, { company: "Örnek Şirket" }), name === "new-session" ? {...branding, showGeneratedHeader:false, templateLogoPolicy:"hide"} : branding);
     const browser = await chromium.launch({ executablePath, headless: true });
     try {
       const page = await browser.newPage();
@@ -68,7 +69,9 @@ test("designed fragment and full-document contracts retain styling and embedded 
         assert.equal(appearance.cellPadding, "8px", `${name}/${media}: table spacing`);
         assert.equal(appearance.direction, name === "full-document" ? "rtl" : "ltr", `${name}/${media}: document writing direction`);
         assert.match(appearance.text!, /Örnek Şirket metni değişmeden korunur/);
-        assert.equal(appearance.logos, 2);
+        assert.equal(appearance.logos, name === "new-session" ? 1 : 3);
+        assert.equal(await page.locator(".fas-contract-brand-header").count(), name === "new-session" ? 0 : 1);
+        if (media === "screen") await page.screenshot({path:resolve(outputDir, `${name}.png`),fullPage:true});
       }
       assert.equal(externalRequests, 0, "no external image request is needed");
     } finally { await browser.close(); }
