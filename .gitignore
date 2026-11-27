@@ -77,3 +77,4 @@ dump/
 .env.*
 !.env.example
 !**/.env.example
+.local-work-pipeline-credentials.json

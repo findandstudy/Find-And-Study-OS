@@ -18,6 +18,7 @@ import { getCurrentSeason } from "../lib/season";
 import { enqueueOnStageChange, maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
 import { applyLeadAssignmentRules, cascadeLeadAssignment } from "../lib/leadAssignment";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
+import { captureWorkSource } from "../lib/workPipelines";
 import { recomputeStudentPhoto, studentHasServablePhotoSql } from "../lib/studentPhoto";
 import { maybeTriggerAutoEducationExtractForStudent } from "../lib/educationAutoExtract";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
@@ -311,6 +312,8 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
   const origin = await inferOriginFromAgentId(agent.id);
 
   const phoneStr2 = normalizePhoneField(phone).slice(0, 30);
+  const workCapture = await captureWorkSource({kind:"web",key:String(agent.id),identity:String(email).trim().toLowerCase(),title:`${normAgentLead.firstName} ${normAgentLead.lastName}`,description:"Web-to-lead",contactName:`${normAgentLead.firstName} ${normAgentLead.lastName}`,email:String(email).trim().toLowerCase(),phone:phoneStr2});
+  if(workCapture){res.status(201).json({success:true,created:workCapture.created,leadId:null});return;}
   await findOrUpsertPublicLead({
     source: "web_form",
     uniqueKey: { kind: "emailSourceAgent", agentId: agent.id },

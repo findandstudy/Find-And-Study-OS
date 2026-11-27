@@ -483,6 +483,12 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     staleTime: 60_000,
     retry: false,
   });
+  const { data: workPipelinesFeature } = useQuery<{enabled:boolean}>({
+    queryKey:["work-pipeline-feature",user?.id],
+    queryFn:()=>customFetch("/api/work-pipelines/feature"),
+    enabled:["super_admin","admin","manager","staff","consultant","editor","accountant"].includes(user?.role||""),
+    staleTime:60_000,retry:false,
+  });
 
   // For agents/sub-agents/agent staff, use their business name as the tab
   // title so it matches the agency-branding hook (otherwise useSeo would
@@ -665,6 +671,9 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     window.location.origin,
     lang,
   );
+  if(workPipelinesFeature?.enabled && groups[0]) {
+    groups[0].items.push({title:"Pipelines",icon:ListChecks,url:"/staff/pipelines"});
+  }
   const allItems = groups.flatMap(g => g.items);
 
   const togglePin = (url: string) => {

@@ -740,3 +740,17 @@ DB/migration, global router/i18n/design, CI/deploy değişmedi. Commit/push,
 staging/production deploy ve gerçek içerik yayını yapılmadı. Kapsam, bütün
 dosyalar, kanıt ve PARTIALLY READY sınırı:
 `docs/PAGES_AUTHORING_LOCAL_2026-09-16.md` içindeki 5 Ekim eki.
+
+### 27 Kasım 2026 — bağımsız iş pipeline'ları yerel inceleme eki
+
+`codex/local-work-pipelines-20261127` branch'inde öğrenci Lead/Student/Application
+akışlarından ayrı yerel iş panoları geliştiriliyor. Pano/tablo, stage/kart,
+ekip erişimi, not/görev/geçmiş ve açık kanal/embed/web-to-lead source bağları
+ayrı `local_work_pipelines` şemasını kullanır. Feature yalnız loopback
+`127.0.0.1:5433/fasos_apply_local` + kapalı canlı entegrasyonla çalışır;
+production activation fail-closed'dur. Bu işte staging/Apply deploy yapılmadı.
+Yeni, sentetik verili cluster kullanıldı; gerçek veriler aktarılmadı.
+17 yerel entegrasyon kontrolü PASS; frontend typecheck PASS; genel API
+typecheck'teki önceki `embedLeadFormI18n.ts:41` hatası sürer. Görsel UAT
+yerel admin girişi bekliyor. Ayrıntılar ve sonraki kapı:
+`LOCAL_WORK_PIPELINES_2026-11-27.md`.

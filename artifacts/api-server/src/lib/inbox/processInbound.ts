@@ -15,6 +15,7 @@ import { inboxBus } from "./eventBus";
 import { applyLeadAssignmentRules } from "../leadAssignment";
 import { getAiAgentConfig } from "./aiAgentConfig";
 import { resolveInboundCommunicationContext } from "./channelAccountConfig";
+import { resolveWorkSource, captureWorkSource } from "../workPipelines";
 
 export interface InboundContactInfo {
   externalId: string;
@@ -56,6 +57,7 @@ export async function processInboundMessage(opts: {
 }): Promise<InboundResult> {
   const { channel, channelAccountId = null, contact, message } = opts;
   const phoneE164 = toE164(contact.phone || null);
+  const workBoardId = channelAccountId ? await resolveWorkSource("channel",String(channelAccountId)) : null;
   const inboundCommunicationContext = channelAccountId
     ? await resolveInboundCommunicationContext(channelAccountId)
     : null;
@@ -109,7 +111,7 @@ export async function processInboundMessage(opts: {
       .where(eq(externalContactsTable.id, externalContact.id));
   }
 
-  if (!externalContact.leadId && !externalContact.studentId && !externalContact.agentId) {
+  if (!workBoardId && !externalContact.leadId && !externalContact.studentId && !externalContact.agentId) {
     const resolution = await resolveIdentity({ phone: contact.phone, email: contact.email });
     if (resolution.outcome === "strong") {
       const c = resolution.candidates[0];
@@ -137,7 +139,7 @@ export async function processInboundMessage(opts: {
   };
   const agentRefRaw = readAgentRef(contact.metadata) || readAgentRef(message.metadata);
   const agentRef = agentRefRaw ? String(agentRefRaw).trim() : "";
-  if (agentRef && !externalContact.leadId && !externalContact.studentId && !externalContact.agentId) {
+  if (!workBoardId && agentRef && !externalContact.leadId && !externalContact.studentId && !externalContact.agentId) {
     try {
       const [matched] = await db
         .select({ id: agentsTable.id, code: agentsTable.agencyCode, name: agentsTable.companyName })
@@ -208,7 +210,7 @@ export async function processInboundMessage(opts: {
   //      instead of creating a fresh row.
   //   3. Reassign any other conversations still pointing at the wa_out contact.
   //   4. Delete the now-orphaned wa_out external_contact row.
-  if (phoneE164 && !contact.externalId.startsWith("wa_out:")) {
+  if (!workBoardId && phoneE164 && !contact.externalId.startsWith("wa_out:")) {
     try {
       const waOutExternalId = `wa_out:${phoneE164.replace(/\+/, "")}`;
       const [waOutContact] = await db
@@ -310,7 +312,7 @@ export async function processInboundMessage(opts: {
         externalThreadId,
         unmatched: !isLinked,
         status: "open",
-        botEnabled: isBlocked ? false : aiConfig.defaultOnForNew,
+        botEnabled: isBlocked || workBoardId ? false : aiConfig.defaultOnForNew,
         lastMessageAt: message.receivedAt || new Date(),
         lastMessagePreview: message.text.slice(0, 200),
         lastInboundAt: message.receivedAt || new Date(),
@@ -392,6 +394,14 @@ export async function processInboundMessage(opts: {
       duplicate: false,
       unmatched: !isLinked,
     };
+  }
+
+  if (workBoardId && channelAccountId) {
+    // Preserve inbox delivery while keeping this business process out of the
+    // student lead capture/AI automation corridor. Retried messages repair a
+    // missing card through the same idempotent source identity.
+    await db.update(conversationsTable).set({botEnabled:false}).where(eq(conversationsTable.id,conversation.id));
+    await captureWorkSource({kind:"channel",key:String(channelAccountId),identity:String(conversation.id),title:contact.displayName||contact.email||contact.phone||channel,description:message.text,contactName:contact.displayName||"",email:contact.email||"",phone:contact.phone||"",conversationId:conversation.id});
   }
 
   // Race-safe message insert. The unique index on (channel, externalMessageId)
@@ -514,7 +524,7 @@ export async function processInboundMessage(opts: {
     // resolved, so the matching queue can route it to the appropriate role
     // pool. Channels (in_app / email / whatsapp) come from the UI-managed
     // notification rule — email is OFF by default to prevent mail floods.
-    if (!isLinked) {
+    if (!isLinked && !workBoardId) {
       await dispatchNotification({
         event: "inbox.message_unmatched",
         title: `Unmatched ${channel} message — needs review`,

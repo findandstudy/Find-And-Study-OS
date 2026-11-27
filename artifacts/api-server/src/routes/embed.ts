@@ -58,6 +58,7 @@ import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceG
 import { generateSecureToken } from "../lib/email";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 import { findOrUpsertEmbedLead } from "../lib/embedLeadDedup";
+import { captureWorkSource } from "../lib/workPipelines";
 import { toE164 } from "../lib/inbox/phone";
 import { resolveIdentity } from "../lib/inbox/identityResolver";
 import { maybeAutoReply } from "../lib/inbox/botAutoReply";
@@ -1774,6 +1775,10 @@ router.post("/public/embed/:slug/lead", embedLeadSubmitLimiter, embedLeadJson, a
 
   try {
     const partnerExtras = await widgetPartnerExtras(widget.agentId);
+    if (widget.mode === "lead_form") {
+      const captured = await captureWorkSource({kind:"embed",key:String(widget.id),identity:String(email).trim().toLowerCase(),title:`${firstName} ${lastName}`,description:normalizeEmbedEnquiryMessage(message)||"",contactName:`${firstName} ${lastName}`,email:String(email).trim().toLowerCase(),phone:pn(phone,countryCode,50)||""});
+      if(captured){res.status(201).json({success:true,created:captured.created,leadId:null});return;}
+    }
     // Dedup-aware insert: if the same email already submitted to this
     // widget within the dedup window, the existing lead row is reused
     // and refreshed with the latest payload. Prevents duplicates when

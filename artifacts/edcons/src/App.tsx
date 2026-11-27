@@ -112,6 +112,7 @@ const StaffAgentDetail = lazyRetry(() => import("@/pages/staff/AgentDetail"));
 const StaffMessages = lazyRetry(() => import("@/pages/staff/Messages"));
 const StaffTasks = lazyRetry(() => import("@/pages/staff/Tasks"));
 const StaffOperationsCenter = lazyRetry(() => import("@/pages/staff/OperationsCenter"));
+const WorkPipelines = lazyRetry(() => import("@/pages/staff/WorkPipelines"));
 
 const AdminDashboard = lazyRetry(() => import("@/pages/admin/Dashboard"));
 const AdminUsers = lazyRetry(() => import("@/pages/admin/Users"));
@@ -543,6 +544,7 @@ function StaffAdminShell() {
           <Route path="/staff/settings" component={StaffSettings} />
           <Route path="/staff/tasks" component={StaffTasks} />
           <Route path="/staff/work" component={StaffOperationsCenter} />
+          <Route path="/staff/pipelines" component={WorkPipelines} />
           <Route component={NotFound} />
         </Switch>
         </Suspense>
