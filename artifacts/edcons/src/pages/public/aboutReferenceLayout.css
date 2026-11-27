@@ -16,6 +16,7 @@
 .cms-editorial-block[data-section-preset] .ar-approach-cards article{min-height:0;border:0;border-radius:16px;background-color:var(--cms-card-bg,#15284e);box-shadow:none}
 .cms-editorial-block[data-section-preset] .ar-photo{height:650px}
 .cms-editorial-block[data-section-preset] .ar-section p{color:var(--cms-section-text,#717986)}
+.cms-editorial-block[data-section-preset] .ar-photo-caption p{color:var(--cms-section-text,#fff)}
 .cms-editorial-block[data-section-preset] .ar-approach p,.cms-editorial-block[data-section-preset] .ar-end p{color:var(--cms-section-text,#ffffffc7)}
 .cms-reusable-home{width:100%;min-width:0;overflow:clip}
 .cms-independent-editorial{container-type:inline-size}
