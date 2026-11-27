@@ -82,7 +82,10 @@ test("Home and About reuse published blocks while preserving static fallbacks an
   assert.match(editorialCss, /managed-agency-page--about \[data-cms-block="grid_box"\] \.cms-grid-box-card:has\(> a\):active/);
   assert.match(editorialCss, /managed-agency-page--about :is\(a,button,summary\):focus-visible/);
   assert.match(editorialCss, /managed-agency-page--about \*,[\s\S]*prefers-reduced-motion: reduce|prefers-reduced-motion: reduce[\s\S]*managed-agency-page--about \*/);
-  assert.match(about, /<ManagedPublicPage/);
+  assert.match(about, /<AboutReferenceLayout/);
+  const aboutLayout = source("pages/public/AboutReferenceLayout.tsx");
+  assert.match(aboutLayout, /enrichManagedPageBlocks\("about", page.data.blocks, lang\)/);
+  assert.match(aboutLayout, /transformBlock\(b\)/);
   assert.match(source("pages/public/About.tsx"), /\/api\/cms\/team-members\?lang=/);
   assert.match(source("pages/public/About.tsx"), /\/api\/cms\/offices\?lang=/);
   assert.match(about, /block\.blockType === "office_list"/);
