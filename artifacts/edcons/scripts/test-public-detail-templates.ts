@@ -921,9 +921,12 @@ test("active section navigation is local, follows visible DOM order and cleans u
 });
 
 test("destination collection requests the active locale and follows canonical paths", () => {
-  assert.match(countries, /public\/destinations\?locale=/);
-  assert.match(countries, /\[lang\]/);
-  assert.match(countries, /destination\.canonicalPath \|\| localePath/);
+  assert.match(countries, /CountryDirectory/);
+  const directory=readFileSync(new URL("../src/pages/public/CountryDirectory.tsx",import.meta.url),"utf8");
+  assert.ok(directory.includes("destinations?scope=active&locale="));
+  assert.ok(directory.includes("encodeURIComponent(lang)"));
+  assert.ok(directory.includes("safeSectionUrl(item.canonicalPath)"));
+  assert.ok(directory.includes("filterCountryDirectory"));
 });
 
 test("Pages editor exposes a bounded live catalogue data block", () => {
