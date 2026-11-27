@@ -62,7 +62,8 @@ router.get("/public/destinations", async (req: Request, res: Response): Promise<
 
   const countMap = new Map(countryCounts.map(c => [c.countryKey, { uniCount: Number(c.uniCount), progCount: Number(c.progCount) }]));
 
-  const directory = await readPublicCatalogCountryDirectory(locale);
+  const allActive = req.query.scope === "active";
+  const directory = await readPublicCatalogCountryDirectory(locale, { includeAllActive: allActive });
   const [localizedDelivery, heroImageByCountryId] = await Promise.all([
     readPublishedLocalizedEntities({
       entityType: "destination",
@@ -103,7 +104,9 @@ router.get("/public/destinations", async (req: Request, res: Response): Promise<
     });
     if (!localized.available) return [];
     emittedDestinationIds.add(d.id);
-    const canonicalPath = localizedDelivery.snapshots.get(d.id)?.canonicalPath
+    const entry = directory.entries.find(entry => entry.destination?.id === d.id);
+    const routeAvailable = !allActive || !!entry && catalogCountryRouteAccessible(entry);
+    const canonicalPath = !routeAvailable ? "" : localizedDelivery.snapshots.get(d.id)?.canonicalPath
       || buildPublicWebCanonicalPath({
         entityType: "DESTINATION",
         entityId: d.id,
@@ -136,7 +139,7 @@ router.get("/public/destinations", async (req: Request, res: Response): Promise<
     !entry.destination || !emittedDestinationIds.has(entry.destination.id)
   )).map(entry => ({
     id: null, catalogCountryId: entry.country.id, countryCode: entry.country.code, source: "catalog", name: entry.country.name,
-    country: entry.country.name, slug: entry.canonicalPath.split("/").at(-1), canonicalPath: entry.canonicalPath,
+    country: entry.country.name, slug: entry.canonicalPath.split("/").at(-1), canonicalPath: allActive && !catalogCountryRouteAccessible(entry) ? "" : entry.canonicalPath,
     shortDescription: null, description: null, imageUrl: null, isFeatured: false,
     cardHeroImageUrl: heroImageByCountryId.get(entry.country.id) ?? null,
     universityCount: entry.universityCount, programCount: entry.programCount,

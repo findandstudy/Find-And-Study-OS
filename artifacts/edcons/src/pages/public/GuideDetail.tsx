@@ -1,3 +1,4 @@
+import { PublicPageHeader } from "./PublicPageHeader";
 import { useEffect, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { ArrowLeft, BookOpen, Calendar, Clock } from "lucide-react";
@@ -114,13 +115,12 @@ export default function GuideDetail({ routeKey }: { routeKey: string }) {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-24 sm:px-6">
+    <><PublicPageHeader title={guide.data.title} parents={[{title:t("nav.blog"),url:localePath("/blog")}]}/><main className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
       <Link href={localePath("/blog")} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary">
         <ArrowLeft className="h-4 w-4" />{t("blog.badge")}
       </Link>
       <article className="mt-8">
         <header>
-          <h1 className="font-display text-4xl font-bold leading-tight text-foreground md:text-5xl">{guide.data.title}</h1>
           <div className="mt-5 flex flex-wrap items-center gap-5 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-2"><Calendar className="h-4 w-4" />{new Date(guide.data.publishedAt).toLocaleDateString(lang)}</span>
             {guide.data.readTime ? <span className="inline-flex items-center gap-2"><Clock className="h-4 w-4" />{guide.data.readTime} {t("blog.minRead")}</span> : null}
@@ -151,6 +151,6 @@ export default function GuideDetail({ routeKey }: { routeKey: string }) {
           </div>
         </section>
       ) : null}
-    </main>
+    </main></>
   );
 }

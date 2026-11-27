@@ -20,7 +20,7 @@ export type HomeUniversity = {
 };
 
 export function hydrateManagedHomeDestinations(blocks: PageBlock[], destinations: HomeDestination[]): PageBlock[] {
-  const items = destinations.filter(destination => destination.name && destination.canonicalPath).slice(0, 6).map(destination => ({
+  const items = destinations.filter(destination => destination.name).map(destination => ({
     id: destination.id ?? destination.canonicalPath,
     title: destination.name,
     description: destination.shortDescription || destination.country || "",

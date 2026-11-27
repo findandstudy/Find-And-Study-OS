@@ -1,3 +1,4 @@
+import { canIssueFirstPartyEmbedToken } from "../lib/firstPartyEmbedPolicy";
 import express, { Router, type IRouter, json } from "express";
 import crypto from "crypto";
 import { parse as parseJavaScript } from "acorn";
@@ -1384,6 +1385,18 @@ router.get("/embed/submissions", requireAuth, requireRole(...STAFF_ROLES), async
 //   reach /token directly from an unauthorized domain.
 //
 // CORS: open-to-all on /token (the API key is the auth gate, not CORS).
+// Only a same-origin browser on an explicitly configured website domain can
+// obtain a short-lived public lead-form session. Partner API-key gates stay intact.
+router.get("/public/embed/:slug/website-token", embedTokenLimiter, async (req,res):Promise<void>=>{
+ res.setHeader("Cache-Control","private, no-store");res.setHeader("Vary","Origin, Referer, Sec-Fetch-Site");
+ const slug=String(req.params.slug);if(!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)||slug.length>80){res.status(404).json({error:"Form unavailable"});return;}
+ try{
+ const [widget]=await db.select({slug:embedWidgetsTable.slug,mode:embedWidgetsTable.mode,agentId:embedWidgetsTable.agentId,allowedDomains:embedWidgetsTable.allowedDomains}).from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug,slug),eq(embedWidgetsTable.isActive,true)));
+ if(!widget||!canIssueFirstPartyEmbedToken({origin:req.protocol+"://"+req.get("host"),referer:req.get("referer"),fetchSite:req.get("sec-fetch-site"),mode:widget.mode,agentId:widget.agentId,domains:widget.allowedDomains})){res.status(403).json({error:"Form unavailable"});return;}
+ res.json({token:createEmbedToken(slug),expiresIn:Math.floor(EMBED_TOKEN_TTL_MS/1000)});
+ }catch{res.status(503).json({error:"Form unavailable"});}
+});
+
 router.get("/public/embed/:slug/token", embedTokenLimiter, async (req, res): Promise<void> => {
   const slug = String(req.params.slug);
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));

@@ -28,7 +28,7 @@ function localiseGeneratedLabels(blocks: PageBlock[], locale: Language): PageBlo
 
 /** One-time, non-destructive expansion. Once saved, every section owns its data. */
 export function independentAboutSections(source: PageBlock[], locale: Language): PageBlock[] {
-  if (source.some(b => ABOUT_SECTION_VARIANTS.has(text(b.content.variant)))) return localiseGeneratedLabels(source,locale);
+  if (source.some(b => ABOUT_SECTION_VARIANTS.has(text(b.content.variant)))) return localiseGeneratedLabels(source,locale).map(b=>b.content.variant==="about-enquiry"?{...b,content:{embedWidgetSlug:"website-contact",...b.content}}:b);
   const byType = (type: string) => source.find(b => b.blockType === type);
   const get = (type: string) => byType(type)?.content || {};
   const hero=get("hero"), story=get("media_text"), values=get("grid_box"), process=get("process_steps"), cta=get("cta_banner"), faq=get("faq");
@@ -44,7 +44,7 @@ export function independentAboutSections(source: PageBlock[], locale: Language):
     block("process_steps","about-why",{eyebrow:process.eyebrow||t("about.badge"),title:process.title,subtitle:process.subtitle,imageUrl:asset("choose-us-image.png"),steps},byType("process_steps")),
     block("counter_grid","about-pillars",{items:cards.slice(3,6).map(c=>({value:c.title,label:c.description}))},byType("counter_grid")),
     block("image_gallery","about-panorama",{imageUrl:asset("video-bg.jpg"),ctaUrl:contact,ctaLabel:t("about.bookConsultation")}),
-    block("column_layout","about-enquiry",{eyebrow:t("contact.badge"),title:`${t("contact.title")} ${t("contact.titleHighlight")}`,subtitle:cta.subtitle||hero.subtitle,items:steps.slice(0,3).map(s=>({title:s.title})),formTitle:t("contact.formTitle"),submitLabel:t("contact.send"),successMessage:t("contact.successTitle"),formSlug:"contact"}),
+    block("column_layout","about-enquiry",{eyebrow:t("contact.badge"),title:`${t("contact.title")} ${t("contact.titleHighlight")}`,subtitle:cta.subtitle||hero.subtitle,items:steps.slice(0,3).map(s=>({title:s.title})),formTitle:t("contact.formTitle"),submitLabel:t("contact.send"),successMessage:t("contact.successTitle"),formSlug:"contact",embedWidgetSlug:"website-contact"}),
     ...source.filter(b=>["team_grid","office_list","logo_marquee"].includes(b.blockType)).map(b=>({...structuredClone(b),content:{...structuredClone(b.content),variant:b.blockType==="team_grid"?"about-team":b.blockType==="office_list"?"about-offices":"about-logos"}})),
     ...(byType("faq")?[block("faq","about-faq",{eyebrow:t("about.badge"),title:faq.title,subtitle:faq.subtitle,imageUrl:asset("faqs-img.jpg"),items:faq.items},byType("faq"))]:[]),
     block("cta_banner","about-end",{eyebrow:"Find And Study",title:cta.title,subtitle:cta.subtitle,ctaLabel:cta.ctaLabel||t("about.bookConsultation"),ctaUrl:cta.ctaUrl||contact,secondaryLabel:cta.secondaryLabel||t("about.browsePrograms"),secondaryUrl:cta.secondaryUrl||`/${locale}/programs`},byType("cta_banner")),

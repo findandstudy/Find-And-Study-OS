@@ -47,7 +47,7 @@ export function catalogCountryRoute(country: Country, countries: Country[], dest
   return `/${locale}/countries/${slug}`;
 }
 
-export async function readPublicCatalogCountryDirectory(localeInput: unknown) {
+export async function readPublicCatalogCountryDirectory(localeInput: unknown, options: { includeAllActive?: boolean } = {}) {
   const locale = normalizeProgramLocale(localeInput);
   const conditions: any[] = [];
   const policy = await getPublicCatalogPolicy();
@@ -72,17 +72,18 @@ export async function readPublicCatalogCountryDirectory(localeInput: unknown) {
   }));
   const directoryRestricted = policy.allowedCountries.length > 0;
   const entries = countries.flatMap(country => {
-    const canonicalPath = catalogCountryRoute(country, countries, destinations, locale);
+    if (!country.isActive) return [];
+    const canonicalPath = catalogCountryRoute(country, countries, destinations, locale) || "";
     const sourceCounts = counts.filter(row => matchCatalogCountry(row.country, countries)?.id === country.id);
     const catalogEligible = sourceCounts.length > 0;
     const editorialPublished = publishedCountryIds.has(country.id);
     const directoryListed = explicitlyListedCountryIds.has(country.id);
-    if (!canonicalPath || !catalogCountryDirectoryIncluded({
+    if ((!canonicalPath && !options.includeAllActive) || (!options.includeAllActive && !catalogCountryDirectoryIncluded({
       directoryRestricted,
       directoryListed,
       catalogEligible,
       editorialPublished,
-    })) return [];
+    }))) return [];
     return [{ country, canonicalPath, destination: destinations.find(row => countryMatches(row.country, country)) ?? null,
       catalogEligible, editorialPublished, directoryListed,
       sourceCountryNames: sourceCounts.map(row => row.country),

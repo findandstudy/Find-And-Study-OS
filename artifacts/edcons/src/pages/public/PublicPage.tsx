@@ -1,3 +1,4 @@
+import { CountryDirectory } from './CountryDirectory';
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -419,6 +420,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
         </section>
       );
     case "catalog_grid": {
+      if (content.source === "destinations" && content.dataMode !== "manual") return <CountryDirectory title={text(content.title,500)} subtitle={text(content.subtitle)} eyebrow={text(content.eyebrow)}/>;
       const sourceLabels: Record<string, string> = {
         programs: "Programs",
         universities: "Universities",

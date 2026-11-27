@@ -1,3 +1,4 @@
+import { sharedPageHeaderBlocks } from "@/lib/website/pageHeader";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, customFetch } from "@workspace/api-client-react";
@@ -24,7 +25,7 @@ import { SECTION_PRESETS, createSectionPreset, editableHomeSections } from "@/li
 import { independentAboutSections } from "@/lib/website/independentAboutSections";
 import { contactPageSections } from "@/lib/website/contactPageSections";
 import { SUPPORTED_LANGUAGES, LANGUAGE_META, type Language } from "@/lib/i18n";
-import { loadLanguage } from "@/lib/i18n/index";
+import { getTranslation, loadLanguage } from "@/lib/i18n/index";
 import DOMPurify from "isomorphic-dompurify";
 import { CatalogBlockFields } from "./CatalogBlockFields";
 import { CatalogBlockPreview } from "./CatalogBlockPreview";
@@ -289,7 +290,7 @@ function PageEditorSession({ id }: { id: number }) {
     queryKey: ["website-page", id],
     queryFn: async () => {
       const result = await customFetch<WebsitePage>(`/api/website/pages/${id}`);
-      if (["about","contact"].includes(result.template)) await Promise.all(SUPPORTED_LANGUAGES.map(locale => loadLanguage(locale)));
+      if (["about","contact","countries","programs","blog"].includes(result.template)) await Promise.all(SUPPORTED_LANGUAGES.map(locale => loadLanguage(locale)));
       return result;
     },
   });
@@ -343,7 +344,8 @@ function PageEditorSession({ id }: { id: number }) {
     const enrichedBase = page && isSystemManagedPage(page)
       ? normalizeBlocks(enrichManagedPageBlocks(page.template, parsedBase, page.locale as Language))
       : parsedBase;
-    const parsed = page?.template === "contact" ? normalizeBlocks(contactPageSections(enrichedBase,page.locale as Language)) : page?.template === "about" ? normalizeBlocks(independentAboutSections(enrichedBase,page.locale as Language)) : page?.template === "home" ? editableHomeSections(enrichedBase) : enrichedBase;
+    const normalizeHeader=(data:PageBlock[],locale:string,title?:string)=>page&&["countries","programs","blog"].includes(page.template)?sharedPageHeaderBlocks(data,title||getTranslation(locale as Language,"nav."+page.template),locale):data;
+    const parsed = normalizeHeader(page?.template === "contact" ? normalizeBlocks(contactPageSections(enrichedBase,page.locale as Language)) : page?.template === "about" ? normalizeBlocks(independentAboutSections(enrichedBase,page.locale as Language)) : page?.template === "home" ? editableHomeSections(enrichedBase) : enrichedBase,page?.locale||"en",page?.title);
     const managedStructureEnriched = JSON.stringify(parsed) !== JSON.stringify(parsedBase);
     setBlocks(parsed);
     defaultBlocksRef.current = JSON.parse(JSON.stringify(parsed));
@@ -359,10 +361,10 @@ function PageEditorSession({ id }: { id: number }) {
         const tj = page.translationsJson as Record<string, unknown>;
         for (const [loc, data] of Object.entries(tj)) {
           if (Array.isArray(data)) {
-            translationsRef.current[loc] = normalizeBlocks(page?.template === "contact" ? contactPageSections(data as PageBlock[],loc as Language) : page?.template === "about" ? independentAboutSections(data as PageBlock[],loc as Language) : data as PageBlock[]);
+            translationsRef.current[loc] = normalizeBlocks(normalizeHeader(page?.template === "contact" ? contactPageSections(data as PageBlock[],loc as Language) : page?.template === "about" ? independentAboutSections(data as PageBlock[],loc as Language) : data as PageBlock[],loc));
           } else if (data && typeof data === "object" && "blocks" in (data as Record<string, unknown>)) {
             const translated=(data as {blocks:PageBlock[]}).blocks;
-            translationsRef.current[loc] = normalizeBlocks(page?.template === "contact" ? contactPageSections(translated,loc as Language) : page?.template === "about" ? independentAboutSections(translated,loc as Language) : translated);
+            translationsRef.current[loc] = normalizeBlocks(normalizeHeader(page?.template === "contact" ? contactPageSections(translated,loc as Language) : page?.template === "about" ? independentAboutSections(translated,loc as Language) : translated,loc));
           }
         }
       } catch {}

@@ -1,3 +1,4 @@
+import { sharedPageHeaderBlocks } from '@/lib/website/pageHeader';
 import type { ReactNode } from "react";
 import type { Language } from "@/lib/i18n";
 import { enrichManagedPageBlocks, managedPageStarterBlocks } from "@/lib/website/managedPageStarters";
@@ -30,9 +31,9 @@ export function ManagedPublicPage({
   slotContent,
   transformBlock,
 }: ManagedPublicPageProps) {
-  const sourceBlocks = page?.data.blocks?.length
+  const sourceBlocks = sharedPageHeaderBlocks(page?.data.blocks?.length
     ? enrichManagedPageBlocks(template, page.data.blocks, lang)
-    : managedPageStarterBlocks(template, lang);
+    : managedPageStarterBlocks(template, lang), page?.data.title || template, lang);
   const isIndependentPreset = (block: PageBlock) => Boolean(block.content.sectionPreset || String(block.content.variant || "").startsWith("about-"));
   const blocks = transformBlock ? sourceBlocks.map(block => isIndependentPreset(block) ? block : transformBlock(block)) : sourceBlocks;
   const hasSlot = Boolean(slotBlockType && blocks.some(block => block.blockType === slotBlockType && !isIndependentPreset(block)));

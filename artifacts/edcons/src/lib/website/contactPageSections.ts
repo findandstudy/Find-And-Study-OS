@@ -2,7 +2,7 @@ import type { PageBlock } from "./blockTypes";
 import { contactDesignBlocks } from "./studentServices";
 import { getTranslation, type Language } from "../i18n/index";
 export function contactPageSections(source:PageBlock[],locale:Language):PageBlock[]{
- if(source.some(b=>b.content.variant==="contact-workspace"))return structuredClone(source);
+ if(source.some(b=>b.content.variant==="contact-workspace"))return structuredClone(source).map(b=>b.content.variant==="contact-workspace"?{...b,content:{embedWidgetSlug:"website-contact",...b.content}}:b);
  const blocks=contactDesignBlocks(locale);
  if(!["en","tr"].includes(locale)){
   const t=(key:string)=>getTranslation(locale,key);
