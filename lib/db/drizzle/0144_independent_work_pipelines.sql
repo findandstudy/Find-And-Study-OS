@@ -1,5 +1,9 @@
 -- Independent work pipelines; additive schema, no CRM backfill.
 -- No existing CRM tables, stages, or application statuses are changed.
+-- Existing inbox upsert requires this key. No rows are deleted or merged;
+-- conflicting historical duplicates make the migration fail for review.
+CREATE UNIQUE INDEX IF NOT EXISTS conversation_participants_conversation_user_unique
+  ON public.conversation_participants(conversation_id,user_id);
 CREATE SCHEMA IF NOT EXISTS local_work_pipelines;
 CREATE TABLE IF NOT EXISTS local_work_pipelines.boards (
   tenant_id uuid NOT NULL,
