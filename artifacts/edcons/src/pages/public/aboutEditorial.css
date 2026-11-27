@@ -1,0 +1,134 @@
+/* Vistara-inspired editorial composition. CMS copy, links and media stay editable. */
+.managed-agency-page.managed-agency-page--about {
+  --about-surface: #f1f4f9;
+  --about-night: #101828;
+  --about-blue: #2864ed;
+  background: var(--about-surface);
+}
+.managed-agency-page.managed-agency-page--about [data-cms-block="hero"] > section {
+  min-height: 390px !important;
+  padding: 76px 24px !important;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center !important;
+  background: #101828 !important;
+}
+.managed-agency-page.managed-agency-page--about [data-cms-block="hero"] h1 {
+  max-width: 1000px !important; margin-inline: auto !important;
+  font-size: clamp(38px,4.8vw,68px) !important; line-height: 1.06 !important;
+  letter-spacing: -.045em !important; text-wrap: balance;
+}
+.managed-agency-page.managed-agency-page--about [data-cms-block="hero"] .cms-action-row { justify-content: center !important; }
+.managed-agency-page.managed-agency-page--about .about-native-proof {
+  margin: 0 auto !important; padding: 0 24px !important; max-width: 1280px !important;
+  background: transparent !important; transform: translateY(-22px); position: relative; z-index: 2;
+}
+.managed-agency-page.managed-agency-page--about .about-native-proof-grid {
+  border: 1px solid #e0e6f0 !important; border-radius: 18px !important;
+  box-shadow: 0 16px 35px #1018280d !important; overflow: hidden;
+}
+.managed-agency-page.managed-agency-page--about .about-native-proof article { padding: 24px !important; }
+.managed-agency-page.managed-agency-page--about .about-native-proof article > svg { display: none; }
+.managed-agency-page.managed-agency-page--about .about-native-story {
+  max-width: 1280px !important; margin: 0 auto !important; padding: 64px 24px 88px !important;
+  display: grid !important; grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important;
+  gap: clamp(32px,5vw,80px) !important; align-items: center !important;
+}
+.managed-agency-page.managed-agency-page--about .about-native-story-visual {
+  min-height: 500px !important; border-radius: 18px !important; overflow: hidden;
+  position: relative; box-shadow: none !important;
+}
+.managed-agency-page.managed-agency-page--about .about-native-story-visual img {
+  width: 100%; height: 500px !important; object-fit: cover; border-radius: 18px !important;
+  transition: transform .65s cubic-bezier(.2,.7,.2,1);
+}
+.managed-agency-page.managed-agency-page--about .about-native-story-mark {
+  inset: auto 24px 24px !important; width: auto !important; max-width: 310px;
+  padding: 22px !important; border-radius: 12px !important; background: #fff !important;
+  color: #101828 !important; box-shadow: 0 12px 35px #10182820;
+}
+.managed-agency-page.managed-agency-page--about .about-native-story-mark span { color: var(--about-blue) !important; }
+.managed-agency-page.managed-agency-page--about .about-native-story-orbit { display: none !important; }
+.managed-agency-page.managed-agency-page--about .about-native-story-copy h2 {
+  font-size: clamp(34px,4vw,56px) !important; line-height: 1.08 !important; letter-spacing: -.045em;
+  margin: 20px 0 26px !important; max-width: none !important;
+}
+.managed-agency-page.managed-agency-page--about .about-native-story-copy > p:not(.home-section-kicker) {
+  white-space: pre-line; font-size: 17px !important; line-height: 1.85 !important; color: #657184 !important;
+}
+.managed-agency-page.managed-agency-page--about :is(.home-section-kicker,.cms-section-eyebrow) {
+  display: inline-flex; align-items: center; gap: 9px; width: fit-content;
+  padding: 8px 14px !important; border-radius: 30px; background: #fff; color: #2864ed !important;
+  font-size: 11px !important; font-weight: 750; letter-spacing: .12em;
+}
+.managed-agency-page.managed-agency-page--about [data-cms-block="grid_box"] { background: var(--about-night) !important; }
+.managed-agency-page.managed-agency-page--about .about-native-values {
+  display: block !important; max-width: 1280px !important; margin: auto !important;
+  padding: 80px 24px !important; background: transparent !important;
+}
+.managed-agency-page.managed-agency-page--about .about-native-values .cms-section-heading {
+  max-width: 760px !important; margin: 0 auto 44px !important; text-align: center !important;
+}
+.managed-agency-page.managed-agency-page--about .about-native-values .cms-section-heading h2 {
+  font-size: clamp(32px,3.8vw,52px) !important; line-height: 1.12 !important; color: #fff !important;
+  margin: 18px 0 !important; max-width: none !important; letter-spacing: -.035em;
+}
+.managed-agency-page.managed-agency-page--about .about-native-values .cms-section-heading > p:last-child { color: #b8c4d9 !important; line-height: 1.75; }
+.managed-agency-page.managed-agency-page--about .about-native-values .cms-grid-box-grid { grid-template-columns: repeat(3,minmax(0,1fr)) !important; gap: 18px !important; }
+.managed-agency-page.managed-agency-page--about .about-native-values .cms-grid-box-card {
+  min-height: 235px !important; padding: 28px !important; border: 1px solid #ffffff14 !important;
+  border-radius: 16px !important; color: #fff !important; background: #172b50 !important; box-shadow: none !important;
+  transition: transform .25s ease,background-color .25s ease,border-color .25s ease !important;
+}
+.managed-agency-page.managed-agency-page--about .about-native-values .cms-grid-box-card::after { display: none !important; }
+.managed-agency-page.managed-agency-page--about .about-native-values .cms-grid-box-media {
+  width: 48px !important; height: 48px !important; min-height: 48px !important;
+  border: 0 !important; border-radius: 50% !important; background: #fff !important; color: #2864ed !important;
+}
+.managed-agency-page.managed-agency-page--about .about-native-values .cms-grid-box-copy { margin-top: 24px !important; }
+.managed-agency-page.managed-agency-page--about .about-native-values .cms-grid-box-copy h3 { color: #fff !important; font-size: 22px !important; }
+.managed-agency-page.managed-agency-page--about .about-native-values .cms-grid-box-copy p { color: #c3cde0 !important; font-size: 15px !important; line-height: 1.7 !important; max-width: none !important; }
+.managed-agency-page.managed-agency-page--about [data-cms-block="process_steps"],
+.managed-agency-page.managed-agency-page--about .about-native-process { background: var(--about-surface) !important; color: #101828 !important; }
+.managed-agency-page.managed-agency-page--about .about-native-process { padding: 80px 24px !important; }
+.managed-agency-page.managed-agency-page--about .about-native-process > div { max-width: 1232px !important; display: grid; grid-template-columns: .85fr 1.4fr; gap: 64px; }
+.managed-agency-page.managed-agency-page--about .about-native-process .home-process-intro { display: block !important; }
+.managed-agency-page.managed-agency-page--about .about-native-process .home-process-emblem { display: none !important; }
+.managed-agency-page.managed-agency-page--about .about-native-process h2 { color: #101828 !important; font-size: clamp(32px,3.6vw,48px) !important; line-height: 1.1; margin: 22px 0 !important; }
+.managed-agency-page.managed-agency-page--about .about-native-process .home-process-intro p:last-child { color: #657184 !important; }
+.managed-agency-page.managed-agency-page--about .about-native-process ol { margin: 0 !important; grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 0 30px !important; }
+.managed-agency-page.managed-agency-page--about .about-native-process .home-timeline-step {
+  min-height: 0 !important; border: 0 !important; border-bottom: 1px solid #d5dce8 !important;
+  border-radius: 0 !important; background: transparent !important; padding: 26px 0 !important;
+  box-shadow: none !important; backdrop-filter: none !important;
+}
+.managed-agency-page.managed-agency-page--about .about-native-process .home-step-icon { margin-bottom: 24px !important; background: #e5edff !important; color: #2864ed !important; border: 0 !important; }
+.managed-agency-page.managed-agency-page--about .about-native-process .home-timeline-step > span { color: #71809a !important; font-size: 20px !important; }
+.managed-agency-page.managed-agency-page--about .about-native-process .home-timeline-step > i { display: none; }
+.managed-agency-page.managed-agency-page--about .about-native-process .home-timeline-step h3 { color: #101828 !important; font-size: 21px !important; }
+.managed-agency-page.managed-agency-page--about .about-native-process .home-timeline-step p { color: #657184 !important; font-size: 15px; }
+.managed-agency-page.managed-agency-page--about :is(a,button,summary) { transition: color .2s ease,background-color .2s ease,box-shadow .2s ease,transform .2s ease; }
+@media (hover:hover) and (pointer:fine) {
+  .managed-agency-page.managed-agency-page--about .about-native-values .cms-grid-box-card:hover { background: #1c3767 !important; border-color: #6598ff80 !important; transform: translateY(-5px) !important; }
+  .managed-agency-page.managed-agency-page--about .about-native-story-visual:hover img { transform: scale(1.035); }
+  .managed-agency-page.managed-agency-page--about .about-native-story-copy > a:hover { transform: translateY(-2px); box-shadow: 0 8px 24px #2864ed30; }
+}
+@media(max-width:900px) {
+  .managed-agency-page.managed-agency-page--about .about-native-story,
+  .managed-agency-page.managed-agency-page--about .about-native-process > div { grid-template-columns: 1fr !important; gap: 32px !important; }
+  .managed-agency-page.managed-agency-page--about .about-native-values .cms-grid-box-grid { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+}
+@media(max-width:600px) {
+  .managed-agency-page.managed-agency-page--about [data-cms-block="hero"] > section { min-height: 350px !important; padding: 52px 20px !important; }
+  .managed-agency-page.managed-agency-page--about .about-native-story,
+  .managed-agency-page.managed-agency-page--about .about-native-values,
+  .managed-agency-page.managed-agency-page--about .about-native-process { padding: 48px 20px !important; }
+  .managed-agency-page.managed-agency-page--about .about-native-story-visual { min-height: 350px !important; }
+  .managed-agency-page.managed-agency-page--about .about-native-story-visual img { height: 350px !important; }
+  .managed-agency-page.managed-agency-page--about .about-native-values .cms-grid-box-grid,
+  .managed-agency-page.managed-agency-page--about .about-native-process ol { grid-template-columns: 1fr !important; }
+  .managed-agency-page.managed-agency-page--about .about-native-values .cms-grid-box-card { min-height: 0 !important; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .managed-agency-page.managed-agency-page--about *,
+  .managed-agency-page.managed-agency-page--about *::before { transition: none !important; animation: none !important; }
+}

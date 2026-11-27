@@ -5,6 +5,7 @@ import type { PageBlock, PageResponse } from "./PublicPage";
 import { CmsBlock, CmsPageCanvas } from "./PublicPage";
 import type { ManagedTemplateSlug } from "./useTemplatePage";
 import { SITE_NAME } from "@/hooks/use-json-ld";
+import "./aboutEditorial.css";
 
 type ManagedPublicPageProps = {
   template: Exclude<ManagedTemplateSlug, "home">;
