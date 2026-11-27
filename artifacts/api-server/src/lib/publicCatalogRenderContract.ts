@@ -2007,7 +2007,7 @@ export function publicCatalogCsp(nonce: string): string {
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     "connect-src 'self' https:",
-    "frame-src 'self' https://maps.google.com",
+    "frame-src 'self' https://maps.google.com https://www.google.com/maps",
     "frame-ancestors 'self'",
     "object-src 'none'",
     "base-uri 'self'",
