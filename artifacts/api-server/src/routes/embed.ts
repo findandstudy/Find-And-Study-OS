@@ -1,3 +1,4 @@
+import { normalizeEmbedEnquiryMessage } from "../lib/embedEnquiryMessage";
 import { canIssueFirstPartyEmbedToken } from "../lib/firstPartyEmbedPolicy";
 import express, { Router, type IRouter, json } from "express";
 import crypto from "crypto";
@@ -1749,7 +1750,7 @@ router.post("/public/embed/:slug/lead", embedLeadSubmitLimiter, embedLeadJson, a
   }
   setEmbedCors(res, widget, origin);
 
-  const { firstName, lastName, email, phone, countryCode, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, gaClientId, gaSessionId, gaCapturedAt, _hp } = req.body;
+  const { firstName, lastName, email, phone, countryCode, message, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, gaClientId, gaSessionId, gaCapturedAt, _hp } = req.body;
   if (_hp) { res.json({ success: true, leadId: null, created: false }); return; }
 
   if (!firstName || !lastName || !email) {
@@ -1787,6 +1788,7 @@ router.post("/public/embed/:slug/lead", embedLeadSubmitLimiter, embedLeadJson, a
         email: s(email, 255)!,
         phone: pn(phone, countryCode, 50),
         phoneE164: toE164(pn(phone, countryCode, 50)),
+        ...(widget.mode === "lead_form" ? { notes: normalizeEmbedEnquiryMessage(message) } : {}),
         interestedProgram: s(programName, 255),
         interestedUniversity: s(universityName, 255),
         sourcePageUrl: s(sourcePageUrl, 500),
@@ -5345,6 +5347,7 @@ function renderFormContent(prog){
     // PhoneCodePicker visual). Spans the full row.
     var sel=fv.countryCode||'';
     h+='<div class="ew-form-group full"><label>'+esc(MODE==='lead_form'?LC.phone:'Phone')+' *</label><div class="ew-phone-group">'+buildCcDropdown(sel)+'<input name="phone" placeholder="'+esc(MODE==='lead_form'?LC.phonePlaceholder:'Phone number')+'" value="'+esc(fv.phone||'')+'" required></div>'+(phoneError?'<div class="ew-field-err">'+esc(MODE==='lead_form'?LC.phoneInvalid:'Please enter a valid phone number for the selected country.')+'</div>':'')+'</div>';
+    if(MODE==='lead_form')h+='<div class="ew-form-group full"><label for="ew-enquiry-message">'+esc(LC.message||'Message')+'</label><textarea id="ew-enquiry-message" name="message" rows="4" maxlength="5000">'+esc(fv.message||'')+'</textarea></div>';
     h+='</div>';
     if(prog){
       // "Applying for" summary pill (mirrors portal's bg-secondary/50 card).
@@ -6026,6 +6029,7 @@ function ewBuildLeadPayload(){
     firstName:savedFormData.firstName,
     lastName:savedFormData.lastName,
     email:savedFormData.email,
+    message:MODE==='lead_form'?String(savedFormData.message||'').slice(0,5000):undefined,
     phone:savedFormData.phone||null,
     countryCode:savedFormData.countryCode||null,
     programName:formProgram?formProgram.name:null,
@@ -6480,7 +6484,7 @@ function resizeParent(){
     // reported height and force an inner scrollbar on the host page.
     var rootH=root?Math.max(root.scrollHeight,root.offsetHeight):0;
     var docH=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight);
-    var h=Math.max(rootH,docH);
+    var h=MODE==='lead_form'?rootH:Math.max(rootH,docH);
     // Absolutely-positioned overlays (the apply modal and any open country
     // code dropdown) do not contribute to scrollHeight, so query their
     // bounding rects explicitly and grow the iframe just enough to contain

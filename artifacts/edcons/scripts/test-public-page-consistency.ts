@@ -1,3 +1,5 @@
+import { normalizeEmbedEnquiryMessage } from "../../api-server/src/lib/embedEnquiryMessage";
+import { getEmbedLeadFormCopy } from "../../api-server/src/lib/embedLeadFormI18n";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -27,4 +29,8 @@ test('common page header preserves content/settings and uses locale-aware initia
 test('About and Contact use the system embed renderer; editor preview cannot submit',()=>{
  const root=new URL('../src/pages/public/',import.meta.url);for(const file of ['Contact.tsx','EditorialInquiryForm.tsx']){const source=readFileSync(new URL(file,root),'utf8');assert.match(source,/<EmbeddedLeadForm/);assert.doesNotMatch(source,/website-forms|onSubmit/);assert.ok(!source.includes('/api/public/lead'));}
  const source=readFileSync(new URL('EmbeddedLeadForm.tsx',root),'utf8');assert.ok(source.includes('if(preview)return'));assert.match(source,/event.origin!==location.origin/);assert.match(source,/event.source!==frame.current/);assert.match(source,/website-token/);
+});
+
+test('embed enquiry messages preserve paragraphs, bound input and use local labels',()=>{
+ assert.equal(normalizeEmbedEnquiryMessage('  First\r\n\r\nSecond  '),'First\n\nSecond');assert.equal(normalizeEmbedEnquiryMessage('   '),null);assert.equal(normalizeEmbedEnquiryMessage({message:'wrong shape'}),null);assert.equal(normalizeEmbedEnquiryMessage('x'.repeat(5001))?.length,5000);assert.equal(normalizeEmbedEnquiryMessage('A\u0000B'),'AB');assert.equal(getEmbedLeadFormCopy('tr').message,'Mesaj');assert.equal(getEmbedLeadFormCopy('ar').message,'الرسالة');
 });

@@ -10,6 +10,7 @@ export type EmbedLeadFormCopy = {
   lastName: string;
   email: string;
   phone: string;
+  message?: string;
   countryCode: string;
   countrySearch: string;
   countryNoMatches: string;
@@ -37,5 +38,6 @@ const COPY: Partial<Record<EmbedChatLocale, EmbedLeadFormCopy>> & { en: EmbedLea
 };
 
 export function getEmbedLeadFormCopy(locale: EmbedChatLocale): EmbedLeadFormCopy {
-  return COPY[locale] ?? COPY.en;
+  const message:Partial<Record<EmbedChatLocale,string>>={en:"Message",tr:"Mesaj",ar:"الرسالة",fa:"پیام",fr:"Message",ru:"Сообщение",zh:"留言",hi:"संदेश",es:"Mensaje",id:"Pesan",ur:"پیغام",tk:"Habar",ky:"Билдирүү",kk:"Хабарлама",uz:"Xabar",tg:"Паём",bn:"বার্তা",pt:"Mensagem",ne:"सन्देश",vi:"Lời nhắn",ko:"메시지",uk:"Повідомлення",it:"Messaggio"};
+  return {...(COPY[locale] ?? COPY.en),message:message[locale]||message.en};
 }

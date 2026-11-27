@@ -1141,7 +1141,7 @@ function PageEditorSession({ id }: { id: number }) {
               </SheetContent>
             </Sheet>
             <Dialog open={preflightOpen} onOpenChange={setPreflightOpen}>
-              <DialogContent className="max-w-lg">
+              <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
                 <DialogHeader><DialogTitle>{copy("Publication readiness", "Yayın öncesi kontrol")}</DialogTitle></DialogHeader>
                 {preflight && <div className="space-y-4">
                   <div className={`rounded-lg border p-3 text-sm ${preflight.eligible ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-destructive/40 bg-destructive/5"}`}>
