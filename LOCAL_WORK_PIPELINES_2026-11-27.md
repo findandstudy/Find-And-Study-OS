@@ -17,7 +17,7 @@ uygulandı; deployment migration journal'ına eklenmedi.
 
 ## Çalışan yetenekler
 
-- Sidebar'da Pipelines; çok sayıda pipeline, dropdown, kullanıcıya özel sabitlenen sekmeler.
+- Sidebar'da Pipelines; çok sayıda pipeline ve üstte doğrudan sekmelerle geçiş.
 - Kanban ve tablo, sürükle/bırak aşama değişikliği; klavye için aşama seçicisi.
 - Aşama adı, rengi, sırası ve açık/başarıyla kapalı/kapalı niteliği.
 - Kart başlığı/açıklaması, sorumlu, hedef tarihi, öncelik ve çalışma durumu.
@@ -89,9 +89,18 @@ CRM sayım eşliği, non-superuser tenant RLS ve UPDATE kapalı source-lock kont
 var olan `embedLeadFormI18n.ts:41` locale union/`ur` hatasıyla duruyor; bu dosya
 bu işte değiştirilmedi.
 
-UI ekranları ve drag/drop etkileşiminin görsel kabulü henüz tamamlanmadı:
-yerel tarayıcı giriş ekranında. Admin login sonrası masaüstü/pano/tablo,
-ayar dialog'u ve kart paneli gezilerek devam edilecek. Gerçek gönderim yok.
+İlk sürümdeki ayrı workspace/favori/uzun ayar ve kart paneli yaklaşımı, kullanıcı
+geri bildirimiyle kaldırıldı. Lead ekranının header, yuvarlak toolbar butonları,
+arama/filtreler, renkli kartlar, sütunlar ve tablo düzeni esas alındı.
+Pipelines içinde sekmeler ve `+`; yalnız isim isteyen oluşturma formu; isim,
+aşamalar ve kaynaklar için ayrı küçük düzenleme pencereleri vardır. Kart formu
+ad/başlık, iletişim, aşama, sorumlu ve açıklamayla sınırlandırıldı. Önceden
+kaydedilmiş ek alanlar silinmez; not/geçmiş varsayılan kapalıdır.
+
+Tarayıcıda yerel giriş sonrası pano/tablo, yeni pipeline'ın tek alanlı formu,
+kısa aşama yönetimi, gerçek pointer drag/drop ile aşama taşıma ve geri alma,
+kart düzenleme ve başarılı kayıt kontrol edildi. Backend/kanal yönlendirmesi
+bu UI revizyonunda değiştirilmedi. Gerçek dış gönderim yoktur.
 
 ## Sonraki kapı
 

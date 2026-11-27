@@ -751,6 +751,10 @@ ayrı `local_work_pipelines` şemasını kullanır. Feature yalnız loopback
 production activation fail-closed'dur. Bu işte staging/Apply deploy yapılmadı.
 Yeni, sentetik verili cluster kullanıldı; gerçek veriler aktarılmadı.
 17 yerel entegrasyon kontrolü PASS; frontend typecheck PASS; genel API
-typecheck'teki önceki `embedLeadFormI18n.ts:41` hatası sürer. Görsel UAT
-yerel admin girişi bekliyor. Ayrıntılar ve sonraki kapı:
+typecheck'teki önceki `embedLeadFormI18n.ts:41` hatası sürer. Kullanıcı geri
+bildirimiyle ayrıntılı workspace UI'ı kaldırılıp mevcut Lead ekranının
+kart/sütun/toolbar/tablo dili ve kısa düzenleme dialog'ları esas alındı.
+Sekmelerle geçiş ve `+` ile yalnız ad girerek pipeline ekleme vardır.
+Yerel browser'da pano/tablo, aşama yönetimi, pointer drag/drop ve geri alma,
+kart kaydetme doğrulandı. Kanal/source ve CRM ayrımı değişmedi. Ayrıntılar:
 `LOCAL_WORK_PIPELINES_2026-11-27.md`.
