@@ -159,6 +159,8 @@ function PageEditorSession({ id }: { id: number }) {
   const { lang } = useI18n();
   const copy = (en: string, tr?: string) => pageEditorText(lang, en, tr);
   const preflightIssueText = (issue: { code: string; message: string }) => ({
+    REVIEWER_REQUIRED: copy("A different authorized administrator must approve this revision. Your saved draft is safe.", "Bu sürümü farklı bir yetkili yönetici onaylamalıdır. Kayıtlı taslağınız korunuyor."),
+    STAGING_SINGLE_ADMIN_APPROVAL: copy("Staging editorial mode: you may explicitly approve your own revision. Your approval will be recorded in version history.", "Staging yayın modu: kendi düzenlemenizi açık onayla yayınlayabilirsiniz. Onayınız sürüm geçmişine kaydedilir."),
     TITLE_REQUIRED: copy("Page title is required.", "Sayfa başlığı zorunludur."),
     SLUG_REQUIRED: copy("Page address is required.", "Sayfa adresi zorunludur."),
     LOCALE_REQUIRED: copy("Page language is required.", "Sayfa dili zorunludur."),

@@ -1,5 +1,6 @@
 import express, { Router, json, type Request, type Response, type RequestHandler } from "express";
 import { publicFormLimiter } from "../lib/limiters";
+import { allowStagingEditorialSelfReview } from "../lib/websiteEditorialReview";
 import { getClientIp } from "../lib/clientIp";
 import { db } from "@workspace/db";
 import { eq, asc, desc, inArray, and, ne, gte } from "drizzle-orm";
@@ -1025,6 +1026,12 @@ router.post("/website/pages/:id/publication-preflight", ...adminOnly, async (req
       .where(eq(websitePageBlocksTable.pageId, pageId))
       .orderBy(asc(websitePageBlocksTable.sortOrder));
     const preflight = buildPagePublicationPreflight(page, blocks);
+    if (!page.updatedBy || (page.updatedBy === req.user?.id && !allowStagingEditorialSelfReview(req.user?.role))) {
+      preflight.blockers.push({ code: "REVIEWER_REQUIRED", message: "A different authorized administrator must approve this revision." });
+      preflight.eligible = false;
+    } else if (page.updatedBy === req.user?.id) {
+      preflight.warnings.push({ code: "STAGING_SINGLE_ADMIN_APPROVAL", message: "Staging editorial mode: you are explicitly approving your own revision. This approval is recorded in version history." });
+    }
     if (page.canonicalUrl?.trim()) {
       const [conflict] = await db.select({ id: websitePagesTable.id }).from(websitePagesTable).where(and(eq(websitePagesTable.canonicalUrl, page.canonicalUrl.trim()), ne(websitePagesTable.id, pageId))).limit(1);
       if (conflict) {
@@ -1090,7 +1097,7 @@ router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res
       const [current] = await tx.select().from(websitePagesTable).where(eq(websitePagesTable.id, pageId)).for("update");
       if (!current) return null;
       if (current.updatedAt.toISOString() !== expectedUpdatedAt || current.status !== "in_review") throw new Error("PAGE_REVISION_CONFLICT");
-      if (!current.updatedBy || current.updatedBy === req.user?.id) throw new Error("REVIEWER_REQUIRED");
+      if (!current.updatedBy || (current.updatedBy === req.user?.id && !allowStagingEditorialSelfReview(req.user?.role))) throw new Error("REVIEWER_REQUIRED");
 
       const blocks = await tx.select().from(websitePageBlocksTable)
         .where(eq(websitePageBlocksTable.pageId, pageId))
@@ -1134,7 +1141,7 @@ router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res
           twitterDescription: page.twitterDescription,
           twitterImageUrl: page.twitterImageUrl,
           translationsJson: page.translationsJson,
-          approval: { digest, authorId: current.updatedBy, reviewerId: req.user?.id, preflight: preflight.publication },
+          approval: { digest, authorId: current.updatedBy, reviewerId: req.user?.id, mode: current.updatedBy === req.user?.id ? "STAGING_EXPLICIT_SINGLE_ADMIN" : "DUAL_REVIEW", preflight: preflight.publication },
         },
         publishedAt: now,
         createdBy: req.user?.id,
