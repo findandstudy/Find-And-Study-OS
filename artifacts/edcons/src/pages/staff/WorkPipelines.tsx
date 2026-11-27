@@ -135,8 +135,8 @@ function ContactCard({
                 {c.source.kind === "channel"
                   ? m.l.messages
                   : c.source.kind === "embed"
-                    ? "Embed"
-                    : "Web-to-lead"}
+                    ? m.t("workPipelines.embedForms")
+                    : m.t("workPipelines.webLead")}
               </span>
             )}
           </div>
@@ -341,17 +341,16 @@ export default function WorkPipelines() {
     m.cards.error?.message ||
     m.options.error?.message;
   if (m.feature.isPending) return <p role="status">{l.loading}</p>;
-  if (!m.feature.data?.enabled)
-    return <p role="alert">{m.feature.error?.message || l.noPipelines}</p>;
+  if (!m.feature.data?.enabled) return <p role="alert">{l.noPipelines}</p>;
   return (
     <div
       className="h-[calc(100vh-8rem)] flex flex-col"
-      dir={m.lang === "ar" || m.lang === "fa" ? "rtl" : "ltr"}
+      dir={m.isRTL ? "rtl" : "ltr"}
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground">
-            Pipelines
+            {l.title}
           </h1>
           <p className="text-muted-foreground text-sm mt-1">{l.simpleIntro}</p>
         </div>
@@ -474,19 +473,23 @@ export default function WorkPipelines() {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-52 p-1" align="end">
-              {(["rename", "stages", "team", "sources"] as const).map((kind) => (
-                <button
-                  key={kind}
-                  className="w-full text-start px-3 py-2 rounded-md text-sm hover:bg-muted"
-                  onClick={() => openSettings(kind)}
-                >
-                  {kind === "rename"
-                    ? l.rename
-                    : kind === "stages"
-                      ? l.stages
-                      : kind === "team" ? l.team : l.sources}
-                </button>
-              ))}
+              {(["rename", "stages", "team", "sources"] as const).map(
+                (kind) => (
+                  <button
+                    key={kind}
+                    className="w-full text-start px-3 py-2 rounded-md text-sm hover:bg-muted"
+                    onClick={() => openSettings(kind)}
+                  >
+                    {kind === "rename"
+                      ? l.rename
+                      : kind === "stages"
+                        ? l.stages
+                        : kind === "team"
+                          ? l.team
+                          : l.sources}
+                  </button>
+                ),
+              )}
             </PopoverContent>
           </Popover>
         )}
@@ -592,7 +595,15 @@ export default function WorkPipelines() {
                         }
                       </span>
                     </TableCell>
-                    <TableCell>{r.document.source?.kind || "—"}</TableCell>
+                    <TableCell>
+                      {r.document.source?.kind === "channel"
+                        ? l.messages
+                        : r.document.source?.kind === "embed"
+                          ? m.t("workPipelines.embedForms")
+                          : r.document.source?.kind === "web"
+                            ? m.t("workPipelines.webLead")
+                            : "—"}
+                    </TableCell>
                     <TableCell>{m.person(r.document.assigneeId)}</TableCell>
                     <TableCell>
                       <Button
@@ -632,8 +643,11 @@ export default function WorkPipelines() {
           if (!open && !m.busy) m.setBoardDraft(null);
         }}
       >
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent
+          closeLabel={m.t("common.close")}
+          className="sm:max-w-lg max-h-[85vh] overflow-y-auto"
+        >
+          <DialogHeader className="text-start sm:text-start">
             <DialogTitle>
               {settings === "create"
                 ? l.create
@@ -641,7 +655,9 @@ export default function WorkPipelines() {
                   ? l.rename
                   : settings === "stages"
                     ? l.stages
-                    : settings === "team" ? l.team : l.sources}
+                    : settings === "team"
+                      ? l.team
+                      : l.sources}
             </DialogTitle>
           </DialogHeader>
           {m.boardDraft && (
@@ -666,13 +682,39 @@ export default function WorkPipelines() {
                   />
                 </div>
               )}
-              {(settings === "create" || settings === "team") && <div className="space-y-2">
-                <Label>{l.team}</Label>
-                <p className="text-xs text-muted-foreground">{m.lang === "tr" ? "Atanabilecek ve bu pipeline'a erişebilecek ekip üyelerini seçin." : "Choose team members who can access this pipeline and be assigned records."}</p>
-                {m.options.data?.people.filter(p => p.id !== m.boardDraft!.document.createdBy).map(p => <label key={p.id} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={m.boardDraft!.document.memberIds.includes(p.id)} onChange={e => m.boardEdit({ memberIds: e.target.checked ? [...m.boardDraft!.document.memberIds, p.id] : m.boardDraft!.document.memberIds.filter(id => id !== p.id) })} />{p.name}
-                </label>)}
-              </div>}
+              {(settings === "create" || settings === "team") && (
+                <div className="space-y-2">
+                  <Label>{l.team}</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {m.t("workPipelines.chooseTeamMembersWhoCan")}
+                  </p>
+                  {m.options.data?.people
+                    .filter((p) => p.id !== m.boardDraft!.document.createdBy)
+                    .map((p) => (
+                      <label
+                        key={p.id}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={m.boardDraft!.document.memberIds.includes(
+                            p.id,
+                          )}
+                          onChange={(e) =>
+                            m.boardEdit({
+                              memberIds: e.target.checked
+                                ? [...m.boardDraft!.document.memberIds, p.id]
+                                : m.boardDraft!.document.memberIds.filter(
+                                    (id) => id !== p.id,
+                                  ),
+                            })
+                          }
+                        />
+                        {p.name}
+                      </label>
+                    ))}
+                </div>
+              )}
               {settings === "stages" && (
                 <>
                   <div className="space-y-3">
@@ -786,9 +828,7 @@ export default function WorkPipelines() {
               {settings === "sources" && (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    {m.lang === "tr"
-                      ? "Formu sistemdeki Embed alanında oluşturun. Burada seçip kaydettiğiniz formun yeni gönderimleri bu pipeline’a kayıt olur; öğrenci lead’i oluşturmaz."
-                      : "Create the form in the existing Embed area. Select and save it here to send new submissions to this pipeline instead of student leads."}
+                    {m.t("workPipelines.createTheFormInThe")}
                   </p>
                   <div className="flex items-center gap-3">
                     <a
@@ -797,9 +837,7 @@ export default function WorkPipelines() {
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      {m.lang === "tr"
-                        ? "Embed formlarını yönet ↗"
-                        : "Manage embed forms ↗"}
+                      {m.t("workPipelines.manageEmbedForms")}
                     </a>
                     <Button
                       type="button"
@@ -808,21 +846,17 @@ export default function WorkPipelines() {
                       disabled={m.options.isFetching}
                       onClick={() => void m.options.refetch()}
                     >
-                      {m.lang === "tr" ? "Listeyi yenile" : "Refresh list"}
+                      {m.t("workPipelines.refreshList")}
                     </Button>
                   </div>
                   {(["embed", "channel", "web"] as const).map((kind) => (
                     <div key={kind} className="space-y-2">
                       <h3 className="font-medium text-sm">
                         {kind === "embed"
-                          ? m.lang === "tr"
-                            ? "Embed formları"
-                            : "Embed forms"
+                          ? m.t("workPipelines.embedForms")
                           : kind === "channel"
-                            ? m.lang === "tr"
-                              ? "Mesaj kanalları"
-                              : "Message channels"
-                            : "Web-to-lead"}
+                            ? m.t("workPipelines.messageChannels")
+                            : m.t("workPipelines.webLead")}
                       </h3>
                       {m.options.data?.sources
                         .filter((s) => s.kind === kind)
@@ -864,12 +898,14 @@ export default function WorkPipelines() {
                                 }
                               />
                               <span>
-                                {s.label}
+                                {s.kind === "web"
+                                  ? m.t("workPipelines.webLead") +
+                                    ": " +
+                                    s.label.replace(/^Web-to-lead: /, "")
+                                  : s.label}
                                 {elsewhere && (
                                   <span className="block text-xs text-muted-foreground">
-                                    {m.lang === "tr"
-                                      ? "Bağlı pipeline: "
-                                      : "Connected pipeline: "}
+                                    {m.t("workPipelines.connectedPipeline")}
                                     {binding.board_name}
                                   </span>
                                 )}
@@ -881,9 +917,7 @@ export default function WorkPipelines() {
                         (s) => s.kind === kind,
                       ) && (
                         <p className="text-xs text-muted-foreground">
-                          {m.lang === "tr"
-                            ? "Aktif kaynak yok."
-                            : "No active sources."}
+                          {m.t("workPipelines.noActiveSources")}
                         </p>
                       )}
                     </div>
@@ -923,8 +957,11 @@ export default function WorkPipelines() {
           if (!open && !m.busy) m.setCardDraft(null);
         }}
       >
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent
+          closeLabel={m.t("common.close")}
+          className="sm:max-w-lg max-h-[85vh] overflow-y-auto"
+        >
+          <DialogHeader className="text-start sm:text-start">
             <DialogTitle>
               {m.cardDraft?.revision ? l.editRecord : l.addRecord}
             </DialogTitle>

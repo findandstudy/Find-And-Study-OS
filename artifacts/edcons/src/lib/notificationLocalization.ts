@@ -128,8 +128,10 @@ export function localizeNotification(
     body: notification.body || null,
   };
   if (notification.type?.startsWith("pipeline.")) {
-    const tr = String(requestedLanguage || "en").split("-")[0] === "tr";
-    return { title: notification.type === "pipeline.note_added" ? (tr ? "Pipeline’a yeni not eklendi" : "New pipeline note") : notification.type === "pipeline.follow_up_due" ? (tr ? "Pipeline takip zamanı geldi" : "Pipeline follow-up due") : (tr ? "Pipeline takibi planlandı" : "Pipeline follow-up scheduled"), body: tr ? "İlgili pipeline kaydını açın." : "Open the related pipeline record." };
+    const requested = String(requestedLanguage || "en").split("-")[0];
+    const lang = isValidLanguage(requested) ? requested : "en";
+    const titleKey = notification.type === "pipeline.note_added" ? "workPipelines.notifyNote" : notification.type === "pipeline.follow_up_due" ? "workPipelines.notifyDue" : "workPipelines.notifyScheduled";
+    return { title: translations(lang, titleKey), body: translations(lang, "workPipelines.notifyBody") };
   }
   if (notification.type !== "application.offer_letter_expiring") return fallback;
 
@@ -153,4 +155,4 @@ export function localizeNotification(
     body: copy.body(subject, stage, date, days),
   };
 }
-import { getLocale, isValidLanguage } from "@/lib/i18n";
+import { getLocale, isValidLanguage, translations } from "@/lib/i18n";

@@ -1,3 +1,5 @@
+import { workPipelineHistory } from "@/lib/workPipelineI18n";
+import { useI18n } from "@/hooks/use-i18n";
 import { useState } from "react";
 import {
   CalendarClock,
@@ -30,13 +32,19 @@ export function WorkPipelineActivity({
   disabled: boolean;
   save: (activity: unknown) => Promise<boolean>;
 }) {
-  const tr = lang === "tr";
+  const { t, isRTL } = useI18n();
   const [note, setNote] = useState("");
   const [editing, setEditing] = useState<Partial<FollowUp> | null>(null);
   const [when, setWhen] = useState("");
   const edit = (f?: FollowUp) => {
     setEditing(
-      f ? { ...f } : { title: "", notes: "", assigneeId: row.document.assigneeId ?? people[0]?.id },
+      f
+        ? { ...f }
+        : {
+            title: "",
+            notes: "",
+            assigneeId: row.document.assigneeId ?? people[0]?.id,
+          },
     );
     if (!f) setWhen("");
     else {
@@ -50,18 +58,24 @@ export function WorkPipelineActivity({
   };
   const followUps = row.document.followUps ?? [];
   return (
-    <Tabs defaultValue="followups" className="border-t pt-4">
+    <Tabs
+      dir={isRTL ? "rtl" : "ltr"}
+      defaultValue="followups"
+      className="border-t pt-4"
+    >
       <TabsList className="w-full justify-start">
         <TabsTrigger value="followups">
           <CalendarClock className="w-4 h-4 me-2" />
-          {tr ? "Takipler" : "Follow-ups"} (
+          {t("workPipelines.followups")} (
           {followUps.filter((f) => !f.completed).length})
         </TabsTrigger>
         <TabsTrigger value="notes">
           <MessageSquare className="w-4 h-4 me-2" />
-          {tr ? "Notlar" : "Notes"} ({row.document.notes.length})
+          {t("common.notes")} ({row.document.notes.length})
         </TabsTrigger>
-        <TabsTrigger value="history">{tr ? "Geçmiş" : "History"}</TabsTrigger>
+        <TabsTrigger value="history">
+          {t("workPipelines.historyText")}
+        </TabsTrigger>
       </TabsList>
       <TabsContent value="followups" className="space-y-3">
         <Button
@@ -73,12 +87,12 @@ export function WorkPipelineActivity({
           onClick={() => edit()}
         >
           <Plus className="w-3 h-3 me-1" />
-          {tr ? "Takip ekle" : "Add follow-up"}
+          {t("workPipelines.addFollowup")}
         </Button>
         {editing && (
           <div className="rounded-xl border bg-secondary/30 p-4 space-y-3">
             <Label htmlFor="pipeline-followup-title">
-              {tr ? "Takip başlığı" : "Follow-up title"}
+              {t("workPipelines.followupTitle")}
             </Label>
             <Input
               id="pipeline-followup-title"
@@ -89,7 +103,7 @@ export function WorkPipelineActivity({
               }
             />
             <Label htmlFor="pipeline-followup-when">
-              {tr ? "Tarih ve saat" : "Date and time"}
+              {t("workPipelines.dateAndTime")}
             </Label>
             <Input
               id="pipeline-followup-when"
@@ -98,7 +112,7 @@ export function WorkPipelineActivity({
               onChange={(e) => setWhen(e.target.value)}
             />
             <Label htmlFor="pipeline-followup-assignee">
-              {tr ? "Sorumlu" : "Assigned to"}
+              {t("workPipelines.assignedTo")}
             </Label>
             <select
               id="pipeline-followup-assignee"
@@ -115,7 +129,7 @@ export function WorkPipelineActivity({
               ))}
             </select>
             <Label htmlFor="pipeline-followup-notes">
-              {tr ? "Açıklama (isteğe bağlı)" : "Notes (optional)"}
+              {t("workPipelines.notesOptional")}
             </Label>
             <Textarea
               id="pipeline-followup-notes"
@@ -132,7 +146,7 @@ export function WorkPipelineActivity({
                 variant="ghost"
                 onClick={() => setEditing(null)}
               >
-                {tr ? "Vazgeç" : "Cancel"}
+                {t("workPipelines.cancel")}
               </Button>
               <Button
                 type="button"
@@ -158,14 +172,14 @@ export function WorkPipelineActivity({
                     setEditing(null);
                 }}
               >
-                {tr ? "Kaydet" : "Save"}
+                {t("workPipelines.save")}
               </Button>
             </div>
           </div>
         )}
         {!followUps.length && (
           <p className="text-sm text-muted-foreground">
-            {tr ? "Henüz takip planlanmadı." : "No follow-ups scheduled."}
+            {t("workPipelines.noFollowupsScheduled")}
           </p>
         )}
         <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -182,13 +196,9 @@ export function WorkPipelineActivity({
                   <button
                     type="button"
                     aria-label={
-                      tr
-                        ? f.completed
-                          ? "Takibi yeniden aç"
-                          : "Takibi tamamla"
-                        : f.completed
-                          ? "Reopen follow-up"
-                          : "Complete follow-up"
+                      f.completed
+                        ? t("workPipelines.reopenFollowup")
+                        : t("workPipelines.completeFollowup")
                     }
                     disabled={busy || disabled}
                     onClick={() =>
@@ -212,7 +222,7 @@ export function WorkPipelineActivity({
                       className={`text-xs mt-1 ${overdue ? "text-red-600" : "text-muted-foreground"}`}
                     >
                       {new Date(f.scheduledAt).toLocaleString(lang)}{" "}
-                      {overdue && (tr ? " · Gecikti" : " · Overdue")}
+                      {overdue && " · " + t("workPipelines.overdue")}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {person(f.assigneeId)}
@@ -228,7 +238,7 @@ export function WorkPipelineActivity({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      aria-label={tr ? "Takibi düzenle" : "Edit follow-up"}
+                      aria-label={t("workPipelines.editFollowup")}
                       disabled={busy || disabled}
                       onClick={() => edit(f)}
                     >
@@ -244,7 +254,7 @@ export function WorkPipelineActivity({
         <div className="space-y-3 max-h-64 overflow-y-auto">
           {!row.document.notes.length && (
             <p className="text-sm text-muted-foreground">
-              {tr ? "Henüz not yok." : "No notes yet."}
+              {t("workPipelines.noNotesYet")}
             </p>
           )}
           {[...row.document.notes].reverse().map((n) => (
@@ -259,7 +269,7 @@ export function WorkPipelineActivity({
           ))}
         </div>
         <Label htmlFor="pipeline-new-note">
-          {tr ? "Yeni not" : "New note"}
+          {t("workPipelines.newNoteText")}
         </Label>
         <Textarea
           id="pipeline-new-note"
@@ -277,7 +287,7 @@ export function WorkPipelineActivity({
             if (await save({ action: "note", text: note })) setNote("");
           }}
         >
-          {tr ? "Not ekle" : "Add note"}
+          {t("workPipelines.addNote")}
         </Button>
       </TabsContent>
       <TabsContent
@@ -291,14 +301,12 @@ export function WorkPipelineActivity({
             </p>
             <p>
               {h.action === "note-added"
-                ? tr
-                  ? "Not eklendi"
-                  : "Note added"
+                ? t("workPipelines.notifyNote")
                 : h.action === "followup-updated"
-                  ? tr
-                    ? "Takip güncellendi"
-                    : "Follow-up updated"
-                  : h.text || (tr ? "Kayıt güncellendi" : "Record updated")}
+                  ? t("workPipelines.followupUpdated")
+                  : h.text
+                    ? workPipelineHistory(h.text, t)
+                    : t("workPipelines.recordUpdated")}
             </p>
           </div>
         ))}

@@ -808,3 +808,14 @@ genişliktedir; PhoneInput'a geriye uyumlu id/name/disabled desteği eklendi.
 Sentetik UI kaydında +1 koduyla kaydetme ve tekrar düzenlemede kodun korunması
 doğrulandı; frontend typecheck PASS. ksks kullanıcı pipeline'ına test kaydı
 eklenmedi; sentetik kayıt mevcut TEST pipeline'ında tutuldu. Deploy/push yok.
+
+### 28 Kasım — pipeline ortak i18n
+Local pipeline arayüzü 130 anahtarlı workPipelines namespace'ine taşındı; mevcut
+23 dil dosyasında karşılığı vardır. Excel/favori/not/takip/dashboard/Mesajlar,
+bildirim ve ortak telefon/atama metinleri kapsandı; kullanıcı içeriği ile Excel
+makine sütunları korunur. Urduca dahil RTL ortak isRTL kullanır. i18n denetimi,
+24 runtime testi, 23 dil React render, mevcut 3 bildirim testi ve frontend
+typecheck PASS. Canlı
+tarayıcı dil ekranı navigation/focus timeout nedeniyle görsel doğrulanamadı;
+local servisler HTTP200/health başarılıdır. LOCAL_WORK_PIPELINE_I18N_2026-11-28.md.
+Staging/Apply/deploy/push yoktur.

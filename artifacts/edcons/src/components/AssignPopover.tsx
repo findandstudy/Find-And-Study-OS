@@ -1,3 +1,4 @@
+import { useI18n } from "@/hooks/use-i18n";
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { UserCheck, UserPlus, Search } from "lucide-react";
@@ -14,6 +15,7 @@ const MENU_WIDTH = 224; // w-56
 const MENU_MAX_HEIGHT = 290; // search box + scrollable list, used for flip decision
 
 export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onAssign }: AssignPopoverProps) {
+  const { t, isRTL } = useI18n();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -92,17 +94,18 @@ export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onA
             ? `text-[10px] text-muted-foreground hover:text-primary transition-colors`
             : `text-[10px] text-primary hover:underline font-medium`
         }`}
-        title={assignedUserName || "Assign staff member"}
+        title={assignedUserName || t("messagesPage.assignOwner")}
       >
         {assignedUserName ? (
           <><UserCheck className="w-3 h-3 shrink-0" />{assignedUserName}</>
         ) : (
-          <><UserPlus className="w-3 h-3 shrink-0" />Assign</>
+          <><UserPlus className="w-3 h-3 shrink-0" />{t("messagesPage.assignOwner")}</>
         )}
       </button>
       {open && coords && createPortal(
         <div
           ref={menuRef}
+          dir={isRTL ? "rtl" : "ltr"}
           style={{
             position: "fixed",
             left: coords.left,
@@ -115,32 +118,32 @@ export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onA
         >
           <div className="p-2 border-b">
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Search className="absolute start-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search staff..."
-                className="w-full h-8 pl-7 pr-2 text-xs rounded-lg border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                placeholder={t("messagesPage.searchStaff")}
+                className="w-full h-8 ps-7 pe-2 text-xs rounded-lg border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                 autoFocus
               />
             </div>
           </div>
           <div className="max-h-48 overflow-y-auto py-1">
             {meFirst.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-3">No staff found</p>
+              <p className="text-xs text-muted-foreground text-center py-3">{t("messagesPage.noStaffFound")}</p>
             ) : (
               meFirst.map(u => (
                 <button
                   key={u.id}
                   onClick={(e) => { e.stopPropagation(); onAssign(u.id); setOpen(false); }}
-                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-primary/10 transition-colors flex items-center gap-2"
+                  className="w-full text-start px-3 py-1.5 text-xs hover:bg-primary/10 transition-colors flex items-center gap-2"
                 >
                   <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[9px] font-bold shrink-0">
                     {u.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
                   </div>
                   <span className="truncate">{u.name}</span>
                   {u.id === currentUserId && (
-                    <span className="text-[9px] text-muted-foreground ml-auto shrink-0">(Me)</span>
+                    <span className="text-[9px] text-muted-foreground ms-auto shrink-0">({t("studentsPage.me")})</span>
                   )}
                 </button>
               ))

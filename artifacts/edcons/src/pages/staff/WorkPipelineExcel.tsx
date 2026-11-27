@@ -1,3 +1,5 @@
+import { workPipelineError } from "@/lib/workPipelineI18n";
+import { useI18n } from "@/hooks/use-i18n";
 import { useState } from "react";
 import { Download, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -57,7 +59,7 @@ export function WorkPipelineExcel({
   assignee: string;
   refresh: () => Promise<void>;
 }) {
-  const tr = lang === "tr";
+  const { t, isRTL } = useI18n();
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -69,10 +71,10 @@ export function WorkPipelineExcel({
   const [fileName, setFileName] = useState("");
   const label = (a: string) =>
     ({
-      create: tr ? "Eklenecek" : "Create",
-      update: tr ? "Güncellenecek" : "Update",
-      unchanged: tr ? "Değişiklik yok" : "Unchanged",
-      error: tr ? "Hatalı" : "Error",
+      create: t("workPipelines.createText"),
+      update: t("workPipelines.update"),
+      unchanged: t("workPipelines.unchanged"),
+      error: t("workPipelines.errorText"),
     })[a] || a;
   const saveFile = async (data: ExportData, template = false) => {
     const XLSX = await import("xlsx");
@@ -93,18 +95,8 @@ export function WorkPipelineExcel({
         ["PipelineId", id],
         ["PipelineName", name],
         ["MaximumRows", data.limit],
-        [
-          "Guide",
-          tr
-            ? "Title zorunludur. RecordId varsa sadece bu pipeline içindeki kayıt güncellenir. StageId/Stage ve AssigneeId/Assignee bu pipeline’a ait olmalıdır. DueDate: YYYY-MM-DD. Notlar ve takipler bu dosyayla değiştirilmez."
-            : "Title is required. RecordId updates only an existing record in this pipeline. Stage/assignee must belong to this pipeline. DueDate: YYYY-MM-DD. Notes and follow-ups are preserved.",
-        ],
-        [
-          "Stages",
-          tr
-            ? "Aşama adlarını mevcut pipeline’dan alın. Boş aşama yeni kayıtta ilk aşamayı kullanır."
-            : "Use this pipeline’s stage names. Blank stage uses the first stage for a new record.",
-        ],
+        ["Guide", t("workPipelines.titleIsRequiredRecordIdUpdates")],
+        ["Stages", t("workPipelines.useThisPipelinesStageNames")],
         ["Priority", "low | normal | high"],
         ["Status", "active | waiting | done | cancelled"],
       ]),
@@ -141,7 +133,7 @@ export function WorkPipelineExcel({
       );
       await saveFile(data, template);
     } catch (e: any) {
-      setError(e.message);
+      setError(workPipelineError(e, t));
     } finally {
       setBusy(false);
     }
@@ -154,13 +146,9 @@ export function WorkPipelineExcel({
     setFileName(file.name);
     try {
       if (file.size > 5 * 1024 * 1024)
-        throw Error(
-          tr ? "Dosya en fazla 5 MB olabilir." : "Maximum file size is 5 MB.",
-        );
+        throw Error(t("workPipelines.maximumFileSizeIs5"));
       if (!/\.(xlsx|xls|csv)$/i.test(file.name))
-        throw Error(
-          tr ? "Excel veya CSV seçin." : "Choose an Excel or CSV file.",
-        );
+        throw Error(t("workPipelines.chooseAnExcelOrCSV"));
       const XLSX = await import("xlsx");
       const wb = XLSX.read(await file.arrayBuffer(), {
         type: "array",
@@ -169,24 +157,15 @@ export function WorkPipelineExcel({
         sheetRows: 2002,
       });
       const records = wb.Sheets.Records ?? wb.Sheets[wb.SheetNames[0]];
-      if (!records)
-        throw Error(tr ? "Veri sayfası bulunamadı." : "Data sheet not found.");
+      if (!records) throw Error(t("workPipelines.dataSheetNotFound"));
       for (const [cell, value] of Object.entries(records))
         if (!cell.startsWith("!") && (value as any)?.f)
-          throw Error(
-            tr
-              ? "Formül yerine sabit değerler kullanın."
-              : "Use fixed values instead of formulas.",
-          );
+          throw Error(t("workPipelines.useFixedValuesInsteadOf"));
       const rows = XLSX.utils.sheet_to_json<
         Record<string, string | number | null>
       >(records, { defval: "", raw: false });
       if (!rows.length || rows.length > 2000)
-        throw Error(
-          tr
-            ? "Dosya 1–2000 kayıt içermeli."
-            : "File must contain 1–2000 records.",
-        );
+        throw Error(t("workPipelines.fileMustContain12000Records"));
       let sourceBoardId: string | undefined;
       if (wb.Sheets.Pipeline) {
         const meta = XLSX.utils.sheet_to_json<any[]>(wb.Sheets.Pipeline, {
@@ -206,7 +185,7 @@ export function WorkPipelineExcel({
       setPayload(input);
       setPreview(result);
     } catch (e: any) {
-      setError(e.message);
+      setError(workPipelineError(e, t));
     } finally {
       setBusy(false);
     }
@@ -223,7 +202,7 @@ export function WorkPipelineExcel({
       setPreview(result);
       await refresh();
     } catch (e: any) {
-      setError(e.message);
+      setError(workPipelineError(e, t));
       setPreview(null);
     } finally {
       setBusy(false);
@@ -236,14 +215,10 @@ export function WorkPipelineExcel({
         className="rounded-full gap-2"
         disabled={busy}
         onClick={() => void exporting()}
-        title={
-          tr
-            ? "Yalnız bu pipeline ve etkin filtrelerin tüm sonuçları"
-            : "Only this pipeline, all results matching active filters"
-        }
+        title={t("workPipelines.onlyThisPipelineAllResults")}
       >
         <Download className="w-4 h-4" />
-        {tr ? "Excel dışa aktar" : "Export Excel"}
+        {t("workPipelines.exportExcel")}
       </Button>
       <Button
         variant="outline"
@@ -258,7 +233,7 @@ export function WorkPipelineExcel({
         }}
       >
         <Upload className="w-4 h-4" />
-        {tr ? "Excel içe aktar" : "Import Excel"}
+        {t("workPipelines.importExcel")}
       </Button>
       {error && !open && (
         <p role="alert" className="text-sm text-destructive">
@@ -271,28 +246,28 @@ export function WorkPipelineExcel({
           if (!busy) setOpen(v);
         }}
       >
-        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent
+          closeLabel={t("common.close")}
+          dir={isRTL ? "rtl" : "ltr"}
+          className="sm:max-w-3xl max-h-[90vh] overflow-y-auto"
+        >
+          <DialogHeader className="text-start sm:text-start">
             <DialogTitle>
-              {tr ? "Excel içe aktar" : "Import Excel"} · {name}
+              {t("workPipelines.importExcel")} · {name}
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            {tr
-              ? "Bu işlem yalnız seçili pipeline’a uygulanır. Önce şablonu indirin, kayıtları doldurun ve önizleyin. Diğer pipeline’lar etkilenmez."
-              : "Applies only to the selected pipeline. Download its template, fill in records and preview before importing. Other pipelines are unaffected."}
+            {t("workPipelines.appliesOnlyToTheSelected")}
           </p>
           <Button
             variant="outline"
             disabled={busy}
             onClick={() => void exporting(true)}
           >
-            {tr
-              ? "Bu pipeline’ın şablonunu indir"
-              : "Download this pipeline’s template"}
+            {t("workPipelines.downloadThisPipelinesTemplate")}
           </Button>
           <Label htmlFor="pipeline-import-file">
-            {tr ? "Excel / CSV dosyası" : "Excel / CSV file"}
+            {t("workPipelines.excelCSVFile")}
           </Label>
           <input
             id="pipeline-import-file"
@@ -313,7 +288,7 @@ export function WorkPipelineExcel({
               {error}
             </p>
           )}
-          {busy && <p role="status">{tr ? "İşleniyor…" : "Processing…"}</p>}
+          {busy && <p role="status">{t("workPipelines.processing")}</p>}
           {preview && (
             <>
               <div className="flex flex-wrap gap-3 text-sm">
@@ -327,9 +302,9 @@ export function WorkPipelineExcel({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>{tr ? "Satır" : "Row"}</TableHead>
-                      <TableHead>{tr ? "Başlık" : "Title"}</TableHead>
-                      <TableHead>{tr ? "Sonuç" : "Result"}</TableHead>
+                      <TableHead>{t("workPipelines.row")}</TableHead>
+                      <TableHead>{t("workPipelines.titleText")}</TableHead>
+                      <TableHead>{t("workPipelines.result")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -340,7 +315,9 @@ export function WorkPipelineExcel({
                         <TableCell
                           className={r.error ? "text-destructive" : ""}
                         >
-                          {r.error || label(r.action)}
+                          {r.error
+                            ? t("workPipelines.invalidRow")
+                            : label(r.action)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -349,16 +326,14 @@ export function WorkPipelineExcel({
               </div>
               {preview.committed ? (
                 <p role="status" className="text-green-700">
-                  {tr ? "İçe aktarma tamamlandı." : "Import completed."}
+                  {t("workPipelines.importCompleted")}
                 </p>
               ) : (
                 <Button
                   disabled={busy || Boolean(preview.counts.error)}
                   onClick={() => void commit()}
                 >
-                  {tr
-                    ? "Önizlenen kayıtları içe aktar"
-                    : "Import previewed records"}
+                  {t("workPipelines.importPreviewedRecords")}
                 </Button>
               )}
             </>

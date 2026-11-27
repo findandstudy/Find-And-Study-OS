@@ -16,8 +16,8 @@ type Item<T> = {
 };
 export function WorkPipelineDashboardWidget() {
   const { user } = useAuth();
-  const { lang } = useI18n();
-  const tr = lang === "tr";
+  const { lang, t, isRTL } = useI18n();
+
   const feature = useQuery({
     queryKey: ["work-pipeline-feature", user?.id],
     queryFn: () => request<{ enabled: boolean }>("/feature"),
@@ -42,28 +42,22 @@ export function WorkPipelineDashboardWidget() {
     <Card className="p-5 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-display font-bold text-lg">
-          {tr
-            ? "Pipeline takipleri ve notları"
-            : "Pipeline follow-ups and notes"}
+          {t("workPipelines.pipelineFollowupsAndNotes")}
         </h2>
         <Link
           href="/staff/pipelines"
           className="text-sm text-primary hover:underline"
         >
-          {tr ? "Pipeline’ları aç" : "Open pipelines"}
+          {t("workPipelines.openPipelines")}
         </Link>
       </div>
       {q.isPending ? (
-        <p role="status">{tr ? "Yükleniyor…" : "Loading…"}</p>
+        <p role="status">{t("workPipelines.loading")}</p>
       ) : q.isError ? (
         <div role="alert">
-          <p>
-            {tr
-              ? "Pipeline etkinliği yüklenemedi."
-              : "Pipeline activity could not be loaded."}
-          </p>
+          <p>{t("workPipelines.pipelineActivityCouldNotBe")}</p>
           <Button variant="outline" size="sm" onClick={() => void q.refetch()}>
-            {tr ? "Yeniden dene" : "Retry"}
+            {t("workPipelines.retry")}
           </Button>
         </div>
       ) : (
@@ -71,18 +65,14 @@ export function WorkPipelineDashboardWidget() {
           <div className="space-y-2">
             <h3 className="flex items-center gap-2 font-semibold text-sm">
               <CalendarClock className="w-4 h-4" />
-              {tr
-                ? "Yaklaşan ve geciken takipler"
-                : "Upcoming and overdue follow-ups"}
+              {t("workPipelines.upcomingAndOverdueFollowups")}
             </h3>
             <p className="text-xs text-muted-foreground">
-              {tr
-                ? "Size atanan veya oluşturduğunuz · Önümüzdeki 7 gün ve gecikenler"
-                : "Assigned to you or created by you · Next 7 days and overdue"}
+              {t("workPipelines.assignedToYouOrCreated")}
             </p>
             {!q.data.followUps.length && (
               <p className="text-sm text-muted-foreground">
-                {tr ? "Planlanmış takip yok." : "No scheduled follow-ups."}
+                {t("workPipelines.noScheduledFollowups")}
               </p>
             )}
             <div className="max-h-64 overflow-y-auto space-y-2">
@@ -106,11 +96,11 @@ export function WorkPipelineDashboardWidget() {
           <div className="space-y-2">
             <h3 className="flex items-center gap-2 font-semibold text-sm">
               <MessageSquare className="w-4 h-4" />
-              {tr ? "Son notlar" : "Recent notes"}
+              {t("workPipelines.recentNotes")}
             </h3>
             {!q.data.notes.length && (
               <p className="text-sm text-muted-foreground">
-                {tr ? "Henüz not yok." : "No notes yet."}
+                {t("workPipelines.noNotesYet")}
               </p>
             )}
             <div className="max-h-64 overflow-y-auto space-y-2">

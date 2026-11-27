@@ -1,3 +1,5 @@
+import { useI18n } from "@/hooks/use-i18n";
+import { getLocale } from "@/lib/i18n";
 import * as React from "react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDown, Search, X } from "lucide-react";
@@ -40,6 +42,14 @@ interface PhoneInputProps {
 }
 
 export function PhoneInput({ id, name, disabled, value, onChange, className }: PhoneInputProps) {
+  const { lang, t, isRTL } = useI18n();
+  const localizedNames = useMemo(() => {
+    try { return new Intl.DisplayNames([getLocale(lang)], { type: "region" }); }
+    catch { return null; }
+  }, [lang]);
+  const displayCountryName = React.useCallback((iso: string, fallback: string) => {
+    try { return localizedNames?.of(iso) || fallback; } catch { return fallback; }
+  }, [localizedNames]);
   const parsed = useMemo(() => parsePhone(value), [value]);
   const [dialCode, setDialCode] = useState(parsed.dialCode);
   const [number, setNumber] = useState(parsed.number);
@@ -88,23 +98,30 @@ export function PhoneInput({ id, name, disabled, value, onChange, className }: P
     return COUNTRY_CODES.find(c => c.dial === dialCode) ?? COUNTRY_CODES[0];
   }, [dialCode, catalogAvailable, baseCatalog]);
 
-  // Server-side (AJAX) debounced search. When the catalog is available we render
-  // its (possibly empty) search results honestly; we only fall back to the
-  // hardcoded list when the catalog itself is empty/unreachable.
+  // Keep server search, and also match the localized names of the same active
+  // catalog rows. A translated country name must remain searchable. Never add
+  // an ITU-only country while the catalog is available.
   const { data: catalog = [] } = useDialCodeCountries(search);
   const filtered = useMemo(() => {
     if (catalogAvailable) {
-      return catalog.map(c => ({ code: c.code, dial: c.dialCode, name: c.name }));
+      const q = search.trim().toLocaleLowerCase(lang);
+      const localMatches = q ? baseCatalog.filter(c =>
+        displayCountryName(c.code, c.name).toLocaleLowerCase(lang).includes(q)
+      ) : [];
+      return [...new Map([...catalog, ...localMatches].map(c =>
+        [c.code, { code: c.code, dial: c.dialCode, name: c.name }]
+      )).values()];
     }
     const q = search.trim().toLowerCase();
     if (!q) return COUNTRY_CODES;
     const cleanQ = q.replace(/^\+/, "");
     return COUNTRY_CODES.filter(c =>
       c.name.toLowerCase().includes(q) ||
+      displayCountryName(c.code, c.name).toLocaleLowerCase(lang).includes(q) ||
       c.dial.replace("+", "").startsWith(cleanQ) ||
       c.code.toLowerCase().includes(q)
     );
-  }, [catalogAvailable, catalog, search]);
+  }, [catalogAvailable, catalog, search, baseCatalog, displayCountryName, lang]);
 
   function handleDialChange(dial: string) {
     setDialCode(dial);
@@ -119,10 +136,11 @@ export function PhoneInput({ id, name, disabled, value, onChange, className }: P
   }
 
   return (
-    <div ref={containerRef} className={cn("relative flex", className)}>
+    <div ref={containerRef} dir="ltr" className={cn("relative flex", className)}>
       <button
         type="button"
         disabled={disabled}
+        aria-label={t("phone.selectCountry")}
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 px-3 h-9 rounded-l-xl border border-r-0 border-input bg-secondary/40 hover:bg-secondary/60 transition-colors text-sm shrink-0"
       >
@@ -144,26 +162,27 @@ export function PhoneInput({ id, name, disabled, value, onChange, className }: P
       />
 
       {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 w-[240px] rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-50 top-full mt-1 left-0 w-[240px] rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95" dir={isRTL ? "rtl" : "ltr"}>
           <div className="flex items-center border-b px-2 py-1.5">
-            <Search className="h-3.5 w-3.5 text-muted-foreground mr-1.5 shrink-0" />
+            <Search className="h-3.5 w-3.5 text-muted-foreground me-1.5 shrink-0" />
             <input
               ref={searchRef}
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search country or code…"
+              placeholder={t("phone.searchCountry")}
+              aria-label={t("phone.searchCountry")}
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
             {search && (
-              <button type="button" onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground">
+              <button type="button" onClick={() => setSearch("")} aria-label={t("phone.clearSearch")} className="text-muted-foreground hover:text-foreground">
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
           <div className="max-h-[260px] overflow-y-auto p-1">
             {filtered.length === 0 && (
-              <div className="py-4 text-center text-sm text-muted-foreground">No results</div>
+              <div className="py-4 text-center text-sm text-muted-foreground">{t("common.noResults")}</div>
             )}
             {filtered.map(c => (
               <button
@@ -176,7 +195,7 @@ export function PhoneInput({ id, name, disabled, value, onChange, className }: P
                 )}
               >
                 <CountryFlag code={c.code} size="sm" />
-                <span className="flex-1 text-left truncate">{c.name}</span>
+                <span className="flex-1 text-start truncate">{displayCountryName(c.code, c.name)}</span>
                 <span className="text-muted-foreground font-mono text-xs">{c.dial}</span>
               </button>
             ))}

@@ -1,3 +1,4 @@
+import { workPipelineError } from "@/lib/workPipelineI18n";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
@@ -37,8 +38,8 @@ export function WorkPipelineInboxSidebar({
   state: WorkConversationState;
   onUpdated: () => void;
 }) {
-  const { lang } = useI18n();
-  const tr = lang === "tr";
+  const { lang, t, isRTL } = useI18n();
+
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const update = async (
@@ -53,7 +54,7 @@ export function WorkPipelineInboxSidebar({
         patch,
       });
     } catch (e: any) {
-      setError(e.message || (tr ? "Kaydedilemedi" : "Could not save"));
+      setError(workPipelineError(e, t));
     } finally {
       setBusy(false);
       onUpdated();
@@ -61,8 +62,9 @@ export function WorkPipelineInboxSidebar({
   };
   return (
     <div
+      dir={isRTL ? "rtl" : "ltr"}
       className="overflow-y-auto p-3 space-y-4"
-      aria-label={tr ? "Pipeline bilgileri" : "Pipeline information"}
+      aria-label={t("workPipelines.pipelineInformation")}
     >
       {state.items.map((item) => (
         <section key={item.card.id} className="space-y-3">
@@ -77,7 +79,7 @@ export function WorkPipelineInboxSidebar({
           </Link>
           <div className="space-y-1 border-t pt-3">
             <label className="text-[11px] text-muted-foreground uppercase">
-              {tr ? "Pipeline · Aşama" : "Pipeline · Stage"}
+              {t("workPipelines.pipelineStage")}
             </label>
             <Select
               value={item.card.stageId}
@@ -85,7 +87,7 @@ export function WorkPipelineInboxSidebar({
               onValueChange={(stageId) => void update(item, { stageId })}
             >
               <SelectTrigger
-                aria-label={tr ? "Pipeline aşaması" : "Pipeline stage"}
+                aria-label={t("workPipelines.pipelineStageText")}
                 className="h-8 text-xs"
               >
                 <SelectValue />
@@ -101,7 +103,7 @@ export function WorkPipelineInboxSidebar({
           </div>
           <div className="space-y-1">
             <label className="text-[11px] text-muted-foreground uppercase">
-              {tr ? "Sorumlu" : "Assignee"}
+              {t("workPipelines.assignee")}
             </label>
             <Select
               value={String(item.card.assigneeId ?? "none")}
@@ -113,15 +115,13 @@ export function WorkPipelineInboxSidebar({
               }
             >
               <SelectTrigger
-                aria-label={tr ? "Pipeline sorumlusu" : "Pipeline assignee"}
+                aria-label={t("workPipelines.pipelineAssignee")}
                 className="h-8 text-xs"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">
-                  {tr ? "Atanmamış" : "Unassigned"}
-                </SelectItem>
+                <SelectItem value="none">{t("workPipelines.none")}</SelectItem>
                 {item.people.map((p) => (
                   <SelectItem key={p.id} value={String(p.id)}>
                     {p.name}

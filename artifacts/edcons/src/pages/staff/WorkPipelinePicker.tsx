@@ -1,3 +1,4 @@
+import { useI18n } from "@/hooks/use-i18n";
 import { useEffect, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Plus, Search, Star } from "lucide-react";
@@ -30,7 +31,7 @@ export function WorkPipelinePicker({
   choose: (id: string) => void;
   create?: () => void;
 }) {
-  const tr = lang === "tr";
+  const { t, isRTL } = useI18n();
   const storageKey = pipelineFavoritesKey(userId);
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
     try {
@@ -94,7 +95,10 @@ export function WorkPipelinePicker({
   });
   const rows = all.data?.pages.flatMap((p) => p.items) ?? [];
   const pins = favoriteIds.flatMap(
-    (id) => favorites.data?.items.find((r) => r.document.id === id) ?? rows.find(r=>r.document.id===id) ?? (current?.id===id ? {document:current,revision:0} : []),
+    (id) =>
+      favorites.data?.items.find((r) => r.document.id === id) ??
+      rows.find((r) => r.document.id === id) ??
+      (current?.id === id ? { document: current, revision: 0 } : []),
   );
   const pick = (id: string) => {
     choose(id);
@@ -102,7 +106,7 @@ export function WorkPipelinePicker({
     setSearch("");
   };
   const starLabel = (name: string, pinned: boolean) =>
-    `${name}: ${tr ? (pinned ? "Favorilerden çıkar" : "Favoriye ekle") : pinned ? "Remove from favorites" : "Add to favorites"}`;
+    `${name}: ${pinned ? t("workPipelines.removeFavorite") : t("workPipelines.addFavorite")}`;
   return (
     <div className="flex flex-1 min-w-0 items-center gap-2 flex-wrap">
       <Popover
@@ -116,16 +120,17 @@ export function WorkPipelinePicker({
           <Button
             variant="outline"
             className="rounded-full gap-2 min-w-0 max-w-full sm:max-w-80"
-            aria-label={tr ? "Pipeline seç" : "Choose pipeline"}
+            aria-label={t("workPipelines.choosePipeline")}
           >
             <span className="truncate">
-              {current?.name || (tr ? "Pipeline seç" : "Choose pipeline")}
+              {current?.name || t("workPipelines.choosePipeline")}
             </span>
             <ChevronsUpDown className="w-4 h-4 shrink-0 text-muted-foreground" />
           </Button>
         </PopoverTrigger>
         <PopoverContent
           align="start"
+          dir={isRTL ? "rtl" : "ltr"}
           className="w-96 max-w-[calc(100vw-2rem)] p-2"
         >
           <div className="relative mb-2">
@@ -135,8 +140,8 @@ export function WorkPipelinePicker({
               maxLength={120}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              aria-label={tr ? "Pipeline ara" : "Search pipelines"}
-              placeholder={tr ? "Pipeline ara…" : "Search pipelines…"}
+              aria-label={t("workPipelines.searchPipelines")}
+              placeholder={t("workPipelines.searchPipelinesText")}
               className="ps-9"
             />
           </div>
@@ -146,26 +151,24 @@ export function WorkPipelinePicker({
           >
             {all.isPending ? (
               <p role="status" className="p-3 text-sm text-muted-foreground">
-                {tr ? "Yükleniyor…" : "Loading…"}
+                {t("workPipelines.loading")}
               </p>
             ) : all.isError ? (
               <div role="alert" className="p-3">
                 <p className="text-sm">
-                  {tr
-                    ? "Pipeline’lar yüklenemedi."
-                    : "Pipelines could not be loaded."}
+                  {t("workPipelines.pipelinesCouldNotBeLoaded")}
                 </p>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => void all.refetch()}
                 >
-                  {tr ? "Yeniden dene" : "Retry"}
+                  {t("workPipelines.retry")}
                 </Button>
               </div>
             ) : !rows.length ? (
               <p className="p-3 text-sm text-muted-foreground">
-                {tr ? "Pipeline bulunamadı." : "No pipelines found."}
+                {t("workPipelines.noPipelinesFound")}
               </p>
             ) : (
               rows.map(({ document: b }) => {
@@ -187,7 +190,7 @@ export function WorkPipelinePicker({
                       <span className="truncate">{b.name}</span>
                       {b.archived && (
                         <span className="text-xs text-muted-foreground">
-                          {tr ? "Arşiv" : "Archived"}
+                          {t("campaigns.tabs.archived")}
                         </span>
                       )}
                     </button>
@@ -215,7 +218,7 @@ export function WorkPipelinePicker({
                 disabled={all.isFetchingNextPage}
                 onClick={() => void all.fetchNextPage()}
               >
-                {tr ? "Daha fazla göster" : "Show more"}
+                {t("workPipelines.showMore")}
               </Button>
             )}
           </div>
@@ -229,7 +232,7 @@ export function WorkPipelinePicker({
               }}
             >
               <Plus className="w-4 h-4 me-2" />
-              {tr ? "Yeni pipeline" : "New pipeline"}
+              {t("workPipelines.create")}
             </Button>
           )}
         </PopoverContent>
@@ -252,7 +255,7 @@ export function WorkPipelinePicker({
       )}
       {pins.length > 0 && (
         <nav
-          aria-label={tr ? "Favori pipeline’lar" : "Favorite pipelines"}
+          aria-label={t("workPipelines.favoritePipelines")}
           className="flex items-center gap-2 overflow-x-auto min-w-0 flex-1 basis-full sm:basis-auto py-1"
         >
           {pins.map(({ document: b }) => (
@@ -277,7 +280,7 @@ export function WorkPipelinePicker({
           className="text-xs text-destructive"
           onClick={() => void favorites.refetch()}
         >
-          {tr ? "Favorileri yeniden yükle" : "Retry favorites"}
+          {t("workPipelines.retryFavorites")}
         </button>
       )}
     </div>

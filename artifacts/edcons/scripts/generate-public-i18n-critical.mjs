@@ -8,7 +8,7 @@ const outputDir = path.join(root, "dist", "public", "i18n-critical");
 const namespaces = [
   "a11y", "nav", "footer", "cookie", "hero", "stats", "features",
   "countries", "countryDetail", "catalogDetail", "programs",
-  "courseFinderPage", "studentJourney", "common", "seo", "apply", "contact",
+  "courseFinderPage", "studentJourney", "common", "seo", "apply", "contact", "phone",
 ];
 const publicCatalogDetailKeys = [
   "advancedFee",

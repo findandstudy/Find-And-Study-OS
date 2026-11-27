@@ -9,7 +9,8 @@ import {
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useAuth } from "@/hooks/use-auth";
-import { workPipelinesEn, workPipelinesTr } from "./workPipelinesCopy";
+import { workPipelineCopy } from "./workPipelinesCopy";
+import { workPipelineError } from "@/lib/workPipelineI18n";
 export type Stage = {
   id: string;
   name: string;
@@ -102,9 +103,9 @@ const newStage = (name: string): Stage => ({
   result: "open",
 });
 export function useWorkPipelines() {
-  const { lang } = useI18n(),
+  const { lang, t, isRTL } = useI18n(),
     { user } = useAuth();
-  const l = lang === "tr" ? workPipelinesTr : workPipelinesEn;
+  const l = workPipelineCopy(t);
   const qc = useQueryClient();
   const [route] = useLocation();
   const [urlSearch, setUrlSearch] = useState(location.search);
@@ -227,7 +228,7 @@ export function useWorkPipelines() {
     try {
       await fn();
     } catch (e: any) {
-      setError(e.message || l.error);
+      setError(workPipelineError(e, t));
     } finally {
       setBusy(false);
     }
@@ -241,10 +242,10 @@ export function useWorkPipelines() {
         name: "",
         description: "",
         stages: [
-          newStage(lang === "tr" ? "Yeni" : "New"),
-          newStage(lang === "tr" ? "İşlemde" : "In progress"),
+          newStage(t("leadDetailPage.statusNew")),
+          newStage(t("tasks.col.in_progress")),
           {
-            ...newStage(lang === "tr" ? "Tamamlandı" : "Completed"),
+            ...newStage(t("followUps.completed")),
             color: "#059669",
             result: "won",
           },
@@ -340,7 +341,7 @@ export function useWorkPipelines() {
       await qc.invalidateQueries({ queryKey: ["notification-section-counts"] });
       return true;
     } catch (e: any) {
-      setError(e.message || l.error);
+      setError(workPipelineError(e, t));
       return false;
     } finally {
       setBusy(false);
@@ -363,7 +364,7 @@ export function useWorkPipelines() {
         if (!disposed) setCardDraft(r);
       })
       .catch((e) => {
-        if (!disposed) setError(e.message || l.error);
+        if (!disposed) setError(workPipelineError(e, t));
       });
     return () => {
       disposed = true;
@@ -381,6 +382,8 @@ export function useWorkPipelines() {
 
   return {
     lang,
+    t,
+    isRTL,
     user,
     l,
     selected,

@@ -676,7 +676,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     lang,
   );
   if(workPipelinesFeature?.enabled && groups[0]) {
-    groups[0].items.push({title:"Pipelines",icon:ListChecks,url:"/staff/pipelines"});
+    groups[0].items.push({title:t("workPipelines.title"),icon:ListChecks,url:"/staff/pipelines"});
   }
   const allItems = groups.flatMap(g => g.items);
 

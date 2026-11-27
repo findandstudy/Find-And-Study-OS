@@ -16,6 +16,7 @@
     "test:page-builder": "tsx --test ./scripts/test-page-builder-templates.ts",
     "test:page-builder-browser": "node ./scripts/test-page-builder-browser.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
+    "test:work-pipeline-i18n": "tsx --tsconfig tsconfig.json scripts/test-work-pipeline-i18n.ts && node scripts/test-work-pipeline-render.mjs",
     "test:agent-account-layout": "tsx --test ./scripts/test-agent-portal-account-layout.ts",
     "test:language-flags": "tsx --test ./scripts/test-language-country-codes.ts",
     "test:public-detail-templates": "tsx --test ./scripts/test-public-detail-templates.ts ./scripts/test-catalog-display-localization.ts",
