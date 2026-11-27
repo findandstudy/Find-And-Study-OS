@@ -1748,6 +1748,8 @@
     ,"credentialsNote": "Kimlik bilgileri şifrelenir ve bu acenteye özel tutulur."
     ,"enabled": "Etkin"
     ,"saveIntegration": "Entegrasyonu kaydet"
+    ,"pendingStatus": "İnceleniyor"
+    ,"suspendedStatus": "Askıya alındı"
     ,"agencyEmail": "Acente E-postası"
     ,"agencyWhatsApp": "Acente WhatsApp"
   },

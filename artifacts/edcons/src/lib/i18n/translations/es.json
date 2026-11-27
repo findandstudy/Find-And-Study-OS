@@ -1807,6 +1807,8 @@
     ,"credentialsNote": "Las credenciales están cifradas y aisladas para esta agencia."
     ,"enabled": "Activado"
     ,"saveIntegration": "Guardar integración"
+    ,"pendingStatus": "Pendiente de revisión"
+    ,"suspendedStatus": "Suspendido"
     ,"agencyEmail": "Correo de la agencia"
     ,"agencyWhatsApp": "WhatsApp de la agencia"
   },

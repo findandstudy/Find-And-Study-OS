@@ -1807,6 +1807,8 @@
     ,"credentialsNote": "اطلاعات ورود رمزگذاری شده و برای این آژانس جدا نگه داشته می‌شود."
     ,"enabled": "فعال"
     ,"saveIntegration": "ذخیره یکپارچه‌سازی"
+    ,"pendingStatus": "در انتظار بررسی"
+    ,"suspendedStatus": "معلق"
     ,"agencyEmail": "ایمیل آژانس"
     ,"agencyWhatsApp": "واتساپ آژانس"
   },

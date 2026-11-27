@@ -595,6 +595,15 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
     );
   }
 
+  const normalizedStatus = String(agentProfile.status || "").toLowerCase();
+  const statusLabel = normalizedStatus === "active"
+    ? t("settingsPage.active")
+    : normalizedStatus === "pending" || normalizedStatus === "under_review"
+      ? t("agentAccount.pendingStatus")
+      : normalizedStatus === "suspended"
+        ? t("agentAccount.suspendedStatus")
+        : agentProfile.status;
+
   return (
     <div className="space-y-6">
       <div className="grid lg:grid-cols-[1fr_280px] gap-6">
@@ -665,7 +674,7 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
           {[
             { label: t("agentAccount.country"), icon: MapPin, value: agentProfile.country, color: "bg-blue-500/10 text-blue-600" },
             { label: t("agentAccount.commissionRate"), icon: TrendingUp, value: agentProfile.commissionRate ? `${agentProfile.commissionRate}%` : null, color: "bg-green-500/10 text-green-600" },
-            { label: t("agentAccount.status"), icon: Check, value: agentProfile.status, color: "bg-emerald-500/10 text-emerald-600" },
+            { label: t("agentAccount.status"), icon: Check, value: statusLabel, color: "bg-emerald-500/10 text-emerald-600" },
           ].map((f, i) => (
             <Card key={i} className="border shadow-sm p-4">
               <div className="flex items-center gap-3">

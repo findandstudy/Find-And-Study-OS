@@ -1807,6 +1807,8 @@
     ,"credentialsNote": "Credentials are encrypted and isolated to this agency."
     ,"enabled": "Enabled"
     ,"saveIntegration": "Save integration"
+    ,"pendingStatus": "Pending review"
+    ,"suspendedStatus": "Suspended"
     ,"agencyEmail": "Agency Email"
     ,"agencyWhatsApp": "Agency WhatsApp"
   },

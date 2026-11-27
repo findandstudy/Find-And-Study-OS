@@ -1807,6 +1807,8 @@
     ,"credentialsNote": "Учётные данные зашифрованы и изолированы для этого агентства."
     ,"enabled": "Включено"
     ,"saveIntegration": "Сохранить интеграцию"
+    ,"pendingStatus": "На проверке"
+    ,"suspendedStatus": "Приостановлено"
     ,"agencyEmail": "Почта агентства"
     ,"agencyWhatsApp": "WhatsApp агентства"
   },

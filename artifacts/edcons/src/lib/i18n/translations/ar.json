@@ -1807,6 +1807,8 @@
     ,"credentialsNote": "بيانات الاعتماد مشفرة ومعزولة لهذه الوكالة."
     ,"enabled": "مفعّل"
     ,"saveIntegration": "حفظ التكامل"
+    ,"pendingStatus": "قيد المراجعة"
+    ,"suspendedStatus": "معلّق"
     ,"agencyEmail": "بريد الوكالة"
     ,"agencyWhatsApp": "واتساب الوكالة"
   },

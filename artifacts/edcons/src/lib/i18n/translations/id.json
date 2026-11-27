@@ -1807,6 +1807,8 @@
     ,"credentialsNote": "Kredensial dienkripsi dan diisolasi untuk agensi ini."
     ,"enabled": "Aktif"
     ,"saveIntegration": "Simpan integrasi"
+    ,"pendingStatus": "Menunggu peninjauan"
+    ,"suspendedStatus": "Ditangguhkan"
     ,"agencyEmail": "Email Agensi"
     ,"agencyWhatsApp": "WhatsApp Agensi"
   },

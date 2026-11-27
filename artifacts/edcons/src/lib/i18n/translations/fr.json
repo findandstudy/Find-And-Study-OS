@@ -1807,6 +1807,8 @@
     ,"credentialsNote": "Les identifiants sont chiffrés et isolés pour cette agence."
     ,"enabled": "Activé"
     ,"saveIntegration": "Enregistrer l'intégration"
+    ,"pendingStatus": "En attente de vérification"
+    ,"suspendedStatus": "Suspendu"
     ,"agencyEmail": "E-mail de l'agence"
     ,"agencyWhatsApp": "WhatsApp de l'agence"
   },
