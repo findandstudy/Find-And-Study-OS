@@ -5,3 +5,8 @@
 .public-page-header nav a{display:inline!important;color:#fff!important;background:transparent!important;box-shadow:none!important;padding:0!important;border:0!important;border-radius:0!important;text-decoration:none;font-weight:650!important;line-height:1.6!important;transform:none!important}.public-page-header nav a:hover{text-decoration:underline!important}
 .cms-editorial-block:has(>.about-reusable-section .public-page-header),.cms-editorial-block:has(.public-page-header){padding:0!important;margin:0!important;max-width:none!important}
 @media(max-width:640px){.public-page-header{min-height:300px;padding:65px 20px!important}.public-page-header nav{font-size:14px}}
+
+/* The banner owns its image/overlay; inherited CMS hero layers must not cover its text. */
+.cms-editorial-block:has(.public-page-header)::before,.cms-editorial-block:has(.public-page-header)::after{display:none!important}
+.cms-editorial-block .public-page-header nav a{height:auto!important;min-height:0!important;line-height:1.5!important}
+.cms-editorial-block .public-page-header h1,.cms-editorial-block .public-page-header nav,.cms-editorial-block .public-page-header nav span,.cms-editorial-block .public-page-header nav a{color:#fff!important}
