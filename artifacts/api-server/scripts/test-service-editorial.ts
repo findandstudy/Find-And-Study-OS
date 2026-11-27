@@ -15,6 +15,7 @@ test('every service creates independent bilingual editable drafts with SEO and c
     assert.ok(draft.page.metaDescription);
     assert.equal(draft.blocks.length, 2);
     assert.deepEqual(inspectWebsitePageBlockLinks(draft.blocks).blockers, []);
+    assert.deepEqual(inspectWebsitePageBlockLinks(draft.blocks).warnings, []);
     assert.deepEqual(inspectWebsitePageTranslations(draft.blocks, draft.page.translationsJson).blockers, []);
     assert.ok(draft.page.translationsJson?.tr.blocks.length);
     draft.blocks[1].content.title = 'Changed';

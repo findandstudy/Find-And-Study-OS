@@ -53,7 +53,7 @@ export function inspectWebsitePageBlockLinks(blocks: Array<{ content: unknown }>
         }
         if (!safeRelative && protocol !== "https:" && protocol !== "http:") blockers.push({ code: "UNSAFE_OR_INVALID_URL", message: `${childPath} contains an unsafe or invalid URL.` });
         else if (protocol === "http:") warnings.push({ code: "INSECURE_HTTP_URL", message: `${childPath} uses HTTP instead of HTTPS.` });
-        if (/(image|photo)(url)?$/i.test(key) && ![record.alt, record.name, record.title].some(label => typeof label === "string" && label.trim())) warnings.push({ code: "MEDIA_LABEL_MISSING", message: `${childPath} has no accessible name or alternative text.` });
+        if (/(image|photo)(url)?$/i.test(key) && ![record.alt, record.altText, record.name, record.title].some(label => typeof label === "string" && label.trim())) warnings.push({ code: "MEDIA_LABEL_MISSING", message: `${childPath} has no accessible name or alternative text.` });
       }
       visit(child, childPath);
     }
