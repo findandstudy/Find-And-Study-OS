@@ -473,10 +473,12 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   }, [panelDensity]);
 
   const { data: agentProfile } = useQuery({
-    queryKey: ["agent-me"],
+    queryKey: ["agent-me", user?.id],
     enabled: isAgentRole,
     queryFn: () => customFetch<any>("/api/agents/me"),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: institutionContext } = useQuery<{ capabilities?: string[] }>({

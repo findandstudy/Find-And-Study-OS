@@ -13,9 +13,11 @@ export function useAuth(requireAuth = false, allowedRoles?: readonly string[]) {
       // Agent staff permissions are edited by their managing agent from a
       // different session. Poll /auth/me every 5s for agent_staff so a
       // permission change (sidebar links + route guards) reflects without a
-      // manual page refresh. Other roles don't poll. Refetch on focus too.
+      // manual page refresh. Agents also refresh after commercial activation or
+      // entitlement edits from another session. Refetch on focus too.
       refetchInterval: (query: any) =>
-        (query?.state?.data as any)?.role === "agent_staff" ? 5_000 : false,
+        (query?.state?.data as any)?.role === "agent_staff" ? 5_000
+          : ["agent", "sub_agent"].includes((query?.state?.data as any)?.role) ? 30_000 : false,
       refetchOnWindowFocus: true,
       ...(initialUser !== undefined
         ? {

@@ -1,3 +1,4 @@
+import { syncAgentAcademyPermission } from "../lib/agentAcademyAccess";
 import { Router, raw as rawBody, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
 import crypto from "crypto";
@@ -1500,6 +1501,7 @@ router.post("/agent-applications/:id/approve", requireAuth, requireRole(...MANAG
         canManageStaff: true,
         updatedAt: now,
       }).where(eq(agentsTable.id, agent.id)).returning();
+      await syncAgentAcademyPermission(tx,activatedAgent);
       agent = activatedAgent;
       await tx.insert(agentBranchesTable).values({ agentId: agent.id, branchId }).onConflictDoNothing();
       await tx.update(signingSessionsTable).set({ agentId: agent.id, updatedAt: now }).where(eq(signingSessionsTable.id, session.id));

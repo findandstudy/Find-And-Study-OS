@@ -1,3 +1,4 @@
+import { syncAgentAcademyPermission } from "../lib/agentAcademyAccess";
 import { Router, type IRouter, json, raw } from "express";
 import crypto from "crypto";
 import { z } from "zod";
@@ -278,12 +279,6 @@ async function resolveAcademyAccessByUserIds(userIds: number[]): Promise<Map<num
   }
 
   return accessByUserId;
-}
-
-async function syncAgentAcademyPermission(agent: typeof agentsTable.$inferSelect): Promise<void> {
-  if (!agent.userId) return;
-  const enabled = resolveAgentFeatures(agent.planTier, agent.featureOverrides).academy;
-  await setUserAcademyAccessOverride(agent.userId, enabled);
 }
 
 async function withAcademyAccess<T extends { userId: number | null }>(agents: T[]): Promise<Array<T & { academyAccess: boolean | null }>> {
@@ -1071,6 +1066,7 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
         changes: JSON.stringify({ parentAgentId: parentAgent.id, logoUploaded: Boolean(preparedLogo) }),
         ipAddress: req.ip ?? null,
       });
+      await syncAgentAcademyPermission(tx,created);
       return created;
     });
   } catch (error) {
@@ -1929,6 +1925,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
         changes: JSON.stringify({ uploadedFields: preparedProfileUploads.map((upload) => upload.field) }),
         ipAddress: req.ip ?? null,
       });
+      await syncAgentAcademyPermission(tx,created);
       return created;
     });
   } catch (error) {
@@ -1938,7 +1935,6 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     }
     throw error;
   }
-  await syncAgentAcademyPermission(agent);
 
   // Persist agency-assigned staff (multi). Accepts either the new
   // `assignedStaff: [{userId, isPrimary}]` array or the legacy single
@@ -2207,6 +2203,10 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
             contentType: upload.contentType,
           })) throw new Error("AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED");
         }
+        // Match activation's user-before-agent lock order.
+        if(oldAgent.userId) await tx.execute(sql`SELECT id FROM users WHERE id=${oldAgent.userId} FOR UPDATE`);
+        const [beforeSave] = await tx.select().from(agentsTable).where(eq(agentsTable.id,id)).for("update");
+        if(!beforeSave) throw new Error("AGENT_NOT_FOUND");
         const [saved] = await tx.update(agentsTable).set(updates).where(eq(agentsTable.id, id)).returning();
         if (!saved) throw new Error("AGENT_NOT_FOUND");
         if (Object.keys(fieldChanges).length > 0) {
@@ -2219,6 +2219,7 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
             ipAddress: req.ip ?? null,
           });
         }
+        await syncAgentAcademyPermission(tx,saved,resolveAgentFeatures(beforeSave.planTier,beforeSave.featureOverrides).academy !== resolveAgentFeatures(saved.planTier,saved.featureOverrides).academy ? "replace" : "initialize");
         return saved;
       });
     } catch (error) {
@@ -2228,9 +2229,6 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
       }
       throw error;
     }
-  }
-  if (updates.planTier !== undefined || updates.featureOverrides !== undefined) {
-    await syncAgentAcademyPermission(agent);
   }
   if (hasStaffUpdate) {
     const staff = parseStaffInput(
