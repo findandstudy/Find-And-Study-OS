@@ -4733,7 +4733,8 @@
     "roleStudent": "Sinh viên",
     "roleAgent": "Đại lý",
     "roleSubAgent": "Tác nhân phụ",
-    "roleAgentStaff": "Nhân viên đại lý"
+    "roleAgentStaff": "Nhân viên đại lý",
+    "roleSubAgentStaff": "Nhân viên đại lý phụ"
   },
   "leadAssignment": {
     "title": "Tự động chỉ định khách hàng tiềm năng",

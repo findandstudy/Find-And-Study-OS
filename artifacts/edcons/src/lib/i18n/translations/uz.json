@@ -4733,7 +4733,8 @@
     "roleStudent": "Talaba",
     "roleAgent": "Hamkor agentlik",
     "roleSubAgent": "Quyi hamkor agentlik",
-    "roleAgentStaff": "Hamkor agentlik xodimi"
+    "roleAgentStaff": "Hamkor agentlik xodimi",
+    "roleSubAgentStaff": "Quyi hamkor agentlik xodimi"
   },
   "leadAssignment": {
     "title": "Potensial mijozlarni avtomatik taqsimlash",

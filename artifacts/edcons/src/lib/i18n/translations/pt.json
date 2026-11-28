@@ -4733,7 +4733,8 @@
     "roleStudent": "Estudante",
     "roleAgent": "Agente",
     "roleSubAgent": "Subagente",
-    "roleAgentStaff": "Agente Equipe"
+    "roleAgentStaff": "Agente Equipe",
+    "roleSubAgentStaff": "Equipe do subagente"
   },
   "leadAssignment": {
     "title": "Atribuição automática de leads",

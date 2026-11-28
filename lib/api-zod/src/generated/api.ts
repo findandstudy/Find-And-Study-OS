@@ -74,7 +74,9 @@ export const ListUsersResponse = zod.object({
   "branchId": zod.number().int().nullish(),
   "branchName": zod.string().nullish(),
   "createdAt": zod.date()
-})),
+}).and(zod.object({
+  "isSubAgentStaff": zod.boolean().optional().describe('Present in manager directory results. True for agent staff attached to a sub-agent.')
+}))),
   "meta": zod.object({
   "total": zod.number().int(),
   "page": zod.number().int(),

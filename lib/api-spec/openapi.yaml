@@ -5556,13 +5556,22 @@ components:
         branchId:
           type: ["integer", "null"]
 
+    UserDirectoryEntry:
+      allOf:
+        - $ref: "#/components/schemas/UserProfile"
+        - type: object
+          properties:
+            isSubAgentStaff:
+              type: boolean
+              description: Present in manager directory results. True for agent staff attached to a sub-agent.
+
     UsersListResponse:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: "#/components/schemas/UserProfile"
+            $ref: "#/components/schemas/UserDirectoryEntry"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
       required:

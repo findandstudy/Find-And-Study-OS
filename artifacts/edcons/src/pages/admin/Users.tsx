@@ -1,7 +1,6 @@
 import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useListUsers } from "@workspace/api-client-react";
-import { customFetch } from "@workspace/api-client-react";
+import { customFetch, useListUsers, type UserDirectoryEntry } from "@workspace/api-client-react";
 import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { Card } from "@/components/ui/card";
@@ -88,6 +87,13 @@ const ROLE_LABEL_KEYS: Record<string, string> = {
   agent_staff: "usersPage.roleAgentStaff",
 };
 
+const ROLE_FILTERS = ["all", "staff", "agent", "agent_staff", "sub_agent", "sub_agent_staff", "admin", "super_admin"] as const;
+const SUB_AGENT_STAFF_LABEL = "usersPage.roleSubAgentStaff";
+
+function directoryRole(user: UserDirectoryEntry): string {
+  return user.role === "agent_staff" && user.isSubAgentStaff === true ? "sub_agent_staff" : user.role;
+}
+
 const roleColors: Record<string, string> = {
   rose: "bg-rose-500/10 text-rose-600 border-rose-200",
   red: "bg-red-500/10 text-red-600 border-red-200",
@@ -162,13 +168,13 @@ function UserSortHeader({ label, sortKey, currentSort, onSort }: {
 function UsersTab() {
   const { lang: uiLanguage } = useUiLanguage();
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState<(typeof ROLE_FILTERS)[number]>("all");
   const [sort, setSort] = useState<{ key: UserSortKey; dir: SortDir }>({ key: "user", dir: "asc" });
   const { data: usersResp, isLoading, refetch } = useListUsers(
-    { limit: 500, roles: "super_admin,admin,manager,staff,consultant,accountant,editor,agent,sub_agent,agent_staff,pending" } as any,
-    { query: { queryKey: ['admin-users'] } as any }
+    { limit: 500, roles: "super_admin,admin,manager,staff,consultant,accountant,editor,agent,sub_agent,agent_staff,pending" },
+    { query: { queryKey: ["admin-users"] } }
   );
-  const users: any[] = (usersResp as any)?.data || usersResp || [];
+  const users = usersResp?.data ?? [];
   const [roles, setRoles] = useState<RoleData[]>([]);
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
@@ -219,19 +225,19 @@ function UsersTab() {
     setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
   }
 
-  const nonStudentUsers = users.filter((u: any) => u.role !== "student");
-  const filtered = nonStudentUsers.filter((u: any) => {
-    const matchSearch = !search ||
-      (u.firstName || "").toLowerCase().includes(search.toLowerCase()) ||
-      (u.email || "").toLowerCase().includes(search.toLowerCase());
-    const matchRole = roleFilter === "all" || u.role === roleFilter;
+  const searchTerm = search.trim().toLowerCase();
+  const nonStudentUsers = users.filter((u) => u.role !== "student");
+  const filtered = nonStudentUsers.filter((u) => {
+    const fullName = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim().toLowerCase();
+    const matchSearch = !searchTerm || fullName.includes(searchTerm) || (u.email ?? "").toLowerCase().includes(searchTerm);
+    const matchRole = roleFilter === "all" || directoryRole(u) === roleFilter;
     return matchSearch && matchRole;
-  }).sort((a: any, b: any) => {
+  }).sort((a, b) => {
     const dir = sort.dir === "asc" ? 1 : -1;
     switch (sort.key) {
       case "user": { const nameA = `${a.firstName || ""} ${a.lastName || ""}`.trim(); const nameB = `${b.firstName || ""} ${b.lastName || ""}`.trim(); return dir * nameA.localeCompare(nameB); }
       case "email": return dir * ((a.email || "").localeCompare(b.email || ""));
-      case "role": return dir * ((a.role || "").localeCompare(b.role || ""));
+      case "role": return dir * directoryRole(a).localeCompare(directoryRole(b));
       case "status": return dir * (Number(b.isActive ?? true) - Number(a.isActive ?? true));
       default: return 0;
     }
@@ -453,27 +459,28 @@ function UsersTab() {
           <UserPlus className="w-4 h-4" /> {translateUi(uiLanguage, "Create User")} </Button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder={translateUi(uiLanguage, "Search by name or email...")} className="pl-10 rounded-xl" />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-0 grow basis-full lg:basis-48">
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+          <Input value={search} onChange={e => {
+            setSearch(e.target.value);
+            pg.setPage(1);
+          }} aria-label={translateUi(uiLanguage, "Search by name or email...")}
+            placeholder={translateUi(uiLanguage, "Search by name or email...")} className="ps-10 rounded-xl" />
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <button onClick={() => setRoleFilter("all")}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${roleFilter === "all" ? "bg-primary text-white shadow-sm" : "bg-secondary hover:bg-secondary/80"}`}> {translateUi(uiLanguage, "All")} </button>
-          {([
-            { value: "staff", labelKey: "usersPage.roleStaff" },
-            { value: "agent", labelKey: "usersPage.roleAgent" },
-            { value: "agent_staff", labelKey: "usersPage.roleAgentStaff" },
-            { value: "sub_agent", labelKey: "usersPage.roleSubAgent" },
-            { value: "admin", labelKey: "usersPage.roleAdmin" },
-          ] as const).map(r => (
-            <button key={r.value} onClick={() => setRoleFilter(r.value)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${roleFilter === r.value ? "bg-primary text-white shadow-sm" : "bg-secondary hover:bg-secondary/80"}`}>
-              {t(r.labelKey)}
-            </button>
-          ))}
+        <div role="group" aria-label={translateUi(uiLanguage, "Role")} className="flex min-w-0 max-w-full flex-wrap gap-2">
+          {ROLE_FILTERS.map(filter => {
+            const selected = roleFilter === filter;
+            const labelKey = filter === "sub_agent_staff" ? SUB_AGENT_STAFF_LABEL : ROLE_LABEL_KEYS[filter];
+            return (
+              <button key={filter} type="button" aria-pressed={selected} onClick={() => {
+                setRoleFilter(filter);
+                pg.setPage(1);
+              }} className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${selected ? "bg-primary text-primary-foreground shadow-sm" : "bg-secondary hover:bg-secondary/80"}`}>
+                {filter === "all" ? translateUi(uiLanguage, "All") : t(labelKey)}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -523,9 +530,11 @@ function UsersTab() {
               ) : pagedUsers.length === 0 ? (
                 <tr><td colSpan={6} className="px-6 py-16 text-center text-muted-foreground">{translateUi(uiLanguage, "No users found")}</td></tr>
               ) : pagedUsers.map(user => {
+                const listedRole = directoryRole(user);
+                const labelKey = listedRole === "sub_agent_staff" ? SUB_AGENT_STAFF_LABEL : ROLE_LABEL_KEYS[listedRole];
                 const badge = {
                   color: roleBadgeColors[user.role] || "bg-secondary text-foreground border-border",
-                  label: ROLE_LABEL_KEYS[user.role] ? t(ROLE_LABEL_KEYS[user.role]) : user.role,
+                  label: labelKey ? t(labelKey) : user.role,
                 };
                 const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || user.email?.[0] || '?'}`.toUpperCase();
                 return (

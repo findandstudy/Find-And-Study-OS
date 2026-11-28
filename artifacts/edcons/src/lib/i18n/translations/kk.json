@@ -4733,7 +4733,8 @@
     "roleStudent": "Студент",
     "roleAgent": "Серіктес агенттік",
     "roleSubAgent": "Қосалқы агенттік",
-    "roleAgentStaff": "Агенттік қызметкері"
+    "roleAgentStaff": "Агенттік қызметкері",
+    "roleSubAgentStaff": "Қосалқы агенттік қызметкері"
   },
   "leadAssignment": {
     "title": "Әлеуетті клиенттерді автоматты түрде тағайындау",

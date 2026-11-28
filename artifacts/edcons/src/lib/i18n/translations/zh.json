@@ -4222,7 +4222,8 @@
     "roleStudent": "学生",
     "roleAgent": "代理",
     "roleSubAgent": "子代理",
-    "roleAgentStaff": "代理员工"
+    "roleAgentStaff": "代理员工",
+    "roleSubAgentStaff": "子代理员工"
   },
   "leadAssignment": {
     "title": "潜在客户自动分配",

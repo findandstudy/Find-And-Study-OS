@@ -4733,7 +4733,8 @@
     "roleStudent": "Student",
     "roleAgent": "Agent",
     "roleSubAgent": "Sub Agent",
-    "roleAgentStaff": "Agent Staff"
+    "roleAgentStaff": "Agent Staff",
+    "roleSubAgentStaff": "Sub Agent Staff"
   },
   "leadAssignment": {
     "title": "Lead Auto Assignment",

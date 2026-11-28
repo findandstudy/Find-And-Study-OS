@@ -4733,7 +4733,8 @@
     "roleStudent": "Talyp",
     "roleAgent": "Hyzmatdaş agentlik",
     "roleSubAgent": "Kiçi agentlik",
-    "roleAgentStaff": "Agentligiň işgäri"
+    "roleAgentStaff": "Agentligiň işgäri",
+    "roleSubAgentStaff": "Kiçi agentligiň işgäri"
   },
   "leadAssignment": {
     "title": "Mümkin bolan müşderileri awtomatik paýlamak",

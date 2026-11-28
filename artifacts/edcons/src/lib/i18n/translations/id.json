@@ -4223,7 +4223,8 @@
     "roleStudent": "Siswa",
     "roleAgent": "Agen",
     "roleSubAgent": "Sub-Agen",
-    "roleAgentStaff": "Staf Agen"
+    "roleAgentStaff": "Staf Agen",
+    "roleSubAgentStaff": "Staf Sub-Agen"
   },
   "leadAssignment": {
     "title": "Penugasan Otomatis Lead",

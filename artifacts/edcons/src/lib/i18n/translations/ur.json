@@ -4733,7 +4733,8 @@
     "roleStudent": "طالب علم",
     "roleAgent": "داخلہ ایجنٹ",
     "roleSubAgent": "ذیلی داخلہ ایجنٹ",
-    "roleAgentStaff": "داخلہ ایجنٹ کا عملہ"
+    "roleAgentStaff": "داخلہ ایجنٹ کا عملہ",
+    "roleSubAgentStaff": "ذیلی داخلہ ایجنٹ کا عملہ"
   },
   "leadAssignment": {
     "title": "ممکنہ گاہکوں کی خودکار تفویض",

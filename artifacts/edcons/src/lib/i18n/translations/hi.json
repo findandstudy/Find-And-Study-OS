@@ -4222,7 +4222,8 @@
     "roleStudent": "छात्र",
     "roleAgent": "एजेंट",
     "roleSubAgent": "सब एजेंट",
-    "roleAgentStaff": "एजेंट स्टाफ"
+    "roleAgentStaff": "एजेंट स्टाफ",
+    "roleSubAgentStaff": "सब एजेंट का स्टाफ"
   },
   "leadAssignment": {
     "title": "लीड स्वचालित असाइनमेंट",

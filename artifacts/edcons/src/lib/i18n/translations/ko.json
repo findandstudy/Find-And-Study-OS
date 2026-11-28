@@ -4733,7 +4733,8 @@
     "roleStudent": "학생",
     "roleAgent": "에이전트",
     "roleSubAgent": "하위 에이전트",
-    "roleAgentStaff": "상담사 직원"
+    "roleAgentStaff": "상담사 직원",
+    "roleSubAgentStaff": "하위 에이전트 직원"
   },
   "leadAssignment": {
     "title": "리드 자동 할당",

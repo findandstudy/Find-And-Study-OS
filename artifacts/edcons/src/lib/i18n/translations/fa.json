@@ -4222,7 +4222,8 @@
     "roleStudent": "دانشجو",
     "roleAgent": "نماینده",
     "roleSubAgent": "زیرنماینده",
-    "roleAgentStaff": "پرسنل نمایندگی"
+    "roleAgentStaff": "پرسنل نمایندگی",
+    "roleSubAgentStaff": "پرسنل زیرنماینده"
   },
   "leadAssignment": {
     "title": "تخصیص خودکار سرنخ",

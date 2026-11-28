@@ -6,9 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PaginationMeta } from './paginationMeta';
-import type { UserProfile } from './userProfile';
+import type { UserDirectoryEntry } from './userDirectoryEntry';
 
 export interface UsersListResponse {
-  data: UserProfile[];
+  data: UserDirectoryEntry[];
   meta: PaginationMeta;
 }

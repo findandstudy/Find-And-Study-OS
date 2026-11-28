@@ -4273,7 +4273,8 @@
     "roleStudent": "طالب",
     "roleAgent": "وكيل",
     "roleSubAgent": "وكيل فرعي",
-    "roleAgentStaff": "موظف الوكيل"
+    "roleAgentStaff": "موظف الوكيل",
+    "roleSubAgentStaff": "موظف الوكيل الفرعي"
   },
   "leadAssignment": {
     "title": "التعيين التلقائي للعملاء المحتملين",

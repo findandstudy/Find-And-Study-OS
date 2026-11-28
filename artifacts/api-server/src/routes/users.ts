@@ -217,11 +217,17 @@ router.get("/users", requireAuth, requireRole(...STAFF_ROLES), async (req, res):
           avatarUrl: usersTable.avatarUrl,
           branchId: usersTable.branchId,
           branchName: branchesTable.name,
+          isSubAgentStaff: sql<boolean>`(${usersTable.role} = 'agent_staff' AND ${agentsTable.parentAgentId} IS NOT NULL)`,
           permissionOverrides: usersTable.permissionOverrides,
           createdAt: usersTable.createdAt,
         })
         .from(usersTable)
         .leftJoin(branchesTable, eq(usersTable.branchId, branchesTable.id))
+        .leftJoin(agentsTable, and(
+          eq(usersTable.role, "agent_staff"),
+          eq(usersTable.managingAgentId, agentsTable.id),
+          isNull(agentsTable.deletedAt),
+        ))
         .where(whereClause)
         .orderBy(desc(usersTable.createdAt), desc(usersTable.id))
         .limit(pageParams.limit)

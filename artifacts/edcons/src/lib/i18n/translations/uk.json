@@ -4733,7 +4733,8 @@
     "roleStudent": "Студент",
     "roleAgent": "Агент",
     "roleSubAgent": "Субагент",
-    "roleAgentStaff": "Агентський персонал"
+    "roleAgentStaff": "Агентський персонал",
+    "roleSubAgentStaff": "Персонал субагента"
   },
   "leadAssignment": {
     "title": "Автоматичне призначення потенційних клієнтів",

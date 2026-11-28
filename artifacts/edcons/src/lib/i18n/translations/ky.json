@@ -4733,7 +4733,8 @@
     "roleStudent": "Студент",
     "roleAgent": "Өнөктөш агент",
     "roleSubAgent": "Көмөкчү агент",
-    "roleAgentStaff": "Агенттиктин кызматкери"
+    "roleAgentStaff": "Агенттиктин кызматкери",
+    "roleSubAgentStaff": "Көмөкчү агенттин кызматкери"
   },
   "leadAssignment": {
     "title": "Потенциалдуу кардарларды автоматтык бөлүштүрүү",

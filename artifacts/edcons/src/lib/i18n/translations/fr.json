@@ -4273,7 +4273,8 @@
     "roleStudent": "Étudiant",
     "roleAgent": "Agence partenaire",
     "roleSubAgent": "Sous-agent",
-    "roleAgentStaff": "Personnel de l'agent"
+    "roleAgentStaff": "Personnel de l'agent",
+    "roleSubAgentStaff": "Personnel du sous-agent"
   },
   "leadAssignment": {
     "title": "Attribution Automatique des Leads",

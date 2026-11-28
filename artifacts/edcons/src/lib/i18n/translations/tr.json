@@ -4674,7 +4674,8 @@
     "roleStudent": "Öğrenci",
     "roleAgent": "Acente",
     "roleSubAgent": "Alt Acente",
-    "roleAgentStaff": "Acente Personeli"
+    "roleAgentStaff": "Acente Personeli",
+    "roleSubAgentStaff": "Alt Acente Personeli"
   },
   "leadAssignment": {
     "title": "Lead Otomatik Atama",

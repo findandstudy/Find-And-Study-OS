@@ -4733,7 +4733,8 @@
     "roleStudent": "Донишҷӯ",
     "roleAgent": "Агентии ҷалби довталабон",
     "roleSubAgent": "Зерагентӣ",
-    "roleAgentStaff": "Корманди агентӣ"
+    "roleAgentStaff": "Корманди агентӣ",
+    "roleSubAgentStaff": "Корманди зерагентӣ"
   },
   "leadAssignment": {
     "title": "Тақсимоти худкори муштариёни эҳтимолӣ",

@@ -649,8 +649,13 @@ export interface UpdateUserBody {
   branchId?: number | null;
 }
 
+export type UserDirectoryEntry = UserProfile & {
+  /** Present in manager directory results. True for agent staff attached to a sub-agent. */
+  isSubAgentStaff?: boolean;
+};
+
 export interface UsersListResponse {
-  data: UserProfile[];
+  data: UserDirectoryEntry[];
   meta: PaginationMeta;
 }
 

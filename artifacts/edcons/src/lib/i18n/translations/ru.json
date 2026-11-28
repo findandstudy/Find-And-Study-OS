@@ -4273,7 +4273,8 @@
     "roleStudent": "Студент",
     "roleAgent": "Агент",
     "roleSubAgent": "Субагент",
-    "roleAgentStaff": "Персонал агента"
+    "roleAgentStaff": "Персонал агента",
+    "roleSubAgentStaff": "Персонал субагента"
   },
   "leadAssignment": {
     "title": "Автоматическое назначение лидов",

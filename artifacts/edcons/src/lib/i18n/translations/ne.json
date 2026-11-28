@@ -4733,7 +4733,8 @@
     "roleStudent": "विद्यार्थी",
     "roleAgent": "एजेन्ट",
     "roleSubAgent": "सब एजेन्ट",
-    "roleAgentStaff": "एजेन्ट कर्मचारी"
+    "roleAgentStaff": "एजेन्ट कर्मचारी",
+    "roleSubAgentStaff": "सब एजेन्टका कर्मचारी"
   },
   "leadAssignment": {
     "title": "नेतृत्व अटो असाइनमेन्ट",

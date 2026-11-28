@@ -445,6 +445,7 @@ export * from './updateUserBody';
 export * from './upsertAdapterSpecBody';
 export * from './upsertAdapterSpecBodySpec';
 export * from './upsertAdapterSpecResponse';
+export * from './userDirectoryEntry';
 export * from './userProfile';
 export * from './usersListResponse';
 export * from './validateAdapterSpecBody';

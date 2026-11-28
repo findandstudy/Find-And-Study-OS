@@ -4733,7 +4733,8 @@
     "roleStudent": "ছাত্র",
     "roleAgent": "এজেন্ট",
     "roleSubAgent": "সাব এজেন্ট",
-    "roleAgentStaff": "এজেন্ট স্টাফ"
+    "roleAgentStaff": "এজেন্ট স্টাফ",
+    "roleSubAgentStaff": "সাব এজেন্টের কর্মী"
   },
   "leadAssignment": {
     "title": "লিড অটো অ্যাসাইনমেন্ট",
