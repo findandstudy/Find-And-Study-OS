@@ -439,7 +439,7 @@ function VersionsDialog({ specKey, isSuperAdmin, onClose, onChanged }: VersionsD
                     {new Date(v.createdAt).toLocaleString()}
                   </span>
                   <div className="mt-1 flex items-center gap-2 flex-wrap">
-                    <code className="text-[10px] text-muted-foreground" title={v.sha256}> {translateUi(uiLanguage, "SHA-256")} {v.sha256.slice(0, 12)}…
+                    <code className="text-[10px] text-muted-foreground" title={v.sha256}> {"SHA-256"} {v.sha256.slice(0, 12)}…
                     </code>
                     {v.activationBlockers.map((blocker) => (
                       <Badge key={blocker} variant="outline" className="h-4 border-amber-300 text-[10px] text-amber-700 dark:text-amber-400">
@@ -637,7 +637,7 @@ export default function AdapterSpecsSection() {
                       {t("portalAutomation.adapterSpecs.versionCount", { count: s.versionCount })}
                     </span>
                     <span className="text-[11px] text-muted-foreground">·</span>
-                    <code className="text-[10px] text-muted-foreground" title={s.latestSha256}> {translateUi(uiLanguage, "SHA-256")} {s.latestSha256.slice(0, 12)}…
+                    <code className="text-[10px] text-muted-foreground" title={s.latestSha256}> {"SHA-256"} {s.latestSha256.slice(0, 12)}…
                     </code>
                   </div>
                   {s.latestActivationBlockers.length > 0 && (

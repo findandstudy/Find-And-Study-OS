@@ -1208,7 +1208,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
               </Select>
             </div>
             <div className="text-xs text-muted-foreground">
-              {t("adminEmbeds.laneLabel")}: <code>{translateUi(uiLanguage, "widget:")}{widget?.id || translateUi(uiLanguage, "new")}</code> · {t("adminEmbeds.laneHelp")}
+              {t("adminEmbeds.laneLabel")}: <code>{"widget:"}{widget?.id || "new"}</code> · {t("adminEmbeds.laneHelp")}
             </div>
           </TabsContent>
         </Tabs>
@@ -1346,7 +1346,7 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
                       <code className="flex-1 text-xs bg-white border border-blue-200 rounded px-2 py-1 font-mono truncate">
                         {currentApiKey
                           ? (apiKeyVisible ? currentApiKey : "•".repeat(20) + currentApiKey.slice(-6))
-                          : translateUi(uiLanguage, "No key — will be generated on save")}
+                          : "No key — will be generated on save"}
                       </code>
                       {currentApiKey && (
                         <Button size="sm" variant="ghost" className="shrink-0 px-2 h-7 text-xs"

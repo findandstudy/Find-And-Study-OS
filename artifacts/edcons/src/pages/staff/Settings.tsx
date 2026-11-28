@@ -995,7 +995,7 @@ export default function SettingsPage() {
             </div>
             <div className="rounded-xl border bg-muted/30 p-4 text-xs text-muted-foreground">
               <p className="font-semibold text-foreground">{translateUi(uiLanguage, "Crawler policy preview")}</p>
-              <code className="mt-2 block whitespace-pre-wrap">{translateUi(uiLanguage, "OAI-SearchBot: {value0}\nGPTBot: {value1}\nGoogle-Extended: {value2}", undefined, { value0: String(technicalPolicy.allowOaiSearchBot ? "Allow" : "Disallow"), value1: String(technicalPolicy.allowGptBot ? "Allow" : "Disallow"), value2: String(technicalPolicy.allowGoogleExtended ? "Allow" : "Disallow") })}</code>
+              <code className="mt-2 block whitespace-pre-wrap">{["OAI-SearchBot: ", String(technicalPolicy.allowOaiSearchBot ? "Allow" : "Disallow"), "\nGPTBot: ", String(technicalPolicy.allowGptBot ? "Allow" : "Disallow"), "\nGoogle-Extended: ", String(technicalPolicy.allowGoogleExtended ? "Allow" : "Disallow"), ""].join("")}</code>
               <p className="mt-3">{translateUi(uiLanguage, "The existing llms.txt remains a supplementary, deterministic identity document. It is not treated as a ranking signal or an alternative to robots, sitemap, canonical or structured data.")}</p>
             </div>
           </div>
@@ -2267,7 +2267,7 @@ function LeadFormWidgetDialog({ widget, onClose, onSaved }: { widget: LeadFormWi
               className="font-mono text-xs"
               disabled={isEdit}
             />
-            <p className="text-[11px] text-muted-foreground mt-1">{translateUi(uiLanguage, "Lead'in source alanı:")} <code>{translateUi(uiLanguage, "embed:")}{slug || translateUi(uiLanguage, "slug")}</code></p>
+            <p className="text-[11px] text-muted-foreground mt-1">{translateUi(uiLanguage, "Lead'in source alanı:")} <code>{"embed:"}{slug || "slug"}</code></p>
           </div>
           <div>
             <Label className="text-xs font-semibold mb-1.5 block">{translateUi(uiLanguage, "Ana Renk")}</Label>
@@ -2340,7 +2340,7 @@ function LeadFormCodeDialog({ widget, onClose }: { widget: LeadFormWidget; onClo
             <p className="font-semibold mb-1">{translateUi(uiLanguage, "Nasıl çalışır?")}</p>
             <ul className="list-disc list-inside space-y-0.5 text-blue-800">
               <li>{translateUi(uiLanguage, "Bu kodu sitenizin herhangi bir sayfasına yapıştırın (WordPress için Custom HTML bloğu).")}</li>
-              <li>{translateUi(uiLanguage, "Form gönderildiğinde lead otomatik olarak CRM'e düşer ve")} <code className="bg-white/60 px-1 rounded">{translateUi(uiLanguage, "embed:")}{widget.slug}</code> {translateUi(uiLanguage, "kaynağıyla işaretlenir.")}</li>
+              <li>{translateUi(uiLanguage, "Form gönderildiğinde lead otomatik olarak CRM'e düşer ve")} <code className="bg-white/60 px-1 rounded">{"embed:"}{widget.slug}</code> {translateUi(uiLanguage, "kaynağıyla işaretlenir.")}</li>
               <li>{translateUi(uiLanguage, "Sayfa URL'si ve UTM parametreleri (utm_source, utm_medium, utm_campaign, ...) lead detayında görünür.")}</li>
             </ul>
           </div>

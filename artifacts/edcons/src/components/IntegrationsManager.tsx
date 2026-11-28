@@ -512,7 +512,7 @@ export function IntegrationsManager() {
           <Shield className="w-5 h-5 mt-0.5 flex-shrink-0" />
           <div className="text-sm">
             <p className="font-semibold">{translateUi(uiLanguage, "Production-only integrations are simulated.")}</p>
-            <p className="opacity-90 mt-0.5"> {translateUi(uiLanguage, "WhatsApp Business and Web Form can only be enabled in production. Outbound calls run in simulated mode. Webhooks still work for testing. Set")} <code className="px-1 bg-amber-100 rounded">{translateUi(uiLanguage, "ALLOW_LIVE_INTEGRATIONS=true")}</code> {translateUi(uiLanguage, "to override.")} </p>
+            <p className="opacity-90 mt-0.5"> {translateUi(uiLanguage, "WhatsApp Business and Web Form can only be enabled in production. Outbound calls run in simulated mode. Webhooks still work for testing. Set")} <code className="px-1 bg-amber-100 rounded">{"ALLOW_LIVE_INTEGRATIONS=true"}</code> {translateUi(uiLanguage, "to override.")} </p>
           </div>
         </div>
       )}
@@ -725,7 +725,7 @@ export function IntegrationsManager() {
                   return (
                     <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
                       <p className="text-xs font-semibold">{translateUi(uiLanguage, "Meta Cloud API webhook setup")}</p>
-                      <p className="text-[11px] text-muted-foreground"> {translateUi(uiLanguage, "In Meta &rarr; App Dashboard &rarr; WhatsApp &rarr; Configuration, paste the")} <strong> {translateUi(uiLanguage, "Callback URL")}</strong> {translateUi(uiLanguage, "and")} <strong>{translateUi(uiLanguage, "Verify Token")}</strong> {translateUi(uiLanguage, "below, then subscribe the")} <code>{translateUi(uiLanguage, "messages")}</code> {translateUi(uiLanguage, "field. Meta will GET this URL with")} <code> {translateUi(uiLanguage, "hub.verify_token")}</code>{translateUi(uiLanguage, "; the handshake passes only if the token matches exactly.")} </p>
+                      <p className="text-[11px] text-muted-foreground"> {translateUi(uiLanguage, "In Meta &rarr; App Dashboard &rarr; WhatsApp &rarr; Configuration, paste the")} <strong> {translateUi(uiLanguage, "Callback URL")}</strong> {translateUi(uiLanguage, "and")} <strong>{translateUi(uiLanguage, "Verify Token")}</strong> {translateUi(uiLanguage, "below, then subscribe the")} <code>{"messages"}</code> {translateUi(uiLanguage, "field. Meta will GET this URL with")} <code> {"hub.verify_token"}</code>{translateUi(uiLanguage, "; the handshake passes only if the token matches exactly.")} </p>
                       <div className="space-y-1.5">
                         <Label className="text-[11px]">{translateUi(uiLanguage, "Callback URL")}</Label>
                         <div className="flex items-center gap-1.5">
@@ -805,8 +805,8 @@ export function IntegrationsManager() {
                   return (
                     <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
                       <p className="text-xs font-semibold">{translateUi(uiLanguage, "Integration snippet")}</p>
-                      <p className="text-[11px] text-muted-foreground"> {translateUi(uiLanguage, "The secret must stay on your server. Never place it in public HTML — anyone viewing the page could read it and forge submissions. Collect leads with a public form that posts to your own backend, then forward them to the webhook with the")} <code>{translateUi(uiLanguage, "X-Webform-Token")}</code> {translateUi(uiLanguage, "header (or an")}{" "}
-                        <code>{translateUi(uiLanguage, "X-Webform-Signature")}</code> {translateUi(uiLanguage, "HMAC).")} </p>
+                      <p className="text-[11px] text-muted-foreground"> {translateUi(uiLanguage, "The secret must stay on your server. Never place it in public HTML — anyone viewing the page could read it and forge submissions. Collect leads with a public form that posts to your own backend, then forward them to the webhook with the")} <code>{"X-Webform-Token"}</code> {translateUi(uiLanguage, "header (or an")}{" "}
+                        <code>{"X-Webform-Signature"}</code> {translateUi(uiLanguage, "HMAC).")} </p>
                       <p className="text-[11px] font-medium">{translateUi(uiLanguage, "1. Public form (no secret)")}</p>
                       <textarea
                         readOnly

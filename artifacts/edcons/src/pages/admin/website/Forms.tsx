@@ -474,11 +474,11 @@ export default function WebsiteForms() {
                   <h3 className="font-semibold">{t("websiteForms.embedCode")}</h3>
                   <p className="text-sm text-muted-foreground">{t("websiteForms.embedIntro")}</p>
                   <div className="bg-muted/50 rounded-lg p-4">
-                    <code className="text-xs break-all">{translateUi(uiLanguage, "POST /api/public/website-forms/")}{selectedForm.slug}/submit</code>
+                    <code className="text-xs break-all">{"POST /api/public/website-forms/"}{selectedForm.slug}/submit</code>
                   </div>
-                  <p className="text-sm text-muted-foreground">{t("websiteForms.honeypotEmbedBefore")}<code className="text-xs">{translateUi(uiLanguage, "_hp")}</code>{t("websiteForms.honeypotEmbedAfter")}</p>
+                  <p className="text-sm text-muted-foreground">{t("websiteForms.honeypotEmbedBefore")}<code className="text-xs">{"_hp"}</code>{t("websiteForms.honeypotEmbedAfter")}</p>
                   <div className="bg-muted/50 rounded-lg p-4">
-                    <pre className="text-xs whitespace-pre-wrap">{translateUi(uiLanguage, "<form action=\"/api/public/website-forms/{value0}/submit\" method=\"POST\">\n  <input type=\"hidden\" name=\"_hp\" value=\"\" style=\"display:none\" />\n{value1}\n  <button type=\"submit\">Submit</button>\n</form>", undefined, { value0: String(selectedForm.slug), value1: String(fields.map(f => `  <label>${f.label}</label>\n  <input type="${f.fieldType}" name="${f.name}" ${f.isRequired ? 'required' : ''} />`).join('\n')) })}</pre>
+                    <pre className="text-xs whitespace-pre-wrap">{["<form action=\"/api/public/website-forms/", String(selectedForm.slug), "/submit\" method=\"POST\">\n  <input type=\"hidden\" name=\"_hp\" value=\"\" style=\"display:none\" />\n", String(fields.map(f => `  <label>${f.label}</label>\n  <input type="${f.fieldType}" name="${f.name}" ${f.isRequired ? 'required' : ''} />`).join('\n')), "\n  <button type=\"submit\">Submit</button>\n</form>"].join("")}</pre>
                   </div>
                   <Button variant="outline" size="sm" className="gap-1"
                     onClick={() => {

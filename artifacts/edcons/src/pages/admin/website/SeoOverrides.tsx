@@ -381,7 +381,7 @@ export default function WebsiteSeoOverrides() {
               <Card className="p-3 bg-muted/30">
                 <p className="text-xs font-medium text-muted-foreground mb-1">{translateUi(uiLanguage, "Robots Directive")}</p>
                 <code className="text-xs font-mono">
-                  {form.robotsIndex ? translateUi(uiLanguage, "index") : translateUi(uiLanguage, "noindex")}, {form.robotsFollow ? translateUi(uiLanguage, "follow") : translateUi(uiLanguage, "nofollow")}
+                  {form.robotsIndex ? "index" : "noindex"}, {form.robotsFollow ? "follow" : "nofollow"}
                 </code>
               </Card>
               {form.canonicalUrl && (
