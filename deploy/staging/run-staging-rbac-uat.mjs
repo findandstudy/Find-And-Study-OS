@@ -19,7 +19,8 @@ const ROLE_EMAILS = {
 const ROLE_CHECKS = {
   super_admin: [
     ["/api/finance/university-receivables", 200],
-    ["/api/ai-personas", 200],
+    ["/api/ai-personas/status", 200],
+    ["/api/ai-personas", 409],
     ["/api/notification-rules", 200],
     ["/api/conversations", 200],
     ["/api/broadcasts", 200],
@@ -30,7 +31,8 @@ const ROLE_CHECKS = {
   ],
   admin: [
     ["/api/finance/university-receivables", 200],
-    ["/api/ai-personas", 200],
+    ["/api/ai-personas/status", 200],
+    ["/api/ai-personas", 409],
     ["/api/notification-rules", 200],
     ["/api/conversations", 200],
     ["/api/broadcasts", 200],
@@ -41,7 +43,8 @@ const ROLE_CHECKS = {
   ],
   manager: [
     ["/api/finance/university-receivables", 403],
-    ["/api/ai-personas", 200],
+    ["/api/ai-personas/status", 200],
+    ["/api/ai-personas", 409],
     ["/api/notification-rules", 200],
     ["/api/conversations", 200],
     ["/api/broadcasts", 200],
@@ -233,6 +236,24 @@ async function runRole(origin, role, email, password) {
       fail(
         `${role} GET ${path} expected ${allowedStatuses.join(" or ")}, received ${response.status}`,
       );
+    }
+    if (path === "/api/ai-personas/status") {
+      const state = await json(response, `${role} persona capability`);
+      if (
+        state.available !== false ||
+        state.reason !== "PERSONA_OWNERSHIP_ADOPTION_REQUIRED" ||
+        state.canRead !== false ||
+        state.canMutate !== false ||
+        state.canReview !== false
+      ) {
+        fail(`${role} persona capability did not report the ownership gate`);
+      }
+    }
+    if (path === "/api/ai-personas" && response.status === 409) {
+      const state = await json(response, `${role} legacy persona gate`);
+      if (state.error !== "PERSONA_OWNERSHIP_ADOPTION_REQUIRED" || state.executed !== false) {
+        fail(`${role} legacy persona gate did not report the ownership restriction`);
+      }
     }
     checks += 1;
   }
