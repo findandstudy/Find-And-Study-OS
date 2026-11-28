@@ -99,6 +99,11 @@ test("transactional transition intent, origin isolation, immutable approval and 
       assert.equal(await hasStageEmailForRecipient(a,key,agencyUsers[i].id),true);
       assert.equal(await hasStageEmailForRecipient(a,key,maker.id),false);
       assert.equal((await validateStageEmailQueueItem(q.id)).allowed,true);
+      await pool.query("UPDATE students SET user_id=null,email=null WHERE id=$1",[st.id]);
+      assert.equal((await validateStageEmailQueueItem(q.id)).allowed,true,'agency recipient does not require a student portal account');
+      await pool.query("UPDATE users SET role='staff' WHERE id=$1",[agencyUsers[i].id]);
+      assert.equal((await validateStageEmailQueueItem(q.id)).code,'AGENT_EMAIL_MISSING_OR_UNVERIFIED');
+      await pool.query("UPDATE users SET role=$2 WHERE id=$1",[agencyUsers[i].id,i===0?'agent':'sub_agent']);
       await pool.query("UPDATE users SET email_verified=false WHERE id=$1",[agencyUsers[i].id]);
       assert.equal((await validateStageEmailQueueItem(q.id)).code,'AGENT_EMAIL_MISSING_OR_UNVERIFIED');
       const skippedApp=await newApp(st.id);await processStageEmailOutbox();
