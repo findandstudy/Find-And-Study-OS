@@ -865,3 +865,21 @@ release staging-20261128T054432Z-f56c6653f262; app healthy. Gerçek staging UI'd
 mevcut Upcoming Follow-ups içinde TEST takip göründü, link doğru Edit record
 penceresini açtı, tamamlanınca kayboldu. Ek panel sayısı 0, mevcut kutu sayısı 1.
 DB migration yok; Apply production değişmedi. Deneme takip tamamlanmış bırakıldı.
+
+### 28 Kasım — sistem arayüzü çeviri düzeltmeleri ve staging teslimi
+23 locale / 10.985 key eşliği, mükerrer namespace ve placeholder kontrolleri
+zorunlu kalite kapısında PASS. 4.305 sabit UI kaynağı ortak lookup'a taşındı;
+137.696 locale girdisi AI inceleme/çeviri hattından geçti, 125.852 değer değişti.
+Katalog/API/status kimlikleri, kod örnekleri, özgün adlar, kullanıcı içeriği ve
+frozen sözleşmeler korunur. Sidebar Team workspace, Settings dil bildirimi,
+RTL açıklamaları ve ekran okuyucu bildirim etiketleri düzeltildi. UI metinleri
+iki lazy shard/locale halinde; mevcut bundle limitleri artırılmadı.
+Local code e1f40758; staging source faea5ad3953e; release
+staging-20261128T073747Z-faea5ad3953e, image ui-localization-complete.
+Frontend typecheck, 190 normal build testi + 5 UI runtime testi, i18n/build/
+bundle-budget PASS. Gerçek browser'da 23 dil geçişi, 3 RTL, 12 ana modül ve
+TR katalog/pipeline/task kontrolü PASS; son tercih EN. API health/dbConnected
+ve container healthy. DB migration/production/gerçek mesaj/imza işlemi yok.
+Staging PublicPage tasarım deltasını koruyan cherry-pick entegrasyonu kullanıldı.
+Geçici export final public paketten, tamamlanan worker container'ları temizlendi.
+Ayrıntılı kapsam/sınırlar: STAGING_SYSTEM_TRANSLATION_QA_2026-11-28.md.
