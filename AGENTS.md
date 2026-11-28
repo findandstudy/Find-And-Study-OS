@@ -850,3 +850,18 @@ bildirim yetenekleri aynen kalır. Local 37be75fa, staging integration 73aa7d96;
 release staging-20261128T053646Z-73aa7d96f254. Frontend build ve health PASS.
 Canlı admin UI'da pipeline panel sayısı 0, Upcoming Follow-ups başlık sayısı 1
 olarak doğrulandı. Ayrı pipeline dashboard kutusunu yeniden ekleme.
+
+### 28 Kasım — pipeline takipleri mevcut Upcoming Follow-ups listesinde
+Kullanıcı talebiyle ayrı panel eklenmeden mevcut /follow-ups/upcoming read
+projection'ına pipeline takipleri dahil edildi. Tenant + board erişimi, staff
+atanan/oluşturan kapsamı, admin createdBy filtresi, 7 gün/gecikmiş açık kapsamı
+korunur. CRM takip satırı kopyalanmaz. İki kaynak tarih sırasıyla birleşip ortak
+20 sınırından geçer; pipeline satırının linki ilgili board/card'ı açar.
+Tamamlama sonrası ortak query invalidate edilir; dashboard 30 sn refresh alır.
+Local HTTP/DB testinde tarih/completed/archive/filter/board privacy/agent deny,
+global sort ve CRM satır sayısının korunması PASS. API/frontend build PASS.
+Local source 375acb29; staging f56c6653f262e71b74b8dbd08505ae6755309e03,
+release staging-20261128T054432Z-f56c6653f262; app healthy. Gerçek staging UI'da
+mevcut Upcoming Follow-ups içinde TEST takip göründü, link doğru Edit record
+penceresini açtı, tamamlanınca kayboldu. Ek panel sayısı 0, mevcut kutu sayısı 1.
+DB migration yok; Apply production değişmedi. Deneme takip tamamlanmış bırakıldı.
