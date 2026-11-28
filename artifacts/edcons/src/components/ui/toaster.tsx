@@ -1,5 +1,6 @@
 import { CheckCircle2, AlertCircle, AlertTriangle, Info } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { useUiLanguage } from "@/lib/ui-localization"
 import {
   Toast,
   ToastClose,
@@ -18,9 +19,11 @@ const ICONS: Record<string, React.ElementType> = {
 
 export function Toaster() {
   const { toasts } = useToast()
+  const { t } = useUiLanguage()
+  const notificationsLabel = t('settingsPage.navNotifications')
 
   return (
-    <ToastProvider>
+    <ToastProvider label={notificationsLabel}>
       {toasts.map(function ({ id, title, description, action, variant, ...props }) {
         const Icon = ICONS[(variant as string) ?? "default"] ?? Info
         return (
@@ -38,7 +41,7 @@ export function Toaster() {
           </Toast>
         )
       })}
-      <ToastViewport />
+      <ToastViewport label={`${notificationsLabel} ({hotkey})`} />
     </ToastProvider>
   )
 }
