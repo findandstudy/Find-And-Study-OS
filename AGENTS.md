@@ -894,3 +894,21 @@ Bundan sonraki tüm geliştirme, düzeltme, tasarım ve özellik çalışmaları
 - Değişkenler, çoğul/sayı/tarih/para biçimleri ve Arapça/Farsça/Urduca gibi RTL dillerindeki yön ve yerleşim dikkate alınır. Görünür metin çevirisi API yollarını, kimlikleri, rol/statü değerlerini veya örnek kodları değiştirmemelidir; marka ve doğrulanmış özel adlar korunur.
 - Teslim/yayın öncesi i18n anahtar/placeholder eşliği ve ilgili kontroller çalıştırılır; değişen ekranın dil geçişi ve gerektiğinde RTL görünümü doğrulanır. Eksik çeviri varsa iş tamamlandı diye sunulmaz; somut engel açıkça belirtilir.
 - Bu kural admin/staff, agent/sub-agent, student ve public arayüzlerde geçerlidir. Mevcut güvenlik, veri ve deployment yetki sınırlarını genişletmez.
+
+### 28 Kasım — ayarlanabilir başvuru deadline hatırlatmaları
+Yerel f647bb40; staging 1402358d36fe, release staging-20261128T083905Z-1402358d36fe.
+0145 additive migration ile ledger 145→146 resmî hedef bağlı runner'da PASS;
+checksum backup + network-none gerçek restore PASS. App healthy.
+Settings/Notifications genel gün listesi; üniversitede INHERIT/CUSTOM/boş=OFF.
+0–3650 gün, en çok20; varsayılan30/7 korunur, sabit seçenek zorunluluğu yok.
+Revision/concurrency/ABA, transactional audit ve etkilenen bekleyen intent iptali
+vardır; SENT değişmez. Tek aktif doğrulanmış dönem programlara miras kalır;
+çoklu dönemde seçim istenir, cross-school/çelişkili tarihler API+DB'de reddedilir.
+Course Finder ve public program Bilgi pencerelerine ortak takvim eklendi.
+23 dil/18 yeni metin, DB/API/UI typecheck,10 pure + local DB/HTTP +190 build testi
+PASS. Gerçek UI genel45/14/3/0, üniversite21/5, genel değişimde override koruma,
+devralmaya dönme ve TR/AR RTL PASS. Ayarlar30/7 ve override yok durumuna döndü.
+Önemli: gerçek staging dönem sayısı0,151.316 programda period/deadline override0.
+Gerçek takvim verisi girilmemiştir; legacy intake metni deadline sayılmaz.
+Sentetik preview ve gerçek gönderim kapalı kalır; tarih uydurma/production yok.
+Ayrıntı: DEADLINE_REMINDERS_IMPLEMENTATION_2026-11-28.md.
