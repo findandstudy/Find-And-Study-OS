@@ -200,7 +200,7 @@ export default function WebsiteThemeBuilder() {
   }
 
   return (
-      <div className={`${ADMIN_FORM_WIDTH} mx-auto space-y-6`}>
+      <div className="min-w-0 w-full space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Palette className="w-6 h-6 text-primary" />
@@ -227,7 +227,7 @@ export default function WebsiteThemeBuilder() {
           <CardHeader>
             <CardTitle className="text-lg">{translateUi(uiLanguage, "Colors")}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className={ADMIN_FORM_WIDTH}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {COLOR_TOKENS.map(token => {
                 const val = getVal(token.group, token.key);
@@ -268,7 +268,7 @@ export default function WebsiteThemeBuilder() {
           <CardHeader>
             <CardTitle className="text-lg">{translateUi(uiLanguage, "Typography")}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className={ADMIN_FORM_WIDTH}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {TYPOGRAPHY_TOKENS.map(token => (
                 <div key={token.key} className="space-y-2">
@@ -305,7 +305,7 @@ export default function WebsiteThemeBuilder() {
           <CardHeader>
             <CardTitle className="text-lg">{translateUi(uiLanguage, "Buttons")}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className={ADMIN_FORM_WIDTH}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               {BUTTON_TOKENS.map(token => (
                 <div key={token.key} className="space-y-2">
@@ -364,7 +364,7 @@ export default function WebsiteThemeBuilder() {
           <CardHeader>
             <CardTitle className="text-lg">{translateUi(uiLanguage, "Spacing")}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className={ADMIN_FORM_WIDTH}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               {SPACING_TOKENS.map(token => (
                 <div key={token.key} className="space-y-2">

@@ -175,12 +175,12 @@ export default function AiExtractorDetail() {
   if (loading) return <div className="p-6 text-sm text-muted-foreground">{t("aiExtractor.loading")}</div>;
 
   return (
-    <div className={`${ADMIN_FORM_WIDTH} mx-auto space-y-4`}>
+    <div className="min-w-0 w-full space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <Button variant="ghost" onClick={() => setLocation("/admin/ai-extractors")}>
           <ArrowLeft className="h-4 w-4 mr-2" /> {t("aiExtractor.back")}
         </Button>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant={data.isActive ? "default" : "secondary"}>
             {data.isActive ? t("aiExtractor.active") : t("aiExtractor.inactive")}
           </Badge>
@@ -196,7 +196,7 @@ export default function AiExtractorDetail() {
       </h1>
 
       <Tabs defaultValue="general">
-        <TabsList className="flex-wrap h-auto">
+        <TabsList className="h-auto max-w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="general">{t("aiExtractor.tabGeneral")}</TabsTrigger>
           <TabsTrigger value="prompt">{t("aiExtractor.tabPrompt")}</TabsTrigger>
           <TabsTrigger value="model">{t("aiExtractor.tabModel")}</TabsTrigger>
@@ -208,7 +208,7 @@ export default function AiExtractorDetail() {
 
         <TabsContent value="general" className="space-y-3">
           <Card>
-            <CardContent className="pt-4 space-y-3">
+            <CardContent className={`${ADMIN_FORM_WIDTH} pt-4 space-y-3`}>
               <div>
                 <Label>{t("aiExtractor.fName")}</Label>
                 <Input value={data.name} onChange={(e) => update("name", e.target.value)} />
@@ -236,7 +236,7 @@ export default function AiExtractorDetail() {
         <TabsContent value="prompt" className="space-y-3">
           <Card>
             <CardHeader><CardTitle className="text-sm">{t("aiExtractor.systemPrompt")}</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className={`${ADMIN_FORM_WIDTH} space-y-3`}>
               <p className="text-xs text-muted-foreground">{t("aiExtractor.promptHint")}</p>
               <Textarea
                 value={data.systemPrompt}
@@ -273,7 +273,7 @@ export default function AiExtractorDetail() {
 
         <TabsContent value="model" className="space-y-3">
           <Card>
-            <CardContent className="pt-4 space-y-3">
+            <CardContent className={`${ADMIN_FORM_WIDTH} pt-4 space-y-3`}>
               <div>
                 <Label>{t("aiExtractor.provider")}</Label>
                 <Select value={data.provider} onValueChange={(v) => update("provider", v as any)}>
@@ -319,7 +319,7 @@ export default function AiExtractorDetail() {
               <CardTitle className="text-sm">{t("aiExtractor.fieldsTitle")}</CardTitle>
               <Button size="sm" onClick={addField}><Plus className="h-3 w-3 mr-1" /> {t("aiExtractor.addField")}</Button>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className={`${ADMIN_FORM_WIDTH} space-y-2`}>
               {data.fields.map((f, i) => (
                 <div key={i} className="border rounded p-3 space-y-2">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
@@ -384,7 +384,7 @@ export default function AiExtractorDetail() {
         <TabsContent value="rules" className="space-y-3">
           <Card>
             <CardHeader><CardTitle className="text-sm">{t("aiExtractor.globalRules")}</CardTitle></CardHeader>
-            <CardContent>
+            <CardContent className={ADMIN_FORM_WIDTH}>
               <Textarea
                 rows={10}
                 value={(data.rules.globalRules || []).join("\n")}
@@ -400,7 +400,7 @@ export default function AiExtractorDetail() {
 
         <TabsContent value="scope" className="space-y-3">
           <Card>
-            <CardContent className="pt-4 space-y-3">
+            <CardContent className={`${ADMIN_FORM_WIDTH} pt-4 space-y-3`}>
               <div>
                 <Label>{t("aiExtractor.scopes")}</Label>
                 <div className="flex flex-wrap gap-2 mt-1">
@@ -437,10 +437,10 @@ export default function AiExtractorDetail() {
         <TabsContent value="test" className="space-y-3">
           <Card>
             <CardHeader><CardTitle className="text-sm">{t("aiExtractor.testTitle")}</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className={`${ADMIN_FORM_WIDTH} space-y-3`}>
               <p className="text-xs text-muted-foreground">{t("aiExtractor.testHint")}</p>
-              <input id="test-file" type="file" accept="image/*,application/pdf" className="text-sm" />
-              <div className="flex items-center gap-2">
+              <input id="test-file" type="file" accept="image/*,application/pdf" className="max-w-full text-sm" />
+              <div className="flex flex-wrap items-center gap-2">
                 <Label className="text-xs">{t("aiExtractor.testLang")}</Label>
                 <Select value={activeLang} onValueChange={setActiveLang}>
                   <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>

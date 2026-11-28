@@ -530,7 +530,7 @@ export default function AiAgent() {
 
   if (!selectedBotId) {
     return (
-      <div className={`${ADMIN_FORM_WIDTH} mx-auto space-y-6`}>
+      <div className="min-w-0 w-full space-y-6">
         <div className="flex items-center gap-3">
           <div className="rounded-xl bg-primary/10 p-2.5">
             <Bot className="h-5 w-5 text-primary" />
@@ -549,7 +549,7 @@ export default function AiAgent() {
               {t("aiAgentAdmin.botManagement.firstBotDescription")}
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+          <CardContent className={`${ADMIN_FORM_WIDTH} grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]`}>
             <Input
               value={newBotName}
               onChange={(event) => {
@@ -597,11 +597,11 @@ export default function AiAgent() {
       ];
 
   return (
-    <div className={`${ADMIN_FORM_WIDTH} mx-auto space-y-6`}>
+    <div className="min-w-0 w-full space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-primary/10 p-2.5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="shrink-0 rounded-xl bg-primary/10 p-2.5">
             <MessageSquare className="h-5 w-5 text-primary" />
           </div>
           <div>
@@ -667,12 +667,12 @@ export default function AiAgent() {
 
           <Separator />
 
-          <div className="space-y-2">
+          <div className={`${ADMIN_FORM_WIDTH} space-y-2`}>
             <div className="flex items-center gap-2 text-sm font-medium">
               <Copy className="h-4 w-4" />
               {t("aiAgentAdmin.botManagement.cloneTitle")}
             </div>
-            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
               <Input
                 value={newBotName}
                 onChange={(event) => {
@@ -701,7 +701,7 @@ export default function AiAgent() {
 
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle className="text-base">{t("aiAgentAdmin.metrics.title")}</CardTitle>
               <CardDescription>{t("aiAgentAdmin.metrics.description")}</CardDescription>
@@ -749,7 +749,7 @@ export default function AiAgent() {
           </CardTitle>
           <CardDescription>{t("aiAgentAdmin.globalHint")}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
+        <CardContent className={`${ADMIN_FORM_WIDTH} space-y-5`}>
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="font-medium">{t("aiAgentAdmin.enabledLabel")}</p>
@@ -1022,7 +1022,7 @@ export default function AiAgent() {
             {t("aiAgentAdmin.knowledgeBaseHint")}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className={ADMIN_FORM_WIDTH}>
           <Textarea
             rows={14}
             className="font-mono text-sm"
@@ -1049,7 +1049,7 @@ export default function AiAgent() {
             {t("aiAgentAdmin.knowledgeSources.hint")}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
+        <CardContent className={`${ADMIN_FORM_WIDTH} space-y-5`}>
           {scopeLoading || !programScopeSource ? (
             <Skeleton className="h-32 w-full rounded-xl" />
           ) : (
@@ -1171,7 +1171,7 @@ export default function AiAgent() {
             {t("aiAgentAdmin.escalationHint")}
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <CardContent className={`${ADMIN_FORM_WIDTH} grid grid-cols-1 sm:grid-cols-2 gap-4`}>
           {ESCALATION_TOPICS.map((topic) => (
             <div key={topic} className="space-y-1.5">
               <Label htmlFor={`kw-${topic}`}>
@@ -1199,9 +1199,9 @@ export default function AiAgent() {
           </CardTitle>
           <CardDescription>{t("aiAgentAdmin.testHint")}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className={`${ADMIN_FORM_WIDTH} space-y-4`}>
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <Label>{t("aiAgentAdmin.testHistoryLabel")}</Label>
                 <p className="text-xs text-muted-foreground mt-0.5">

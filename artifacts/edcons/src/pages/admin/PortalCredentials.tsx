@@ -52,7 +52,7 @@ export default function PortalCredentials() {
   const portals: UniversityPortal[] = Array.isArray(portalsRaw) ? portalsRaw : [];
 
   return (
-    <div className={`${ADMIN_FORM_WIDTH} mx-auto space-y-6`}>
+    <div className="min-w-0 w-full space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">
@@ -137,12 +137,12 @@ function PortalCredentialCard({
   return (
     <Card className="rounded-xl">
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
             <KeyRound className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-            <div>
-              <CardTitle className="text-base">{portal.label}</CardTitle>
-              <CardDescription className="text-xs font-mono">
+            <div className="min-w-0">
+              <CardTitle className="break-words text-base">{portal.label}</CardTitle>
+              <CardDescription className="break-all text-xs font-mono">
                 {portal.key}
               </CardDescription>
             </div>
@@ -169,7 +169,7 @@ function PortalCredentialCard({
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className={ADMIN_FORM_WIDTH}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">

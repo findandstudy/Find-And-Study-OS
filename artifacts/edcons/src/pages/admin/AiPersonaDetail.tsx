@@ -227,9 +227,9 @@ export default function AiPersonaDetail() {
   };
 
   return (
-    <div className={`${ADMIN_FORM_WIDTH} mx-auto space-y-6`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+    <div className="min-w-0 w-full space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => setLocation("/admin/ai-personas")}>
             <ArrowLeft className="h-4 w-4 mr-1" /> {t("aiPersona.back")}
           </Button>
@@ -248,7 +248,7 @@ export default function AiPersonaDetail() {
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="flex-wrap">
+        <TabsList className="h-auto max-w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="general">{t("aiPersona.tabGeneral")}</TabsTrigger>
           <TabsTrigger value="prompt">{t("aiPersona.tabPrompt")}</TabsTrigger>
           <TabsTrigger value="model">{t("aiPersona.tabModel")}</TabsTrigger>
@@ -261,8 +261,8 @@ export default function AiPersonaDetail() {
 
         <TabsContent value="general" className="space-y-4 mt-4">
           <Card>
-            <CardContent className="space-y-4 pt-6">
-              <div className="grid grid-cols-2 gap-4">
+            <CardContent className={`${ADMIN_FORM_WIDTH} space-y-4 pt-6`}>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <Label>{t("aiPersona.fName")}</Label>
                   <Input value={form.name} onChange={(e) => update("name", e.target.value)} />
@@ -301,19 +301,19 @@ export default function AiPersonaDetail() {
         <TabsContent value="prompt" className="space-y-4 mt-4">
           <Card>
             <CardHeader><CardTitle className="text-base">{t("aiPersona.systemPrompt")}</CardTitle></CardHeader>
-            <CardContent>
+            <CardContent className={ADMIN_FORM_WIDTH}>
               <Textarea rows={6} value={form.systemPrompt} onChange={(e) => update("systemPrompt", e.target.value)} placeholder={t("aiPersona.systemPromptPlaceholder")} />
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-base">{t("aiPersona.guidelines")}</CardTitle></CardHeader>
-            <CardContent>
+            <CardContent className={ADMIN_FORM_WIDTH}>
               <Textarea rows={5} value={form.guidelines} onChange={(e) => update("guidelines", e.target.value)} placeholder={t("aiPersona.guidelinesPlaceholder")} />
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-base">{t("aiPersona.negativePrompt")}</CardTitle></CardHeader>
-            <CardContent>
+            <CardContent className={ADMIN_FORM_WIDTH}>
               <Textarea rows={4} value={form.negativePrompt} onChange={(e) => update("negativePrompt", e.target.value)} placeholder={t("aiPersona.negativePromptPlaceholder")} />
             </CardContent>
           </Card>
@@ -321,7 +321,7 @@ export default function AiPersonaDetail() {
 
         <TabsContent value="model" className="space-y-4 mt-4">
           <Card>
-            <CardContent className="grid grid-cols-2 gap-4 pt-6">
+            <CardContent className={`${ADMIN_FORM_WIDTH} grid gap-4 pt-6 sm:grid-cols-2`}>
               <div>
                 <Label>{t("aiPersona.provider")}</Label>
                 <Select value={form.provider} onValueChange={(v) => update("provider", v as any)}>
@@ -351,7 +351,7 @@ export default function AiPersonaDetail() {
         <TabsContent value="abilities" className="space-y-4 mt-4">
           <Card>
             <CardHeader><CardTitle className="text-base">{t("aiPersona.scopesTitle")}</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className={`${ADMIN_FORM_WIDTH} space-y-2`}>
               {scopes.length === 0 && <div className="text-sm text-muted-foreground">{t("aiPersona.scopesLoading")}</div>}
               {scopes.map((s) => (
                 <label key={s.key} className="flex items-start gap-3 cursor-pointer border rounded p-2 hover:bg-muted/50">
@@ -371,7 +371,7 @@ export default function AiPersonaDetail() {
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-base">{t("aiPersona.toolsTitle")}</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className={`${ADMIN_FORM_WIDTH} space-y-2`}>
               {tools.map((tl) => {
                 const disabled = form.personaType === "advisor" && tl.sideEffect;
                 return (
@@ -400,7 +400,7 @@ export default function AiPersonaDetail() {
 
         <TabsContent value="trigger" className="space-y-4 mt-4">
           <Card>
-            <CardContent className="space-y-4 pt-6">
+            <CardContent className={`${ADMIN_FORM_WIDTH} space-y-4 pt-6`}>
               <div>
                 <Label>{t("aiPersona.triggerMode")}</Label>
                 <Select value={form.triggerMode} onValueChange={(v) => update("triggerMode", v as any)}>
@@ -461,7 +461,7 @@ export default function AiPersonaDetail() {
         <TabsContent value="output" className="space-y-4 mt-4">
           <Card>
             <CardHeader><CardTitle className="text-base">{t("aiPersona.outputTargets")}</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className={`${ADMIN_FORM_WIDTH} space-y-2`}>
               {OUTPUT_TARGETS.map((o) => (
                 <label key={o} className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -481,7 +481,7 @@ export default function AiPersonaDetail() {
 
         <TabsContent value="budget" className="space-y-4 mt-4">
           <Card>
-            <CardContent className="pt-6 space-y-2">
+            <CardContent className={`${ADMIN_FORM_WIDTH} pt-6 space-y-2`}>
               <Label>{t("aiPersona.budgetCapLabel")}</Label>
               <Input
                 value={form.monthlyCostCapUsd}
@@ -498,11 +498,11 @@ export default function AiPersonaDetail() {
         <TabsContent value="history" className="space-y-4 mt-4">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <CardTitle className="text-base">{t("aiPersona.lastRuns")}</CardTitle>
-                <div className="flex gap-2">
+                <div className="flex min-w-0 flex-wrap gap-2">
                   <Input
-                    className="w-72"
+                    className="w-72 max-w-full"
                     placeholder={t("aiPersona.runInputPlaceholder")}
                     value={runInput}
                     onChange={(e) => setRunInput(e.target.value)}
