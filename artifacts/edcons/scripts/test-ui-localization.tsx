@@ -20,6 +20,7 @@ test('migrated UI text follows the selected dictionary in every locale', async (
     assert.ok(html.length>0);
     assert.ok(!html.includes('uiText.'));
     assert.equal(translateUi(lang, 'An unregistered synthetic UI string', 'Sentetik metin'), lang==='tr'?'Sentetik metin':'An unregistered synthetic UI string');
+    assert.equal(translateUi(lang, ''), '');
   }
 });
 

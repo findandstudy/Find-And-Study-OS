@@ -11,6 +11,7 @@ export function uiTextKey(text: string): string {
 }
 
 export function translateUi(lang: string, english: string, turkish?: string, params?: Record<string, string | number>): string {
+  if (!english.trim()) return lang === 'tr' ? turkish ?? english : english;
   const key = uiTextKey(english);
   const value = getTranslation(isValidLanguage(lang) ? lang : 'en', key, params);
   let result = value === key ? (lang === 'tr' && turkish ? turkish : english) : value;

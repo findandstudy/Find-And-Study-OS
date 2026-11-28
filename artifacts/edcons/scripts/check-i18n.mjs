@@ -59,6 +59,7 @@ function inspectDictionary(file, source) {
   }
   visit(tree);
   for (const [key, value] of flattenValues(JSON.parse(source))) {
+    if (file === 'en.json' && !value.trim()) emptyValueErrors.push({file,key});
     if (/@\s*(?:info|action|label|title)\b|QDialog|BelizComment|Saytcolor/i.test(value)) {
       translationArtifactErrors.push(`${file}:${key}`);
     }

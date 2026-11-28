@@ -10,6 +10,7 @@ const known=new Map();for(const[key,value]of Object.entries(en))if(!key.startsWi
 for(const[key,value]of Object.entries(dict.uiText))if(lang!=='en'&&value===en['uiText.'+key]&&known.has(value)){dict.uiText[key]=known.get(value);values['uiText.'+key]=known.get(value);}
 fs.writeFileSync(filePath,JSON.stringify(dict,null,2)+'\n');
 for(const[key,value]of Object.entries(en)){
+ if(!String(value).trim())continue;
  const missingEnglish=values[key]===value&&/[a-zA-Z]{3}/.test(value)&&!brand.test(value)&&!/^https?:|^mailto:|^tel:|^[A-Z0-9_ .:/-]+$|^\{\{?\w+\}?\}$/.test(value);
  const sourceTurkish=lang==='en'&&(key.startsWith('uiText.')||(/[çğıöşüÇĞİÖŞÜ]/.test(value)&&!/(?:Acıbadem|Türkiye|İstanbul|İzmir|Oʻzbekcha|Türkçe|Français|Português|Español)/.test(value)));
  // These legacy catalogues contain unrelated desktop-software/dictionary
