@@ -11627,6 +11627,8 @@
     "agent": "Agente",
     "assignee": "Responsable",
     "hint": "Una vez por registro, etapa y canal. Se requieren correo verificado y plantilla aprobada.",
-    "location": "Plantillas: Mensajes. Cuentas remitentes: Integraciones."
+    "location": "Plantillas: Mensajes. Cuentas remitentes: Integraciones.",
+    "enableEmail": "Enviar correo cuando un registro entre en esta etapa",
+    "inactive": "El envío automático está desactivado en este entorno."
   }
 }

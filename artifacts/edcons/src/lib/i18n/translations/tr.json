@@ -11627,6 +11627,8 @@
     "agent": "Acente",
     "assignee": "Sorumlu kişi",
     "hint": "Kayıt, aşama ve kanal başına bir kez. Doğrulanmış e-posta ve onaylı şablon gerekir.",
-    "location": "E-posta şablonları: Mesajlar. Gönderici hesapları: Entegrasyonlar."
+    "location": "E-posta şablonları: Mesajlar. Gönderici hesapları: Entegrasyonlar.",
+    "enableEmail": "Kayıt bu aşamaya geldiğinde e-posta gönder",
+    "inactive": "Bu ortamda otomatik gönderim kapalıdır."
   }
 }

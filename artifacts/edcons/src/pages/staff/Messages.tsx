@@ -4976,6 +4976,13 @@ const TEMPLATE_LANGUAGES = SYSTEM_LANGUAGE_OPTIONS.map(({ code, label }) => ({
 }));
 
 const WHATSAPP_TEMPLATE_VARIABLES = [
+  {value:"recordName",labelKey:"workPipelines.recordName"},
+  {value:"recipientName",labelKey:"pipelineNotice.recipient"},
+  {value:"newStage",labelKey:"editStages.stageName"},
+  {value:"newStageKey",labelKey:"editStages.keyPlaceholder"},
+  {value:"stageName",labelKey:"editStages.stageName"},
+  {value:"pipelineName",labelKey:"workPipelines.title"},
+  {value:"recordId",labelKey:"uiText.s56e8eb60"},
   { value: "studentName", labelKey: "messagesPage.variableStudentName" },
   { value: "firstName", labelKey: "messagesPage.variableFirstName" },
   { value: "lastName", labelKey: "messagesPage.variableLastName" },
@@ -5699,7 +5706,7 @@ function TemplatesTab() {
                             <SelectContent>
                               {WHATSAPP_TEMPLATE_VARIABLES.map((option) => (
                                 <SelectItem key={option.value} value={option.value}>
-                                  {tx(option.labelKey)}
+                                  {tx(option.labelKey)} · {option.value}
                                 </SelectItem>
                               ))}
                             </SelectContent>

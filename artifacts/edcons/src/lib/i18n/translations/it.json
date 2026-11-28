@@ -11627,6 +11627,8 @@
     "agent": "Agente",
     "assignee": "Responsabile",
     "hint": "Una volta per record, fase e canale. Servono e-mail verificata e modello approvato.",
-    "location": "Modelli: Messaggi. Account mittenti: Integrazioni."
+    "location": "Modelli: Messaggi. Account mittenti: Integrazioni.",
+    "enableEmail": "Invia un’email quando un record entra in questa fase",
+    "inactive": "L’invio automatico è disattivato in questo ambiente."
   }
 }

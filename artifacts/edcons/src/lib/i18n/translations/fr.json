@@ -11627,6 +11627,8 @@
     "agent": "Agent",
     "assignee": "Responsable",
     "hint": "Une fois par fiche, étape et canal. Adresse vérifiée et modèle approuvé requis.",
-    "location": "Modèles : Messages. Comptes expéditeurs : Intégrations."
+    "location": "Modèles : Messages. Comptes expéditeurs : Intégrations.",
+    "enableEmail": "Envoyer un e-mail lorsqu’une fiche atteint cette étape",
+    "inactive": "L’envoi automatique est désactivé dans cet environnement."
   }
 }

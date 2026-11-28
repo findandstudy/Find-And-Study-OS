@@ -11627,6 +11627,8 @@
     "agent": "Agent",
     "assignee": "Jogapkär şahs",
     "hint": "Her ýazgy, tapgyr we kanal üçin bir gezek. Tassyklanan e-poçta we şablon gerek.",
-    "location": "E-poçta şablonlary: Habarlar. Iberiji hasaplary: Integrasiýalar."
+    "location": "E-poçta şablonlary: Habarlar. Iberiji hasaplary: Integrasiýalar.",
+    "enableEmail": "Ýazgy şu tapgyra gelende e-poçta ibermek",
+    "inactive": "Bu gurşawda awtomatik ibermek öçürilen."
   }
 }

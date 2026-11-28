@@ -46,7 +46,7 @@ export function WorkStageNotifications({
         ...message,
         ...patch,
         policyVersion: 2,
-        recipientType: patch.recipientType ?? message?.recipientType ?? "auto",
+        recipientType: patch.recipientType ?? message?.recipientType ?? "contact",
       },
     });
   return (
@@ -72,7 +72,7 @@ export function WorkStageNotifications({
             <>
               <PipelineNoticeRecipient
                 work
-                value={message?.recipientType ?? "auto"}
+                value={message?.recipientType ?? "contact"}
                 onChange={(recipientType) => change({ recipientType })}
               />
               <label className="block text-sm space-y-1">
@@ -135,7 +135,7 @@ export function WorkStageNotifications({
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
-                {t("pipelineNotice.hint")}
+                {t("editStages.automaticMessageOnceHint")}
               </p>
             </>
           )}

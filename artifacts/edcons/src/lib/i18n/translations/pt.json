@@ -11627,6 +11627,8 @@
     "agent": "Agente",
     "assignee": "Responsável",
     "hint": "Uma vez por registro, etapa e canal. Exige e-mail verificado e modelo aprovado.",
-    "location": "Modelos: Mensagens. Contas remetentes: Integrações."
+    "location": "Modelos: Mensagens. Contas remetentes: Integrações.",
+    "enableEmail": "Enviar email quando um registro entrar nesta etapa",
+    "inactive": "O envio automático está desativado neste ambiente."
   }
 }

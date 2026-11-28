@@ -11627,6 +11627,8 @@
     "agent": "Đại lý",
     "assignee": "Người phụ trách",
     "hint": "Một lần cho mỗi bản ghi, giai đoạn và kênh. Cần email đã xác minh và mẫu đã duyệt.",
-    "location": "Mẫu email: Tin nhắn. Tài khoản gửi: Tích hợp."
+    "location": "Mẫu email: Tin nhắn. Tài khoản gửi: Tích hợp.",
+    "enableEmail": "Gửi email khi bản ghi vào giai đoạn này",
+    "inactive": "Gửi tự động đang tắt trong môi trường này."
   }
 }

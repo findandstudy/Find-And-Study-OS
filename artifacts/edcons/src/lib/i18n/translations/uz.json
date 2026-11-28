@@ -11627,6 +11627,8 @@
     "agent": "Agent",
     "assignee": "Mas’ul shaxs",
     "hint": "Har bir yozuv, bosqich va kanal uchun bir marta. Tasdiqlangan pochta va shablon kerak.",
-    "location": "Pochta shablonlari: Xabarlar. Yuboruvchi hisoblari: Integratsiyalar."
+    "location": "Pochta shablonlari: Xabarlar. Yuboruvchi hisoblari: Integratsiyalar.",
+    "enableEmail": "Yozuv ushbu bosqichga kirganda email yuborish",
+    "inactive": "Bu muhitda avtomatik yuborish o‘chirilgan."
   }
 }

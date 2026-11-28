@@ -87,7 +87,7 @@ export function EmailAutomationManager({ view = "all" }: { view?: "all" | "sende
   return <Card id={view === "templates" ? "email-templates" : "notification-email"} className="p-4 sm:p-6 space-y-4 min-w-0 scroll-mt-6" data-testid="email-automation-manager" dir={dir}>
     <header className="space-y-2"><h2 className="font-semibold text-lg">{view === "templates" ? copy.templates : view === "senders" ? copy.senders : copy.title}</h2><p className="text-sm text-muted-foreground">{copy.intro}</p>
       {view !== "templates" && <a href="/staff/messages?tab=templates#email-templates" className="block text-sm text-primary underline">{t("stageEmail.manageTemplates")}</a>}
-      {library.capabilities.isError ? <p role="alert" className="text-sm text-destructive">{copy.loadError} <Button variant="outline" size="sm" onClick={() => void library.capabilities.refetch()}>{copy.refresh}</Button></p> : capability ? <p className="rounded-md border bg-secondary/40 p-3 text-sm" data-testid="email-runtime-status">{capability.enabled ? copy.enabled : copy.disabled}</p> : <p role="status">{copy.loading}</p>}
+      {library.capabilities.isError ? <p role="alert" className="text-sm text-destructive">{copy.loadError} <Button variant="outline" size="sm" onClick={() => void library.capabilities.refetch()}>{copy.refresh}</Button></p> : capability ? <p className="rounded-md border bg-secondary/40 p-3 text-sm" data-testid="email-runtime-status">{capability.enabled ? copy.enabled : t("pipelineNotice.inactive")}</p> : <p role="status">{copy.loading}</p>}
     </header>
     {(view === "all" || view === "history") && <StageEmailReadiness />}
     <div className="flex flex-wrap gap-2" role="group" aria-label={copy.title}>

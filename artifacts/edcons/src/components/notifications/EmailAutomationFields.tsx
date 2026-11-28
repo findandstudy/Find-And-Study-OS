@@ -12,7 +12,7 @@ export function EmailLibrarySelection({ templateVersionId, senderAccountId, onCh
   templateVersionId: number | null; senderAccountId: number | null;
   onChange: (selection: { templateVersionId: number | null; senderAccountId: number | null }) => void; enabled?: boolean; stageOnly?: boolean; allowedVariables?: readonly string[];
 }) {
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const copy = emailAutomationCopy(lang);
   const id = useId();
   const { templates, senders, capabilities } = useEmailLibrary(enabled);
@@ -37,7 +37,7 @@ export function EmailLibrarySelection({ templateVersionId, senderAccountId, onCh
     {failed && <div role="alert" className="text-sm text-destructive">{copy.loadError} <Button type="button" variant="outline" size="sm" onClick={() => { void templates.refetch(); void senders.refetch(); void capabilities.refetch(); }}>{copy.refresh}</Button></div>}
     {truncated && <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">{copy.copy("The option catalogue is incomplete. Missing selections may be outside the returned range; do not clear them without checking.", "Seçenek kataloğu eksik. Görünmeyen seçimler dönen aralığın dışında olabilir; kontrol etmeden temizlemeyin.")}</p>}
     {!loading && !failed && !truncated && stale && <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">{copy.unavailable}</p>}
-    {capabilities.data && <p className="text-xs text-muted-foreground">{capabilities.data.enabled ? copy.enabled : copy.disabled}</p>}
+    {capabilities.data && <p className="text-xs text-muted-foreground">{capabilities.data.enabled ? copy.enabled : t("pipelineNotice.inactive")}</p>}
     <div className="grid sm:grid-cols-2 gap-3">
       <label htmlFor={`${id}-version`} className="space-y-1 text-sm min-w-0"><span>{copy.version}</span>
         <select id={`${id}-version`} className="w-full min-w-0 h-10 rounded-md border bg-background px-2" value={templateVersionId ?? ""} disabled={loading || failed || !enabled} onChange={e => onChange({ templateVersionId: e.target.value ? Number(e.target.value) : null, senderAccountId })}>
@@ -68,17 +68,17 @@ export function StageAutomaticEmailFields({ value, onChange, kind="application" 
     <h3 className="font-semibold text-sm">{copy.stageTitle}</h3>
     <p className="text-xs text-muted-foreground">{t("pipelineNotice.location")}</p>
     <p className="text-xs text-muted-foreground">{t("pipelineNotice.hint")}</p>
-    <fieldset className="flex flex-wrap gap-3 text-sm"><legend className="mb-2">{copy.stageEnabled}</legend>
-      {[true, false].map(enabled => <label key={String(enabled)} className="flex gap-2 items-center"><input type="radio" name={`${id}-enabled`} checked={(value?.enabled === true) === enabled} onChange={() => onChange(enabled ? { enabled: true, policyVersion:2, recipientType:value?.recipientType??"auto", templateVersionId: value?.templateVersionId ?? null, senderAccountId: value?.senderAccountId ?? null, originTypes: value?.originTypes ?? ["direct"] } : null)} />{t(enabled ? "common.yes" : "common.no")}</label>)}
+    <fieldset className="flex flex-wrap gap-3 text-sm"><legend className="mb-2">{t("pipelineNotice.enableEmail")}</legend>
+      {[true, false].map(enabled => <label key={String(enabled)} className="flex gap-2 items-center"><input type="radio" name={`${id}-enabled`} checked={(value?.enabled === true) === enabled} onChange={() => onChange(enabled ? { enabled: true, policyVersion:2, recipientType:value?.recipientType??(kind==='work'?'contact':'auto'), templateVersionId: value?.templateVersionId ?? null, senderAccountId: value?.senderAccountId ?? null, originTypes: value?.originTypes ?? ["direct"] } : null)} />{t(enabled ? "common.yes" : "common.no")}</label>)}
     </fieldset>
     {value?.enabled && <>
       <PipelineNoticeRecipient value={value.recipientType??'auto'} work={kind==='work'} onChange={recipientType=>onChange({...value,policyVersion:2,recipientType})} />
       <EmailLibrarySelection allowedVariables={capabilities.data?.variablesByKind?.[kind]??[]} templateVersionId={value.templateVersionId} senderAccountId={value.senderAccountId} onChange={selection => onChange({ ...value, policyVersion:2, recipientType:value.recipientType??"auto", ...selection })} />
-      <fieldset className="flex flex-wrap gap-3 text-sm"><legend className="mb-2">{copy.origin}</legend>
+      {kind!=='work'&&<fieldset className="flex flex-wrap gap-3 text-sm"><legend className="mb-2">{copy.origin}</legend>
         {(["direct", "agent", "sub_agent"] as const).map(origin => <label key={origin} className="inline-flex gap-2 items-center"><input type="checkbox" checked={value.originTypes.includes(origin)} onChange={e => onChange({ ...value, originTypes: e.target.checked ? [...value.originTypes, origin] : value.originTypes.filter(v => v !== origin) })} />{origin === "direct" ? translateUi(uiLanguage, "Direct") : origin === "agent" ? copy.copy("Agent", "Acente") : copy.copy("Sub-agent", "Alt acente")}</label>)}
-      </fieldset><p className="text-xs text-muted-foreground">{copy.originHint}</p>
+      </fieldset>}{kind!=='work'&&<p className="text-xs text-muted-foreground">{copy.originHint}</p>}
     </>}
   </section>;
 }
 
-export function PipelineNoticeRecipient({value,onChange,work=false}:{value:'auto'|'contact'|'agent'|'assignee';onChange:(v:'auto'|'contact'|'agent'|'assignee')=>void;work?:boolean}){const {t}=useI18n();return <label className="block space-y-1 text-sm"><span>{t('pipelineNotice.recipient')}</span><select className="w-full h-10 rounded-md border bg-background px-2" value={value} onChange={e=>onChange(e.target.value as typeof value)}>{(['auto','contact',...(!work?['agent']:[]),'assignee'] as const).map(v=><option key={v} value={v}>{t('pipelineNotice.'+v)}</option>)}</select></label>;}
+export function PipelineNoticeRecipient({value,onChange,work=false}:{value:'auto'|'contact'|'agent'|'assignee';onChange:(v:'auto'|'contact'|'agent'|'assignee')=>void;work?:boolean}){const {t}=useI18n();return <label className="block space-y-1 text-sm"><span>{t('pipelineNotice.recipient')}</span><select className="w-full h-10 rounded-md border bg-background px-2" value={work&&value==='auto'?'contact':value} onChange={e=>onChange(e.target.value as typeof value)}>{([...(work?[]:['auto']),'contact',...(!work?['agent']:[]),'assignee'] as const).map(v=><option key={v} value={v}>{t('pipelineNotice.'+v)}</option>)}</select></label>;}

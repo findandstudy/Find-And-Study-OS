@@ -11628,6 +11628,8 @@
     "agent": "Agen",
     "assignee": "Penanggung jawab",
     "hint": "Sekali per catatan, tahap, dan kanal. Perlu email terverifikasi dan templat disetujui.",
-    "location": "Templat email: Pesan. Akun pengirim: Integrasi."
+    "location": "Templat email: Pesan. Akun pengirim: Integrasi.",
+    "enableEmail": "Kirim email saat catatan memasuki tahap ini",
+    "inactive": "Pengiriman otomatis dinonaktifkan di lingkungan ini."
   }
 }

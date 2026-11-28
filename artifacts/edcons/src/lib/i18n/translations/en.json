@@ -11627,6 +11627,8 @@
     "agent": "Agent",
     "assignee": "Assignee",
     "hint": "Once per record, stage and channel. Verified email and an approved template are required.",
-    "location": "Email templates: Messages. Sender accounts: Integrations."
+    "location": "Email templates: Messages. Sender accounts: Integrations.",
+    "enableEmail": "Send an email when a record enters this stage",
+    "inactive": "Automatic delivery is disabled in this environment."
   }
 }
