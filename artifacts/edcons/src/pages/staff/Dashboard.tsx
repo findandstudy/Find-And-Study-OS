@@ -1,4 +1,3 @@
-import { WorkPipelineDashboardWidget } from "@/components/WorkPipelineDashboardWidget";
 import { DashboardSkeleton } from "@/components/ui/page-skeleton";
 import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -184,8 +183,6 @@ export default function StaffDashboard() {
           <h1 className="text-3xl font-display font-bold text-foreground">{t("staffDash.welcomeBack")}</h1>
           <p className="text-muted-foreground mt-1">{t("staffDash.welcomeSubtitle")}</p>
         </div>
-
-        <WorkPipelineDashboardWidget />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {[

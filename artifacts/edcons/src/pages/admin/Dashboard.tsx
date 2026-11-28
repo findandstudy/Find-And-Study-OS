@@ -1,4 +1,3 @@
-import { WorkPipelineDashboardWidget } from "@/components/WorkPipelineDashboardWidget";
 import { useState, useEffect, useMemo } from "react";
 import { customFetch, useGetOverviewStats, useGetActivitySummary, useGetKommoSummary, useListUsers } from "@workspace/api-client-react";
 import { formatDate } from "@workspace/i18n";
@@ -436,8 +435,6 @@ export default function AdminDashboard() {
           <Shield className="w-4 h-4 mr-2" /> {t("adminDash.adminAccess")}
         </Badge>
       </div>
-
-      <WorkPipelineDashboardWidget />
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
