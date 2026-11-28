@@ -71,7 +71,7 @@ export function EmailVerificationGuard({ children }: Props) {
 
           <Button onClick={handleResend} disabled={sending} className="w-full rounded-xl gap-2 mb-3">
             {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            {sent ? "Resend Verification Email" : "Send Verification Email"}
+            {sent ? translateUi(uiLanguage, "Resend Verification Email") : translateUi(uiLanguage, "Send Verification Email")}
           </Button>
 
           <p className="text-xs text-muted-foreground mb-4"> {translateUi(uiLanguage, "Check your inbox (and spam folder) for the verification link.")} </p>

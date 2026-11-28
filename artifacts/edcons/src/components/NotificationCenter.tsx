@@ -195,7 +195,7 @@ export function NotificationCenter() {
         applications: 0,
         tasks: 0,
       }));
-      toast({ title: "All notifications marked as read" });
+      toast({ title: translateUi(uiLanguage, "All notifications marked as read") });
     } catch {}
   };
 
@@ -261,7 +261,7 @@ export function NotificationCenter() {
               ) : notifications.length === 0 ? (
                 <div className="p-8 text-center text-muted-foreground">
                   <Bell className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                  <p className="text-sm">{view === "important" ? "No important notifications" : "No notifications yet"}</p>
+                  <p className="text-sm">{view === "important" ? translateUi(uiLanguage, "No important notifications") : translateUi(uiLanguage, "No notifications yet")}</p>
                 </div>
               ) : (
                 notifications.map(n => {

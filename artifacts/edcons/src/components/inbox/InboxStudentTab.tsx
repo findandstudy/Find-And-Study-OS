@@ -569,7 +569,7 @@ export function InboxStudentTab({
     } catch (error) {
       toast({
         title: t("studentDetailPage.deleteTooltip"),
-        description: error instanceof Error ? error.message : "Failed to delete document",
+        description: error instanceof Error ? error.message : translateUi(uiLanguage, "Failed to delete document"),
         variant: "destructive",
       });
     } finally {
@@ -646,8 +646,8 @@ export function InboxStudentTab({
       toast({
         title: t("inbox.studentTab.requiredDocs"),
         description: docReqsError
-          ? "Document requirements could not be verified."
-          : "Document requirements are still loading.",
+          ? translateUi(uiLanguage, "Document requirements could not be verified.")
+          : translateUi(uiLanguage, "Document requirements are still loading."),
         variant: "destructive",
       });
       return;

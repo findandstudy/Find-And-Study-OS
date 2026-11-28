@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { workPipelineHistory } from "@/lib/workPipelineI18n";
 import { useI18n } from "@/hooks/use-i18n";
 import { useState } from "react";
@@ -32,6 +33,7 @@ export function WorkPipelineActivity({
   disabled: boolean;
   save: (activity: unknown) => Promise<boolean>;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, isRTL } = useI18n();
   const [note, setNote] = useState("");
   const [editing, setEditing] = useState<Partial<FollowUp> | null>(null);

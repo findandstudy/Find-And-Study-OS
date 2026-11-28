@@ -450,7 +450,7 @@ export function AuditLogSection({ resource, resourceId }: Props) {
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="flex items-center gap-2 flex-wrap min-w-0">
                             <span className="text-sm font-semibold text-foreground truncate">
-                              {log.userName || "System"}
+                              {log.userName || translateUi(uiLanguage, "System")}
                             </span>
                             <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${TONE_BADGE[meta.tone]}`}>
                               {meta.label}

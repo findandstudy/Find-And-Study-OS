@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -79,6 +80,7 @@ export function AssignDocumentFromMessageModal({
   onClose,
   onSaved,
 }: AssignDocumentFromMessageModalProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const queryClient = useQueryClient();

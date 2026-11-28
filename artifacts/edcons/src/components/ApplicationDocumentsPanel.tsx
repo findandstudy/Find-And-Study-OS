@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -163,6 +164,7 @@ function CategorySection({
   isAgent: boolean;
   hideUpload?: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(docs.length > 0);
   const { toast } = useToast();

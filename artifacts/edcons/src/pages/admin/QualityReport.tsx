@@ -65,6 +65,7 @@ export function TrendIcon({ trend }: { trend: "up" | "down" | "flat" }) {
 }
 
 export default function QualityReportPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   // Route-level ProtectedRoute is the source of truth for authorization;

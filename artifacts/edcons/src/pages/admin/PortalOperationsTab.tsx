@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useCallback, useEffect, useState } from "react";
 import {
   customFetch,
@@ -77,6 +78,7 @@ function time(value: string | null): string {
 }
 
 export default function PortalOperationsTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [data, setData] = useState<PortalOperationsResponse | null>(null);
@@ -374,7 +376,7 @@ export default function PortalOperationsTab() {
                             {t("portalAutomation.operations.applicationLabel")} #{proposal.applicationId}
                           </span>
                           <Badge variant="outline">{decision.disposition ?? decision.signal ?? "UNKNOWN"}</Badge>
-                          <Badge variant="secondary">{decision.action ?? "manual_review"}</Badge>
+                          <Badge variant="secondary">{decision.action ?? translateUi(uiLanguage, "manual_review")}</Badge>
                           {decision.requiredArtifact && (
                             <Badge variant={decision.artifactVerified ? "secondary" : "destructive"}>
                               {decision.requiredArtifact}

@@ -57,6 +57,7 @@ function hhmmToMinutes(s: string): number {
 }
 
 export default function StaffCardDetailPage({ userId }: { userId: number }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [data, setData] = useState<CardData | null>(null);
@@ -88,7 +89,7 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
     return (
       <div className="p-12 max-w-md mx-auto text-center space-y-3">
         <p className="text-sm text-destructive">{error || t("staffCards.loadFailed")}</p>
-        <Button size="sm" variant="outline" onClick={refresh}>{t("common.retry") || "Retry"}</Button>
+        <Button size="sm" variant="outline" onClick={refresh}>{t("common.retry") || translateUi(uiLanguage, "Retry")}</Button>
       </div>
     );
   }
@@ -499,6 +500,7 @@ function DocumentsSection({ documents, userId, onSaved }: { documents: any[]; us
 
 // ─── Sortable header helper ─────────────────────────────────────────────────
 function SortHeader({ label, active, dir, onClick, className }: { label: string; active: boolean; dir: "asc" | "desc"; onClick: () => void; className?: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   return (
     <th className={`p-3 cursor-pointer select-none hover:bg-muted/60 ${className || ""}`} onClick={onClick}>
       <div className="flex items-center gap-1">

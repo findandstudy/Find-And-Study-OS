@@ -1,3 +1,4 @@
+import { translateUi } from "@/lib/ui-localization";
 // Page-editor copy only; catalogue facts and user-authored content are never translated here.
 const TURKISH: Record<string, string> = {
   Hero: "Üst bölüm", "Rich Text": "Zengin metin", "HTML Content": "HTML içerik", "Stats Strip": "İstatistik şeridi", "Live Catalog Grid": "Güncel katalog listesi",
@@ -23,5 +24,5 @@ const TURKISH: Record<string, string> = {
 };
 
 export function pageEditorText(lang: string, english: string, turkish?: string): string {
-  return lang === "tr" ? turkish ?? TURKISH[english] ?? english : english;
+  return translateUi(lang, english, turkish ?? TURKISH[english]);
 }

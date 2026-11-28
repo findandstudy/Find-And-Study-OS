@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -101,6 +102,7 @@ interface DocumentScannerProps {
 }
 
 export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", allowMultiPage = true }: DocumentScannerProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);

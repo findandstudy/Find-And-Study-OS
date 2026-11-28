@@ -500,8 +500,8 @@ export default function OperationsCenter() {
       const snoozedDueDate = addDaysToDueDate(row.dueAt, 3);
       if (action === "snooze" && !snoozedDueDate) {
         toast({
-          title: tr ? "Görev ertelenemedi" : "Task could not be snoozed",
-          description: tr ? "Geçerli bir tarih bulunamadı." : "No valid due date was found.",
+          title: tr ? translateUi(uiLanguage, "Görev ertelenemedi") : translateUi(uiLanguage, "Task could not be snoozed"),
+          description: tr ? translateUi(uiLanguage, "Geçerli bir tarih bulunamadı.") : translateUi(uiLanguage, "No valid due date was found."),
           variant: "destructive",
         });
         return;
@@ -520,11 +520,11 @@ export default function OperationsCenter() {
         title:
           action === "complete"
             ? tr
-              ? "Görev tamamlandı"
-              : "Task completed"
+              ? translateUi(uiLanguage, "Görev tamamlandı")
+              : translateUi(uiLanguage, "Task completed")
             : tr
-              ? "Görev 3 gün ertelendi"
-              : "Task snoozed for 3 days",
+              ? translateUi(uiLanguage, "Görev 3 gün ertelendi")
+              : translateUi(uiLanguage, "Task snoozed for 3 days"),
       });
       await queryClient.invalidateQueries({
         queryKey: ["operations-center", "work-items"],
@@ -533,7 +533,7 @@ export default function OperationsCenter() {
       const description =
         error instanceof Error ? error.message : tr ? "İşlem başarısız." : "Action failed.";
       toast({
-        title: tr ? "Görev güncellenemedi" : "Task was not updated",
+        title: tr ? translateUi(uiLanguage, "Görev güncellenemedi") : translateUi(uiLanguage, "Task was not updated"),
         description,
         variant: "destructive",
       });
@@ -557,12 +557,12 @@ export default function OperationsCenter() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            {tr ? "İş & İstisna Merkezi" : "Work & Exception Center"}
+            {tr ? translateUi(uiLanguage, "İş & İstisna Merkezi") : translateUi(uiLanguage, "Work & Exception Center")}
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {tr
-              ? "Görev, başvuru, belge, offer ve portal sinyallerini mevcut yetki sınırları içinde tek öncelikli iş kuyruğunda birleştirir."
-              : "Combines tasks, applications, evidence, offers and portal signals into one prioritized queue within existing access boundaries."}
+              ? translateUi(uiLanguage, "Görev, başvuru, belge, offer ve portal sinyallerini mevcut yetki sınırları içinde tek öncelikli iş kuyruğunda birleştirir.")
+              : translateUi(uiLanguage, "Combines tasks, applications, evidence, offers and portal signals into one prioritized queue within existing access boundaries.")}
           </p>
         </div>
         <Button
@@ -572,7 +572,7 @@ export default function OperationsCenter() {
           disabled={loading}
         >
           <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
-          {tr ? "Yenile" : "Refresh"}
+          {tr ? translateUi(uiLanguage, "Yenile") : translateUi(uiLanguage, "Refresh")}
         </Button>
       </div>
 
@@ -640,21 +640,21 @@ export default function OperationsCenter() {
 
       <Tabs defaultValue="work" className="space-y-4">
         <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-xl bg-muted/60 p-1">
-          <TabsTrigger value="work">{tr ? "İşim" : "My Work"}</TabsTrigger>
+          <TabsTrigger value="work">{tr ? translateUi(uiLanguage, "İşim") : translateUi(uiLanguage, "My Work")}</TabsTrigger>
           <TabsTrigger value="exceptions">
-            {tr ? "İstisnalar" : "Exceptions"}
+            {tr ? translateUi(uiLanguage, "İstisnalar") : translateUi(uiLanguage, "Exceptions")}
           </TabsTrigger>
           <TabsTrigger value="evidence">
-            {tr ? "Belge Merkezi" : "Evidence Center"}
+            {tr ? translateUi(uiLanguage, "Belge Merkezi") : translateUi(uiLanguage, "Evidence Center")}
           </TabsTrigger>
           <TabsTrigger value="integrations">
-            {tr ? "Entegrasyonlar" : "Integrations"}
+            {tr ? translateUi(uiLanguage, "Entegrasyonlar") : translateUi(uiLanguage, "Integrations")}
           </TabsTrigger>
           <TabsTrigger value="journey">
-            {tr ? "Offer / Vize / Kayıt" : "Offer / Visa / Enrolment"}
+            {tr ? translateUi(uiLanguage, "Offer / Vize / Kayıt") : translateUi(uiLanguage, "Offer / Visa / Enrolment")}
           </TabsTrigger>
           <TabsTrigger value="communication">
-            {tr ? "İletişim & Onay" : "Communication & Consent"}
+            {tr ? translateUi(uiLanguage, "İletişim & Onay") : translateUi(uiLanguage, "Communication & Consent")}
           </TabsTrigger>
         </TabsList>
 
@@ -662,7 +662,7 @@ export default function OperationsCenter() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">
-                {tr ? "Birleşik iş kuyruğum" : "Unified My Work"}
+                {tr ? translateUi(uiLanguage, "Birleşik iş kuyruğum") : translateUi(uiLanguage, "Unified My Work")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -686,11 +686,11 @@ export default function OperationsCenter() {
                   >
                     {work.isFetchingNextPage
                       ? tr
-                        ? "Yükleniyor…"
-                        : "Loading…"
+                        ? translateUi(uiLanguage, "Yükleniyor…")
+                        : translateUi(uiLanguage, "Loading…")
                       : tr
-                        ? "Daha fazla iş yükle"
-                        : "Load more work"}
+                        ? translateUi(uiLanguage, "Daha fazla iş yükle")
+                        : translateUi(uiLanguage, "Load more work")}
                   </Button>
                 </div>
               )}
@@ -705,13 +705,13 @@ export default function OperationsCenter() {
                 <div>
                   <CardTitle className="text-base">
                     {tr
-                      ? "Case Orchestration & Exception Center"
-                      : "Case Orchestration & Exception Center"}
+                      ? translateUi(uiLanguage, "Case Orchestration & Exception Center")
+                      : translateUi(uiLanguage, "Case Orchestration & Exception Center")}
                   </CardTitle>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {tr
-                      ? "Öncelik açıklanabilir kurallarla hesaplanır; bu ekran iş akışı durumunu kendiliğinden değiştirmez."
-                      : "Priority is calculated with explainable rules; this view never mutates workflow state by itself."}
+                      ? translateUi(uiLanguage, "Öncelik açıklanabilir kurallarla hesaplanır; bu ekran iş akışı durumunu kendiliğinden değiştirmez.")
+                      : translateUi(uiLanguage, "Priority is calculated with explainable rules; this view never mutates workflow state by itself.")}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -732,7 +732,7 @@ export default function OperationsCenter() {
                     className="h-9 rounded-md border bg-background px-3 text-sm"
                   >
                     <option value="all">
-                      {tr ? "Tüm önemler" : "All severities"}
+                      {tr ? translateUi(uiLanguage, "Tüm önemler") : translateUi(uiLanguage, "All severities")}
                     </option>
                     <option value="critical">{translateUi(uiLanguage, "Critical")}</option>
                     <option value="high">{translateUi(uiLanguage, "High")}</option>
@@ -747,7 +747,7 @@ export default function OperationsCenter() {
                     className="h-9 rounded-md border bg-background px-3 text-sm"
                   >
                     <option value="all">
-                      {tr ? "Tüm kaynaklar" : "All sources"}
+                      {tr ? translateUi(uiLanguage, "Tüm kaynaklar") : translateUi(uiLanguage, "All sources")}
                     </option>
                     <option value="application">{translateUi(uiLanguage, "Application")}</option>
                     <option value="task">{translateUi(uiLanguage, "Task")}</option>
@@ -784,11 +784,11 @@ export default function OperationsCenter() {
                   >
                     {exceptions.isFetchingNextPage
                       ? tr
-                        ? "Yükleniyor…"
-                        : "Loading…"
+                        ? translateUi(uiLanguage, "Yükleniyor…")
+                        : translateUi(uiLanguage, "Loading…")
                       : tr
-                        ? "Daha fazla istisna yükle"
-                        : "Load more exceptions"}
+                        ? translateUi(uiLanguage, "Daha fazla istisna yükle")
+                        : translateUi(uiLanguage, "Load more exceptions")}
                   </Button>
                 )}
               </div>
@@ -818,19 +818,19 @@ export default function OperationsCenter() {
               <CardTitle className="flex items-center gap-2 text-base">
                 <FileCheck2 className="size-4 text-primary" />
                 {tr
-                  ? "Evidence & Document Center"
-                  : "Evidence & Document Center"}
+                  ? translateUi(uiLanguage, "Evidence & Document Center")
+                  : translateUi(uiLanguage, "Evidence & Document Center")}
               </CardTitle>
               <p className="text-sm text-muted-foreground">
                 {tr
-                  ? "Gerçek belge kayıtlarının doğrulama durumunu ve bağlı case'i gösterir; dosya içeriğini bu listeye taşımaz."
-                  : "Shows verification state and linked case for real document records without bringing file contents into this list."}
+                  ? translateUi(uiLanguage, "Gerçek belge kayıtlarının doğrulama durumunu ve bağlı case'i gösterir; dosya içeriğini bu listeye taşımaz.")
+                  : translateUi(uiLanguage, "Shows verification state and linked case for real document records without bringing file contents into this list.")}
               </p>
             </CardHeader>
             <CardContent>
               {documentRows.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr ? "Görüntülenebilir belge yok." : "No visible documents."}
+                  {tr ? translateUi(uiLanguage, "Görüntülenebilir belge yok.") : translateUi(uiLanguage, "No visible documents.")}
                 </p>
               ) : (
                 <div className="overflow-x-auto rounded-xl border">
@@ -838,14 +838,14 @@ export default function OperationsCenter() {
                     <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2.5">
-                          {tr ? "Belge" : "Document"}
+                          {tr ? translateUi(uiLanguage, "Belge") : translateUi(uiLanguage, "Document")}
                         </th>
                         <th className="px-3 py-2.5">
-                          {tr ? "Durum" : "Status"}
+                          {tr ? translateUi(uiLanguage, "Durum") : translateUi(uiLanguage, "Status")}
                         </th>
                         <th className="px-3 py-2.5">{translateUi(uiLanguage, "Case")}</th>
                         <th className="px-3 py-2.5">
-                          {tr ? "Güncellendi" : "Updated"}
+                          {tr ? translateUi(uiLanguage, "Güncellendi") : translateUi(uiLanguage, "Updated")}
                         </th>
                         <th />
                       </tr>
@@ -909,8 +909,8 @@ export default function OperationsCenter() {
             <Card>
               <CardContent className="py-10 text-center text-sm text-muted-foreground">
                 {tr
-                  ? "Entegrasyon sağlık görünümü yönetici yetkisi gerektirir."
-                  : "Integration health requires administrator access."}
+                  ? translateUi(uiLanguage, "Entegrasyon sağlık görünümü yönetici yetkisi gerektirir.")
+                  : translateUi(uiLanguage, "Integration health requires administrator access.")}
               </CardContent>
             </Card>
           ) : (
@@ -919,7 +919,7 @@ export default function OperationsCenter() {
                 <Card>
                   <CardContent className="p-4">
                     <p className="text-xs text-muted-foreground">
-                      {tr ? "İzlenen portal işi" : "Tracked portal work"}
+                      {tr ? translateUi(uiLanguage, "İzlenen portal işi") : translateUi(uiLanguage, "Tracked portal work")}
                     </p>
                     <p className="mt-2 text-2xl font-semibold">
                       {Number(portal.data?.summary.tracked ?? 0)}
@@ -929,7 +929,7 @@ export default function OperationsCenter() {
                 <Card>
                   <CardContent className="p-4">
                     <p className="text-xs text-muted-foreground">
-                      {tr ? "Kontrol zamanı gelen" : "Due for check"}
+                      {tr ? translateUi(uiLanguage, "Kontrol zamanı gelen") : translateUi(uiLanguage, "Due for check")}
                     </p>
                     <p className="mt-2 text-2xl font-semibold">
                       {Number(portal.data?.summary.due ?? 0)}
@@ -939,7 +939,7 @@ export default function OperationsCenter() {
                 <Card>
                   <CardContent className="p-4">
                     <p className="text-xs text-muted-foreground">
-                      {tr ? "Askıya alınan" : "Suspended"}
+                      {tr ? translateUi(uiLanguage, "Askıya alınan") : translateUi(uiLanguage, "Suspended")}
                     </p>
                     <p className="mt-2 text-2xl font-semibold">
                       {Number(portal.data?.summary.suspended ?? 0)}
@@ -949,7 +949,7 @@ export default function OperationsCenter() {
                 <Card>
                   <CardContent className="p-4">
                     <p className="text-xs text-muted-foreground">
-                      {tr ? "Onay bekleyen" : "Pending review"}
+                      {tr ? translateUi(uiLanguage, "Onay bekleyen") : translateUi(uiLanguage, "Pending review")}
                     </p>
                     <p className="mt-2 text-2xl font-semibold">
                       {Number(portal.data?.summary.pendingReviews ?? 0)}
@@ -962,13 +962,13 @@ export default function OperationsCenter() {
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Link2 className="size-4 text-primary" />
                     {tr
-                      ? "Integration Control Tower"
-                      : "Integration Control Tower"}
+                      ? translateUi(uiLanguage, "Integration Control Tower")
+                      : translateUi(uiLanguage, "Integration Control Tower")}
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
                     {tr
-                      ? "Etkinlik durumu sağlık kanıtı değildir. Sonuç kaydı olmayan bağlantı 'doğrulanmadı' olarak gösterilir."
-                      : "Enabled does not mean healthy. Connections without a recorded real test remain unverified."}
+                      ? translateUi(uiLanguage, "Etkinlik durumu sağlık kanıtı değildir. Sonuç kaydı olmayan bağlantı 'doğrulanmadı' olarak gösterilir.")
+                      : translateUi(uiLanguage, "Enabled does not mean healthy. Connections without a recorded real test remain unverified.")}
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -977,10 +977,10 @@ export default function OperationsCenter() {
                       <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                         <tr>
                           <th className="px-3 py-2.5">
-                            {tr ? "Bağlantı" : "Connection"}
+                            {tr ? translateUi(uiLanguage, "Bağlantı") : translateUi(uiLanguage, "Connection")}
                           </th>
                           <th className="px-3 py-2.5">
-                            {tr ? "Kategori" : "Category"}
+                            {tr ? translateUi(uiLanguage, "Kategori") : translateUi(uiLanguage, "Category")}
                           </th>
                           <th className="px-3 py-2.5">{translateUi(uiLanguage, "Config")}</th>
                           <th className="px-3 py-2.5">{translateUi(uiLanguage, "Health")}</th>
@@ -1009,16 +1009,16 @@ export default function OperationsCenter() {
                               >
                                 {integration.isEnabled
                                   ? tr
-                                    ? "Etkin"
-                                    : "Enabled"
+                                    ? translateUi(uiLanguage, "Etkin")
+                                    : translateUi(uiLanguage, "Enabled")
                                   : tr
-                                    ? "Kapalı"
-                                    : "Disabled"}
+                                    ? translateUi(uiLanguage, "Kapalı")
+                                    : translateUi(uiLanguage, "Disabled")}
                               </Badge>
                             </td>
                             <td className="px-3 py-3">
                               <Badge variant="outline">
-                                {tr ? "Doğrulanmadı" : "Unverified"}
+                                {tr ? translateUi(uiLanguage, "Doğrulanmadı") : translateUi(uiLanguage, "Unverified")}
                               </Badge>
                             </td>
                             <td className="px-3 py-3 text-right">
@@ -1039,13 +1039,13 @@ export default function OperationsCenter() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">
-                    {tr ? "İzole portal sıraları" : "Isolated portal lanes"}
+                    {tr ? translateUi(uiLanguage, "İzole portal sıraları") : translateUi(uiLanguage, "Isolated portal lanes")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   {(portal.data?.lanes ?? []).length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      {tr ? "Aktif sıra yok." : "No active lanes."}
+                      {tr ? translateUi(uiLanguage, "Aktif sıra yok.") : translateUi(uiLanguage, "No active lanes.")}
                     </p>
                   ) : (
                     <div className="grid gap-2 md:grid-cols-2">
@@ -1079,13 +1079,13 @@ export default function OperationsCenter() {
               <CardTitle className="flex items-center gap-2 text-base">
                 <GraduationCap className="size-4 text-primary" />
                 {tr
-                  ? "Offer, Visa & Enrolment Journey"
-                  : "Offer, Visa & Enrolment Journey"}
+                  ? translateUi(uiLanguage, "Offer, Visa & Enrolment Journey")
+                  : translateUi(uiLanguage, "Offer, Visa & Enrolment Journey")}
               </CardTitle>
               <p className="text-sm text-muted-foreground">
                 {tr
-                  ? "Mevcut dinamik application stage'lerini ve offer kanıtlarını aynı case yolculuğunda görünür kılar. State değişikliği yine kanıtlı akış üzerinden yapılır."
-                  : "Projects dynamic application stages and offer evidence into one case journey. State changes still use the evidence-bound workflow."}
+                  ? translateUi(uiLanguage, "Mevcut dinamik application stage'lerini ve offer kanıtlarını aynı case yolculuğunda görünür kılar. State değişikliği yine kanıtlı akış üzerinden yapılır.")
+                  : translateUi(uiLanguage, "Projects dynamic application stages and offer evidence into one case journey. State changes still use the evidence-bound workflow.")}
               </p>
             </CardHeader>
             <CardContent>
@@ -1099,8 +1099,8 @@ export default function OperationsCenter() {
                     <p className="mt-1 text-xs text-muted-foreground">
                       {stage.isCaseClose
                         ? tr
-                          ? "Kapanış durumu"
-                          : "Closing state"
+                          ? translateUi(uiLanguage, "Kapanış durumu")
+                          : translateUi(uiLanguage, "Closing state")
                         : stage.key}
                     </p>
                   </div>
@@ -1111,15 +1111,15 @@ export default function OperationsCenter() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {tr ? "Offer son tarihleri" : "Offer deadlines"}
+                {tr ? translateUi(uiLanguage, "Offer son tarihleri") : translateUi(uiLanguage, "Offer deadlines")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {offerRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {tr
-                    ? "Yaklaşan offer son tarihi yok."
-                    : "No upcoming offer deadline."}
+                    ? translateUi(uiLanguage, "Yaklaşan offer son tarihi yok.")
+                    : translateUi(uiLanguage, "No upcoming offer deadline.")}
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -1163,13 +1163,13 @@ export default function OperationsCenter() {
               <CardTitle className="flex items-center gap-2 text-base">
                 <MessageCircle className="size-4 text-primary" />
                 {tr
-                  ? "Communication, Consent & Guardian/Sponsor"
-                  : "Communication, Consent & Guardian/Sponsor"}
+                  ? translateUi(uiLanguage, "Communication, Consent & Guardian/Sponsor")
+                  : translateUi(uiLanguage, "Communication, Consent & Guardian/Sponsor")}
               </CardTitle>
               <p className="text-sm text-muted-foreground">
                 {tr
-                  ? "Mevcut inbox ve bildirim altyapısını kullanır; onay, tercih ve temsil yetkisi birbirinin yerine geçmez."
-                  : "Uses the existing inbox and notification foundation; consent, preference and relationship authority remain separate."}
+                  ? translateUi(uiLanguage, "Mevcut inbox ve bildirim altyapısını kullanır; onay, tercih ve temsil yetkisi birbirinin yerine geçmez.")
+                  : translateUi(uiLanguage, "Uses the existing inbox and notification foundation; consent, preference and relationship authority remain separate.")}
               </p>
             </CardHeader>
             <CardContent>
@@ -1180,7 +1180,7 @@ export default function OperationsCenter() {
                 >
                   <Inbox className="size-5 text-primary" />
                   <p className="mt-3 font-medium">
-                    {tr ? "Birleşik Inbox" : "Unified Inbox"}
+                    {tr ? translateUi(uiLanguage, "Birleşik Inbox") : translateUi(uiLanguage, "Unified Inbox")}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground"> {translateUi(uiLanguage, "WhatsApp, Messenger, Instagram")} </p>
                 </a>
@@ -1190,12 +1190,12 @@ export default function OperationsCenter() {
                 >
                   <ShieldCheck className="size-5 text-primary" />
                   <p className="mt-3 font-medium">
-                    {tr ? "İletişim tercihleri" : "Communication preferences"}
+                    {tr ? translateUi(uiLanguage, "İletişim tercihleri") : translateUi(uiLanguage, "Communication preferences")}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {tr
-                      ? "Kanal ve kategori bazlı kontrol"
-                      : "Channel and category controls"}
+                      ? translateUi(uiLanguage, "Kanal ve kategori bazlı kontrol")
+                      : translateUi(uiLanguage, "Channel and category controls")}
                   </p>
                 </a>
                 <div className="rounded-xl border p-4">
@@ -1203,19 +1203,19 @@ export default function OperationsCenter() {
                   <p className="mt-3 font-medium">{translateUi(uiLanguage, "Guardian / Sponsor")}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {tr
-                      ? "Purpose-limited ilişki ve paylaşım kapsamı foundation üzerinde; mutating UI henüz kapalı."
-                      : "Purpose-limited relationship foundation exists; mutating UI remains closed."}
+                      ? translateUi(uiLanguage, "Purpose-limited ilişki ve paylaşım kapsamı foundation üzerinde; mutating UI henüz kapalı.")
+                      : translateUi(uiLanguage, "Purpose-limited relationship foundation exists; mutating UI remains closed.")}
                   </p>
                 </div>
                 <div className="rounded-xl border p-4">
                   <ListChecks className="size-5 text-primary" />
                   <p className="mt-3 font-medium">
-                    {tr ? "Karar izi" : "Decision receipt"}
+                    {tr ? translateUi(uiLanguage, "Karar izi") : translateUi(uiLanguage, "Decision receipt")}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {tr
-                      ? "Gönderim öncesi consent, suppression ve quiet-hours değerlendirmesi."
-                      : "Consent, suppression and quiet-hours evaluation before sending."}
+                      ? translateUi(uiLanguage, "Gönderim öncesi consent, suppression ve quiet-hours değerlendirmesi.")
+                      : translateUi(uiLanguage, "Consent, suppression and quiet-hours evaluation before sending.")}
                   </p>
                 </div>
               </div>
@@ -1224,8 +1224,8 @@ export default function OperationsCenter() {
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
             <FileWarning className="mr-2 inline size-4" />
             {tr
-              ? "Bu dilim consent veya guardian yetkisi üretmez; yalnız mevcut güvenli altyapıyı doğru operasyon alanına bağlar. Yazma akışları ayrı maker-checker ve hukuk kapısından geçecek."
-              : "This slice does not mint consent or guardian authority; it only places the existing safe foundation in the right workspace. Write flows remain behind maker-checker and legal gates."}
+              ? translateUi(uiLanguage, "Bu dilim consent veya guardian yetkisi üretmez; yalnız mevcut güvenli altyapıyı doğru operasyon alanına bağlar. Yazma akışları ayrı maker-checker ve hukuk kapısından geçecek.")
+              : translateUi(uiLanguage, "This slice does not mint consent or guardian authority; it only places the existing safe foundation in the right workspace. Write flows remain behind maker-checker and legal gates.")}
           </div>
         </TabsContent>
       </Tabs>

@@ -132,13 +132,13 @@ export default function WebsiteNavigation() {
       if (editItem) return customFetch(`/api/website/navigation-items/${editItem.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
       return customFetch("/api/website/navigation-items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["nav-items", activeMenuId] }); setItemDialog(false); toast({ title: editItem ? "Item updated" : "Item added" }); },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["nav-items", activeMenuId] }); setItemDialog(false); toast({ title: editItem ? translateUi(uiLanguage, "Item updated") : translateUi(uiLanguage, "Item added") }); },
+    onError: (e: Error) => toast({ title: translateUi(uiLanguage, "Error"), description: e.message, variant: "destructive" }),
   });
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => customFetch(`/api/website/navigation-items/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["nav-items", activeMenuId] }); toast({ title: "Item deleted" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["nav-items", activeMenuId] }); toast({ title: translateUi(uiLanguage, "Item deleted") }); },
   });
 
   const reorderMut = useMutation({
@@ -181,13 +181,13 @@ export default function WebsiteNavigation() {
 
   function handleSave() {
     if (!form.label.trim()) {
-      toast({ title: "Label is required", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Label is required"), variant: "destructive" });
       return;
     }
 
     const urlVal = form.linkType === "url" ? form.url.trim() : null;
     if (urlVal && /^javascript:/i.test(urlVal)) {
-      toast({ title: "Invalid URL scheme", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Invalid URL scheme"), variant: "destructive" });
       return;
     }
 
@@ -300,7 +300,7 @@ export default function WebsiteNavigation() {
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="text-muted-foreground text-sm">
-                      {m.location === "header" ? "Main navigation links in the website header." : "Links displayed in the website footer."}
+                      {m.location === "header" ? translateUi(uiLanguage, "Main navigation links in the website header.") : translateUi(uiLanguage, "Links displayed in the website footer.")}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Location:")} <Badge variant="outline" className="text-[10px]">{m.location}</Badge></p>
                   </div>
@@ -323,7 +323,7 @@ export default function WebsiteNavigation() {
 
       <Dialog open={itemDialog} onOpenChange={setItemDialog}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{editItem ? "Edit Menu Item" : "Add Menu Item"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editItem ? translateUi(uiLanguage, "Edit Menu Item") : translateUi(uiLanguage, "Add Menu Item")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label>{translateUi(uiLanguage, "Label *")}</Label>
@@ -398,7 +398,7 @@ export default function WebsiteNavigation() {
             <div className="flex gap-3 justify-end pt-2">
               <Button variant="outline" onClick={() => setItemDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
               <Button onClick={handleSave} disabled={saveMut.isPending} className="rounded-xl">
-                {saveMut.isPending ? "Saving..." : editItem ? "Update" : "Add Item"}
+                {saveMut.isPending ? translateUi(uiLanguage, "Saving...") : editItem ? translateUi(uiLanguage, "Update") : translateUi(uiLanguage, "Add Item")}
               </Button>
             </div>
           </div>

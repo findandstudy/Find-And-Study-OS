@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -149,6 +150,7 @@ export function QuickContactDialog({
   hideEmail?: boolean;
   hideWhatsApp?: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t } = useI18n();
   const { isAgentSide, availability } = useAgentChannelAvailability();

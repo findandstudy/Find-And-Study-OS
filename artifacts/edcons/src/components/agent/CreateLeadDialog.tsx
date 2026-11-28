@@ -46,6 +46,7 @@ const EMPTY_FORM = {
 };
 
 function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [searchVal, setSearchVal] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,7 +77,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
       />
       {open && (
         <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? translateUi(uiLanguage, "No match — custom value OK") : translateUi(uiLanguage, "No countries loaded")}</div>}
           {filtered.map(c => (
             <button key={c.id} type="button"
               className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
@@ -143,7 +144,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
         className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background hover:bg-accent/50 transition-colors"
       >
         <span className={`truncate ${localSelected.length === 0 ? "text-muted-foreground" : ""}`}>
-          {localSelected.length === 0 ? "Select countries..." : localSelected.length === 1 ? localSelected[0] : `${localSelected.length} countries selected`}
+          {localSelected.length === 0 ? translateUi(uiLanguage, "Select countries...") : localSelected.length === 1 ? localSelected[0] : `${localSelected.length} countries selected`}
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </button>
@@ -209,7 +210,7 @@ export function CreateLeadDialog({ open, onOpenChange, sourceOptions }: {
       { data: payload },
       {
         onSuccess: () => {
-          toast({ title: "Lead created" });
+          toast({ title: translateUi(uiLanguage, "Lead created") });
           handleClose();
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
         },
@@ -270,7 +271,7 @@ export function CreateLeadDialog({ open, onOpenChange, sourceOptions }: {
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleCreate} disabled={createLead.isPending || !form.firstName || !form.lastName || !form.email || !isPhoneFieldValid(form.phone, true)}>
-            {createLead.isPending ? "Creating…" : "Create Lead"}
+            {createLead.isPending ? translateUi(uiLanguage, "Creating…") : translateUi(uiLanguage, "Create Lead")}
           </Button>
         </DialogFooter>
       </DialogContent>

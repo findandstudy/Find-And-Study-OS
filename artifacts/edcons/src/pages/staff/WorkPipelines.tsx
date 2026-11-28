@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { WorkPipelineActivity } from "./WorkPipelineActivity";
 import { WorkPipelineExcel } from "./WorkPipelineExcel";
 import { WorkPipelinePicker } from "./WorkPipelinePicker";
@@ -89,6 +90,7 @@ function ContactCard({
   stage: Stage;
   m: Model;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const c = row.document,
     { attributes, listeners, setNodeRef, transform, transition, isDragging } =
       useSortable({ id: c.id, disabled: m.busy || m.b?.archived });
@@ -266,6 +268,7 @@ function StageColumn({
 }
 
 export default function WorkPipelines() {
+  const { lang: uiLanguage } = useUiLanguage();
   const m = useWorkPipelines(),
     { l, b } = m;
   const [settings, setSettings] = useState<

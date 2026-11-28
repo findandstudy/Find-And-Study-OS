@@ -194,7 +194,7 @@ export default function ContractTemplatesPage() {
       const response: any = await customFetch("/api/contract-brands");
       setBrands(response.data || []);
     } catch (error: any) {
-      toast({ title: "Contract brands could not be loaded", description: error.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Contract brands could not be loaded"), description: error.message, variant: "destructive" });
     }
   }
 
@@ -247,7 +247,7 @@ export default function ContractTemplatesPage() {
   function loadCompanySignature(file: File | undefined) {
     if (!file) return;
     if (!/^image\/(png|jpeg)$/.test(file.type) || file.size > 2 * 1024 * 1024) {
-      toast({ title: "Signature must be a PNG or JPEG up to 2 MB", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Signature must be a PNG or JPEG up to 2 MB"), variant: "destructive" });
       return;
     }
     const reader = new FileReader();
@@ -280,7 +280,7 @@ export default function ContractTemplatesPage() {
       }
       toast({
         title: editing ? t("contractTemplates.updated") : t("contractTemplates.created"),
-        description: editing ? undefined : "Template saved as a draft. Publish it before creating or sending signing links.",
+        description: editing ? undefined : translateUi(uiLanguage, "Template saved as a draft. Publish it before creating or sending signing links."),
       });
       setShowDialog(false);
       await load();
@@ -298,7 +298,7 @@ export default function ContractTemplatesPage() {
       await load();
       if (action === "new-version" && response?.data) openEdit(response.data);
     } catch (error: any) {
-      toast({ title: "Template workflow could not be updated", description: error.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Template workflow could not be updated"), description: error.message, variant: "destructive" });
     }
   }
 
@@ -428,7 +428,7 @@ export default function ContractTemplatesPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Badge variant={tpl.publicationStatus === "published" ? "default" : tpl.publicationStatus === "review_pending" ? "secondary" : "outline"}>
-                        {tpl.publicationStatus === "review_pending" ? "In review" : tpl.publicationStatus}
+                        {tpl.publicationStatus === "review_pending" ? translateUi(uiLanguage, "In review") : tpl.publicationStatus}
                       </Badge>
                       {tpl.signingPageConfig?.requireEmailVerification === false ? (
                         <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
@@ -562,7 +562,7 @@ export default function ContractTemplatesPage() {
                           <div className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Managed centrally in Brand profiles")}</div>
                         </div>
                         <Badge variant={selectedBrand.hasCompanySignature ? "secondary" : "destructive"}>
-                          {selectedBrand.hasCompanySignature ? "Signature ready" : "Signature required"}
+                          {selectedBrand.hasCompanySignature ? translateUi(uiLanguage, "Signature ready") : translateUi(uiLanguage, "Signature required")}
                         </Badge>
                       </div>
                       {selectedBrand.hasCompanySignature && <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "The official signature is stored privately and appears only on the final signed PDF.")}</p>}

@@ -939,7 +939,7 @@ function TasksTabContent() {
                 data-testid="button-bulk-archive-tasks"
               >
                 <Trash2 className="w-4 h-4 mr-1.5" />
-                {bulkArchiving ? "Archiving..." : "Archive selected"}
+                {bulkArchiving ? translateUi(uiLanguage, "Archiving...") : translateUi(uiLanguage, "Archive selected")}
               </Button>
             </div>
           </div>
@@ -1694,6 +1694,7 @@ function TasksTabContent() {
 }
 
 export default function TasksPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const query = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();

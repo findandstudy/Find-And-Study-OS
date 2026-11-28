@@ -154,6 +154,7 @@ export function CmsPageCanvas({ children, className = "" }: { children: ReactNod
   return <main className={`public-cms-page ${className}`.trim()} style={themeStyle(query.data?.tokens)}>{children}</main>;
 }
 export function CmsBlock({ block, index, variables, preview = false }: { block: PageBlock; index: number; variables?: CmsTextVariableValues; preview?: boolean }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const resolved = variables ? { ...block, content: resolveCmsValue(block.content, variables) } : block;
   const variant=String(resolved.content.variant||"");
   const about=ABOUT_SECTION_VARIANTS.has(variant);
@@ -307,8 +308,8 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
                 <div className="home-hero-map-dots" aria-hidden="true"><i /><i /><i /><i /></div>
                 <div className="home-hero-review-card">
                   <strong>{text(content.reviewScore, 24) || "4.9/5"}</strong>
-                  <span>{text(content.reviewLabel, 120) || "Excellent student reviews"}</span>
-                  <small>{text(content.reviewProof, 160) || "Trusted guidance across the student journey"}</small>
+                  <span>{text(content.reviewLabel, 120) || translateUi(uiLanguage, "Excellent student reviews")}</span>
+                  <small>{text(content.reviewProof, 160) || translateUi(uiLanguage, "Trusted guidance across the student journey")}</small>
                 </div>
               </div> : null}
               <div className="home-journey-console">
@@ -373,7 +374,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
         <section className="home-bento-section">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="home-section-intro mx-auto mb-14 max-w-3xl text-center">
-              <p className="home-section-kicker">{text(content.eyebrow, 200) || "Built around your next decision"}</p>
+              <p className="home-section-kicker">{text(content.eyebrow, 200) || translateUi(uiLanguage, "Built around your next decision")}</p>
               <h2 className="text-3xl md:text-4xl font-bold font-display mb-4">{text(content.title, 500)}</h2>
               {content.subtitle ? <p className="text-lg text-muted-foreground">{text(content.subtitle)}</p> : null}
             </div>
@@ -440,7 +441,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
               <h2 id={headingId} className="font-display text-3xl font-bold">{text(content.title, 500)}</h2>
               {content.subtitle ? <p className="mt-3 text-muted-foreground">{text(content.subtitle)}</p> : null}
             </div>
-            {sourceLabels[source] ? <span className="rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground">{sourceLabels[source]} · {liveCards.length ? "live" : "start here"}</span> : null}
+            {sourceLabels[source] ? <span className="rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground">{sourceLabels[source]} · {liveCards.length ? translateUi(uiLanguage, "live") : translateUi(uiLanguage, "start here")}</span> : null}
           </div>
           {cards.length > 0 ? (
             <div className={`cms-responsive-grid mt-8 ${catalogLayoutClass(content)}`} tabIndex={content.layout === "carousel" ? 0 : undefined} aria-label={text(content.title, 500)}>

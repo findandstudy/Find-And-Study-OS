@@ -61,9 +61,9 @@ export function ContractFieldBuilder({ value, onChange, disabled = false }: Prop
       const parsed = JSON.parse(jsonDraft);
       if (!Array.isArray(parsed)) throw new Error("Schema must be an array");
       onChange(parsed);
-      toast({ title: "Advanced JSON applied" });
+      toast({ title: translateUi(uiLanguage, "Advanced JSON applied") });
     } catch (error: any) {
-      toast({ title: "Invalid JSON", description: error.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Invalid JSON"), description: error.message, variant: "destructive" });
     }
   }
 

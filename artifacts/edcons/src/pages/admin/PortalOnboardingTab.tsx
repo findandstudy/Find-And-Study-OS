@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useCallback, useEffect, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
@@ -133,6 +134,7 @@ export default function PortalOnboardingTab({
 }: {
   onNavigate: (tab: PortalSetupTab) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [data, setData] = useState<OnboardingSnapshot | null>(null);

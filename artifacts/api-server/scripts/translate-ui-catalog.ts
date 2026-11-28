@@ -10,9 +10,17 @@ async function main() {
   if (!output?.startsWith('/output/')) throw new Error('Expected isolated output directory');
   const config=await resolveWebsiteAiIntegration();
   if(!config) throw new Error('No configured translation provider');
-  const service=new AiContentService(config);
+  const service=new AiContentService({...config,qualityMode:'premium'});
   const tasks: {lang:string;texts:Record<string,string>}[]=JSON.parse(fs.readFileSync('/input/ui-translation-requests.json','utf8'));
   fs.mkdirSync(output,{recursive:true});
+  // Resume successful keys from the first pass without spending tokens twice.
+  const seedDir='/output/../seed';
+  const seeds:Record<string,Record<string,string>>={};
+  if(fs.existsSync(seedDir))for(const f of fs.readdirSync(seedDir)){
+    const match=/^([a-z]{2})-\d+\.json$/.exec(f);if(match)Object.assign(seeds[match[1]]??={},JSON.parse(fs.readFileSync(path.join(seedDir,f),'utf8')));
+  }
+  for(const task of tasks)for(const key of Object.keys(task.texts))if(seeds[task.lang]?.[key])delete task.texts[key];
+  for(const[lang,values]of Object.entries(seeds))fs.writeFileSync(path.join(output,`${lang}-seed.json`),JSON.stringify(values));
   const jobs: {lang:string;texts:Record<string,string>;id:number}[]=[];
   for(const task of tasks){let batch:Record<string,string>={},size=0,index=0;
     for(const [key,value]of Object.entries(task.texts)){if(size+value.length>4200||Object.keys(batch).length>=55){jobs.push({lang:task.lang,texts:batch,id:index++});batch={};size=0;}batch[key]=value;size+=value.length;}
@@ -27,7 +35,7 @@ async function main() {
       fs.writeFileSync(file,JSON.stringify(result));completed++;console.log(JSON.stringify({lang:job.lang,batch:job.id,completed,total:jobs.length}));break;
     }catch(error){if(attempt===2){failed++;console.log(JSON.stringify({lang:job.lang,batch:job.id,error:error instanceof Error?error.message:'Failed'}));}else await new Promise(r=>setTimeout(r,(attempt+1)*2000));}}
   }}
-  await Promise.all([worker(),worker(),worker()]);
+  await Promise.all([worker(),worker(),worker(),worker(),worker(),worker()]);
   fs.writeFileSync(path.join(output,'summary.json'),JSON.stringify({completed,failed,total:jobs.length}));
   process.exitCode=failed?1:0;
 }

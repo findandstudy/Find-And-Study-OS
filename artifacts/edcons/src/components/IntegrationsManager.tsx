@@ -412,7 +412,7 @@ export function IntegrationsManager() {
   async function handleSave() {
     if (!editDef) return;
     if (isNamedAnthropicConnection(editDef.key) && !connectionName.trim()) {
-      toast({ title: "Connection name is required", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Connection name is required"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -445,7 +445,7 @@ export function IntegrationsManager() {
       return;
     }
     if (LIVE_GATED_KEYS.has(def.key) && !existing.isEnabled && liveMode && !liveMode.live) {
-      toast({ title: "Production-only", description: "This integration can only be enabled in production.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Production-only"), description: translateUi(uiLanguage, "This integration can only be enabled in production."), variant: "destructive" });
       return;
     }
     try {
@@ -473,16 +473,16 @@ export function IntegrationsManager() {
       }>(`/api/integrations/${key}/test`, { method: "POST" });
       if (res.status === "simulated" || res.status === "not_supported") {
         toast({
-          title: res.status === "simulated" ? "Verification not run" : "Verification unavailable",
+          title: res.status === "simulated" ? translateUi(uiLanguage, "Verification not run") : translateUi(uiLanguage, "Verification unavailable"),
           description: res.message,
         });
       } else if (res.success && (res.verified === undefined || res.verified)) {
-        toast({ title: res.message || "Connection verified" });
+        toast({ title: res.message || translateUi(uiLanguage, "Connection verified") });
       } else {
-        toast({ title: "Connection test failed", description: res.message, variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Connection test failed"), description: res.message, variant: "destructive" });
       }
     } catch {
-      toast({ title: "Connection test failed", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Connection test failed"), variant: "destructive" });
     } finally {
       setTesting(null);
     }
@@ -888,6 +888,7 @@ function ChannelAccountsDialog({
   liveMode: { live: boolean; reason: string } | null;
   onClose: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t, lang, dir } = useI18n();
   const { user } = useAuth();
@@ -1157,7 +1158,7 @@ function ChannelAccountsDialog({
           <div className="space-y-4 py-2">
             {(scope.provider === "zernio" || configurationOnly) && <p className="text-xs text-muted-foreground">{copy.inactiveHint}</p>}
             {scope.provider === "zernio" && <>
-              <label className="block text-sm space-y-1"><span>{copy.channel}</span><select className="h-9 rounded-lg w-full border bg-background px-2" value={channel} disabled={editingId !== null} onChange={event => setChannel(event.target.value as AccountChannel)}>{scope.channels.map(value => <option key={value} value={value}>{value === "messenger" ? "Facebook / Messenger" : value === "whatsapp" ? "WhatsApp" : value === "telegram" ? "Telegram" : "Instagram"}</option>)}</select></label>
+              <label className="block text-sm space-y-1"><span>{copy.channel}</span><select className="h-9 rounded-lg w-full border bg-background px-2" value={channel} disabled={editingId !== null} onChange={event => setChannel(event.target.value as AccountChannel)}>{scope.channels.map(value => <option key={value} value={value}>{value === "messenger" ? translateUi(uiLanguage, "Facebook / Messenger") : value === "whatsapp" ? "WhatsApp" : value === "telegram" ? "Telegram" : "Instagram"}</option>)}</select></label>
               <label className="block text-sm space-y-1"><span>{copy.externalId}</span><Input value={externalAccountId} disabled={editingId !== null} maxLength={256} required onChange={event => setExternalAccountId(event.target.value)} /></label>
               <p className="text-xs text-muted-foreground">{copy.immutable}</p>
             </>}

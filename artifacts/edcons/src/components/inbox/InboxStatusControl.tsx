@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
@@ -56,6 +57,7 @@ export function InboxStatusControl({
   label,
   onUpdated,
 }: InboxStatusControlProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const { user } = useAuth();

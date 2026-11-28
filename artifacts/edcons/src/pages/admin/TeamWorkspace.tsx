@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,7 @@ const availableLocation = () =>
 
 export default function TeamWorkspace({ project }: { project?: string }) {
   const { lang } = useI18n();
-  const copy = (tr: string, en: string) => (lang === "tr" ? tr : en);
+  const copy = (tr: string, en: string) => (translateUi(lang, en, tr));
   let path: string | null = null;
   try {
     if (project) path = workspaceApiPath(project);
@@ -70,8 +71,9 @@ export default function TeamWorkspace({ project }: { project?: string }) {
 }
 
 function LoadedWorkspace({ project, path }: { project: string; path: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang } = useI18n();
-  const copy = (tr: string, en: string) => (lang === "tr" ? tr : en);
+  const copy = (tr: string, en: string) => (translateUi(lang, en, tr));
   const [phase, setPhase] = useState<
     "loading" | "ready" | "saving" | "locked" | "error"
   >("loading");

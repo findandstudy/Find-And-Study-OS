@@ -352,7 +352,7 @@ export default function Embeds() {
                           </TableCell>
                           <TableCell>
                             <Badge variant={w.isActive ? "default" : "secondary"}>
-                              {w.isActive ? "Active" : "Inactive"}
+                              {w.isActive ? translateUi(uiLanguage, "Active") : translateUi(uiLanguage, "Inactive")}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
@@ -641,20 +641,20 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
 
   const handleSave = async () => {
     if (!name.trim() || !slug.trim()) {
-      toast({ title: "Name and slug are required", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Name and slug are required"), variant: "destructive" });
       return;
     }
     if (universityScopeMode === "selected" && presetUniversityIds.length === 0) {
       toast({
-        title: "Select at least one university",
-        description: "Choose one or more universities, or switch the widget scope to All Universities.",
+        title: translateUi(uiLanguage, "Select at least one university"),
+        description: translateUi(uiLanguage, "Choose one or more universities, or switch the widget scope to All Universities."),
         variant: "destructive",
       });
       return;
     }
     const defaultUniversityId = presetDefaultUniversityId ? Number(presetDefaultUniversityId) : null;
     if (defaultUniversityId != null && (!Number.isInteger(defaultUniversityId) || defaultUniversityId <= 0)) {
-      toast({ title: "Select a valid default university", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Select a valid default university"), variant: "destructive" });
       return;
     }
     if (aiBotId && (!Number.isInteger(selectedAiBotId) || selectedAiBotId <= 0)) {
@@ -724,10 +724,10 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
       } else {
         await customFetch(`/api/embed/widgets`, { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
       }
-      toast({ title: isEdit ? "Widget updated" : "Widget created" });
+      toast({ title: isEdit ? translateUi(uiLanguage, "Widget updated") : translateUi(uiLanguage, "Widget created") });
       onSaved();
     } catch (err: any) {
-      toast({ title: err.message || "Failed to save widget", variant: "destructive" });
+      toast({ title: err.message || translateUi(uiLanguage, "Failed to save widget"), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -735,11 +735,11 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
 
   const uploadLogo = async (file: File) => {
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      toast({ title: "Please upload a PNG, JPG or WebP logo", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Please upload a PNG, JPG or WebP logo"), variant: "destructive" });
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "Logo must be smaller than 5 MB", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Logo must be smaller than 5 MB"), variant: "destructive" });
       return;
     }
     setLogoUploading(true);
@@ -765,9 +765,9 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
         throw new Error("Unexpected uploaded logo path");
       }
       setLogoUrl(`${window.location.origin}${API_BASE}/storage/public-branding/${relativePath}`);
-      toast({ title: "Logo uploaded" });
+      toast({ title: translateUi(uiLanguage, "Logo uploaded") });
     } catch (err: any) {
-      toast({ title: err?.message || "Logo upload failed", variant: "destructive" });
+      toast({ title: err?.message || translateUi(uiLanguage, "Logo upload failed"), variant: "destructive" });
     } finally {
       setLogoUploading(false);
     }
@@ -1073,7 +1073,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                     <div className="space-y-2">
                       <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()} disabled={logoUploading}>
                         <Upload className="mr-2 h-4 w-4" />
-                        {logoUploading ? "Uploading..." : logoUrl ? "Replace logo" : "Upload logo"}
+                        {logoUploading ? translateUi(uiLanguage, "Uploading...") : logoUrl ? translateUi(uiLanguage, "Replace logo") : translateUi(uiLanguage, "Upload logo")}
                       </Button>
                       {logoUrl && (
                         <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setLogoUrl("")}>
@@ -1208,7 +1208,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
               </Select>
             </div>
             <div className="text-xs text-muted-foreground">
-              {t("adminEmbeds.laneLabel")}: <code>{translateUi(uiLanguage, "widget:")}{widget?.id || "new"}</code> · {t("adminEmbeds.laneHelp")}
+              {t("adminEmbeds.laneLabel")}: <code>{translateUi(uiLanguage, "widget:")}{widget?.id || translateUi(uiLanguage, "new")}</code> · {t("adminEmbeds.laneHelp")}
             </div>
           </TabsContent>
         </Tabs>
@@ -1216,7 +1216,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : isEdit ? "Update Widget" : "Create Widget"}
+            {saving ? translateUi(uiLanguage, "Saving...") : isEdit ? translateUi(uiLanguage, "Update Widget") : translateUi(uiLanguage, "Create Widget")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1243,9 +1243,9 @@ function EmbedCodeDialog({ widget, onClose }: { widget: Widget; onClose: () => v
       } as any) as { embedApiKey: string };
       setCurrentApiKey(data.embedApiKey);
       setApiKeyVisible(true);
-      toast({ title: "API key rotated — update your backend with the new key" });
+      toast({ title: translateUi(uiLanguage, "API key rotated — update your backend with the new key") });
     } catch (err: any) {
-      toast({ title: err?.message || "Failed to rotate API key", variant: "destructive" });
+      toast({ title: err?.message || translateUi(uiLanguage, "Failed to rotate API key"), variant: "destructive" });
     } finally {
       setRotating(false);
     }
@@ -1346,12 +1346,12 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
                       <code className="flex-1 text-xs bg-white border border-blue-200 rounded px-2 py-1 font-mono truncate">
                         {currentApiKey
                           ? (apiKeyVisible ? currentApiKey : "•".repeat(20) + currentApiKey.slice(-6))
-                          : "No key — will be generated on save"}
+                          : translateUi(uiLanguage, "No key — will be generated on save")}
                       </code>
                       {currentApiKey && (
                         <Button size="sm" variant="ghost" className="shrink-0 px-2 h-7 text-xs"
                           onClick={() => setApiKeyVisible((v) => !v)}>
-                          {apiKeyVisible ? "Hide" : "Show"}
+                          {apiKeyVisible ? translateUi(uiLanguage, "Hide") : translateUi(uiLanguage, "Show")}
                         </Button>
                       )}
                       {currentApiKey && (
@@ -1362,7 +1362,7 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
                       )}
                     </div>
                     <Button size="sm" variant="outline" onClick={rotateKey} disabled={rotating} className="text-xs">
-                      {rotating ? "Rotating…" : "Rotate API Key"}
+                      {rotating ? translateUi(uiLanguage, "Rotating…") : translateUi(uiLanguage, "Rotate API Key")}
                     </Button>
                     <p className="text-xs text-blue-700"> {translateUi(uiLanguage, "Rotate only if the key is compromised — partners must update their backend immediately after rotation.")} </p>
                   </div>
@@ -1513,8 +1513,8 @@ function DeleteWidgetBtn({ id, name, onDone }: { id: number; name: string; onDon
   const { toast } = useToast();
   const del = useMutation({
     mutationFn: () => customFetch(`${API_BASE}/embed/widgets/${id}`, { method: "DELETE" }),
-    onSuccess: () => { toast({ title: "Widget deleted" }); onDone(); setOpen(false); },
-    onError: () => toast({ title: "Failed to delete", variant: "destructive" }),
+    onSuccess: () => { toast({ title: translateUi(uiLanguage, "Widget deleted") }); onDone(); setOpen(false); },
+    onError: () => toast({ title: translateUi(uiLanguage, "Failed to delete"), variant: "destructive" }),
   });
   return (
     <>
@@ -1530,7 +1530,7 @@ function DeleteWidgetBtn({ id, name, onDone }: { id: number; name: string; onDon
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>{translateUi(uiLanguage, "Cancel")}</Button>
             <Button variant="destructive" onClick={() => del.mutate()} disabled={del.isPending}>
-              {del.isPending ? "Deleting..." : "Delete"}
+              {del.isPending ? translateUi(uiLanguage, "Deleting...") : translateUi(uiLanguage, "Delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

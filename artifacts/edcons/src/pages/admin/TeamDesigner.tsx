@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import {
   useCallback,
   useEffect,
@@ -130,6 +131,7 @@ function MemberEditor({
   durable: boolean;
   onPendingChange?: (pending: boolean) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [name, setName] = useState(member.name);
   const [purpose, setPurpose] = useState(member.purpose);
   const [output, setOutput] = useState(member.output);
@@ -276,6 +278,7 @@ export default function TeamDesigner({
   controls,
   disabled = false,
 }: TeamDesignerProps = {}) {
+  const { lang: uiLanguage } = useUiLanguage();
   const durable = Boolean(initialState);
   const initial = useRef(initialState);
   const notifyChange = useRef(onChange);
@@ -291,7 +294,7 @@ export default function TeamDesigner({
   }, []);
   const { lang, dir } = useI18n();
   const { user } = useAuth();
-  const copy: Copy = (tr, en) => (lang === "tr" ? tr : en);
+  const copy: Copy = (tr, en) => (translateUi(lang, en, tr));
   const smallScreen = useIsMobile();
   const [compactInspector, setCompactInspector] = useState(
     () => window.innerWidth < 1100,

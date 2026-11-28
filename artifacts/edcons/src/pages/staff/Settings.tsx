@@ -151,7 +151,7 @@ function LogoUploader({ label, description, value, onChange, bgClass, dims }: { 
       onChange(`${BASE_URL}/api/storage/objects${strippedPath}`);
       toast({ title: `${label} uploaded` });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Upload failed"), description: err.message, variant: "destructive" });
     } finally { setUploading(false); }
   }
 
@@ -170,7 +170,7 @@ function LogoUploader({ label, description, value, onChange, bgClass, dims }: { 
           <button onClick={() => inputRef.current?.click()} disabled={uploading}
             className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
             {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Upload className="w-6 h-6" />}
-            <span className="text-[10px] font-medium">{uploading ? "Uploading..." : "Upload"}</span>
+            <span className="text-[10px] font-medium">{uploading ? translateUi(uiLanguage, "Uploading...") : translateUi(uiLanguage, "Upload")}</span>
           </button>
         )}
       </div>
@@ -181,10 +181,11 @@ function LogoUploader({ label, description, value, onChange, bgClass, dims }: { 
 }
 
 function SaveButton({ onClick, saving, label }: { onClick: () => void; saving: boolean; label?: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   return (
     <Button onClick={onClick} disabled={saving} className="rounded-xl gap-2 px-8">
       {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-      {label || "Save Changes"}
+      {label || translateUi(uiLanguage, "Save Changes")}
     </Button>
   );
 }
@@ -286,7 +287,7 @@ export default function SettingsPage() {
       if (section === "branding") await refreshSettings();
       toast({ title: `${section.charAt(0).toUpperCase() + section.slice(1)} saved` });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     } finally { setSectionSaving(null); }
   }
 
@@ -308,15 +309,15 @@ export default function SettingsPage() {
         body: JSON.stringify({ avatarUrl }),
       });
       await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "Profile photo updated" });
+      toast({ title: translateUi(uiLanguage, "Profile photo updated") });
     } catch (err: any) {
       // On 401, customFetch already dispatches `api:unauthorized` and the host
       // app redirects to /login. Show a friendly Turkish message instead of
       // the raw "HTTP 401 Unauthorized: Authentication required" string.
       if (err?.status === 401) {
-        toast({ title: "Oturum süreniz doldu", description: "Lütfen tekrar giriş yapın.", variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Oturum süreniz doldu"), description: translateUi(uiLanguage, "Lütfen tekrar giriş yapın."), variant: "destructive" });
       } else {
-        toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Upload failed"), description: err.message, variant: "destructive" });
       }
     } finally { setAvatarUploading(false); }
   }
@@ -337,9 +338,9 @@ export default function SettingsPage() {
       const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
       const contractUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;
       setForm(f => ({ ...f, contractUrl }));
-      toast({ title: "Contract uploaded" });
+      toast({ title: translateUi(uiLanguage, "Contract uploaded") });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Upload failed"), description: err.message, variant: "destructive" });
     } finally { setContractUploading(false); }
   }
 
@@ -359,9 +360,9 @@ export default function SettingsPage() {
       const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
       const passportUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;
       setForm(f => ({ ...f, passportUrl }));
-      toast({ title: "Passport uploaded" });
+      toast({ title: translateUi(uiLanguage, "Passport uploaded") });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Upload failed"), description: err.message, variant: "destructive" });
     } finally { setPassportUploading(false); }
   }
 
@@ -373,9 +374,9 @@ export default function SettingsPage() {
         body: JSON.stringify({ avatarUrl: null }),
       });
       await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "Profile photo removed" });
+      toast({ title: translateUi(uiLanguage, "Profile photo removed") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -388,23 +389,23 @@ export default function SettingsPage() {
         body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone ? `${form.phoneCode}${form.phone}` : undefined, avatarUrl: form.avatarUrl || null, email: form.email || undefined, startDate: form.startDate || null, homeAddress: form.homeAddress || null, passportNumber: form.passportNumber || null, contractUrl: form.contractUrl || null, passportUrl: form.passportUrl || null, emergencyContactName: form.emergencyContactName || null, emergencyContactPhone: form.emergencyPhone ? `${form.emergencyPhoneCode}${form.emergencyPhone}` : null }),
       });
       await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "Profile updated" });
+      toast({ title: translateUi(uiLanguage, "Profile updated") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     } finally { setSaving(false); }
   }
 
   async function handleChangePassword() {
     if (!pwForm.currentPassword || !pwForm.newPassword) {
-      toast({ title: "Please fill in all password fields", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Please fill in all password fields"), variant: "destructive" });
       return;
     }
     if (pwForm.newPassword.length < 6) {
-      toast({ title: "New password must be at least 6 characters", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "New password must be at least 6 characters"), variant: "destructive" });
       return;
     }
     if (pwForm.newPassword !== pwForm.confirmPassword) {
-      toast({ title: "New passwords do not match", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "New passwords do not match"), variant: "destructive" });
       return;
     }
     setPwSaving(true);
@@ -414,9 +415,9 @@ export default function SettingsPage() {
         body: JSON.stringify({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword }),
       });
       setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
-      toast({ title: "Password changed successfully" });
+      toast({ title: translateUi(uiLanguage, "Password changed successfully") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message || "Failed to change password", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message || translateUi(uiLanguage, "Failed to change password"), variant: "destructive" });
     } finally { setPwSaving(false); }
   }
 
@@ -428,7 +429,7 @@ export default function SettingsPage() {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ language: code }),
       });
-      toast({ title: "Language updated" });
+      toast({ title: translateUi(uiLanguage, "Language updated") });
     } catch {}
   }
 
@@ -534,7 +535,7 @@ export default function SettingsPage() {
               )}
               <Button variant="outline" size="sm" onClick={() => contractInputRef.current?.click()} disabled={contractUploading}>
                 {contractUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
-                {form.contractUrl ? "Replace" : "Upload"}
+                {form.contractUrl ? translateUi(uiLanguage, "Replace") : translateUi(uiLanguage, "Upload")}
               </Button>
               <input ref={contractInputRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleContractUpload(f); e.target.value = ""; }} />
             </div>
@@ -553,7 +554,7 @@ export default function SettingsPage() {
               )}
               <Button variant="outline" size="sm" onClick={() => passportInputRef.current?.click()} disabled={passportUploading}>
                 {passportUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
-                {form.passportUrl ? "Replace" : "Upload"}
+                {form.passportUrl ? translateUi(uiLanguage, "Replace") : translateUi(uiLanguage, "Upload")}
               </Button>
               <input ref={passportInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handlePassportUpload(f); e.target.value = ""; }} />
             </div>
@@ -1025,8 +1026,8 @@ export default function SettingsPage() {
           <SectionHeader title={translateUi(uiLanguage, "Search Preview")} description="How your site may appear on Google search results." />
           <div className="p-5 rounded-xl border border-border/50 bg-white dark:bg-gray-950 max-w-lg">
             <p className="text-sm text-blue-700 dark:text-blue-400 truncate">{s.canonicalBaseUrl || "https://yoursite.com"}</p>
-            <p className="text-lg text-blue-800 dark:text-blue-300 font-medium truncate hover:underline cursor-pointer mt-0.5">{s.seoMetaTitle || s.siteName || "Your Site Title"}</p>
-            <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mt-1">{s.seoMetaDescription || "Your site description will appear here. Write a compelling description to improve click-through rates."}</p>
+            <p className="text-lg text-blue-800 dark:text-blue-300 font-medium truncate hover:underline cursor-pointer mt-0.5">{s.seoMetaTitle || s.siteName || translateUi(uiLanguage, "Your Site Title")}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mt-1">{s.seoMetaDescription || translateUi(uiLanguage, "Your site description will appear here. Write a compelling description to improve click-through rates.")}</p>
           </div>
         </Card>
 
@@ -1103,7 +1104,7 @@ export default function SettingsPage() {
           <SectionHeader title={translateUi(uiLanguage, "Email Preview")} description="How a branded email might look." />
           <div className="max-w-md mx-auto rounded-xl border border-border/50 overflow-hidden bg-white dark:bg-gray-950">
             <div className="px-6 py-4 border-b border-border/30 text-center" style={{ backgroundColor: (s.emailButtonColor || "#143591") + "10" }}>
-              {s.emailLogoUrl ? <img src={s.emailLogoUrl} className="max-h-10 mx-auto object-contain" alt="" /> : <p className="font-bold text-lg" style={{ color: s.emailButtonColor || "#143591" }}>{s.emailSenderName || "Your Company"}</p>}
+              {s.emailLogoUrl ? <img src={s.emailLogoUrl} className="max-h-10 mx-auto object-contain" alt="" /> : <p className="font-bold text-lg" style={{ color: s.emailButtonColor || "#143591" }}>{s.emailSenderName || translateUi(uiLanguage, "Your Company")}</p>}
             </div>
             <div className="px-6 py-5">
               <p className="text-sm text-gray-800 dark:text-gray-200 mb-4">{translateUi(uiLanguage, "Hello,")}</p>
@@ -1113,7 +1114,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="px-6 py-3 border-t border-border/30 bg-gray-50 dark:bg-gray-900">
-              <p className="text-[10px] text-gray-500 text-center whitespace-pre-line">{s.emailFooterText || "Your company footer text"}</p>
+              <p className="text-[10px] text-gray-500 text-center whitespace-pre-line">{s.emailFooterText || translateUi(uiLanguage, "Your company footer text")}</p>
               {s.emailDisclaimerText && <p className="text-[9px] text-gray-400 text-center mt-2 italic">{s.emailDisclaimerText}</p>}
             </div>
           </div>
@@ -1171,7 +1172,7 @@ export default function SettingsPage() {
               <div className="h-2 w-full" style={{ backgroundColor: s.pdfPrimaryColor || "#143591" }} />
               <div className="px-5 py-4 flex items-center justify-between border-b border-border/30">
                 {s.pdfLogoUrl ? <img src={s.pdfLogoUrl} className="max-h-8 object-contain" alt="" /> : <p className="text-sm font-bold" style={{ color: s.pdfPrimaryColor || "#143591" }}>{translateUi(uiLanguage, "Company Logo")}</p>}
-                <p className="text-[10px] text-muted-foreground">{s.pdfHeaderText || "Header Text"}</p>
+                <p className="text-[10px] text-muted-foreground">{s.pdfHeaderText || translateUi(uiLanguage, "Header Text")}</p>
               </div>
               <div className="px-5 py-6">
                 <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2" />
@@ -1182,14 +1183,14 @@ export default function SettingsPage() {
                 )}
                 <div className="mt-4 pt-3 border-t border-dashed border-border/50 flex items-end justify-between">
                   <div>
-                    <p className="text-[9px] text-muted-foreground">{s.pdfSignatureLabel || "Signature"}</p>
+                    <p className="text-[9px] text-muted-foreground">{s.pdfSignatureLabel || translateUi(uiLanguage, "Signature")}</p>
                     <div className="h-px w-24 bg-gray-300 mt-3" />
                   </div>
                   {s.pdfSealImageUrl && <img src={s.pdfSealImageUrl} className="w-12 h-12 object-contain opacity-60" alt="" />}
                 </div>
               </div>
               <div className="px-5 py-2 border-t border-border/30 bg-gray-50 dark:bg-gray-900">
-                <p className="text-[9px] text-gray-500 text-center">{s.pdfFooterText || "Footer text"}</p>
+                <p className="text-[9px] text-gray-500 text-center">{s.pdfFooterText || translateUi(uiLanguage, "Footer text")}</p>
               </div>
             </div>
           </div>
@@ -1380,9 +1381,9 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
         }),
       });
       setAutoConvert(next);
-      toast({ title: "Auto-convert settings saved" });
+      toast({ title: translateUi(uiLanguage, "Auto-convert settings saved") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     } finally { setSavingAutoConvert(false); }
   }
 
@@ -1473,10 +1474,10 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
             const warnings = result.warnings;
             if (warnings.length > 0) {
               for (const w of warnings) {
-                toast({ title: "Pipeline warning", description: w, variant: "default" });
+                toast({ title: translateUi(uiLanguage, "Pipeline warning"), description: w, variant: "default" });
               }
             } else {
-              toast({ title: "Pipeline stages saved" });
+              toast({ title: translateUi(uiLanguage, "Pipeline stages saved") });
             }
           }}
           isSaving={activePipeline.pipeline.isSaving}
@@ -1531,9 +1532,9 @@ function YearsManagement() {
         body: JSON.stringify({ availableYears: sorted }),
       });
       setDetails(sorted);
-      toast({ title: "Academic years updated" });
+      toast({ title: translateUi(uiLanguage, "Academic years updated") });
     } catch (err: any) {
-      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Failed to save"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -1544,17 +1545,17 @@ function YearsManagement() {
   function handleAdd() {
     const y = parseInt(newYear, 10);
     if (isNaN(y) || y < 2000 || y > 2100) {
-      toast({ title: "Enter a valid year (2000–2100)", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Enter a valid year (2000–2100)"), variant: "destructive" });
       return;
     }
     if (details.some(d => d.year === y)) {
-      toast({ title: "Year already exists", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Year already exists"), variant: "destructive" });
       return;
     }
     const start = newStart && isoOk(newStart) ? newStart : `${y}-01-01`;
     const end = newEnd && isoOk(newEnd) ? newEnd : `${y}-12-31`;
     if (start > end) {
-      toast({ title: "Start date must be before end date", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Start date must be before end date"), variant: "destructive" });
       return;
     }
     setNewYear(""); setNewStart(""); setNewEnd("");
@@ -1571,7 +1572,7 @@ function YearsManagement() {
     const next = details.map(d => d.year === y ? { ...d, [field]: value } : d);
     const target = next.find(d => d.year === y)!;
     if (target.startDate > target.endDate) {
-      toast({ title: "Start date must be before end date", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Start date must be before end date"), variant: "destructive" });
       return;
     }
     persist(next);
@@ -1732,7 +1733,7 @@ function QuickLinksTab() {
 
   const handleSave = async () => {
     if (!form.title.trim() || !form.url.trim()) {
-      toast({ title: "Error", description: "Title and URL are required.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Title and URL are required."), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -1751,13 +1752,13 @@ function QuickLinksTab() {
           sortOrder: form.sortOrder,
         }),
       });
-      toast({ title: editingId ? "Updated" : "Created", description: `Quick link "${form.title}" has been ${editingId ? "updated" : "created"}.` });
+      toast({ title: editingId ? translateUi(uiLanguage, "Updated") : translateUi(uiLanguage, "Created"), description: `Quick link "${form.title}" has been ${editingId ? "updated" : "created"}.` });
       setShowForm(false);
       setEditingId(null);
       setForm({ title: "", url: "", logoUrl: "", color: "#6366f1", target: "agent", sortOrder: 0 });
       fetchLinks();
     } catch (e: any) {
-      toast({ title: "Error", description: e.message || "Failed to save quick link.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: e.message || translateUi(uiLanguage, "Failed to save quick link."), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -1766,10 +1767,10 @@ function QuickLinksTab() {
   const handleDelete = async (id: number) => {
     try {
       await customFetch(`${BASE}/api/quick-links/${id}`, { method: "DELETE" });
-      toast({ title: "Deleted", description: "Quick link has been removed." });
+      toast({ title: translateUi(uiLanguage, "Deleted"), description: translateUi(uiLanguage, "Quick link has been removed.") });
       fetchLinks();
     } catch (e: any) {
-      toast({ title: "Error", description: e.message || "Failed to delete.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: e.message || translateUi(uiLanguage, "Failed to delete."), variant: "destructive" });
     }
     setDeleteConfirm(null);
   };
@@ -1799,9 +1800,9 @@ function QuickLinksTab() {
       const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
       const logoPath = `${BASE}/api/storage/objects${strippedPath}`;
       setForm(f => ({ ...f, logoUrl: logoPath }));
-      toast({ title: "Logo uploaded" });
+      toast({ title: translateUi(uiLanguage, "Logo uploaded") });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Upload failed"), description: err.message, variant: "destructive" });
     } finally {
       setLogoUploading(false);
     }
@@ -1840,7 +1841,7 @@ function QuickLinksTab() {
 
         {showForm && (
           <Card className="p-5 mb-6 border-2 border-primary/20 bg-primary/[0.02]">
-            <h4 className="font-semibold text-sm mb-4">{editingId ? "Edit Quick Link" : "New Quick Link"}</h4>
+            <h4 className="font-semibold text-sm mb-4">{editingId ? translateUi(uiLanguage, "Edit Quick Link") : translateUi(uiLanguage, "New Quick Link")}</h4>
             <div className="grid sm:grid-cols-2 gap-4 mb-4">
               <div>
                 <Label className="text-xs font-medium mb-1.5">{t("settingsPage.title")}</Label>
@@ -1873,7 +1874,7 @@ function QuickLinksTab() {
                     <button onClick={() => logoInputRef.current?.click()} disabled={logoUploading}
                       className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-xs">
                       {logoUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                      <span className="font-medium">{logoUploading ? "Uploading..." : "Upload Logo"}</span>
+                      <span className="font-medium">{logoUploading ? translateUi(uiLanguage, "Uploading...") : translateUi(uiLanguage, "Upload Logo")}</span>
                     </button>
                   )}
                 </div>
@@ -1933,7 +1934,7 @@ function QuickLinksTab() {
               <Button variant="ghost" onClick={() => { setShowForm(false); setEditingId(null); }}>{translateUi(uiLanguage, "Cancel")}</Button>
               <Button onClick={handleSave} disabled={saving} className="gap-2">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {editingId ? "Update" : "Create"}
+                {editingId ? translateUi(uiLanguage, "Update") : translateUi(uiLanguage, "Create")}
               </Button>
             </div>
           </Card>
@@ -2082,10 +2083,10 @@ function WebToLeadTab() {
     if (!confirm("Bu form silinsin mi?")) return;
     try {
       await customFetch(`/api/embed/widgets/${id}`, { method: "DELETE" });
-      toast({ title: "Form silindi" });
+      toast({ title: translateUi(uiLanguage, "Form silindi") });
       qc.invalidateQueries({ queryKey: ["lead-form-widgets"] });
     } catch {
-      toast({ title: "Silinemedi", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Silinemedi"), variant: "destructive" });
     }
   };
 
@@ -2097,7 +2098,7 @@ function WebToLeadTab() {
       } as any);
       qc.invalidateQueries({ queryKey: ["lead-form-widgets"] });
     } catch {
-      toast({ title: "Güncellenemedi", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Güncellenemedi"), variant: "destructive" });
     }
   };
 
@@ -2212,9 +2213,9 @@ function LeadFormWidgetDialog({ widget, onClose, onSaved }: { widget: LeadFormWi
   const [slugTouched, setSlugTouched] = useState(isEdit);
 
   const handleSave = async () => {
-    if (!name.trim()) { toast({ title: "Form adı gerekli", variant: "destructive" }); return; }
+    if (!name.trim()) { toast({ title: translateUi(uiLanguage, "Form adı gerekli"), variant: "destructive" }); return; }
     const finalSlug = (slug || slugify(name)).trim();
-    if (!finalSlug) { toast({ title: "Slug gerekli", variant: "destructive" }); return; }
+    if (!finalSlug) { toast({ title: translateUi(uiLanguage, "Slug gerekli"), variant: "destructive" }); return; }
     setSaving(true);
     const allowedDomains = domains.split(",").map(d => d.trim()).filter(Boolean);
     const payload = {
@@ -2232,15 +2233,15 @@ function LeadFormWidgetDialog({ widget, onClose, onSaved }: { widget: LeadFormWi
     try {
       if (isEdit) {
         await customFetch(`/api/embed/widgets/${widget!.id}`, { method: "PATCH", body: JSON.stringify(payload) } as any);
-        toast({ title: "Form güncellendi" });
+        toast({ title: translateUi(uiLanguage, "Form güncellendi") });
       } else {
         await customFetch(`/api/embed/widgets`, { method: "POST", body: JSON.stringify(payload) } as any);
-        toast({ title: "Form oluşturuldu" });
+        toast({ title: translateUi(uiLanguage, "Form oluşturuldu") });
       }
       onSaved();
       onClose();
     } catch (e: any) {
-      toast({ title: "Kaydedilemedi", description: e?.message || "Slug benzersiz olmalı.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Kaydedilemedi"), description: e?.message || translateUi(uiLanguage, "Slug benzersiz olmalı."), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -2250,7 +2251,7 @@ function LeadFormWidgetDialog({ widget, onClose, onSaved }: { widget: LeadFormWi
     <Dialog open={true} onOpenChange={() => onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Formu Düzenle" : "Yeni Form"}</DialogTitle>
+          <DialogTitle>{isEdit ? translateUi(uiLanguage, "Formu Düzenle") : translateUi(uiLanguage, "Yeni Form")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div>
@@ -2273,7 +2274,7 @@ function LeadFormWidgetDialog({ widget, onClose, onSaved }: { widget: LeadFormWi
               className="font-mono text-xs"
               disabled={isEdit}
             />
-            <p className="text-[11px] text-muted-foreground mt-1">{translateUi(uiLanguage, "Lead'in source alanı:")} <code>{translateUi(uiLanguage, "embed:")}{slug || "slug"}</code></p>
+            <p className="text-[11px] text-muted-foreground mt-1">{translateUi(uiLanguage, "Lead'in source alanı:")} <code>{translateUi(uiLanguage, "embed:")}{slug || translateUi(uiLanguage, "slug")}</code></p>
           </div>
           <div>
             <Label className="text-xs font-semibold mb-1.5 block">{translateUi(uiLanguage, "Ana Renk")}</Label>
@@ -2294,7 +2295,7 @@ function LeadFormWidgetDialog({ widget, onClose, onSaved }: { widget: LeadFormWi
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "İptal")}</Button>
-          <Button onClick={handleSave} disabled={saving}>{saving ? "Kaydediliyor..." : (isEdit ? "Güncelle" : "Oluştur")}</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? translateUi(uiLanguage, "Kaydediliyor...") : (isEdit ? translateUi(uiLanguage, "Güncelle") : translateUi(uiLanguage, "Oluştur"))}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -2315,7 +2316,7 @@ function LeadFormCodeDialog({ widget, onClose }: { widget: LeadFormWidget; onClo
   const copy = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
-    toast({ title: "Kod kopyalandı" });
+    toast({ title: translateUi(uiLanguage, "Kod kopyalandı") });
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -2969,6 +2970,7 @@ const PHONE_CODE_OPTIONS = (() => {
 })();
 
 function LeadAssignmentRulesTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t } = useI18n();
   const [rules, setRules] = useState<AssignmentRule[]>([]);

@@ -94,7 +94,7 @@ export function PdfMarkupModal({
 
           <div className="space-y-2">
             <Label className="text-sm font-medium">
-              {allowNegative ? "Service Fee Adjustment" : "Additional Service Fee"}
+              {allowNegative ? translateUi(uiLanguage, "Service Fee Adjustment") : translateUi(uiLanguage, "Additional Service Fee")}
               {!hasMultipleCurrencies && ` (${currency})`}
             </Label>
             <div className="relative">

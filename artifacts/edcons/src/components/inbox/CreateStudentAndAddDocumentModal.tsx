@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useCallback } from "react";
 import { useCreateStudent, customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
@@ -66,6 +67,7 @@ export function CreateStudentAndAddDocumentModal({
   onClose,
   onCreated,
 }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const createStudent = useCreateStudent();

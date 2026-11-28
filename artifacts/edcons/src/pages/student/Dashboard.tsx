@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
 import { useListApplications, useListDocuments, customFetch } from "@workspace/api-client-react";
@@ -77,6 +78,7 @@ function formatRole(role: string | null | undefined, fallback: string) {
 }
 
 export default function StudentDashboard() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { user } = useAuth(true);
   const { t, lang } = useI18n();
   const dateFormat = useDateFormatPublic();

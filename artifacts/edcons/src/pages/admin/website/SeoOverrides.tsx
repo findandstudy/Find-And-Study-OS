@@ -88,8 +88,8 @@ function GooglePreview({ title, description, slug, baseUrl }: { title: string; d
     <div className="bg-white rounded-xl border border-border p-4 space-y-1">
       <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1"><Search className="w-3 h-3" /> {translateUi(uiLanguage, "Google Search Preview")}</p>
       <p className="text-sm text-green-700 truncate">{displayUrl}</p>
-      <p className="text-lg text-blue-700 hover:underline cursor-pointer truncate">{title || "Page Title"}</p>
-      <p className="text-sm text-gray-600 line-clamp-2">{description || "No meta description set. Search engines will use page content."}</p>
+      <p className="text-lg text-blue-700 hover:underline cursor-pointer truncate">{title || translateUi(uiLanguage, "Page Title")}</p>
+      <p className="text-sm text-gray-600 line-clamp-2">{description || translateUi(uiLanguage, "No meta description set. Search engines will use page content.")}</p>
     </div>
     </>
   );
@@ -109,9 +109,9 @@ function SocialPreview({ title, description, image, siteName }: { title: string;
         )}
       </div>
       <div className="p-3 border-t">
-        <p className="text-xs text-muted-foreground uppercase">{siteName || "findandstudy.com"}</p>
-        <p className="text-sm font-semibold text-foreground truncate">{title || "Page Title"}</p>
-        <p className="text-xs text-muted-foreground line-clamp-2">{description || "No description"}</p>
+        <p className="text-xs text-muted-foreground uppercase">{siteName || translateUi(uiLanguage, "findandstudy.com")}</p>
+        <p className="text-sm font-semibold text-foreground truncate">{title || translateUi(uiLanguage, "Page Title")}</p>
+        <p className="text-xs text-muted-foreground line-clamp-2">{description || translateUi(uiLanguage, "No description")}</p>
       </div>
     </div>
     </>
@@ -155,9 +155,9 @@ export default function WebsiteSeoOverrides() {
       qc.invalidateQueries({ queryKey: ["/api/website/seo-overview"] });
       qc.invalidateQueries({ queryKey: ["/api/website/seo-health"] });
       setEditing(null);
-      toast({ title: "SEO settings saved" });
+      toast({ title: translateUi(uiLanguage, "SEO settings saved") });
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: translateUi(uiLanguage, "Error"), description: e.message, variant: "destructive" }),
   });
 
   function openEditor(page: PageSeo) {
@@ -196,7 +196,7 @@ export default function WebsiteSeoOverrides() {
             <p className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "Answer-engine readiness")}</p>
             <div className="mt-2 flex items-center gap-2">
               {healthLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : health?.readiness === "ELIGIBLE" ? <CheckCircle2 className="h-5 w-5 text-green-600" /> : <AlertTriangle className="h-5 w-5 text-amber-600" />}
-              <p className="text-xl font-bold">{health?.readiness ?? "Unknown"}</p>
+              <p className="text-xl font-bold">{health?.readiness ?? translateUi(uiLanguage, "Unknown")}</p>
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Technical eligibility only; not a ranking guarantee.")}</p>
           </Card>
@@ -213,7 +213,7 @@ export default function WebsiteSeoOverrides() {
           <Card className="p-4">
             <p className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "AI crawler policy")}</p>
             <p className="mt-2 text-sm font-semibold">{translateUi(uiLanguage, "Search:")} {health?.discovery.oaiSearchBot ?? "—"}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Training:")} {health?.discovery.gptBot ?? "—"} {translateUi(uiLanguage, "· llms.txt")} {health?.discovery.llmsTxtAvailable ? "available" : "off"}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Training:")} {health?.discovery.gptBot ?? "—"} {translateUi(uiLanguage, "· llms.txt")} {health?.discovery.llmsTxtAvailable ? translateUi(uiLanguage, "available") : translateUi(uiLanguage, "off")}</p>
           </Card>
         </div>
 
@@ -381,7 +381,7 @@ export default function WebsiteSeoOverrides() {
               <Card className="p-3 bg-muted/30">
                 <p className="text-xs font-medium text-muted-foreground mb-1">{translateUi(uiLanguage, "Robots Directive")}</p>
                 <code className="text-xs font-mono">
-                  {form.robotsIndex ? "index" : "noindex"}, {form.robotsFollow ? "follow" : "nofollow"}
+                  {form.robotsIndex ? translateUi(uiLanguage, "index") : translateUi(uiLanguage, "noindex")}, {form.robotsFollow ? translateUi(uiLanguage, "follow") : translateUi(uiLanguage, "nofollow")}
                 </code>
               </Card>
               {form.canonicalUrl && (

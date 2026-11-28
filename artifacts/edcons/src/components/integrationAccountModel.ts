@@ -1,3 +1,4 @@
+import { translateUi } from "@/lib/ui-localization";
 export type AccountChannel = "whatsapp" | "messenger" | "instagram" | "telegram" | "sms";
 export type AccountScope = { kind: "channel"; provider: "direct" | "zernio"; channels: readonly AccountChannel[] } | { kind: "email" };
 
@@ -37,7 +38,7 @@ export function canManageIntegrationAccounts(user: { role?: string; isActive?: b
 
 export function integrationAccountsCopy(lang: string) {
   const tr = lang === "tr";
-  const copy = (en: string, turkish: string) => tr ? turkish : en;
+  const copy = (en: string, turkish: string) => translateUi(lang, en, turkish);
   return {
     copy,
     emailHint: copy("Sender accounts use the same approved SMTP settings as Notifications. Sending only; this does not connect an email inbox or OAuth mailbox.", "Gönderici hesapları Bildirimler ile aynı onaylı SMTP ayarlarını kullanır. Yalnız e-posta gönderimi içindir; gelen kutusu veya OAuth posta hesabı bağlanmaz."),

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -81,6 +82,7 @@ function LocaleIndicator({ item, locales, fields }: { item: TranslationItem; loc
 }
 
 export default function WebsiteTranslations() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t } = useI18n();
   const qc = useQueryClient();

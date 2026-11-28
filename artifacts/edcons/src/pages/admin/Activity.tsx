@@ -223,6 +223,7 @@ interface StaffFilterProps {
 }
 
 function PanelPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [preset, setPreset] = useState<PanelPreset>("today");
   const [customFrom, setCustomFrom] = useState("");
@@ -626,6 +627,7 @@ function OverviewPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
   }
 
   function SortTh({ label, sortKey, className }: { label: string; sortKey: string; className?: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
     const active = sort.key === sortKey;
     return (
       <th
@@ -1109,6 +1111,7 @@ function UserDetailPage({ userId }: { userId: number }) {
 }
 
 export default function AdminActivity({ userId }: { userId?: number }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<"panel" | "overview">("panel");
   const [staffId, setStaffId] = useState<number | undefined>(undefined);

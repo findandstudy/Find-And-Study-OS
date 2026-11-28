@@ -34,7 +34,7 @@ function ModelPicker({ value, provider, disabled, optional = false, onChange }: 
   const sentinel = optional ? "__none__" : "__default__";
   return <Select disabled={disabled || provider === "auto"} value={value || sentinel} onValueChange={next => onChange(next === sentinel ? "" : next)}>
     <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
-      <SelectItem value={sentinel}>{optional ? "Model yok" : "Entegrasyon varsayılanını kullan"}</SelectItem>
+      <SelectItem value={sentinel}>{optional ? translateUi(uiLanguage, "Model yok") : translateUi(uiLanguage, "Entegrasyon varsayılanını kullan")}</SelectItem>
       {legacyValue ? <SelectItem value={legacyValue}>{translateUi(uiLanguage, "Mevcut eski model ·")} {legacyValue}</SelectItem> : null}
       {options.map(option => <SelectItem key={option.value} value={option.value}>{option.label} · {option.description}</SelectItem>)}
     </SelectContent>
@@ -70,9 +70,9 @@ function ProviderConnectionCard({ provider, row, canEdit, onSaved }: { provider:
       const saved = await requestWithTimeout<IntegrationRow>(`/api/integrations/${provider}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: label, category: "ai", isEnabled: enabled, config: { apiKey: apiKey.trim(), model } }) });
       setApiKey(typeof saved.config?.apiKey === "string" ? saved.config.apiKey : "");
       setSavedCredentialReady(!saved.requiresCredentialReset);
-      toast({ title: `${label} bağlantısı kaydedildi`, description: "API anahtarı şifreli saklanır ve yalnız maskeli gösterilir." });
+      toast({ title: `${label} bağlantısı kaydedildi`, description: translateUi(uiLanguage, "API anahtarı şifreli saklanır ve yalnız maskeli gösterilir.") });
       void onSaved();
-    } catch (error: any) { toast({ title: "Bağlantı kaydedilemedi", description: error?.body?.message || error?.message, variant: "destructive" }); }
+    } catch (error: any) { toast({ title: translateUi(uiLanguage, "Bağlantı kaydedilemedi"), description: error?.body?.message || error?.message, variant: "destructive" }); }
     finally { setBusy(null); }
   };
   const testConnection = async () => {
@@ -80,12 +80,12 @@ function ProviderConnectionCard({ provider, row, canEdit, onSaved }: { provider:
     try {
       const result: any = await requestWithTimeout(`/api/integrations/${provider}/test`, { method: "POST" }, 30_000);
       const skipped = result?.status === "simulated" || result?.status === "not_supported";
-      toast({ title: skipped ? "Bağlantı testi çalıştırılmadı" : result?.success ? `${label} bağlantısı doğrulandı` : "Bağlantı testi başarısız", description: result?.message, variant: !skipped && !result?.success ? "destructive" : undefined });
-    } catch (error: any) { toast({ title: "Bağlantı testi başarısız", description: error?.message, variant: "destructive" }); }
+      toast({ title: skipped ? translateUi(uiLanguage, "Bağlantı testi çalıştırılmadı") : result?.success ? `${label} bağlantısı doğrulandı` : translateUi(uiLanguage, "Bağlantı testi başarısız"), description: result?.message, variant: !skipped && !result?.success ? "destructive" : undefined });
+    } catch (error: any) { toast({ title: translateUi(uiLanguage, "Bağlantı testi başarısız"), description: error?.message, variant: "destructive" }); }
     finally { setBusy(null); }
   };
   return <div className="rounded-xl border bg-background p-4 space-y-4">
-    <div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{label}</p><p className={`text-xs ${requiresCredentialReset ? "text-amber-700" : "text-muted-foreground"}`}>{requiresCredentialReset ? "API anahtarı yeniden girilmeli" : (savedCredentialReady || row?.config?.apiKey) ? "API anahtarı yapılandırıldı · gizli değer maskeli" : "API anahtarı gerekli"}</p></div><Switch checked={enabled} disabled={!canEdit || busy !== null} onCheckedChange={setEnabled} /></div>
+    <div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{label}</p><p className={`text-xs ${requiresCredentialReset ? "text-amber-700" : "text-muted-foreground"}`}>{requiresCredentialReset ? translateUi(uiLanguage, "API anahtarı yeniden girilmeli") : (savedCredentialReady || row?.config?.apiKey) ? translateUi(uiLanguage, "API anahtarı yapılandırıldı · gizli değer maskeli") : translateUi(uiLanguage, "API anahtarı gerekli")}</p></div><Switch checked={enabled} disabled={!canEdit || busy !== null} onCheckedChange={setEnabled} /></div>
     <div className="space-y-2"><Label>{label} {translateUi(uiLanguage, "API anahtarı")}</Label><Input type="password" autoComplete="new-password" disabled={!canEdit || busy !== null} value={apiKey} onChange={event => { setApiKey(event.target.value); setSavedCredentialReady(false); }} placeholder={provider === "openai" ? "sk-..." : "sk-ant-..."} /><p className="text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Maskeli değeri değiştirmeden bırakırsanız kayıtlı anahtar korunur.")}</p></div>
     <div className="space-y-2"><Label>{translateUi(uiLanguage, "Varsayılan model")}</Label><Select disabled={!canEdit || busy !== null} value={model} onValueChange={setModel}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{!AI_MODEL_OPTIONS[provider].some(option => option.value === model) ? <SelectItem value={model}>{translateUi(uiLanguage, "Mevcut eski model ·")} {model}</SelectItem> : null}{AI_MODEL_OPTIONS[provider].map(option => <SelectItem key={option.value} value={option.value}>{option.label} · {option.description}</SelectItem>)}</SelectContent></Select></div>
     {canEdit ? <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={testConnection} disabled={!row || requiresCredentialReset || busy !== null}>{busy === "test" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}{translateUi(uiLanguage, "Test et")}</Button><Button type="button" onClick={saveConnection} disabled={!apiKey.trim() || !model || busy !== null}>{busy === "save" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}{translateUi(uiLanguage, "Bağlantıyı kaydet")}</Button></div> : null}
@@ -108,8 +108,8 @@ export function AiContentTranslationSettings({ canEdit }: { canEdit: boolean }) 
     try {
       const response: any = await customFetch("/api/website/ai/content-settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) });
       setValue(response.settings); await query.refetch();
-      toast({ title: "AI içerik ayarları kaydedildi", description: "Politika artık dinamik sayfa üretimi ve çevirilerde uygulanıyor." });
-    } catch (error: any) { toast({ title: "Ayarlar kaydedilemedi", description: error?.message, variant: "destructive" }); }
+      toast({ title: translateUi(uiLanguage, "AI içerik ayarları kaydedildi"), description: translateUi(uiLanguage, "Politika artık dinamik sayfa üretimi ve çevirilerde uygulanıyor.") });
+    } catch (error: any) { toast({ title: translateUi(uiLanguage, "Ayarlar kaydedilemedi"), description: error?.message, variant: "destructive" }); }
     finally { setSaving(false); }
   };
   if (query.isLoading || !value) return <Card className="p-6"><div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{translateUi(uiLanguage, "AI içerik ayarları yükleniyor…")}</div></Card>;

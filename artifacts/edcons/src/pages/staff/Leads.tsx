@@ -996,6 +996,7 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
   currentSort: { key: SortKey; dir: SortDir };
   onSort: (key: SortKey) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const active = currentSort.key === sortKey;
   return (
     <>

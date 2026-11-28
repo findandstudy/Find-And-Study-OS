@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { apiFetch } from "@/lib/apiFetch";
@@ -86,6 +87,7 @@ function botScopedUrl(path: string, aiBotId: number) {
 }
 
 export default function KnowledgeSourcesRag({ aiBotId }: { aiBotId: number }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
 

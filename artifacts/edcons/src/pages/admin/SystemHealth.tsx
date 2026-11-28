@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock3, RefreshCw, ShieldAlert } from "lucide-react";
@@ -10,6 +11,7 @@ import { healthCopy, issueCopy } from "./system-health/copy";
 import { appendHealthHistory, createHealthReader, healthHref, healthIsStale, healthNumber, healthRefreshEnabled, healthSummary, type CheckKey, type DisplayState, type HealthHistory, type HealthResponse, type MetricRecord } from "./system-health/model";
 
 export default function SystemHealthPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang, dir } = useI18n();
   const copy = healthCopy(lang);
   const [data, setData] = useState<HealthResponse | null>(null);

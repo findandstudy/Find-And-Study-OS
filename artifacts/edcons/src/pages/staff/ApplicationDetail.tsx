@@ -137,7 +137,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
         return true;
       case "conflict":
         queryClient.invalidateQueries({ queryKey: [`/api/applications/${id}`] });
-        toast({ title: "Başvuru güncellendi", description: "Başka bir kullanıcı değişiklik yaptı. Güncel kayıt yüklendi; lütfen tekrar deneyin.", variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Başvuru güncellendi"), description: translateUi(uiLanguage, "Başka bir kullanıcı değişiklik yaptı. Güncel kayıt yüklendi; lütfen tekrar deneyin."), variant: "destructive" });
         return false;
       case "doc_selection_required":
         setDocRequestDialog({
@@ -211,10 +211,10 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/students/${app?.studentId}/follow-ups`] });
       resetFollowUpForm();
-      toast({ title: "Follow-up scheduled" });
+      toast({ title: translateUi(uiLanguage, "Follow-up scheduled") });
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -227,7 +227,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
       }).then(r => { if (!r.ok) throw new Error("Failed"); return r.json(); }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/students/${app?.studentId}/follow-ups`] });
-      toast({ title: "Follow-up updated" });
+      toast({ title: translateUi(uiLanguage, "Follow-up updated") });
     },
   });
 
@@ -241,10 +241,10 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/students/${app?.studentId}/follow-ups`] });
       resetFollowUpForm();
-      toast({ title: "Follow-up updated" });
+      toast({ title: translateUi(uiLanguage, "Follow-up updated") });
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -539,7 +539,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                         onClick={handleCreateFollowUp}
                         disabled={(editingFuId ? editFollowUp.isPending : createFollowUp.isPending) || !fuTitle.trim() || !fuDate}
                       >
-                        {editingFuId ? "Save" : "Schedule"}
+                        {editingFuId ? translateUi(uiLanguage, "Save") : translateUi(uiLanguage, "Schedule")}
                       </Button>
                     </div>
                   </div>

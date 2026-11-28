@@ -146,6 +146,7 @@ type SortDir = "asc" | "desc";
 function UserSortHeader({ label, sortKey, currentSort, onSort }: {
   label: string; sortKey: UserSortKey; currentSort: { key: UserSortKey; dir: SortDir }; onSort: (k: UserSortKey) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const active = currentSort.key === sortKey;
   return (
     <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:bg-muted/50 transition-colors"
@@ -199,7 +200,7 @@ function UsersTab() {
       setRoles(rolesRes?.data || rolesRes || []);
       setBranches(branchesRes?.data || branchesRes || []);
     }).catch((err: Error) => {
-      toast({ title: "Failed to load user settings", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Failed to load user settings"), description: err.message, variant: "destructive" });
     });
   }, [toast]);
 
@@ -252,7 +253,7 @@ function UsersTab() {
       if (!createOpenRef.current) return;
       setCreateForm(f => ({ ...f, avatarUrl }));
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Upload failed"), description: err.message, variant: "destructive" });
     } finally {
       setCreateAvatarUploading(false);
     }
@@ -260,11 +261,11 @@ function UsersTab() {
 
   const handleCreate = async () => {
     if (!createForm.email || !createForm.firstName || !createForm.lastName) {
-      toast({ title: "Please fill in all required fields", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Please fill in all required fields"), variant: "destructive" });
       return;
     }
     if (requiresDirectBranch(createForm.role) && !createForm.branchId) {
-      toast({ title: "Please select a branch for this staff user", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Please select a branch for this staff user"), variant: "destructive" });
       return;
     }
     setCreating(true);
@@ -282,12 +283,12 @@ function UsersTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      toast({ title: "User created successfully" });
+      toast({ title: translateUi(uiLanguage, "User created successfully") });
       setCreateOpen(false);
       setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", branchId: "", phoneCode: "+90", phone: "", language: "en", password: "", avatarUrl: "" });
       refetch();
     } catch (err: any) {
-      toast({ title: "Failed to create user", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Failed to create user"), description: err.message, variant: "destructive" });
     } finally {
       setCreating(false);
     }
@@ -297,10 +298,10 @@ function UsersTab() {
     if (!confirm("Are you sure you want to delete this user? This action cannot be undone.")) return;
     try {
       await customFetch(`/api/users/${id}`, { method: "DELETE" });
-      toast({ title: "User deleted" });
+      toast({ title: translateUi(uiLanguage, "User deleted") });
       refetch();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -315,14 +316,14 @@ function UsersTab() {
       toast({ title: `User ${newActive ? "activated" : "deactivated"}` });
       refetch();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
   async function handleSetPassword() {
     if (!passwordDialog) return;
     if (!newPassword || newPassword.length < 6) {
-      toast({ title: "Password must be at least 6 characters", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Password must be at least 6 characters"), variant: "destructive" });
       return;
     }
     setPasswordSaving(true);
@@ -332,11 +333,11 @@ function UsersTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: newPassword }),
       });
-      toast({ title: "Password updated" });
+      toast({ title: translateUi(uiLanguage, "Password updated") });
       setPasswordDialog(null);
       setNewPassword("");
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     } finally {
       setPasswordSaving(false);
     }
@@ -354,7 +355,7 @@ function UsersTab() {
         window.location.href = `${base}${(res as any).redirectTo}`;
       }
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -395,7 +396,7 @@ function UsersTab() {
       if (!editOpenRef.current) return;
       setEditForm(f => ({ ...f, avatarUrl }));
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Upload failed"), description: err.message, variant: "destructive" });
     } finally {
       setEditAvatarUploading(false);
     }
@@ -404,11 +405,11 @@ function UsersTab() {
   async function handleEditSave() {
     if (!editUser) return;
     if (!editForm.email || !editForm.firstName || !editForm.lastName) {
-      toast({ title: "Please fill in all required fields", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Please fill in all required fields"), variant: "destructive" });
       return;
     }
     if (requiresDirectBranch(editForm.role) && !editForm.branchId) {
-      toast({ title: "Please select a branch for this staff user", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Please select a branch for this staff user"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -425,12 +426,12 @@ function UsersTab() {
           permissionOverrides: editOverrides,
         }),
       });
-      toast({ title: "User updated successfully" });
+      toast({ title: translateUi(uiLanguage, "User updated successfully") });
       setEditOpen(false);
       setEditUser(null);
       refetch();
     } catch (err: any) {
-      toast({ title: "Failed to update user", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Failed to update user"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -568,13 +569,13 @@ function UsersTab() {
                           ? <span className="text-foreground">{user.branchName}</span>
                           : <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">{translateUi(uiLanguage, "Unassigned")}</Badge>
                       ) : (
-                        <span className="text-muted-foreground">{user.role === "super_admin" ? "Global" : "Managed separately"}</span>
+                        <span className="text-muted-foreground">{user.role === "super_admin" ? translateUi(uiLanguage, "Global") : translateUi(uiLanguage, "Managed separately")}</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
                       <Badge variant={user.isActive ? "default" : "secondary"}
                         className={user.isActive ? "bg-green-500/10 text-green-600 border-green-200" : "bg-secondary text-muted-foreground"}>
-                        {user.isActive ? "Active" : "Inactive"}
+                        {user.isActive ? translateUi(uiLanguage, "Active") : translateUi(uiLanguage, "Inactive")}
                       </Badge>
                     </td>
                     <td className="px-6 py-4">
@@ -741,7 +742,7 @@ function UsersTab() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>{translateUi(uiLanguage, "Cancel")}</Button>
             <Button onClick={handleCreate} disabled={creating || createAvatarUploading}>
-              {creating ? "Creating..." : createAvatarUploading ? "Uploading photo..." : "Create User"}
+              {creating ? translateUi(uiLanguage, "Creating...") : createAvatarUploading ? translateUi(uiLanguage, "Uploading photo...") : translateUi(uiLanguage, "Create User")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -851,7 +852,7 @@ function UsersTab() {
               <Label>{translateUi(uiLanguage, "Status")}</Label>
               <div className="flex items-center gap-2">
                 <span className={`text-sm ${editForm.isActive ? "text-green-600" : "text-muted-foreground"}`}>
-                  {editForm.isActive ? "Active" : "Inactive"}
+                  {editForm.isActive ? translateUi(uiLanguage, "Active") : translateUi(uiLanguage, "Inactive")}
                 </span>
                 <button
                   type="button"
@@ -906,7 +907,7 @@ function UsersTab() {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditOpen(false); setEditUser(null); }}>{translateUi(uiLanguage, "Cancel")}</Button>
             <Button onClick={handleEditSave} disabled={saving || editAvatarUploading}>
-              {saving ? "Saving..." : editAvatarUploading ? "Uploading photo..." : "Save Changes"}
+              {saving ? translateUi(uiLanguage, "Saving...") : editAvatarUploading ? translateUi(uiLanguage, "Uploading photo...") : translateUi(uiLanguage, "Save Changes")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -933,7 +934,7 @@ function UsersTab() {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setPasswordDialog(null); setNewPassword(""); }}>{translateUi(uiLanguage, "Cancel")}</Button>
             <Button onClick={handleSetPassword} disabled={passwordSaving || newPassword.length < 6}>
-              {passwordSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {translateUi(uiLanguage, "Saving...")}</> : "Set Password"}
+              {passwordSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {translateUi(uiLanguage, "Saving...")}</> : translateUi(uiLanguage, "Set Password")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -970,7 +971,7 @@ function RolesTab() {
       setRoles((rolesRes as any)?.data || rolesRes || []);
       setPermSchema((schemaRes as any)?.data || schemaRes || {});
     } catch {
-      toast({ title: "Failed to load roles", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Failed to load roles"), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -1033,10 +1034,10 @@ function RolesTab() {
           permissions: editPerms,
         }),
       });
-      toast({ title: "Role updated successfully" });
+      toast({ title: translateUi(uiLanguage, "Role updated successfully") });
       fetchRoles();
     } catch (err: any) {
-      toast({ title: "Failed to update role", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Failed to update role"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -1044,7 +1045,7 @@ function RolesTab() {
 
   const createRole = async () => {
     if (!newRoleName.trim() || !newRoleDisplay.trim()) {
-      toast({ title: "Name and display name are required", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Name and display name are required"), variant: "destructive" });
       return;
     }
     try {
@@ -1059,7 +1060,7 @@ function RolesTab() {
           permissions: [],
         }),
       });
-      toast({ title: "Role created successfully" });
+      toast({ title: translateUi(uiLanguage, "Role created successfully") });
       setCreateOpen(false);
       setNewRoleName("");
       setNewRoleDisplay("");
@@ -1067,23 +1068,23 @@ function RolesTab() {
       setNewRoleColor("blue");
       fetchRoles();
     } catch (err: any) {
-      toast({ title: "Failed to create role", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Failed to create role"), description: err.message, variant: "destructive" });
     }
   };
 
   const deleteRole = async (role: RoleData) => {
     if (role.isSystem) {
-      toast({ title: "System roles cannot be deleted", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "System roles cannot be deleted"), variant: "destructive" });
       return;
     }
     if (!window.confirm(`Delete role "${role.displayName}"? Users with this role will need to be reassigned.`)) return;
     try {
       await customFetch(`/api/roles/${role.id}`, { method: "DELETE" });
-      toast({ title: "Role deleted" });
+      toast({ title: translateUi(uiLanguage, "Role deleted") });
       if (selectedRole?.id === role.id) setSelectedRole(null);
       fetchRoles();
     } catch (err: any) {
-      toast({ title: "Failed to delete role", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Failed to delete role"), description: err.message, variant: "destructive" });
     }
   };
 
@@ -1266,7 +1267,7 @@ function RolesTab() {
                 <p className="text-sm text-muted-foreground">
                   <span className="font-semibold text-foreground">{editPerms.length}</span> {translateUi(uiLanguage, "of")} {totalPerms} {translateUi(uiLanguage, "permissions enabled")} </p>
                 <Button onClick={saveRole} disabled={saving} className="rounded-xl gap-2">
-                  {saving ? "Saving..." : "Save Changes"}
+                  {saving ? translateUi(uiLanguage, "Saving...") : translateUi(uiLanguage, "Save Changes")}
                 </Button>
               </div>
             </Card>

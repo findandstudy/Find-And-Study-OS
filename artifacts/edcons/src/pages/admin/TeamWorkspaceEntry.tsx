@@ -1,4 +1,4 @@
-import { translateUi } from "@/lib/ui-localization";
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ArrowRight, FolderKanban, Loader2 } from "lucide-react";
@@ -13,6 +13,7 @@ import {
 } from "@/lib/personaWorkspaceNavigation";
 
 export default function TeamWorkspaceEntry() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang } = useI18n();
   const [, setLocation] = useLocation();
   const copy = (tr: string, en: string) => translateUi(lang, en, tr);

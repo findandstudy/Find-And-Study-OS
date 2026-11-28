@@ -96,7 +96,7 @@ export function InboxSubmitTab({
     });
     if (missingAcademic.length > 0) {
       toast({
-        title: "Academic information is incomplete",
+        title: translateUi(uiLanguage, "Academic information is incomplete"),
         description: `AI could not verify: ${missingAcademic.join(", ")}. Review the uploaded education documents or enter these fields manually.`,
         variant: "destructive",
       });
@@ -105,7 +105,7 @@ export function InboxSubmitTab({
     if (!data.leadId) {
       toast({
         title: t("inbox.studentTab.createFailed"),
-        description: "A linked lead is required before student creation.",
+        description: translateUi(uiLanguage, "A linked lead is required before student creation."),
         variant: "destructive",
       });
       return;

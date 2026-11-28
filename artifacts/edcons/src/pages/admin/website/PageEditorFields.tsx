@@ -26,6 +26,7 @@ export function BlockFieldEditor({
   onChange: (key: string, value: unknown) => void;
   variableContext?: CmsTextVariableValues;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang } = useI18n();
   const copy = (value: string) => pageEditorText(lang, value);
   const customAppearance = content.useThemeColors === false;
@@ -54,10 +55,10 @@ export function BlockFieldEditor({
   return (
     <div className="space-y-4">
       {variableContext && variableFields.length > 0 && <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
-        <div><h4 className="flex items-center gap-2 text-sm font-semibold"><Braces className="h-4 w-4 text-primary" />{lang === "tr" ? "Canlı sayfa verisi ekle" : "Insert live page data"}</h4><p className="mt-1 text-xs text-muted-foreground">{lang === "tr" ? "Teknik kod yazmadan sayfa ve site bilgilerini seçili metin alanına ekleyin." : "Insert page and site information into a text field without writing technical code."}</p></div>
-        <div className="grid gap-2 sm:grid-cols-2"><div className="space-y-1"><Label className="text-xs">{lang === "tr" ? "Eklenecek bilgi" : "Information to insert"}</Label><Select value={variableKey} onValueChange={setVariableKey}><SelectTrigger aria-label={lang === "tr" ? "Eklenecek bilgi" : "Information to insert"}><SelectValue /></SelectTrigger><SelectContent>{CMS_TEXT_VARIABLES.map(item => <SelectItem key={item.key} value={item.key}>{lang === "tr" ? item.labelTr : item.label}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1"><Label className="text-xs">{lang === "tr" ? "Hedef metin alanı" : "Target text field"}</Label><Select value={variableFields.some(field => field.key === variableTarget) ? variableTarget : variableFields[0]?.key} onValueChange={setVariableTarget}><SelectTrigger aria-label={lang === "tr" ? "Hedef metin alanı" : "Target text field"}><SelectValue /></SelectTrigger><SelectContent>{variableFields.map(field => <SelectItem key={field.key} value={field.key}>{copy(field.label)}</SelectItem>)}</SelectContent></Select></div></div>
-        <div className="rounded-lg border bg-background p-3"><p className="text-xs text-muted-foreground">{lang === "tr" ? `${selectedVariable.labelTr}, yayınlanan sayfanın gerçek bağlamından otomatik doldurulur.` : `${selectedVariable.label} is filled automatically from the published page context.`}</p><code className="mt-2 inline-block rounded bg-muted px-2 py-1 text-xs">{`{{${selectedVariable.key}}}`}</code><Button type="button" size="sm" className="mt-3 w-full" onClick={insertVariable}>{lang === "tr" ? "Seçili alana ekle" : "Add to selected field"}</Button></div>
-        <p className="text-[11px] text-muted-foreground">{lang === "tr" ? "Boş değer için yedek: {{page.title|Varsayılan başlık}}" : "Fallback for an empty value: {{page.title|Default title}}"}</p>
+        <div><h4 className="flex items-center gap-2 text-sm font-semibold"><Braces className="h-4 w-4 text-primary" />{translateUi(lang, "Insert live page data", "Canlı sayfa verisi ekle")}</h4><p className="mt-1 text-xs text-muted-foreground">{translateUi(lang, "Insert page and site information into a text field without writing technical code.", "Teknik kod yazmadan sayfa ve site bilgilerini seçili metin alanına ekleyin.")}</p></div>
+        <div className="grid gap-2 sm:grid-cols-2"><div className="space-y-1"><Label className="text-xs">{translateUi(lang, "Information to insert", "Eklenecek bilgi")}</Label><Select value={variableKey} onValueChange={setVariableKey}><SelectTrigger aria-label={translateUi(lang, "Information to insert", "Eklenecek bilgi")}><SelectValue /></SelectTrigger><SelectContent>{CMS_TEXT_VARIABLES.map(item => <SelectItem key={item.key} value={item.key}>{lang === "tr" ? item.labelTr : item.label}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1"><Label className="text-xs">{translateUi(lang, "Target text field", "Hedef metin alanı")}</Label><Select value={variableFields.some(field => field.key === variableTarget) ? variableTarget : variableFields[0]?.key} onValueChange={setVariableTarget}><SelectTrigger aria-label={translateUi(lang, "Target text field", "Hedef metin alanı")}><SelectValue /></SelectTrigger><SelectContent>{variableFields.map(field => <SelectItem key={field.key} value={field.key}>{copy(field.label)}</SelectItem>)}</SelectContent></Select></div></div>
+        <div className="rounded-lg border bg-background p-3"><p className="text-xs text-muted-foreground">{lang === "tr" ? `${selectedVariable.labelTr}, yayınlanan sayfanın gerçek bağlamından otomatik doldurulur.` : `${selectedVariable.label} is filled automatically from the published page context.`}</p><code className="mt-2 inline-block rounded bg-muted px-2 py-1 text-xs">{`{{${selectedVariable.key}}}`}</code><Button type="button" size="sm" className="mt-3 w-full" onClick={insertVariable}>{translateUi(lang, "Add to selected field", "Seçili alana ekle")}</Button></div>
+        <p className="text-[11px] text-muted-foreground">{translateUi(lang, "Fallback for an empty value: {{page.title|Default title}}", "Boş değer için yedek: {{page.title|Varsayılan başlık}}")}</p>
       </div>}
       {content.useThemeColors !== false && fields.some(field => BLOCK_APPEARANCE_KEYS.has(field.key)) && (
         <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">{copy("This section inherits its colors, width and spacing from Theme Builder. Turn off Theme Builder Colors to create a section-specific appearance.")}</p>
@@ -198,6 +199,7 @@ function ItemsEditor({
   itemFields: BlockFieldDef[];
   onChange: (items: Record<string, unknown>[]) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang } = useI18n();
   const copy = (value: string) => pageEditorText(lang, value);
   const addItem = () => {

@@ -110,6 +110,7 @@ async function uploadFileToStorage(file: File): Promise<string> {
  * Review → Sign. The agent's email is pre-filled and locked (no verification).
  */
 export default function SignContract({ onSigned, asModal = false, sessionId, onClose }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const dismissible = !!onClose;
   // Intake is only collected for the primary onboarding session.
@@ -213,38 +214,38 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
     <div className="flex items-center justify-center p-6">
       <div className="max-w-md text-center space-y-3">
         <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
-        <h1 className="text-xl font-semibold">{t("agentOnboarding.sign.unavailable") || "Contract unavailable"}</h1>
+        <h1 className="text-xl font-semibold">{t("agentOnboarding.sign.unavailable") || translateUi(uiLanguage, "Contract unavailable")}</h1>
         <p className="text-sm text-muted-foreground">{error}</p>
         {dismissible ? (
-          <Button variant="outline" onClick={onClose}>{t("common.close") || "Close"}</Button>
+          <Button variant="outline" onClick={onClose}>{t("common.close") || translateUi(uiLanguage, "Close")}</Button>
         ) : (
-          <Button variant="outline" onClick={() => void performLogout()}><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</Button>
+          <Button variant="outline" onClick={() => void performLogout()}><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || translateUi(uiLanguage, "Sign out")}</Button>
         )}
       </div>
     </div>
   );
 
   const exitButton = dismissible ? (
-    <Button variant="ghost" onClick={onClose}>{t("common.later") || "Later"}</Button>
+    <Button variant="ghost" onClick={onClose}>{t("common.later") || translateUi(uiLanguage, "Later")}</Button>
   ) : (
-    <Button variant="ghost" onClick={() => void performLogout()}><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</Button>
+    <Button variant="ghost" onClick={() => void performLogout()}><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || translateUi(uiLanguage, "Sign out")}</Button>
   );
 
   const innerContent = data ? (
     <>
       <div className="text-center mb-6">
-        <h1 className="text-2xl font-semibold">{t("agentOnboarding.sign.title") || "Sign your agency contract"}</h1>
+        <h1 className="text-2xl font-semibold">{t("agentOnboarding.sign.title") || translateUi(uiLanguage, "Sign your agency contract")}</h1>
         <p className="text-sm text-muted-foreground mt-1">{data.template?.name}</p>
         <p className="text-xs text-muted-foreground mt-1">
-          {t("agentOnboarding.sign.deadline") || "Deadline"}: <strong>{new Date(data.expiresAt).toLocaleString()}</strong>
+          {t("agentOnboarding.sign.deadline") || translateUi(uiLanguage, "Deadline")}: <strong>{new Date(data.expiresAt).toLocaleString()}</strong>
         </p>
       </div>
       <div className="bg-card border rounded-2xl shadow-sm p-6">
         {step === "details" ? (
           <div className="space-y-5">
             <div>
-              <h2 className="text-lg font-semibold">{t("agentOnboarding.intake.title") || "Agency Information"}</h2>
-              <p className="text-sm text-muted-foreground">{t("agentOnboarding.intake.subtitle") || "Fill in your agency details before reviewing the contract."}</p>
+              <h2 className="text-lg font-semibold">{t("agentOnboarding.intake.title") || translateUi(uiLanguage, "Agency Information")}</h2>
+              <p className="text-sm text-muted-foreground">{t("agentOnboarding.intake.subtitle") || translateUi(uiLanguage, "Fill in your agency details before reviewing the contract.")}</p>
             </div>
             <div className="space-y-4">
               {intakeFields.map(f => (
@@ -292,7 +293,7 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
               {exitButton}
               <Button onClick={submitIntake} disabled={!canContinueIntake || submitting}>
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                {t("common.continue") || "Continue"}
+                {t("common.continue") || translateUi(uiLanguage, "Continue")}
               </Button>
             </div>
           </div>
@@ -303,12 +304,12 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
             </div>
             <div className="flex justify-between mt-6">
               {intakeFields.length > 0 && isOnboarding ? (
-                <Button variant="outline" onClick={() => { setError(""); setStep("details"); }}>{t("common.back") || "Back"}</Button>
+                <Button variant="outline" onClick={() => { setError(""); setStep("details"); }}>{t("common.back") || translateUi(uiLanguage, "Back")}</Button>
               ) : (
                 exitButton
               )}
               <Button onClick={() => setStep("sign")}>
-                <FileSignature className="w-4 h-4 mr-2" /> {t("agentOnboarding.sign.proceed") || "Proceed to sign"}
+                <FileSignature className="w-4 h-4 mr-2" /> {t("agentOnboarding.sign.proceed") || translateUi(uiLanguage, "Proceed to sign")}
               </Button>
             </div>
           </>
@@ -338,7 +339,7 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
           onInteractOutside={e => { if (!dismissible) e.preventDefault(); }}
         >
           <DialogHeader className="sr-only">
-            <DialogTitle>{t("agentOnboarding.sign.title") || "Sign your agency contract"}</DialogTitle>
+            <DialogTitle>{t("agentOnboarding.sign.title") || translateUi(uiLanguage, "Sign your agency contract")}</DialogTitle>
             <DialogDescription>{data?.template?.name || ""}</DialogDescription>
           </DialogHeader>
           {loading ? loadingNode : (error && !data) ? errorNode : innerContent}
@@ -362,6 +363,7 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
 }
 
 function LogoUpload({ value, onChange, onError }: { value: string; onChange: (v: string) => void; onError: (m: string) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -392,7 +394,7 @@ function LogoUpload({ value, onChange, onError }: { value: string; onChange: (v:
       ) : null}
       <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={() => inputRef.current?.click()} className="gap-2">
         {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-        {value ? "Change" : "Upload"}
+        {value ? translateUi(uiLanguage, "Change") : translateUi(uiLanguage, "Upload")}
       </Button>
       <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={e => handleFile(e.target.files?.[0])} />
     </div>

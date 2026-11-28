@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -21,6 +22,7 @@ const blankTemplate = (): TemplateDraft => ({ name: "", category: "applications"
 const blankSender = (): SenderDraft => ({ displayName: "", fromEmail: "", fromName: "", replyTo: "", host: "", port: 587, username: "", password: "", isActive: false });
 
 export function EmailAutomationManager({ view = "all" }: { view?: "all" | "senders" } = {}) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang, dir } = useI18n();
   const copy = emailAutomationCopy(lang);
   const { user } = useAuth();

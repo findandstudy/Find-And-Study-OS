@@ -1,3 +1,4 @@
+import { translateUi } from "@/lib/ui-localization";
 // This memory-only preview uses the existing dashboard SPA shell. Menu
 // visibility is discoverability only; the server still validates its template
 // request and direct document entry against the real session and staging gate.
@@ -7,7 +8,7 @@ const STAGING_ORIGIN = "https://staging.findandstudy.com";
 export function getPersonaTeamPreviewMenuLink(origin: string, role: string, language: string) {
   if (origin !== STAGING_ORIGIN || !["admin", "super_admin"].includes(role)) return null;
   return {
-    title: language === "tr" ? "Takım Tasarımcısı — Önizleme" : "Team Designer — Preview",
+    title: translateUi(language, "Team Designer — Preview", "Takım Tasarımcısı — Önizleme"),
     url: PERSONA_TEAM_PREVIEW_PATH,
   };
 }

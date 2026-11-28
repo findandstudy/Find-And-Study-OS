@@ -171,11 +171,11 @@ function DropZone({ docType, uploaded, onUpload, onRemove, applicationSession }:
     const labelText = docType.label ?? t(docType.labelKey);
     const currentPartCount = uploaded?.partCount || (uploaded ? 1 : 0);
     if (isSingleImageDocumentType(docType.key) && (uploaded || files.length > 1)) {
-      toast({ title: "Photograph accepts one file", description: "Remove the current photograph before choosing another PDF or image.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Photograph accepts one file"), description: translateUi(uiLanguage, "Remove the current photograph before choosing another PDF or image."), variant: "destructive" });
       return;
     }
     if (currentPartCount + files.length > MAX_DOCUMENT_PARTS) {
-      toast({ title: "Too many document parts", description: `You can combine up to ${MAX_DOCUMENT_PARTS} parts in one document box.`, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Too many document parts"), description: `You can combine up to ${MAX_DOCUMENT_PARTS} parts in one document box.`, variant: "destructive" });
       return;
     }
 
@@ -215,7 +215,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove, applicationSession }:
         partCount: currentPartCount + files.length,
       });
     } catch (error) {
-      toast({ title: "Documents could not be combined", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Documents could not be combined"), description: error instanceof Error ? error.message : translateUi(uiLanguage, "Please try again."), variant: "destructive" });
     } finally {
       setMerging(false);
     }
@@ -238,7 +238,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove, applicationSession }:
         {!isSingleImageDocumentType(docType.key) && (
           <div className="flex items-center gap-2">
             <button type="button" disabled={merging} onClick={() => inputRef.current?.click()} className="text-[10px] font-semibold text-primary hover:underline disabled:opacity-50">
-              {merging ? "Combining..." : "+ Add part"}
+              {merging ? translateUi(uiLanguage, "Combining...") : translateUi(uiLanguage, "+ Add part")}
             </button>
             <button type="button" disabled={merging} onClick={() => setScannerOpen(true)} className="text-[10px] font-semibold text-primary hover:underline disabled:opacity-50">{translateUi(uiLanguage, "Scan")}</button>
           </div>
@@ -712,7 +712,7 @@ export default function PublicProgramApplicationDialog({ open, onClose, program 
   function handleSkipToReview() {
     if (programReqsLoading || programReqsError) {
       toast({
-        title: "Document requirements could not be verified. Please retry.",
+        title: translateUi(uiLanguage, "Document requirements could not be verified. Please retry."),
         variant: "destructive",
       });
       return;
@@ -729,7 +729,7 @@ export default function PublicProgramApplicationDialog({ open, onClose, program 
 
     if (programReqsLoading || programReqsError) {
       toast({
-        title: "Document requirements could not be verified. Please retry.",
+        title: translateUi(uiLanguage, "Document requirements could not be verified. Please retry."),
         variant: "destructive",
       });
       return;
@@ -792,7 +792,7 @@ export default function PublicProgramApplicationDialog({ open, onClose, program 
           });
         } else if (err.code === "ELIGIBILITY_FAILED" && err.eligibilityErrors) {
           toast({
-            title: "Eligibility Requirements Not Met",
+            title: translateUi(uiLanguage, "Eligibility Requirements Not Met"),
             description: err.eligibilityErrors.join(". "),
             variant: "destructive",
             duration: 12000,

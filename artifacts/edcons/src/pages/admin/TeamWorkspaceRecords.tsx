@@ -1,3 +1,4 @@
+import { translateUi } from "@/lib/ui-localization";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,7 +17,7 @@ export default function TeamWorkspaceRecords({
   disabled: boolean;
 }) {
   const { lang } = useI18n();
-  const copy = (tr: string, en: string) => (lang === "tr" ? tr : en);
+  const copy = (tr: string, en: string) => (translateUi(lang, en, tr));
   const [records, setRecords] = useState<ReturnType<
     typeof parseWorkspaceRecords
   > | null>(null);

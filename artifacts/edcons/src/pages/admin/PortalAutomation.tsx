@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 /**
  * PortalAutomation.tsx — Admin: Portal Otomasyonu sekmeli yönetim sayfası
  *
@@ -117,6 +118,7 @@ function ComingSoon() {
 // Otomasyon Kuralları tab
 // ---------------------------------------------------------------------------
 function AutomationRulesTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
 

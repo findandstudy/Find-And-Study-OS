@@ -232,18 +232,18 @@ function DropZone({
     if (files.length === 0) return;
     const currentPartCount = uploaded?.partCount || (uploaded ? 1 : 0);
     if (isSingleImageDocumentType(docType.key) && (uploaded || files.length > 1)) {
-      toast({ title: "Photograph accepts one file", description: "Remove the current photograph before choosing another PDF or image.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Photograph accepts one file"), description: translateUi(uiLanguage, "Remove the current photograph before choosing another PDF or image."), variant: "destructive" });
       return;
     }
     if (currentPartCount + files.length > MAX_DOCUMENT_PARTS) {
-      toast({ title: "Too many document parts", description: `You can combine up to ${MAX_DOCUMENT_PARTS} parts in one document box.`, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Too many document parts"), description: `You can combine up to ${MAX_DOCUMENT_PARTS} parts in one document box.`, variant: "destructive" });
       return;
     }
     const safeFiles: File[] = [];
     for (const file of files) {
       const validation = validateApplicationDocumentFileObj(file);
       if (!validation.valid) {
-        toast({ title: "File error", description: validation.message, variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "File error"), description: validation.message, variant: "destructive" });
         return;
       }
       safeFiles.push(new File([file], sanitizeFileName(file.name), { type: file.type }));
@@ -273,7 +273,7 @@ function DropZone({
         partCount: currentPartCount + files.length,
       });
     } catch (error) {
-      toast({ title: "Documents could not be combined", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Documents could not be combined"), description: error instanceof Error ? error.message : translateUi(uiLanguage, "Please try again."), variant: "destructive" });
     } finally {
       setMerging(false);
     }
@@ -308,7 +308,7 @@ function DropZone({
         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{docType.label}</span>
         {!isSingleImageDocumentType(docType.key) && (
           <button type="button" disabled={merging} onClick={() => inputRef.current?.click()} className="text-[10px] font-semibold text-primary hover:underline disabled:opacity-50">
-            {merging ? "Combining..." : "+ Add another part"}
+            {merging ? translateUi(uiLanguage, "Combining...") : translateUi(uiLanguage, "+ Add another part")}
           </button>
         )}
         <input
@@ -398,6 +398,7 @@ export function NationalityCombobox({ value, onChange, countries }: {
   onChange: (v: string) => void;
   countries: Array<{ id: number; name: string; code?: string }>;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [searchVal, setSearchVal] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -440,7 +441,7 @@ export function NationalityCombobox({ value, onChange, countries }: {
       />
       {open && (
         <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? translateUi(uiLanguage, "No match — custom value OK") : translateUi(uiLanguage, "No countries loaded")}</div>}
           {filtered.map(c => (
             <button key={c.id} type="button"
               className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
@@ -588,7 +589,7 @@ export function AddStudentModal({
   async function analyzeDocuments() {
     const uploadedDocs = Object.values(docs);
     if (uploadedDocs.length === 0) {
-      toast({ title: "Upload at least one document", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Upload at least one document"), variant: "destructive" });
       return;
     }
     setStep("analyzing");
@@ -772,29 +773,29 @@ export function AddStudentModal({
     if (!form.passportExpiry.trim()) missing.push("Expiry Date");
     if (!form.interestedLevel.trim()) missing.push("Interested Level");
     if (missing.length > 0) {
-      toast({ title: "Required fields missing", description: missing.join(", "), variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Required fields missing"), description: missing.join(", "), variant: "destructive" });
       return;
     }
     const validationErrors = validateStudentIntakeForm(form);
     if (validationErrors.length > 0) {
-      toast({ title: "Check student details", description: validationErrors.join(" "), variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Check student details"), description: validationErrors.join(" "), variant: "destructive" });
       return;
     }
     if (!documentPolicyReady) {
-      toast({ title: "Document requirements unavailable", description: "The selected level's document policy could not be verified. Please reload and try again.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Document requirements unavailable"), description: translateUi(uiLanguage, "The selected level's document policy could not be verified. Please reload and try again."), variant: "destructive" });
       return;
     }
     if (Object.keys(docs).length === 0) {
       toast({
-        title: "No documents uploaded",
-        description: "A student profile requires documents. Create this person as a lead until their documents are available.",
+        title: translateUi(uiLanguage, "No documents uploaded"),
+        description: translateUi(uiLanguage, "A student profile requires documents. Create this person as a lead until their documents are available."),
         variant: "destructive",
       });
       return;
     }
     const missingDocs = currentDocs.filter(dt => dt.required && !docs[dt.key]).map(dt => dt.label);
     if (missingDocs.length > 0) {
-      toast({ title: "Required documents missing", description: missingDocs.join(", "), variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Required documents missing"), description: missingDocs.join(", "), variant: "destructive" });
       return;
     }
     const fullPhone = form.phone ? `${form.phoneCode} ${form.phone}` : null;
@@ -830,22 +831,22 @@ export function AddStudentModal({
             const result = await saveDocumentsForStudent(createdStudent.id, form.firstName, form.lastName);
             if (result.failed.length > 0) {
               toast({
-                title: "Student created, but document upload is incomplete",
+                title: translateUi(uiLanguage, "Student created, but document upload is incomplete"),
                 description: `${result.uploaded.length}/${docCount} documents added. Failed: ${result.failed.join(", ")}. Please upload them again from the student profile.`,
                 variant: "destructive",
               });
             } else {
-              toast({ title: "Student created", description: `${result.uploaded.length} document${result.uploaded.length !== 1 ? "s" : ""} added to profile.` });
+              toast({ title: translateUi(uiLanguage, "Student created"), description: `${result.uploaded.length} document${result.uploaded.length !== 1 ? "s" : ""} added to profile.` });
             }
           } else {
-            toast({ title: "Student created successfully" });
+            toast({ title: translateUi(uiLanguage, "Student created successfully") });
           }
           handleClose();
           onSuccess();
           onCreated?.(createdStudent.id);
         },
         onError: (err: any) => {
-          toast({ title: "Failed to create student", description: isNonLatinNameError(err) ? t("common.latinOnlyName") : err?.message, variant: "destructive" });
+          toast({ title: translateUi(uiLanguage, "Failed to create student"), description: isNonLatinNameError(err) ? t("common.latinOnlyName") : err?.message, variant: "destructive" });
         },
       }
     );
@@ -1176,7 +1177,7 @@ export function AddStudentModal({
                   disabled={!canProceedToForm}
                   className="rounded-xl gap-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white border-0"
                 >
-                  <Sparkles className="w-4 h-4" /> {translateUi(uiLanguage, "Analyze")} {uploadedCount > 0 ? `${uploadedCount} Doc${uploadedCount !== 1 ? "s" : ""}` : "Documents"}
+                  <Sparkles className="w-4 h-4" /> {translateUi(uiLanguage, "Analyze")} {uploadedCount > 0 ? `${uploadedCount} Doc${uploadedCount !== 1 ? "s" : ""}` : translateUi(uiLanguage, "Documents")}
                 </Button>
               </div>
             </>

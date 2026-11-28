@@ -283,7 +283,7 @@ export default function AgentsPage() {
       setStaffMembers(staff);
     } catch (error: any) {
       setStaffMembers([]);
-      toast({ title: "Staff list could not be loaded", description: error?.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Staff list could not be loaded"), description: error?.message, variant: "destructive" });
     }
   }
 
@@ -403,9 +403,9 @@ export default function AgentsPage() {
       const strippedPath = urlRes.objectPath.replace(/^\/objects/, "");
       const publicUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;
       setForm(f => ({ ...f, [field]: publicUrl }));
-      toast({ title: "File uploaded" });
+      toast({ title: translateUi(uiLanguage, "File uploaded") });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Upload failed"), description: err.message, variant: "destructive" });
     } finally {
       setUploading(false);
     }
@@ -413,15 +413,15 @@ export default function AgentsPage() {
 
   async function handleSave() {
     if (!form.firstName.trim() || !form.lastName.trim()) {
-      toast({ title: "Error", description: "First Name and Last Name are required.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "First Name and Last Name are required."), variant: "destructive" });
       return;
     }
     if (!form.email.trim()) {
-      toast({ title: "Error", description: "Email is required.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Email is required."), variant: "destructive" });
       return;
     }
     if (isSubAgent && !form.parentAgentId) {
-      toast({ title: "Error", description: "Parent Agent is required for sub-agents.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Parent Agent is required for sub-agents."), variant: "destructive" });
       return;
     }
 
@@ -469,21 +469,21 @@ export default function AgentsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        toast({ title: "Agent updated" });
+        toast({ title: translateUi(uiLanguage, "Agent updated") });
       } else {
         await customFetch(`/api/agents`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        toast({ title: isSubAgent ? "Sub-agent created" : "Agent created" });
+        toast({ title: isSubAgent ? translateUi(uiLanguage, "Sub-agent created") : translateUi(uiLanguage, "Agent created") });
       }
       setShowDialog(false);
       fetchAgents();
       fetchSubAgents();
       fetchParentAgents();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -496,11 +496,11 @@ export default function AgentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assignedStaffId: staffId }),
       });
-      toast({ title: staffId ? "Contact person assigned" : "Contact person removed" });
+      toast({ title: staffId ? translateUi(uiLanguage, "Contact person assigned") : translateUi(uiLanguage, "Contact person removed") });
       fetchAgents();
       fetchSubAgents();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -519,7 +519,7 @@ export default function AgentsPage() {
       fetchAgents();
       fetchSubAgents();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -527,13 +527,13 @@ export default function AgentsPage() {
     if (!confirm("Are you sure you want to delete this agent?")) return;
     try {
       await customFetch(`/api/agents/${id}`, { method: "DELETE" });
-      toast({ title: "Agent deleted" });
+      toast({ title: translateUi(uiLanguage, "Agent deleted") });
       setSelectedIds(s => { const n = new Set(s); n.delete(id); return n; });
       setSubSelectedIds(s => { const n = new Set(s); n.delete(id); return n; });
       fetchAgents();
       fetchSubAgents();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -552,7 +552,7 @@ export default function AgentsPage() {
       fetchAgents();
       fetchSubAgents();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -568,7 +568,7 @@ export default function AgentsPage() {
       fetchAgents();
       fetchSubAgents();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -581,11 +581,11 @@ export default function AgentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: newPassword }),
       });
-      toast({ title: "Password updated" });
+      toast({ title: translateUi(uiLanguage, "Password updated") });
       setPasswordDialog(null);
       setNewPassword("");
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     } finally {
       setPasswordSaving(false);
     }
@@ -603,7 +603,7 @@ export default function AgentsPage() {
         window.location.href = `${base}${res.redirectTo}`;
       }
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -621,7 +621,7 @@ export default function AgentsPage() {
         toast({ title: t("staffAgents.resendCredentialsQueued"), description: `${agent.firstName} ${agent.lastName}`, variant: "default" });
       }
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     } finally {
       setResendingCredentials(prev => { const s = new Set(prev); s.delete(agent.id); return s; });
     }
@@ -676,6 +676,7 @@ export default function AgentsPage() {
   function AgentSortHeader({ label, sortKey, currentSort, onSort, className }: {
     label: string; sortKey: AgentSortKey; currentSort: { key: AgentSortKey; dir: AgentSortDir }; onSort: (k: AgentSortKey) => void; className?: string;
   }) {
+  const { lang: uiLanguage } = useUiLanguage();
     const active = currentSort.key === sortKey;
     return (
       <>
@@ -767,7 +768,7 @@ export default function AgentsPage() {
                 <SelectItem value="none">{t("agentsPage.unassigned")}</SelectItem>
                 {staffMembers.map(s => (
                   <SelectItem key={s.id} value={String(s.id)}>
-                    {`${s.firstName || ""} ${s.lastName || ""}`.trim() || "Staff"}
+                    {`${s.firstName || ""} ${s.lastName || ""}`.trim() || translateUi(uiLanguage, "Staff")}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -907,7 +908,7 @@ export default function AgentsPage() {
                         <SelectItem value="none">{t("agentsPage.unassigned")}</SelectItem>
                         {staffMembers.map(s => (
                           <SelectItem key={s.id} value={String(s.id)}>
-                            {`${s.firstName || ""} ${s.lastName || ""}`.trim() || "Staff"}
+                            {`${s.firstName || ""} ${s.lastName || ""}`.trim() || translateUi(uiLanguage, "Staff")}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1018,7 +1019,7 @@ export default function AgentsPage() {
           </div>
           {isManager && (
             <Button variant="outline" className="rounded-xl gap-2" onClick={() => setLocation("/staff/agency-applications")}>
-              <ClipboardCheck className="w-4 h-4" /> {t("staffAgents.agencyApplications") === "staffAgents.agencyApplications" ? "Agency Applications" : t("staffAgents.agencyApplications")}
+              <ClipboardCheck className="w-4 h-4" /> {t("staffAgents.agencyApplications") === "staffAgents.agencyApplications" ? translateUi(uiLanguage, "Agency Applications") : t("staffAgents.agencyApplications")}
             </Button>
           )}
         </div>
@@ -1434,7 +1435,7 @@ export default function AgentsPage() {
                       <Button type="button" variant="outline" className="w-full justify-between rounded-xl">
                         <span className="text-xs truncate">
                           {form.assignedStaff.length === 0
-                            ? "Select staff..."
+                            ? translateUi(uiLanguage, "Select staff...")
                             : `${form.assignedStaff.length} staff selected`}
                         </span>
                         <ChevronRight className="h-4 w-4 opacity-50" />
@@ -1543,7 +1544,7 @@ export default function AgentsPage() {
                       ) : (
                         <button onClick={() => logoRef.current?.click()} className="flex flex-col items-center gap-1 text-muted-foreground hover:text-primary text-xs" disabled={logoUploading}>
                           {logoUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                          <span>{logoUploading ? "Uploading..." : "Upload"}</span>
+                          <span>{logoUploading ? translateUi(uiLanguage, "Uploading...") : translateUi(uiLanguage, "Upload")}</span>
                         </button>
                       )}
                     </div>
@@ -1562,7 +1563,7 @@ export default function AgentsPage() {
                       ) : (
                         <button onClick={() => idProofRef.current?.click()} className="flex flex-col items-center gap-1 text-muted-foreground hover:text-primary text-xs" disabled={idProofUploading}>
                           {idProofUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                          <span>{idProofUploading ? "Uploading..." : "Upload"}</span>
+                          <span>{idProofUploading ? translateUi(uiLanguage, "Uploading...") : translateUi(uiLanguage, "Upload")}</span>
                         </button>
                       )}
                     </div>
@@ -1581,7 +1582,7 @@ export default function AgentsPage() {
                       ) : (
                         <button onClick={() => certRef.current?.click()} className="flex flex-col items-center gap-1 text-muted-foreground hover:text-primary text-xs" disabled={certUploading}>
                           {certUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                          <span>{certUploading ? "Uploading..." : "Upload"}</span>
+                          <span>{certUploading ? translateUi(uiLanguage, "Uploading...") : translateUi(uiLanguage, "Upload")}</span>
                         </button>
                       )}
                     </div>
@@ -1770,7 +1771,7 @@ function ContractTemplatePicker({ value, onChange, showCreateNote }: {
             <SelectItem value={NO_CONTRACT}>{translateUi(uiLanguage, "No contract")}</SelectItem>
             {active.map(t => (
               <SelectItem key={t.id} value={String(t.id)}>
-                {t.name} — {t.language.toUpperCase()} · {t.entityType === "individual" ? "Individual" : "Company"} v{t.version}
+                {t.name} — {t.language.toUpperCase()} · {t.entityType === "individual" ? translateUi(uiLanguage, "Individual") : translateUi(uiLanguage, "Company")} v{t.version}
               </SelectItem>
             ))}
           </SelectContent>

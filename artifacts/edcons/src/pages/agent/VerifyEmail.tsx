@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function VerifyEmail({ email, onVerified }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -67,14 +69,14 @@ export default function VerifyEmail({ email, onVerified }: Props) {
           <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mx-auto mb-4">
             <MailCheck className="w-8 h-8 text-amber-600 dark:text-amber-400" />
           </div>
-          <h1 className="text-2xl font-display font-bold mb-2">{t("agentOnboarding.verifyEmail.title") || "Verify your email"}</h1>
+          <h1 className="text-2xl font-display font-bold mb-2">{t("agentOnboarding.verifyEmail.title") || translateUi(uiLanguage, "Verify your email")}</h1>
           <p className="text-sm text-muted-foreground">
-            {t("agentOnboarding.verifyEmail.subtitle") || "We sent a 6-digit code to"} <strong className="text-foreground">{email}</strong>
+            {t("agentOnboarding.verifyEmail.subtitle") || translateUi(uiLanguage, "We sent a 6-digit code to")} <strong className="text-foreground">{email}</strong>
           </p>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="code">{t("agentOnboarding.verifyEmail.codeLabel") || "Verification code"}</Label>
+          <Label htmlFor="code">{t("agentOnboarding.verifyEmail.codeLabel") || translateUi(uiLanguage, "Verification code")}</Label>
           <Input
             id="code"
             value={code}
@@ -95,22 +97,22 @@ export default function VerifyEmail({ email, onVerified }: Props) {
         )}
         {resent && (
           <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 text-sm">
-            <CheckCircle2 className="w-4 h-4 shrink-0" /> <span>{t("agentOnboarding.verifyEmail.resent") || "New code sent. Check your inbox."}</span>
+            <CheckCircle2 className="w-4 h-4 shrink-0" /> <span>{t("agentOnboarding.verifyEmail.resent") || translateUi(uiLanguage, "New code sent. Check your inbox.")}</span>
           </div>
         )}
 
         <Button type="submit" disabled={submitting || code.trim().length !== 6} className="w-full">
           {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-          {t("agentOnboarding.verifyEmail.submit") || "Verify and continue"}
+          {t("agentOnboarding.verifyEmail.submit") || translateUi(uiLanguage, "Verify and continue")}
         </Button>
 
         <div className="flex justify-between gap-2 pt-2">
           <Button type="button" variant="outline" onClick={resend} disabled={resending || resendCooldown > 0}>
             {resending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-            {resendCooldown > 0 ? `${t("agentOnboarding.verifyEmail.resendIn") || "Resend in"} ${resendCooldown}s` : (t("agentOnboarding.verifyEmail.resend") || "Resend code")}
+            {resendCooldown > 0 ? `${t("agentOnboarding.verifyEmail.resendIn") || "Resend in"} ${resendCooldown}s` : (t("agentOnboarding.verifyEmail.resend") || translateUi(uiLanguage, "Resend code"))}
           </Button>
           <Button type="button" variant="ghost" onClick={() => void performLogout()}>
-            <LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}
+            <LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || translateUi(uiLanguage, "Sign out")}
           </Button>
         </div>
       </form>

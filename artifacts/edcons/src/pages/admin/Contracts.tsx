@@ -193,13 +193,13 @@ export default function ContractsPage() {
     const linkedAgent = subjectType === "agent" && Number(subjectId) > 0;
     const normalizedEmail = signerEmail.trim();
     if (!linkedAgent && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-      toast({ title: "Enter a valid signer email", variant: "destructive" }); return;
+      toast({ title: translateUi(uiLanguage, "Enter a valid signer email"), variant: "destructive" }); return;
     }
     if (subjectType && subjectType !== "other" && (!subjectId || Number(subjectId) < 1)) {
-      toast({ title: "Select a record for the association", variant: "destructive" }); return;
+      toast({ title: translateUi(uiLanguage, "Select a record for the association"), variant: "destructive" }); return;
     }
     if (templateId === "auto" && !linkedAgent) {
-      toast({ title: "Select a contract template when no agent is linked", variant: "destructive" }); return;
+      toast({ title: translateUi(uiLanguage, "Select a contract template when no agent is linked"), variant: "destructive" }); return;
     }
     setSending(true);
     try {
@@ -545,7 +545,7 @@ export default function ContractsPage() {
               <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Linking an agent, company or another record is optional.")}</p>
             </div>
             {subjectType && <div>
-              <Label>{subjectType === "other" ? "Association label" : `Select ${SUBJECT_LABELS[subjectType]}`}</Label>
+              <Label>{subjectType === "other" ? translateUi(uiLanguage, "Association label") : `Select ${SUBJECT_LABELS[subjectType]}`}</Label>
               {subjectType === "other" ? (
                 <Input value={subjectLabel} onChange={event => setSubjectLabel(event.target.value)} placeholder={translateUi(uiLanguage, "Name or reference")} />
               ) : (

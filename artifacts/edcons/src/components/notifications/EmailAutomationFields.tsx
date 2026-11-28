@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useId } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -58,6 +59,7 @@ export function EmailLibrarySelection({ templateVersionId, senderAccountId, onCh
 }
 
 export function StageAutomaticEmailFields({ value, onChange }: { value?: StageAutomaticEmail | null; onChange: (value: StageAutomaticEmail | null) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang, t } = useI18n();
   const copy = emailAutomationCopy(lang);
   const id = useId();
@@ -70,7 +72,7 @@ export function StageAutomaticEmailFields({ value, onChange }: { value?: StageAu
     {value?.enabled && <>
       <EmailLibrarySelection stageOnly templateVersionId={value.templateVersionId} senderAccountId={value.senderAccountId} onChange={selection => onChange({ ...value, ...selection })} />
       <fieldset className="flex flex-wrap gap-3 text-sm"><legend className="mb-2">{copy.origin}</legend>
-        {(["direct", "agent", "sub_agent"] as const).map(origin => <label key={origin} className="inline-flex gap-2 items-center"><input type="checkbox" checked={value.originTypes.includes(origin)} onChange={e => onChange({ ...value, originTypes: e.target.checked ? [...value.originTypes, origin] : value.originTypes.filter(v => v !== origin) })} />{origin === "direct" ? "Direct" : origin === "agent" ? copy.copy("Agent", "Acente") : copy.copy("Sub-agent", "Alt acente")}</label>)}
+        {(["direct", "agent", "sub_agent"] as const).map(origin => <label key={origin} className="inline-flex gap-2 items-center"><input type="checkbox" checked={value.originTypes.includes(origin)} onChange={e => onChange({ ...value, originTypes: e.target.checked ? [...value.originTypes, origin] : value.originTypes.filter(v => v !== origin) })} />{origin === "direct" ? translateUi(uiLanguage, "Direct") : origin === "agent" ? copy.copy("Agent", "Acente") : copy.copy("Sub-agent", "Alt acente")}</label>)}
       </fieldset><p className="text-xs text-muted-foreground">{copy.originHint}</p>
     </>}
   </section>;

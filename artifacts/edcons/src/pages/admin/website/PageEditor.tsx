@@ -917,7 +917,7 @@ function PageEditorSession({ id }: { id: number }) {
             <Badge variant={page.status === "published" ? "default" : "secondary"} className="text-xs">
               {page.status === "published" ? copy("Published", "Yayında") : page.status === "draft" ? copy("Draft", "Taslak") : page.status === "in_review" ? copy("Awaiting review", "İnceleme bekliyor") : page.status}
             </Badge>
-            {(dirty || seoDirty) && <Badge variant="outline" role="status" className="text-xs text-amber-600 border-amber-300">{copy("Unsaved", "Kaydedilmedi")}{seoDirty ? " (SEO)" : ""}</Badge>}
+            {(dirty || seoDirty) && <Badge variant="outline" role="status" className="text-xs text-amber-600 border-amber-300">{copy("Unsaved", "Kaydedilmedi")}{seoDirty ? translateUi(uiLanguage, " (SEO)") : ""}</Badge>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={editLocale} onValueChange={handleLocaleSwitch}>
@@ -992,8 +992,8 @@ function PageEditorSession({ id }: { id: number }) {
                   </div>
                   <div className="rounded border p-3 bg-muted/30">
                     <p className="text-[10px] text-muted-foreground mb-1">{copy("Google Search Preview", "Google arama önizlemesi")}</p>
-                    <p className="text-sm text-blue-700 truncate">{seo.metaTitle || page?.title || globalSeo.metaTitle || "Page Title"}</p>
-                    <p className="text-xs text-green-700 truncate">{globalSeo.siteName ? globalSeo.siteName.toLowerCase().replace(/\s+/g, '') + '.com' : 'findandstudy.com'}/{seo.slug || page?.slug || ""}</p>
+                    <p className="text-sm text-blue-700 truncate">{seo.metaTitle || page?.title || globalSeo.metaTitle || translateUi(uiLanguage, "Page Title")}</p>
+                    <p className="text-xs text-green-700 truncate">{globalSeo.siteName ? globalSeo.siteName.toLowerCase().replace(/\s+/g, '') + translateUi(uiLanguage, ".com") : translateUi(uiLanguage, "findandstudy.com")}/{seo.slug || page?.slug || ""}</p>
                     <p className="text-xs text-muted-foreground line-clamp-2">{seo.metaDescription || globalSeo.metaDescription || copy("No description set", "Açıklama eklenmedi")}</p>
                     {!seo.metaTitle && !seo.metaDescription && globalSeo.metaTitle && (
                       <p className="text-[10px] text-amber-600 mt-1">{copy("Using global SEO defaults from Settings.", "Ayarlar bölümündeki genel SEO değerleri kullanılıyor.")}</p>
@@ -1031,7 +1031,7 @@ function PageEditorSession({ id }: { id: number }) {
                     <div className="rounded border p-3 bg-muted/30">
                       <p className="text-[10px] text-muted-foreground mb-1">{copy("Social Share Preview", "Sosyal paylaşım önizlemesi")}</p>
                       {(seo.ogImageUrl || globalSeo.ogImageUrl) && <div className="w-full h-24 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground overflow-hidden"><img src={seo.ogImageUrl || globalSeo.ogImageUrl} alt={translateUi(uiLanguage, "OG")} className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} /></div>}
-                      <p className="text-sm font-medium truncate">{seo.ogTitle || seo.metaTitle || page?.title || globalSeo.metaTitle || "Title"}</p>
+                      <p className="text-sm font-medium truncate">{seo.ogTitle || seo.metaTitle || page?.title || globalSeo.metaTitle || translateUi(uiLanguage, "Title")}</p>
                       <p className="text-xs text-muted-foreground line-clamp-2">{seo.ogDescription || seo.metaDescription || globalSeo.metaDescription || ""}</p>
                     </div>
                   )}
@@ -1152,7 +1152,7 @@ function PageEditorSession({ id }: { id: number }) {
                   <dl className="grid gap-2 rounded-lg border p-3 text-xs sm:grid-cols-2">
                     <div><dt className="text-muted-foreground">{copy("Public route", "Public adres")}</dt><dd className="mt-1 break-all font-medium">{preflight.publication.route}</dd></div>
                     <div><dt className="text-muted-foreground">{translateUi(uiLanguage, "Canonical")}</dt><dd className="mt-1 break-all font-medium">{preflight.publication.canonical}</dd></div>
-                    <div><dt className="text-muted-foreground">{copy("Search visibility", "Arama görünürlüğü")}</dt><dd className="mt-1 font-medium">{preflight.publication.indexable ? copy("Indexable", "İndekslenebilir") : "Noindex"}</dd></div>
+                    <div><dt className="text-muted-foreground">{copy("Search visibility", "Arama görünürlüğü")}</dt><dd className="mt-1 font-medium">{preflight.publication.indexable ? copy("Indexable", "İndekslenebilir") : translateUi(uiLanguage, "Noindex")}</dd></div>
                     <div><dt className="text-muted-foreground">{translateUi(uiLanguage, "Sitemap")}</dt><dd className="mt-1 font-medium">{preflight.publication.sitemapEligible ? copy("Eligible", "Uygun") : copy("Excluded", "Hariç")}</dd></div>
                     <div><dt className="text-muted-foreground">{copy("Revision", "Sürüm")}</dt><dd className="mt-1 break-all font-mono">{preflight.digest.slice(0, 16)}</dd></div>
                     <div><dt className="text-muted-foreground">{copy("Valid until", "Geçerlilik sonu")}</dt><dd className="mt-1 font-medium">{new Date(preflight.expiresAt).toLocaleString(lang)}</dd></div>
@@ -1388,7 +1388,7 @@ function BlockPreview({ blocks, locale, template, pageTitle, pageSlug, teamMembe
           </div>
           {collectionDependency(block) && !hasCollectionItems(block) ? (
             <div role="status" className="m-4 rounded-xl border border-dashed border-amber-400 bg-amber-50 p-5 text-sm text-amber-900">
-              {collectionsLoading ? "Collection data is loading…" : `This visible ${getBlockTypeDef(block.blockType)?.label || block.blockType} section is not rendered publicly until its collection contains data.`}
+              {collectionsLoading ? translateUi(uiLanguage, "Collection data is loading…") : `This visible ${getBlockTypeDef(block.blockType)?.label || block.blockType} section is not rendered publicly until its collection contains data.`}
             </div>
           ) : block.blockType === "catalog_grid" && !block.content.sectionPreset
             ? <CatalogBlockPreview content={block.content} locale={locale} />

@@ -294,7 +294,7 @@ function DropZone({
   async function handleFile(file: File) {
     const validation = validateFile(file);
     if (!validation.valid) {
-      toast({ title: "Dosya hatas\u0131", description: validation.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Dosya hatası"), description: validation.message, variant: "destructive" });
       return;
     }
     const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
@@ -410,6 +410,7 @@ function FormField({
 type Step = "upload" | "analyzing" | "review";
 
 function NationalityCombobox({ value, onChange, countries, aiExtracted }: { value: string; onChange: (v: string) => void; countries: Array<{ id: number; name: string; code?: string }>; aiExtracted?: boolean }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [searchVal, setSearchVal] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -442,7 +443,7 @@ function NationalityCombobox({ value, onChange, countries, aiExtracted }: { valu
       />
       {open && (
         <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? translateUi(uiLanguage, "No match — custom value OK") : translateUi(uiLanguage, "No countries loaded")}</div>}
           {filtered.map(c => (
             <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
               onMouseDown={e => { e.preventDefault(); onChange(c.name); setSearchVal(""); setOpen(false); }}>
@@ -1135,6 +1136,7 @@ type StuSortDir = "asc" | "desc";
 function StuSortHeader({ label, sortKey, currentSort, onSort }: {
   label: string; sortKey: StuSortKey; currentSort: { key: StuSortKey; dir: StuSortDir }; onSort: (k: StuSortKey) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const active = currentSort.key === sortKey;
   return (
     <>
@@ -1198,7 +1200,7 @@ function DraggableStudentCard({ student, onView, variant }: { student: any; onVi
           <StudentAvatar student={student} />
           <div className="min-w-0">
             <h4 className="font-bold text-sm text-foreground line-clamp-1">{student.firstName} {student.lastName}</h4>
-            <p className="text-xs text-muted-foreground truncate">{student.email || student.phone || "No contact"}</p>
+            <p className="text-xs text-muted-foreground truncate">{student.email || student.phone || translateUi(uiLanguage, "No contact")}</p>
           </div>
         </div>
         {student.nationality && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{student.nationality}</span>}
@@ -1362,11 +1364,11 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast({ title: "Student updated" });
+      toast({ title: translateUi(uiLanguage, "Student updated") });
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
       onClose();
     } catch {
-      toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to update"), variant: "destructive" });
     } finally { setSaving(false); }
   }
 
@@ -1495,7 +1497,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
         <DialogFooter className="pt-3 border-t border-border/50">
           <Button variant="outline" onClick={onClose} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleSave} disabled={!form.firstName || !form.lastName || saving} className="rounded-xl">
-            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{translateUi(uiLanguage, "Saving...")}</> : "Save Changes"}
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{translateUi(uiLanguage, "Saving...")}</> : translateUi(uiLanguage, "Save Changes")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1516,7 +1518,7 @@ function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: 
         <p className="text-sm text-muted-foreground py-2">{translateUi(uiLanguage, "This action cannot be undone.")}</p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? "Deleting..." : `Delete ${count}`}</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? translateUi(uiLanguage, "Deleting...") : `Delete ${count}`}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1842,7 +1844,7 @@ export default function AgentStudentsPage() {
     setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
     invalidate();
     if (failed === 0) toast({ title: `${ids.length} student${ids.length > 1 ? "s" : ""} deleted` });
-    else toast({ title: "Some could not be deleted", variant: "destructive" });
+    else toast({ title: translateUi(uiLanguage, "Some could not be deleted"), variant: "destructive" });
   }
 
   const allStuColumnIds = new Set(pipelineStages.map(s => s.key));
@@ -1852,7 +1854,7 @@ export default function AgentStudentsPage() {
 
   const handleStuDragEnd = (event: DragEndEvent) => {
     setActiveId(null);
-    toast({ title: "Only admin & staff can change student status", variant: "destructive" });
+    toast({ title: translateUi(uiLanguage, "Only admin & staff can change student status"), variant: "destructive" });
   };
   const _handleStuDragEndDisabled = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -1884,7 +1886,7 @@ export default function AgentStudentsPage() {
       const colLabel = pipelineStages.find(s => s.key === targetStatus)?.label ?? targetStatus;
       toast({ title: `Student moved → ${colLabel}` });
     }).catch(() => {
-      toast({ title: "Error", description: "Could not move student", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Could not move student"), variant: "destructive" });
       invalidate();
       queryClient.invalidateQueries({ queryKey: [`/api/students/${studentId}`] });
     });

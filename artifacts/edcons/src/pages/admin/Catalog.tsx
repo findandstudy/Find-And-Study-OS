@@ -585,9 +585,9 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
                   <tbody>{preview.rows.map(item => (
                     <tr key={item.row} className="border-t align-top">
                       <td className="p-2">{item.row}</td>
-                      <td className="p-2 font-medium">{item.action === "add" ? "Ekle" : item.action === "update" ? "Güncelle" : "Hata"}</td>
+                      <td className="p-2 font-medium">{item.action === "add" ? translateUi(uiLanguage, "Ekle") : item.action === "update" ? translateUi(uiLanguage, "Güncelle") : translateUi(uiLanguage, "Hata")}</td>
                       <td className="p-2"><div>{item.university}</div><div className="text-muted-foreground">{item.program}</div>{item.currency && <div className="text-muted-foreground">{item.currency}</div>}</td>
-                      <td className="p-2 text-destructive">{item.errors.join("; ") || (item.wouldCreateUniversity ? "Okul da oluşturulacak" : "Hazır")}</td>
+                      <td className="p-2 text-destructive">{item.errors.join("; ") || (item.wouldCreateUniversity ? translateUi(uiLanguage, "Okul da oluşturulacak") : translateUi(uiLanguage, "Hazır"))}</td>
                     </tr>
                   ))}</tbody>
                 </table>
@@ -704,6 +704,7 @@ function sortCompare<T>(a: T, b: T, key: keyof T, dir: "asc" | "desc"): number {
 }
 
 function SortTh({ label, col, sort, onSort, className }: { label: string; col: string; sort: SortState; onSort: (col: string) => void; className?: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const active = sort.col === col;
   return (
     <>
@@ -1214,9 +1215,9 @@ function CitiesTab() {
     mutationFn: async (cityId: number) => api(`/api/cities/${cityId}/weather/refresh`, { method: "POST" }),
     onSuccess: async (_result, cityId) => {
       setWeatherState(await api(`/api/cities/${cityId}/weather`));
-      toast({ title: "Weather snapshot refreshed", description: "Public city and university pages now use the stored result." });
+      toast({ title: translateUi(uiLanguage, "Weather snapshot refreshed"), description: translateUi(uiLanguage, "Public city and university pages now use the stored result.") });
     },
-    onError: (error: Error) => toast({ title: "Weather could not be refreshed", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: translateUi(uiLanguage, "Weather could not be refreshed"), description: error.message, variant: "destructive" }),
   });
 
   async function handleBulkDelete() {
@@ -1444,10 +1445,10 @@ function CitiesTab() {
               {!form?.id ? <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Save the city before requesting weather.")}</p>
                 : form.latitude == null || form.longitude == null ? <p className="text-xs text-amber-700">{translateUi(uiLanguage, "Latitude and longitude are required before weather can be synchronized.")}</p>
                   : <div className="grid gap-2 text-xs sm:grid-cols-2">
-                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">{translateUi(uiLanguage, "Integration")}</span><p className="font-medium">{weatherState?.integration.keyConfigured ? "API key configured" : "API key missing"} · {weatherState?.integration.automaticSyncEnabled ? "Automatic sync on" : "Automatic sync off"}</p></div>
-                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">{translateUi(uiLanguage, "Latest snapshot")}</span><p className="font-medium">{weatherState?.snapshot ? `${weatherState.snapshot.temperatureC.toFixed(1)}°C · ${weatherState.snapshot.description}` : "No successful snapshot yet"}</p></div>
+                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">{translateUi(uiLanguage, "Integration")}</span><p className="font-medium">{weatherState?.integration.keyConfigured ? translateUi(uiLanguage, "API key configured") : translateUi(uiLanguage, "API key missing")} · {weatherState?.integration.automaticSyncEnabled ? translateUi(uiLanguage, "Automatic sync on") : translateUi(uiLanguage, "Automatic sync off")}</p></div>
+                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">{translateUi(uiLanguage, "Latest snapshot")}</span><p className="font-medium">{weatherState?.snapshot ? `${weatherState.snapshot.temperatureC.toFixed(1)}°C · ${weatherState.snapshot.description}` : translateUi(uiLanguage, "No successful snapshot yet")}</p></div>
                     <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">{translateUi(uiLanguage, "Fetched")}</span><p className="font-medium">{weatherState?.snapshot?.fetchedAt ? new Date(weatherState.snapshot.fetchedAt).toLocaleString() : "—"}</p></div>
-                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">{translateUi(uiLanguage, "Last sync result")}</span><p className={cn("font-medium", weatherState?.sync?.lastErrorCode && "text-destructive")}>{weatherState?.sync?.lastErrorCode || (weatherState?.sync ? "Successful" : "Not attempted")}</p></div>
+                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">{translateUi(uiLanguage, "Last sync result")}</span><p className={cn("font-medium", weatherState?.sync?.lastErrorCode && "text-destructive")}>{weatherState?.sync?.lastErrorCode || (weatherState?.sync ? translateUi(uiLanguage, "Successful") : translateUi(uiLanguage, "Not attempted"))}</p></div>
                   </div>}
             </div>
             <div className="flex items-center justify-between">
@@ -1731,11 +1732,11 @@ function UniversitiesTab() {
     // Reset immediately so choosing the same file again still fires change.
     e.target.value = "";
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      toast({ title: t("catalogPage.saveFailed"), description: "Logo must be a PNG, JPG or WebP image.", variant: "destructive" });
+      toast({ title: t("catalogPage.saveFailed"), description: translateUi(uiLanguage, "Logo must be a PNG, JPG or WebP image."), variant: "destructive" });
       return;
     }
     if (file.size <= 0 || file.size > 5 * 1024 * 1024) {
-      toast({ title: t("catalogPage.saveFailed"), description: "Logo must be smaller than 5 MB.", variant: "destructive" });
+      toast({ title: t("catalogPage.saveFailed"), description: translateUi(uiLanguage, "Logo must be smaller than 5 MB."), variant: "destructive" });
       return;
     }
     setLogoUploading(true);
@@ -2147,7 +2148,7 @@ function UniversitiesTab() {
               {(form?.applicationPeriods ?? []).length === 0 && <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">{translateUi(uiLanguage, "Henüz doğrulanmış bir dönem eklenmedi.")}</p>}
               {(form?.applicationPeriods ?? []).map((period, index) => <div key={period.id ?? `new-${index}`} className="rounded-lg border bg-background p-3 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold">{translateUi(uiLanguage, "Dönem")} {index + 1}{period.id ? ` · #${period.id}` : " · yeni"}</p>
+                  <p className="text-sm font-semibold">{translateUi(uiLanguage, "Dönem")} {index + 1}{period.id ? ` · #${period.id}` : translateUi(uiLanguage, " · yeni")}</p>
                   <Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setF({ applicationPeriods: (form?.applicationPeriods ?? []).filter((_, rowIndex) => rowIndex !== index) })}><Trash2 className="h-3.5 w-3.5" /></Button>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -2260,7 +2261,7 @@ function UniversitiesTab() {
           <div className="rounded-lg border overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-muted/50"><tr><th className="px-3 py-2 text-left">{translateUi(uiLanguage, "Sentetik kayıt")}</th><th className="px-3 py-2 text-left">{translateUi(uiLanguage, "Kanal")}</th><th className="px-3 py-2 text-left">{translateUi(uiLanguage, "Sonuç")}</th><th className="px-3 py-2 text-left">{translateUi(uiLanguage, "Neden")}</th></tr></thead>
-              <tbody className="divide-y">{(reminderPreview?.data ?? []).map((row: any) => <tr key={row.reference}><td className="px-3 py-2 font-mono text-xs">{row.reference}</td><td className="px-3 py-2">{row.channel ?? "—"}</td><td className="px-3 py-2"><Badge variant="outline" className={row.eligible ? "border-emerald-300 text-emerald-700" : "border-amber-300 text-amber-700"}>{row.eligible ? "Uygun" : "Dışlandı"}</Badge></td><td className="px-3 py-2 text-xs text-muted-foreground">{row.reason}</td></tr>)}</tbody>
+              <tbody className="divide-y">{(reminderPreview?.data ?? []).map((row: any) => <tr key={row.reference}><td className="px-3 py-2 font-mono text-xs">{row.reference}</td><td className="px-3 py-2">{row.channel ?? "—"}</td><td className="px-3 py-2"><Badge variant="outline" className={row.eligible ? "border-emerald-300 text-emerald-700" : "border-amber-300 text-amber-700"}>{row.eligible ? translateUi(uiLanguage, "Uygun") : translateUi(uiLanguage, "Dışlandı")}</Badge></td><td className="px-3 py-2 text-xs text-muted-foreground">{row.reason}</td></tr>)}</tbody>
             </table>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setReminderPreview(null)}>{translateUi(uiLanguage, "Kapat")}</Button></DialogFooter>
@@ -3680,6 +3681,7 @@ type DeleteBlockedCurrencyPayload = {
 type DeleteBlockedPayload = DeleteBlockedDocPayload | DeleteBlockedDegreePayload | DeleteBlockedCurrencyPayload;
 
 function OptionsTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [activeCategory, setActiveCategory] = useState(() => {
@@ -4027,6 +4029,7 @@ function DeleteCatalogOptionDialog({ item, onCancel, onConfirm }: {
 function DeleteBlockedDialog({ payload, onClose }: {
   payload: DeleteBlockedPayload | null; onClose: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   return (
     <Dialog open={payload !== null} onOpenChange={o => !o && onClose()}>
@@ -4329,6 +4332,7 @@ function DegreeDocsDialog({ option, onClose }: { option: CatalogOption; onClose:
 }
 
 function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: CatalogOption; onSaved?: () => void; variant?: "inline" | "dialog" }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();

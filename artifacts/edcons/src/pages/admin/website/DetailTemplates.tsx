@@ -164,9 +164,9 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
   const selectedLocked = selectedSection ? ["hero", "navigation", "overview"].includes(selectedSection) : false;
   const availableVariables = editingLayout ? DETAIL_TEMPLATE_VARIABLES[editingLayout.kind] : [];
   const visibleVariables = availableVariables.filter(item => {
-    const query = variableSearch.trim().toLocaleLowerCase(lang === "tr" ? "tr-TR" : "en-US");
+    const query = variableSearch.trim().toLocaleLowerCase(translateUi(lang, "en-US", "tr-TR"));
     if (!query) return true;
-    return [detailVariableLabel(item, lang), detailVariableGroup(item, lang), item.key].some(value => value.toLocaleLowerCase(lang === "tr" ? "tr-TR" : "en-US").includes(query));
+    return [detailVariableLabel(item, lang), detailVariableGroup(item, lang), item.key].some(value => value.toLocaleLowerCase(translateUi(lang, "en-US", "tr-TR")).includes(query));
   });
   const variableGroups = [...new Set(visibleVariables.map(item => item.group))];
   const selectedVariableMeta = availableVariables.find(item => item.key === selectedVariable) ?? null;

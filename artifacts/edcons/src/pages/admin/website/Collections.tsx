@@ -158,11 +158,11 @@ function OfficesTab() {
         { key: "country", label: "Country" },
         { key: "phone", label: "Phone" },
         { key: "sortOrder", label: "Order" },
-        { key: "isActive", label: "Status", render: (i: Office) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
+        { key: "isActive", label: "Status", render: (i: Office) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? translateUi(uiLanguage, "Active") : translateUi(uiLanguage, "Hidden")}</Badge> },
       ]} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editItem ? "Edit Office" : "New Office"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editItem ? translateUi(uiLanguage, "Edit Office") : translateUi(uiLanguage, "New Office")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Name *")}</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="rounded-xl" /></div>
@@ -182,7 +182,7 @@ function OfficesTab() {
             <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>{translateUi(uiLanguage, "Active")}</Label></div>
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
-              <Button onClick={save} disabled={saveMut.isPending} className="rounded-xl">{editItem ? "Update" : "Create"}</Button>
+              <Button onClick={save} disabled={saveMut.isPending} className="rounded-xl">{editItem ? translateUi(uiLanguage, "Update") : translateUi(uiLanguage, "Create")}</Button>
             </div>
           </div>
         </DialogContent>
@@ -230,11 +230,11 @@ function TeamTab() {
         )},
         { key: "email", label: "Email" },
         { key: "sortOrder", label: "Order" },
-        { key: "isActive", label: "Status", render: (i: TeamMember) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
+        { key: "isActive", label: "Status", render: (i: TeamMember) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? translateUi(uiLanguage, "Active") : translateUi(uiLanguage, "Hidden")}</Badge> },
       ]} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editItem ? "Edit Team Member" : "New Team Member"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editItem ? translateUi(uiLanguage, "Edit Team Member") : translateUi(uiLanguage, "New Team Member")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Name *")}</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="rounded-xl" /></div>
@@ -252,7 +252,7 @@ function TeamTab() {
             <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>{translateUi(uiLanguage, "Active")}</Label></div>
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
-              <Button onClick={save} disabled={saveMut.isPending} className="rounded-xl">{editItem ? "Update" : "Create"}</Button>
+              <Button onClick={save} disabled={saveMut.isPending} className="rounded-xl">{editItem ? translateUi(uiLanguage, "Update") : translateUi(uiLanguage, "Create")}</Button>
             </div>
           </div>
         </DialogContent>
@@ -295,11 +295,11 @@ function FaqsTab() {
         { key: "question", label: "Question", render: (i: Faq) => <span className="font-medium line-clamp-1">{i.question}</span> },
         { key: "category", label: "Category", render: (i: Faq) => i.category ? <Badge variant="outline" className="text-xs">{i.category}</Badge> : <span className="text-muted-foreground">-</span> },
         { key: "sortOrder", label: "Order" },
-        { key: "isActive", label: "Status", render: (i: Faq) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
+        { key: "isActive", label: "Status", render: (i: Faq) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? translateUi(uiLanguage, "Active") : translateUi(uiLanguage, "Hidden")}</Badge> },
       ]} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>{editItem ? "Edit FAQ" : "New FAQ"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editItem ? translateUi(uiLanguage, "Edit FAQ") : translateUi(uiLanguage, "New FAQ")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Question *")}</Label><Input value={form.question} onChange={e => setForm(f => ({ ...f, question: e.target.value }))} className="rounded-xl" /></div>
             <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Answer *")}</Label><Textarea value={form.answer} onChange={e => setForm(f => ({ ...f, answer: e.target.value }))} className="rounded-xl" rows={4} /></div>
@@ -310,7 +310,7 @@ function FaqsTab() {
             <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>{translateUi(uiLanguage, "Active")}</Label></div>
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
-              <Button onClick={save} disabled={saveMut.isPending} className="rounded-xl">{editItem ? "Update" : "Create"}</Button>
+              <Button onClick={save} disabled={saveMut.isPending} className="rounded-xl">{editItem ? translateUi(uiLanguage, "Update") : translateUi(uiLanguage, "Create")}</Button>
             </div>
           </div>
         </DialogContent>
@@ -363,11 +363,11 @@ function TestimonialsTab() {
         { key: "content", label: "Quote", render: (i: Testimonial) => <span className="line-clamp-1 text-muted-foreground text-xs max-w-[200px]">{translateUi(uiLanguage, "&ldquo;")}{i.content}{translateUi(uiLanguage, "&rdquo;")}</span> },
         { key: "rating", label: "Rating", render: (i: Testimonial) => <span className="text-amber-500">{Array.from({ length: i.rating ?? 0 }).map((_, j) => "\u2605").join("")}</span> },
         { key: "sortOrder", label: "Order" },
-        { key: "isActive", label: "Status", render: (i: Testimonial) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
+        { key: "isActive", label: "Status", render: (i: Testimonial) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? translateUi(uiLanguage, "Active") : translateUi(uiLanguage, "Hidden")}</Badge> },
       ]} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>{editItem ? "Edit Testimonial" : "New Testimonial"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editItem ? translateUi(uiLanguage, "Edit Testimonial") : translateUi(uiLanguage, "New Testimonial")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Name *")}</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="rounded-xl" /></div>
@@ -385,7 +385,7 @@ function TestimonialsTab() {
             <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>{translateUi(uiLanguage, "Active")}</Label></div>
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
-              <Button onClick={save} disabled={saveMut.isPending} className="rounded-xl">{editItem ? "Update" : "Create"}</Button>
+              <Button onClick={save} disabled={saveMut.isPending} className="rounded-xl">{editItem ? translateUi(uiLanguage, "Update") : translateUi(uiLanguage, "Create")}</Button>
             </div>
           </div>
         </DialogContent>

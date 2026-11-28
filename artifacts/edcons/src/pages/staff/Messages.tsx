@@ -634,7 +634,7 @@ function InboxTab() {
     }
     if (errors.length > 0) {
       toast({
-        title: "Some files could not be added",
+        title: translateUi(uiLanguage, "Some files could not be added"),
         description: errors.slice(0, 3).join("\n"),
         variant: "destructive",
       });
@@ -644,7 +644,7 @@ function InboxTab() {
   const voiceRecorder = useOggVoiceRecorder(
     useCallback((file: File) => addPendingFiles([file]), [addPendingFiles]),
     useCallback((message: string) => {
-      toast({ title: "Voice message unavailable", description: message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Voice message unavailable"), description: message, variant: "destructive" });
     }, [toast]),
   );
 
@@ -1498,7 +1498,7 @@ function InboxTab() {
           variant: "destructive",
         });
       } else {
-        toast({ title: body?.error || "Failed to send", variant: "destructive" });
+        toast({ title: body?.error || translateUi(uiLanguage, "Failed to send"), variant: "destructive" });
       }
     } finally {
       setSending(false);
@@ -1588,7 +1588,7 @@ function InboxTab() {
       toast({ title: res.starred ? t("inbox.action.star") : t("inbox.action.unstar") });
     } catch {
       setConvs(prev => prev.map(c => c.id === convId ? { ...c, isStarred: !c.isStarred } : c));
-      toast({ title: "Failed to update", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Failed to update"), variant: "destructive" });
     }
   }
 
@@ -1599,7 +1599,7 @@ function InboxTab() {
       if (selectedId === convId) fetchDetail(convId);
       toast({ title: res.subscribed ? t("inbox.action.subscribe") : t("inbox.action.unsubscribe") });
     } catch {
-      toast({ title: "Failed to update", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Failed to update"), variant: "destructive" });
     }
   }
 
@@ -2349,7 +2349,7 @@ function InboxTab() {
             <select aria-label={t("inboxActions.receivingAccount")} className="h-8 w-full min-w-0 rounded-md border bg-background px-2 text-xs" value={filterAccountId} onChange={e => setFilterAccountId(e.target.value)} data-testid="select-inbox-account-filter">
               <option value="">{t("inboxActions.allReceivingAccounts")}</option>
               <option value="0">{t("inboxActions.unlinkedAccount")}</option>
-              {filterAccounts.filter(a => channel === "all" || a.channel === channel).map(a => <option key={a.id} value={a.id}>{a.channel} · {a.displayName}{a.isActive ? "" : " (inactive)"} · #{a.id}</option>)}
+              {filterAccounts.filter(a => channel === "all" || a.channel === channel).map(a => <option key={a.id} value={a.id}>{a.channel} · {a.displayName}{a.isActive ? "" : translateUi(uiLanguage, " (inactive)")} · #{a.id}</option>)}
             </select>
             {filterAccountsFailed && <p role="alert" className="text-xs text-destructive">{t("inboxActions.accountsFailed")}</p>}
             <div className="flex items-center gap-1">
@@ -2625,7 +2625,7 @@ function InboxTab() {
                 </Button>
                 <div className="flex-1 basis-[18rem] min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                    <p className="font-semibold text-sm truncate">{ext?.displayName || conv.title || "(unknown)"}</p>
+                    <p className="font-semibold text-sm truncate">{ext?.displayName || conv.title || translateUi(uiLanguage, "(unknown)")}</p>
                     <Badge variant="secondary" className={`text-[10px] ${channelColor[conv.channel] || ""}`}>{conv.channel}</Badge>
                     {activeLineBrand && (
                       <Badge
@@ -3224,7 +3224,7 @@ function InboxTab() {
                                         /{template.externalTemplateName || template.name}
                                       </span>
                                       <Badge variant="outline" className="h-4 shrink-0 px-1.5 text-[9px]">
-                                        {template.externalTemplateName ? "Approved" : "Quick reply"}
+                                        {template.externalTemplateName ? translateUi(uiLanguage, "Approved") : translateUi(uiLanguage, "Quick reply")}
                                       </Badge>
                                     </span>
                                     <span className="block truncate text-xs text-muted-foreground">
@@ -3321,7 +3321,7 @@ function InboxTab() {
                         className="h-9 shrink-0 gap-1 px-3"
                       >
                         {(sending || uploading) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                        <span className="hidden sm:inline">{t("inbox.send") || "Send"}</span>
+                        <span className="hidden sm:inline">{t("inbox.send") || translateUi(uiLanguage, "Send")}</span>
                       </Button>
                     </div>
                     <div className="flex items-center justify-between gap-2">
@@ -3525,7 +3525,7 @@ function InboxTab() {
             {(matchSuggestions?.candidates || []).map((c: any, i: number) => (
               <div key={`${c.type}-${c.id}-${i}`} className="flex items-center justify-between p-2 border rounded-lg">
                 <div>
-                  <p className="text-sm font-medium">{c.displayName || `${c.firstName || ""} ${c.lastName || ""}`.trim() || "(unnamed)"} <Badge variant="outline" className="text-[9px] ml-1">{c.type}</Badge></p>
+                  <p className="text-sm font-medium">{c.displayName || `${c.firstName || ""} ${c.lastName || ""}`.trim() || translateUi(uiLanguage, "(unnamed)")} <Badge variant="outline" className="text-[9px] ml-1">{c.type}</Badge></p>
                   <p className="text-[11px] text-muted-foreground">{c.email || c.phone || ""}</p>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => applyMatch(c.type, c.id)}>{t("messagesPage.link")}</Button>
@@ -3565,7 +3565,7 @@ function InboxTab() {
                 {studentSearchResults.map((s: any) => (
                   <div key={s.id} className="flex items-center justify-between p-2 border rounded-lg gap-2">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{`${s.firstName || ""} ${s.lastName || ""}`.trim() || "(unnamed)"}</p>
+                      <p className="text-sm font-medium truncate">{`${s.firstName || ""} ${s.lastName || ""}`.trim() || translateUi(uiLanguage, "(unnamed)")}</p>
                       <p className="text-[11px] text-muted-foreground truncate">
                         {[s.phone, s.email, s.passportNumber].filter(Boolean).join(" · ")}
                       </p>
@@ -4124,7 +4124,7 @@ function ConversationList({
                       </Badge>
                     )}
                   </div>
-                  <p className={`text-xs truncate mt-0.5 ${isUnread ? "text-foreground font-bold" : "text-muted-foreground"}`}>{conv.lastMessagePreview || "No messages yet"}</p>
+                  <p className={`text-xs truncate mt-0.5 ${isUnread ? "text-foreground font-bold" : "text-muted-foreground"}`}>{conv.lastMessagePreview || translateUi(uiLanguage, "No messages yet")}</p>
                 </div>
               </div>
             );
@@ -4483,7 +4483,7 @@ function MessageThread({
                 <div className={`max-w-[70%] ${isMe ? "items-end" : ""}`}>
                   {!isMe && (
                     <p className="text-xs text-muted-foreground mb-1">
-                      {isBot ? "AI Assistant" : `${msg.senderFirstName ?? ""} ${msg.senderLastName ?? ""}`.trim()}
+                      {isBot ? translateUi(uiLanguage, "AI Assistant") : `${msg.senderFirstName ?? ""} ${msg.senderLastName ?? ""}`.trim()}
                     </p>
                   )}
                   <div className={`rounded-2xl px-4 py-2.5 ${
@@ -4636,8 +4636,8 @@ function BroadcastTab() {
     } catch (error: any) {
       if (!quiet) {
         toast({
-          title: "CRM campaigns could not be loaded",
-          description: error?.message || "Campaign history is temporarily unavailable.",
+          title: translateUi(uiLanguage, "CRM campaigns could not be loaded"),
+          description: error?.message || translateUi(uiLanguage, "Campaign history is temporarily unavailable."),
           variant: "destructive",
         });
       }
@@ -4693,7 +4693,7 @@ function BroadcastTab() {
       return true;
     } catch (error: any) {
       toast({
-        title: "Recipient history could not be loaded",
+        title: translateUi(uiLanguage, "Recipient history could not be loaded"),
         description: error?.message,
         variant: "destructive",
       });
@@ -4723,7 +4723,7 @@ function BroadcastTab() {
       }) as any;
       toast({
         title: `${response?.retried || 0} safe failure(s) queued again`,
-        description: "Recipients with an unknown provider outcome remain blocked for manual review.",
+        description: translateUi(uiLanguage, "Recipients with an unknown provider outcome remain blocked for manual review."),
       });
       setCampaignDetails((current) => {
         const next = { ...current };
@@ -4733,7 +4733,7 @@ function BroadcastTab() {
       await loadCampaigns(true);
       if (expandedCampaignId === campaignId) await loadCampaignDetails(campaignId);
     } catch (error: any) {
-      toast({ title: "Retry failed", description: error?.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Retry failed"), description: error?.message, variant: "destructive" });
     } finally {
       setRetryingCampaignId(null);
     }
@@ -4802,7 +4802,7 @@ function BroadcastTab() {
             </div>
           )}
           <Button onClick={sendBroadcast} disabled={sending} className="rounded-xl gap-2">
-            <Send className="w-4 h-4" /> {sending ? "Sending..." : "Send Internal Announcement"}
+            <Send className="w-4 h-4" /> {sending ? translateUi(uiLanguage, "Sending...") : translateUi(uiLanguage, "Send Internal Announcement")}
           </Button>
         </div>
       </Card>
@@ -4903,7 +4903,7 @@ function BroadcastTab() {
                         {campaignDetailLoading === campaign.id
                           ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                           : <Eye className="mr-2 h-3.5 w-3.5" />}
-                        {expandedCampaignId === campaign.id ? "Hide recipients" : "View recipients"}
+                        {expandedCampaignId === campaign.id ? translateUi(uiLanguage, "Hide recipients") : translateUi(uiLanguage, "View recipients")}
                       </Button>
                       {Number(campaign.failedCount || 0) > 0 && (
                         <Button variant="outline" size="sm" onClick={() => void retryFailedCampaign(campaign.id)} disabled={retryingCampaignId === campaign.id}>
@@ -5789,7 +5789,7 @@ function TemplatesTab() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
-              {editingTemplate ? "Edit Template" : "New Template"}
+              {editingTemplate ? translateUi(uiLanguage, "Edit Template") : translateUi(uiLanguage, "New Template")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -5869,7 +5869,7 @@ function TemplatesTab() {
             <Button variant="outline" onClick={() => setEditOpen(false)} className="rounded-xl">{tx("messagesPage.cancel")}</Button>
             <Button onClick={saveTemplate} disabled={saving} className="rounded-xl gap-2">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              {saving ? "Saving..." : editingTemplate ? "Update Template" : "Create Template"}
+              {saving ? translateUi(uiLanguage, "Saving...") : editingTemplate ? translateUi(uiLanguage, "Update Template") : translateUi(uiLanguage, "Create Template")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -6237,7 +6237,7 @@ export default function MessagesPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewConvOpen(false)}>{t("messagesPage.cancel")}</Button>
             <Button onClick={createConversation} disabled={creating || selectedUsers.length === 0}>
-              {creating ? "Creating..." : "Start Conversation"}
+              {creating ? translateUi(uiLanguage, "Creating...") : translateUi(uiLanguage, "Start Conversation")}
             </Button>
           </DialogFooter>
         </DialogContent>

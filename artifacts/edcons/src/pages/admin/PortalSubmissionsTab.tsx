@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 /**
  * PortalSubmissionsTab.tsx — SUB-STEP G
  *
@@ -299,6 +300,7 @@ function SubmissionRow({
   retryingId, cancelingId, processingId, diagnosingId, processingAll,
   selected, onToggleSelect, bulkBusy,
 }: RowProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const cfg = STATUS_CONFIG[sub.status];
   const Icon = cfg.icon;
@@ -637,6 +639,7 @@ function SubmissionRow({
 // ---------------------------------------------------------------------------
 
 export default function PortalSubmissionsTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
 

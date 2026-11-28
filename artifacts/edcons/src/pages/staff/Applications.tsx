@@ -299,7 +299,7 @@ function StudentSearchInput({ value, onChange }: { value: Student | null; onChan
       </PopoverTrigger>
       <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-64 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
         {isLoading && <div className="p-3 text-sm text-muted-foreground text-center">{translateUi(uiLanguage, "Searching...")}</div>}
-        {!isLoading && students.length === 0 && <div className="p-4 text-sm text-muted-foreground text-center">{query.length === 0 ? "Start typing to search" : "No students found"}</div>}
+        {!isLoading && students.length === 0 && <div className="p-4 text-sm text-muted-foreground text-center">{query.length === 0 ? translateUi(uiLanguage, "Start typing to search") : translateUi(uiLanguage, "No students found")}</div>}
         {students.map(student => (
           <button key={student.id} type="button" className="w-full flex items-center gap-3 p-3 hover:bg-secondary/70 transition-colors text-left border-b border-border/50 last:border-0" onMouseDown={e => { e.preventDefault(); onChange(student); setQuery(""); setOpen(false); }}>
             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><User className="w-4 h-4 text-primary" /></div>
@@ -413,7 +413,7 @@ function UniversityInfoPopup({ universityId, onClose }: { universityId: number; 
                     {uni.universityType && <Badge variant="secondary" className="text-xs">{uni.universityType}</Badge>}
                     {uni.status && (
                       <Badge variant="outline" className={`text-xs ${uni.status === "open" ? "border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700/60" : "border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/60"}`}>
-                        {uni.status === "open" ? "Open" : "Closed"}
+                        {uni.status === "open" ? translateUi(uiLanguage, "Open") : translateUi(uiLanguage, "Closed")}
                       </Badge>
                     )}
                   </div>
@@ -553,7 +553,7 @@ function ProgramInfoPopup({ programId, onClose, canSeeCommission }: { programId:
                     <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Applications open")}</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.applicationsOpenAt}</p></div>
                     <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Deadline")}</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.applicationDeadlineAt}</p></div>
                   </div>
-                  <p className="text-xs text-muted-foreground">{programCalendar.effectiveApplicationPeriod.sourceTimezone}{Object.values(programCalendar.effectiveApplicationPeriod.overrides || {}).some(Boolean) ? " · Program-specific override" : " · University default"}</p>
+                  <p className="text-xs text-muted-foreground">{programCalendar.effectiveApplicationPeriod.sourceTimezone}{Object.values(programCalendar.effectiveApplicationPeriod.overrides || {}).some(Boolean) ? translateUi(uiLanguage, " · Program-specific override") : translateUi(uiLanguage, " · University default")}</p>
                 </div>
               )}
               <div className="bg-muted/30 rounded-xl p-4 space-y-3">
@@ -828,7 +828,7 @@ function DroppableAppColumn({ stage, label, variant, apps, totalCount, totalReve
               disabled={isLoading}
               onClick={onLoadMore}
             >
-              {isLoading ? "Loading…" : `Load more (${apps.length}/${totalCount})`}
+              {isLoading ? translateUi(uiLanguage, "Loading…") : `Load more (${apps.length}/${totalCount})`}
             </Button>
           )}
         </SortableContext>
@@ -845,6 +845,7 @@ type SortDir = "asc" | "desc";
 function SortHeader({ label, sortKey, currentSort, onSort }: {
   label: string; sortKey: SortKey; currentSort: { key: SortKey; dir: SortDir }; onSort: (k: SortKey) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const active = currentSort.key === sortKey;
   return (
     <>
@@ -908,8 +909,8 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
 
   const updateApp = useMutation({
     mutationFn: (payload: Record<string, unknown>) => apiFetch(`${BASE_URL}/api/applications/${app?.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: () => { toast({ title: "Application updated" }); queryClient.invalidateQueries({ queryKey: ["applications"] }); onClose(); },
-    onError: () => { toast({ title: "Error", description: "Failed to update", variant: "destructive" }); },
+    onSuccess: () => { toast({ title: translateUi(uiLanguage, "Application updated") }); queryClient.invalidateQueries({ queryKey: ["applications"] }); onClose(); },
+    onError: () => { toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to update"), variant: "destructive" }); },
   });
 
   useEffect(() => {
@@ -976,7 +977,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        toast({ title: "Application updated" });
+        toast({ title: translateUi(uiLanguage, "Application updated") });
         queryClient.invalidateQueries({ queryKey: ["applications"] });
         onClose();
         return;
@@ -999,10 +1000,10 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
       } else if (res.status === 422 && body.code === "DOCS_REQUIRED") {
         setDocUploadDialog({ targetStage: form.stage, targetStageLabel: stageLabelOf(form.stage) });
       } else {
-        toast({ title: "Error", description: body.error || "Failed to update", variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Error"), description: body.error || translateUi(uiLanguage, "Failed to update"), variant: "destructive" });
       }
     } catch {
-      toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to update"), variant: "destructive" });
     }
   }
 
@@ -1104,7 +1105,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("applicationsPage.cancel")}</Button>
-          <Button onClick={handleSave} disabled={updateApp.isPending}>{updateApp.isPending ? "Saving..." : "Save Changes"}</Button>
+          <Button onClick={handleSave} disabled={updateApp.isPending}>{updateApp.isPending ? translateUi(uiLanguage, "Saving...") : translateUi(uiLanguage, "Save Changes")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1170,7 +1171,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
         <p className="text-sm text-muted-foreground py-2">{translateUi(uiLanguage, "This action cannot be undone.")}</p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("applicationsPage.cancel")}</Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? "Deleting..." : `Delete ${count}`}</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? translateUi(uiLanguage, "Deleting...") : `Delete ${count}`}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1442,7 +1443,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
 
   const createApplication = useMutation({
     mutationFn: (payload: Record<string, unknown>) => apiFetch(`${BASE_URL}/api/applications`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: () => { toast({ title: "Application created" }); handleClose(); onSuccess(); },
+    onSuccess: () => { toast({ title: translateUi(uiLanguage, "Application created") }); handleClose(); onSuccess(); },
     onError: (err: any) => {
       toast(applicationCreationErrorToast(err, "Failed to create application"));
     },
@@ -1451,9 +1452,9 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
   function handleClose() { setSelectedStudent(null); setForm({ country: "", universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "", tuitionFee: "", notes: "" }); onClose(); }
 
   function handleSubmit() {
-    if (!selectedStudent) { toast({ title: "Select a student", variant: "destructive", duration: APPLICATION_CREATION_ERROR_TOAST_DURATION_MS }); return; }
-    if (!form.country) { toast({ title: "Select a country", variant: "destructive", duration: APPLICATION_CREATION_ERROR_TOAST_DURATION_MS }); return; }
-    if (!form.level) { toast({ title: "Select a level", variant: "destructive", duration: APPLICATION_CREATION_ERROR_TOAST_DURATION_MS }); return; }
+    if (!selectedStudent) { toast({ title: translateUi(uiLanguage, "Select a student"), variant: "destructive", duration: APPLICATION_CREATION_ERROR_TOAST_DURATION_MS }); return; }
+    if (!form.country) { toast({ title: translateUi(uiLanguage, "Select a country"), variant: "destructive", duration: APPLICATION_CREATION_ERROR_TOAST_DURATION_MS }); return; }
+    if (!form.level) { toast({ title: translateUi(uiLanguage, "Select a level"), variant: "destructive", duration: APPLICATION_CREATION_ERROR_TOAST_DURATION_MS }); return; }
     const fee = parseFloat(form.tuitionFee);
     createApplication.mutate({
       studentId: selectedStudent.id, stage: defaultStage || "inquiry", season,
@@ -1545,7 +1546,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
         </div>
         <DialogFooter className="gap-2 pt-2">
           <Button variant="outline" onClick={handleClose} className="rounded-xl">{t("applicationsPage.cancel")}</Button>
-          <Button onClick={handleSubmit} disabled={createApplication.isPending || !selectedStudent || !form.country || !form.level} className="rounded-xl">{createApplication.isPending ? "Creating..." : "Create Application"}</Button>
+          <Button onClick={handleSubmit} disabled={createApplication.isPending || !selectedStudent || !form.country || !form.level} className="rounded-xl">{createApplication.isPending ? translateUi(uiLanguage, "Creating...") : translateUi(uiLanguage, "Create Application")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1844,9 +1845,9 @@ export default function ApplicationsPage() {
         body: JSON.stringify({ assignedToId: userId }),
       });
       await invalidateAssignmentWorkspaceQueries(queryClient);
-      toast({ title: "Application assigned" });
+      toast({ title: translateUi(uiLanguage, "Application assigned") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -1949,7 +1950,7 @@ export default function ApplicationsPage() {
     if (!over) return;
 
     if (!canMoveCards) {
-      toast({ title: "You don't have permission to move cards", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "You don't have permission to move cards"), variant: "destructive" });
       return;
     }
 
@@ -1991,7 +1992,7 @@ export default function ApplicationsPage() {
       case "conflict":
         queryClient.invalidateQueries({ queryKey: ["applications"] });
         queryClient.invalidateQueries({ queryKey: [`/api/applications/${appId}`] });
-        toast({ title: "Başvuru değişti", description: "Başka bir kullanıcı kaydı güncelledi. Liste yenilendi; lütfen tekrar deneyin.", variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Başvuru değişti"), description: translateUi(uiLanguage, "Başka bir kullanıcı kaydı güncelledi. Liste yenilendi; lütfen tekrar deneyin."), variant: "destructive" });
         return false;
       case "doc_selection_required":
         setDocRequestDialog({
@@ -2080,10 +2081,10 @@ export default function ApplicationsPage() {
           : list;
         if (filtered.length === 0) {
           toast({
-            title: "Belge bulunamadı",
+            title: translateUi(uiLanguage, "Belge bulunamadı"),
             description: wanted
               ? `"${action.documentName}" adlı belge bu aşamada yok.`
-              : "Bu aşamada indirilebilecek bir belge yok.",
+              : translateUi(uiLanguage, "Bu aşamada indirilebilecek bir belge yok."),
             variant: "destructive",
           });
           return;
@@ -2096,7 +2097,7 @@ export default function ApplicationsPage() {
         link.click();
         await moveAppToStage(app.id, targetKey);
       } catch {
-        toast({ title: "Error", description: "Belge indirilemedi", variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Belge indirilemedi"), variant: "destructive" });
       }
       return;
     }
@@ -2133,7 +2134,7 @@ export default function ApplicationsPage() {
       const res = await apiFetch(`${BASE_URL}/api/applications/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(selectedIds), action: "delete" }) });
       const d = res as any;
       toast({ title: `${d.updated} application${d.updated !== 1 ? "s" : ""} deleted` });
-    } catch { toast({ title: "Some could not be deleted", variant: "destructive" }); }
+    } catch { toast({ title: translateUi(uiLanguage, "Some could not be deleted"), variant: "destructive" }); }
     setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["applications"] });
   }
@@ -2144,7 +2145,7 @@ export default function ApplicationsPage() {
       const d = res as any;
       toast({ title: `${d.updated} application${d.updated !== 1 ? "s" : ""} assigned` });
       await invalidateAssignmentWorkspaceQueries(queryClient);
-    } catch { toast({ title: "Could not assign applications", variant: "destructive" }); }
+    } catch { toast({ title: translateUi(uiLanguage, "Could not assign applications"), variant: "destructive" }); }
     setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["applications"] });
   }
@@ -2164,7 +2165,7 @@ export default function ApplicationsPage() {
           variant: "destructive",
         });
       }
-    } catch { toast({ title: "Could not move applications", variant: "destructive" }); }
+    } catch { toast({ title: translateUi(uiLanguage, "Could not move applications"), variant: "destructive" }); }
     setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["applications"] });
   }

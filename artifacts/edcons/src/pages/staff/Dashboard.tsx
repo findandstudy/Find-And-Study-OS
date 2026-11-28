@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { DashboardSkeleton } from "@/components/ui/page-skeleton";
 import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -61,6 +62,7 @@ const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
 function isOverdue(d: string) { return new Date(d) < new Date(); }
 
 export default function StaffDashboard() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { user } = useAuth(true);
   const { t, lang } = useI18n();
   const { toast } = useToast();

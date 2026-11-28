@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useRef, type CSSProperties } from "react";
 import { ArrowUpRight, Check, ChevronRight, Target, Rocket } from "lucide-react";
 import { safeSectionUrl, safeSectionImage } from "@/lib/website/sectionUrls";
@@ -9,6 +10,7 @@ const rows=(v:unknown):Record<string,unknown>[]=>Array.isArray(v)?v.filter(x=>x&
 function Image({src,alt="",className=""}:{src:unknown;alt?:string;className?:string}) {const url=safeSectionImage(src);return url?<img src={url} alt={alt} className={className} loading="lazy"/>:null;}
 function Action({url,label,outline=false}:{url:unknown;label:unknown;outline?:boolean}) {const href=safeSectionUrl(url);return href&&s(label)?<a className={`ar-button${outline?" ar-button-outline":""}`} href={href}>{s(label)}<ArrowUpRight size={18} aria-hidden="true"/></a>:null;}
 export function ReusableEditorialSection({variant,content:c,preview=false}:{variant:string;content:Record<string,unknown>;preview?:boolean}) {
+  const { lang: uiLanguage } = useUiLanguage();
  const root=useRef<HTMLDivElement>(null);
  useEffect(()=>{if(preview||matchMedia("(prefers-reduced-motion: reduce)").matches)return;const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add("ar-revealed");observer.unobserve(e.target);}}),{threshold:.08});root.current?.querySelectorAll("[data-reveal]").forEach(e=>{e.classList.add("ar-ready");observer.observe(e);});return()=>observer.disconnect();},[preview,variant]);
  const heading=<><span className="ar-kicker">{s(c.eyebrow)}</span><h2>{s(c.title)}</h2>{c.subtitle?<p>{s(c.subtitle)}</p>:null}</>;

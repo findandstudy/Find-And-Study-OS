@@ -209,7 +209,7 @@ function StudentSearchInput({ value, onChange }: { value: Student | null; onChan
       </PopoverTrigger>
       <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-64 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
         {isLoading && <div className="p-3 text-sm text-muted-foreground text-center">{translateUi(uiLanguage, "Searching...")}</div>}
-        {!isLoading && students.length === 0 && <div className="p-4 text-sm text-muted-foreground text-center">{query.length === 0 ? "Start typing to search" : "No students found"}</div>}
+        {!isLoading && students.length === 0 && <div className="p-4 text-sm text-muted-foreground text-center">{query.length === 0 ? translateUi(uiLanguage, "Start typing to search") : translateUi(uiLanguage, "No students found")}</div>}
         {students.map(student => (
           <button key={student.id} type="button" className="w-full flex items-center gap-3 p-3 hover:bg-secondary/70 transition-colors text-left border-b border-border/50 last:border-0" onMouseDown={e => { e.preventDefault(); onChange(student); setQuery(""); setOpen(false); }}>
             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><User className="w-4 h-4 text-primary" /></div>
@@ -359,6 +359,7 @@ type SortDir = "asc" | "desc";
 function SortHeader({ label, sortKey, currentSort, onSort }: {
   label: string; sortKey: SortKey; currentSort: { key: SortKey; dir: SortDir }; onSort: (k: SortKey) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const active = currentSort.key === sortKey;
   return (
     <>
@@ -417,8 +418,8 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
 
   const updateApp = useMutation({
     mutationFn: (payload: Record<string, unknown>) => apiFetch(`${BASE_URL}/api/applications/${app?.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, expectedUpdatedAt: app?.updatedAt }) }),
-    onSuccess: () => { toast({ title: "Application updated" }); queryClient.invalidateQueries({ queryKey: ["applications"] }); onClose(); },
-    onError: () => { toast({ title: "Error", description: "Failed to update", variant: "destructive" }); },
+    onSuccess: () => { toast({ title: translateUi(uiLanguage, "Application updated") }); queryClient.invalidateQueries({ queryKey: ["applications"] }); onClose(); },
+    onError: () => { toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to update"), variant: "destructive" }); },
   });
 
   useEffect(() => {
@@ -590,7 +591,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
         )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
-          <Button onClick={handleSave} disabled={updateApp.isPending}>{updateApp.isPending ? "Saving..." : "Save Changes"}</Button>
+          <Button onClick={handleSave} disabled={updateApp.isPending}>{updateApp.isPending ? translateUi(uiLanguage, "Saving...") : translateUi(uiLanguage, "Save Changes")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -611,7 +612,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
         <p className="text-sm text-muted-foreground py-2">{translateUi(uiLanguage, "This action cannot be undone.")}</p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? "Deleting..." : `Delete ${count}`}</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? translateUi(uiLanguage, "Deleting...") : `Delete ${count}`}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -723,7 +724,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
 
   const createApplication = useMutation({
     mutationFn: (payload: Record<string, unknown>) => apiFetch(`${BASE_URL}/api/applications`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: () => { toast({ title: "Application created" }); handleClose(); onSuccess(); },
+    onSuccess: () => { toast({ title: translateUi(uiLanguage, "Application created") }); handleClose(); onSuccess(); },
     onError: (err: any) => {
       toast(applicationCreationErrorToast(err, "Failed to create application"));
     },
@@ -732,9 +733,9 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
   function handleClose() { setSelectedStudent(null); setForm({ country: "", universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "", tuitionFee: "", notes: "" }); onClose(); }
 
   function handleSubmit() {
-    if (!selectedStudent) { toast({ title: "Select a student", variant: "destructive", duration: APPLICATION_CREATION_ERROR_TOAST_DURATION_MS }); return; }
-    if (!form.country) { toast({ title: "Select a country", variant: "destructive", duration: APPLICATION_CREATION_ERROR_TOAST_DURATION_MS }); return; }
-    if (!form.level) { toast({ title: "Select a level", variant: "destructive", duration: APPLICATION_CREATION_ERROR_TOAST_DURATION_MS }); return; }
+    if (!selectedStudent) { toast({ title: translateUi(uiLanguage, "Select a student"), variant: "destructive", duration: APPLICATION_CREATION_ERROR_TOAST_DURATION_MS }); return; }
+    if (!form.country) { toast({ title: translateUi(uiLanguage, "Select a country"), variant: "destructive", duration: APPLICATION_CREATION_ERROR_TOAST_DURATION_MS }); return; }
+    if (!form.level) { toast({ title: translateUi(uiLanguage, "Select a level"), variant: "destructive", duration: APPLICATION_CREATION_ERROR_TOAST_DURATION_MS }); return; }
     const fee = parseFloat(form.tuitionFee);
     createApplication.mutate({
       studentId: selectedStudent.id, stage: defaultStage || "inquiry", season,
@@ -825,7 +826,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
         </div>
         <DialogFooter className="gap-2 pt-2">
           <Button variant="outline" onClick={handleClose} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
-          <Button onClick={handleSubmit} disabled={createApplication.isPending || !selectedStudent || !form.country || !form.level} className="rounded-xl">{createApplication.isPending ? "Creating..." : "Create Application"}</Button>
+          <Button onClick={handleSubmit} disabled={createApplication.isPending || !selectedStudent || !form.country || !form.level} className="rounded-xl">{createApplication.isPending ? translateUi(uiLanguage, "Creating...") : translateUi(uiLanguage, "Create Application")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -949,8 +950,8 @@ export default function AgentAppsPage() {
     if (!app || app.stage === targetStage) return;
 
     toast({
-      title: "Action not allowed",
-      description: "Only staff members can change application status. Please contact your advisor.",
+      title: translateUi(uiLanguage, "Action not allowed"),
+      description: translateUi(uiLanguage, "Only staff members can change application status. Please contact your advisor."),
       variant: "destructive",
     });
   };
@@ -965,7 +966,7 @@ export default function AgentAppsPage() {
     setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["applications"] });
     if (failed === 0) toast({ title: `${ids.length} application${ids.length > 1 ? "s" : ""} deleted` });
-    else toast({ title: "Some could not be deleted", variant: "destructive" });
+    else toast({ title: translateUi(uiLanguage, "Some could not be deleted"), variant: "destructive" });
   }
 
   return (

@@ -1,3 +1,4 @@
+import { translateUi } from "@/lib/ui-localization";
 import { useMemo, useState } from "react";
 import { Braces, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,7 @@ export function DetailVariableInsertPanel({ kind, language, copy, onInsertTitle,
   const variables = DETAIL_TEMPLATE_VARIABLES[kind];
   const [selected, setSelected] = useState(variables[0]?.key ?? "");
   const [search, setSearch] = useState("");
-  const locale = language === "tr" ? "tr-TR" : "en-US";
+  const locale = translateUi(language, "en-US", "tr-TR");
   const visible = useMemo(() => {
     const query = search.trim().toLocaleLowerCase(locale);
     return query ? variables.filter(item => [detailVariableLabel(item, language), detailVariableGroup(item, language), item.key].some(value => value.toLocaleLowerCase(locale).includes(query))) : [...variables];

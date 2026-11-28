@@ -120,10 +120,10 @@ export default function WebsiteGlobalComponents() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["website-global-components"] });
       setEditOpen(false);
-      toast({ title: editItem ? "Component updated" : "Component created" });
+      toast({ title: editItem ? translateUi(uiLanguage, "Component updated") : translateUi(uiLanguage, "Component created") });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to save component.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to save component."), variant: "destructive" });
     },
   });
 
@@ -133,7 +133,7 @@ export default function WebsiteGlobalComponents() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["website-global-components"] });
       setDeleteConfirm(null);
-      toast({ title: "Component deleted" });
+      toast({ title: translateUi(uiLanguage, "Component deleted") });
     },
   });
 
@@ -191,7 +191,7 @@ export default function WebsiteGlobalComponents() {
 
   function handleSave() {
     if (!form.name.trim()) {
-      toast({ title: "Name required", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Name required"), variant: "destructive" });
       return;
     }
     const slug = form.slug || slugify(form.name);
@@ -451,10 +451,10 @@ export default function WebsiteGlobalComponents() {
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Component className="w-12 h-12 text-muted-foreground mb-4" />
             <h2 className="text-lg font-semibold mb-1">
-              {search ? "No matching components" : "No global components yet"}
+              {search ? translateUi(uiLanguage, "No matching components") : translateUi(uiLanguage, "No global components yet")}
             </h2>
             <p className="text-sm text-muted-foreground mb-4">
-              {search ? "Try a different search term." : "Create your first reusable component to embed across pages."}
+              {search ? translateUi(uiLanguage, "Try a different search term.") : translateUi(uiLanguage, "Create your first reusable component to embed across pages.")}
             </p>
             {!search && (
               <Button size="sm" onClick={openNew}>
@@ -507,7 +507,7 @@ export default function WebsiteGlobalComponents() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editItem ? "Edit Component" : "New Global Component"}</DialogTitle>
+            <DialogTitle>{editItem ? translateUi(uiLanguage, "Edit Component") : translateUi(uiLanguage, "New Global Component")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -569,7 +569,7 @@ export default function WebsiteGlobalComponents() {
               <div className="flex items-end gap-2 pb-0.5">
                 <div className="flex items-center gap-2">
                   <Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
-                  <Label className="text-xs">{form.isActive ? "Active" : "Inactive"}</Label>
+                  <Label className="text-xs">{form.isActive ? translateUi(uiLanguage, "Active") : translateUi(uiLanguage, "Inactive")}</Label>
                 </div>
               </div>
             </div>
@@ -584,7 +584,7 @@ export default function WebsiteGlobalComponents() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>{translateUi(uiLanguage, "Cancel")}</Button>
             <Button onClick={handleSave} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? "Saving..." : editItem ? "Update" : "Create"}
+              {saveMutation.isPending ? translateUi(uiLanguage, "Saving...") : editItem ? translateUi(uiLanguage, "Update") : translateUi(uiLanguage, "Create")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -599,7 +599,7 @@ export default function WebsiteGlobalComponents() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirm(null)}>{translateUi(uiLanguage, "Cancel")}</Button>
             <Button variant="destructive" onClick={() => deleteConfirm && deleteMutation.mutate(deleteConfirm.id)} disabled={deleteMutation.isPending}>
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              {deleteMutation.isPending ? translateUi(uiLanguage, "Deleting...") : translateUi(uiLanguage, "Delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

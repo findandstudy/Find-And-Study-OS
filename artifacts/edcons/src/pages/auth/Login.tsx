@@ -619,7 +619,7 @@ export default function Login() {
                       onClick={() => { setTab("forgot-password"); setError(""); setForgotSent(false); setForgotEmail(loginForm.email); }}
                       className="text-sm text-primary hover:text-primary/80 font-medium transition-colors hover:underline"
                     >
-                      {t("login.forgotPassword") || "Forgot your password?"}
+                      {t("login.forgotPassword") || translateUi(uiLanguage, "Forgot your password?")}
                     </button>
                   </div>
                 </form>
@@ -634,7 +634,7 @@ export default function Login() {
                 <h2 className="text-3xl font-display font-bold text-foreground mb-2">{t("login.createAccount")}</h2>
                 <p className="text-muted-foreground mb-8">{t("login.registerSubtitle")}</p>
 
-                <button type="button" onClick={() => setMatchingProfile(null)} className="text-sm text-primary hover:underline mb-4">← {lang === "tr" ? "Önerileri değiştir" : "Change recommendations"}</button>
+                <button type="button" onClick={() => setMatchingProfile(null)} className="text-sm text-primary hover:underline mb-4">← {translateUi(lang, "Change recommendations", "Önerileri değiştir")}</button>
 
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
@@ -802,15 +802,15 @@ export default function Login() {
                       <Mail className="w-8 h-8 text-green-600 dark:text-green-400" />
                     </div>
                     <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-                      {t("login.resetEmailSent") || "Check Your Email"}
+                      {t("login.resetEmailSent") || translateUi(uiLanguage, "Check Your Email")}
                     </h2>
                     <p className="text-muted-foreground text-sm mb-6">
-                      {t("login.resetEmailSentDesc") || "If an account exists with that email, we've sent a password reset link. Please check your inbox and spam folder."}
+                      {t("login.resetEmailSentDesc") || translateUi(uiLanguage, "If an account exists with that email, we've sent a password reset link. Please check your inbox and spam folder.")}
                     </p>
                     <Button size="lg" onClick={() => { setTab("login"); setError(""); setForgotSent(false); }}
                       className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25">
                       <ArrowRight className="w-5 h-5 mr-2" />
-                      {t("login.backToLogin") || "Back to Sign In"}
+                      {t("login.backToLogin") || translateUi(uiLanguage, "Back to Sign In")}
                     </Button>
                   </div>
                 ) : (
@@ -820,10 +820,10 @@ export default function Login() {
                         <Lock className="w-8 h-8 text-primary" />
                       </div>
                       <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-                        {t("login.forgotPasswordTitle") || "Forgot Password?"}
+                        {t("login.forgotPasswordTitle") || translateUi(uiLanguage, "Forgot Password?")}
                       </h2>
                       <p className="text-muted-foreground text-sm">
-                        {t("login.forgotPasswordDesc") || "Enter your email address and we'll send you a link to reset your password."}
+                        {t("login.forgotPasswordDesc") || translateUi(uiLanguage, "Enter your email address and we'll send you a link to reset your password.")}
                       </p>
                     </div>
 
@@ -850,12 +850,12 @@ export default function Login() {
                       <Button type="submit" size="lg" disabled={loading}
                         className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25">
                         {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Mail className="w-5 h-5 mr-2" />}
-                        {t("login.sendResetLink") || "Send Reset Link"}
+                        {t("login.sendResetLink") || translateUi(uiLanguage, "Send Reset Link")}
                       </Button>
 
                       <button type="button" onClick={() => { setTab("login"); setError(""); }}
                         className="w-full text-sm text-muted-foreground hover:text-foreground text-center">
-                        {t("login.backToLogin") || "Back to Sign In"}
+                        {t("login.backToLogin") || translateUi(uiLanguage, "Back to Sign In")}
                       </button>
                     </form>
                   </>

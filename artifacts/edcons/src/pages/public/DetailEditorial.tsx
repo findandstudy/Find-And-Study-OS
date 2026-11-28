@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import React, { useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ArrowUpRight, BookOpen, Building2, MapPin } from "lucide-react";
@@ -45,6 +46,7 @@ export function DetailPrice({ tuition, locale, verifiedLabel }: { tuition: Detai
 }
 
 export function DetailCard({ href, eyebrow, title, children, logoUrl, mediaUrl, mediaFit = "cover", kind = "program", layout = "standard" }: { href: string; eyebrow?: string | null; title: string; children?: ReactNode; index?: number; logoUrl?: string | null; mediaUrl?: string | null; mediaFit?: "cover" | "contain"; kind?: "university" | "city" | "program"; layout?: "standard" | "media" }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const media = mediaUrl || logoUrl;
   return <Link href={href} className={`detail-catalog-card is-${kind}${layout === "media" ? " has-media" : ""}`}>
     {layout === "media" ? <div className={`detail-card-media is-${mediaFit}`}>

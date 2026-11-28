@@ -1,5 +1,5 @@
 import { useI18nContext } from './i18n/use-i18n-context';
-import { getTranslation, type Language } from './i18n';
+import { getTranslation, isValidLanguage } from './i18n/index';
 
 export { useI18nContext as useUiLanguage } from './i18n/use-i18n-context';
 
@@ -10,9 +10,9 @@ export function uiTextKey(text: string): string {
   return `uiText.s${(hash >>> 0).toString(16)}`;
 }
 
-export function translateUi(lang: Language, english: string, turkish?: string): string {
+export function translateUi(lang: string, english: string, turkish?: string): string {
   const key = uiTextKey(english);
-  const value = getTranslation(lang, key);
+  const value = getTranslation(isValidLanguage(lang) ? lang : 'en', key);
   return value === key ? (lang === 'tr' && turkish ? turkish : english) : value;
 }
 

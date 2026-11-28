@@ -70,11 +70,11 @@ export function RowActionsMenu({
         body: JSON.stringify({ agentId: null }),
       });
       if (!res.ok) throw new Error("Failed to unlink agent");
-      toast({ title: "Agent unlinked", description: `Removed agent from ${entityName}` });
+      toast({ title: translateUi(uiLanguage, "Agent unlinked"), description: `Removed agent from ${entityName}` });
       onRefresh?.();
       qc.invalidateQueries({ queryKey: [entityType === "lead" ? "/api/leads" : entityType === "student" ? "/api/students" : "applications"] });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -93,7 +93,7 @@ export function RowActionsMenu({
       const data = await res.json();
       window.location.href = data.redirectTo || "/student";
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
       setImpersonating(false);
     }
   }
@@ -113,7 +113,7 @@ export function RowActionsMenu({
           {onAssign && staffUsersList && (currentAssignedToId ? (canReassign || currentAssignedToId === currentUserId) : canAssign) && (
             <DropdownMenuItem onClick={() => setAssignOpen(true)}>
               <UserPlus className="w-3.5 h-3.5 mr-2" />
-              {assignedName ? `Reassign (${assignedName})` : "Assign Staff"}
+              {assignedName ? `Reassign (${assignedName})` : translateUi(uiLanguage, "Assign Staff")}
             </DropdownMenuItem>
           )}
 
@@ -226,13 +226,13 @@ function LinkAgentDialog({ open, onClose, entityType, entityId, entityName, onRe
         body: JSON.stringify({ agentId }),
       });
       if (!res.ok) throw new Error("Failed to link agent");
-      toast({ title: "Agent linked", description: `Agent linked to ${entityName}` });
+      toast({ title: translateUi(uiLanguage, "Agent linked"), description: `Agent linked to ${entityName}` });
       onRefresh?.();
       qc.invalidateQueries({ queryKey: [entityType === "lead" ? "/api/leads" : entityType === "student" ? "/api/students" : "applications"] });
       setSearch("");
       onClose();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     } finally {
       setLinking(false);
     }
@@ -380,11 +380,11 @@ function SetPasswordDialog({ open, onClose, studentId, entityName }: {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!password || password.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Password must be at least 6 characters"), variant: "destructive" });
       return;
     }
     if (password !== confirmPassword) {
-      toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Passwords do not match"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -399,10 +399,10 @@ function SetPasswordDialog({ open, onClose, studentId, entityName }: {
         const err = await res.json().catch(() => ({ error: "Failed" }));
         throw new Error(err.error || "Failed to set password");
       }
-      toast({ title: "Password updated", description: `Password has been set for ${entityName}` });
+      toast({ title: translateUi(uiLanguage, "Password updated"), description: `Password has been set for ${entityName}` });
       handleClose();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }

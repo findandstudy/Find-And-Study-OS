@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
@@ -109,6 +110,7 @@ function daysLeft(expiry: string | null): number | null {
 interface Props { openId?: number }
 
 export default function CompanyContractsPage({ openId }: Props = {}) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t, lang } = useI18n();
   const locale = getLocale(lang);

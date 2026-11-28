@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useMemo } from "react";
 import { customFetch, useGetOverviewStats, useGetActivitySummary, useGetKommoSummary, useListUsers } from "@workspace/api-client-react";
 import { formatDate } from "@workspace/i18n";
@@ -350,6 +351,7 @@ function UserActivityPanel({ range, currentUserId, isAdmin, expandable = false }
 }
 
 export default function AdminDashboard() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, lang } = useI18n();
   const timeAgo = (d: string) => i18nTimeAgo(lang, d);
   const { user } = useAuth(true);
@@ -472,7 +474,7 @@ export default function AdminDashboard() {
 
       {/* Contract Alerts */}
       {contractAgentsQuery.isError && (
-        <PanelLoadError message={lang === "tr" ? "Sözleşme uyarıları yüklenemedi; uyarı olmadığı varsayılmadı." : "Contract alerts could not be loaded; no-alert state was not assumed."} retryLabel={lang === "tr" ? "Yeniden dene" : "Retry"} onRetry={() => void contractAgentsQuery.refetch()} />
+        <PanelLoadError message={translateUi(lang, "Contract alerts could not be loaded; no-alert state was not assumed.", "Sözleşme uyarıları yüklenemedi; uyarı olmadığı varsayılmadı.")} retryLabel={translateUi(lang, "Retry", "Yeniden dene")} onRetry={() => void contractAgentsQuery.refetch()} />
       )}
       {contractAgents.length > 0 && (
         <Card className="p-5 border-none shadow-lg shadow-black/5 bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-950/20 dark:to-red-950/20">
@@ -544,9 +546,9 @@ export default function AdminDashboard() {
           </div>
           <div className="space-y-3 max-h-[320px] overflow-y-auto">
             {latestStudentsQuery.isError ? (
-              <PanelLoadError message={lang === "tr" ? "Öğrenciler yüklenemedi; boş liste gösterilmedi." : "Students could not be loaded; the list is not empty."} retryLabel={lang === "tr" ? "Yeniden dene" : "Retry"} onRetry={() => void latestStudentsQuery.refetch()} />
+              <PanelLoadError message={translateUi(lang, "Students could not be loaded; the list is not empty.", "Öğrenciler yüklenemedi; boş liste gösterilmedi.")} retryLabel={translateUi(lang, "Retry", "Yeniden dene")} onRetry={() => void latestStudentsQuery.refetch()} />
             ) : latestStudentsQuery.isLoading ? (
-              <p role="status" className="text-sm text-muted-foreground">{lang === "tr" ? "Öğrenciler yükleniyor…" : "Loading students…"}</p>
+              <p role="status" className="text-sm text-muted-foreground">{translateUi(lang, "Loading students…", "Öğrenciler yükleniyor…")}</p>
             ) : latestStudents.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("staffDash.noStudents")}</p>
             ) : (
@@ -594,9 +596,9 @@ export default function AdminDashboard() {
           </div>
           <div className="space-y-3 max-h-[320px] overflow-y-auto">
             {latestAuditQuery.isError ? (
-              <PanelLoadError message={lang === "tr" ? "Son güncellemeler yüklenemedi." : "Latest updates could not be loaded."} retryLabel={lang === "tr" ? "Yeniden dene" : "Retry"} onRetry={() => void latestAuditQuery.refetch()} />
+              <PanelLoadError message={translateUi(lang, "Latest updates could not be loaded.", "Son güncellemeler yüklenemedi.")} retryLabel={translateUi(lang, "Retry", "Yeniden dene")} onRetry={() => void latestAuditQuery.refetch()} />
             ) : latestAuditQuery.isLoading ? (
-              <p role="status" className="text-sm text-muted-foreground">{lang === "tr" ? "Güncellemeler yükleniyor…" : "Loading updates…"}</p>
+              <p role="status" className="text-sm text-muted-foreground">{translateUi(lang, "Loading updates…", "Güncellemeler yükleniyor…")}</p>
             ) : latestUpdates.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("staffDash.noUpdates")}</p>
             ) : (
@@ -642,9 +644,9 @@ export default function AdminDashboard() {
           </div>
           <div className="space-y-3 max-h-[320px] overflow-y-auto">
             {notificationsQuery.isError ? (
-              <PanelLoadError message={lang === "tr" ? "Bildirimler yüklenemedi." : "Notifications could not be loaded."} retryLabel={lang === "tr" ? "Yeniden dene" : "Retry"} onRetry={() => void notificationsQuery.refetch()} />
+              <PanelLoadError message={translateUi(lang, "Notifications could not be loaded.", "Bildirimler yüklenemedi.")} retryLabel={translateUi(lang, "Retry", "Yeniden dene")} onRetry={() => void notificationsQuery.refetch()} />
             ) : notificationsQuery.isLoading ? (
-              <p role="status" className="text-sm text-muted-foreground">{lang === "tr" ? "Bildirimler yükleniyor…" : "Loading notifications…"}</p>
+              <p role="status" className="text-sm text-muted-foreground">{translateUi(lang, "Loading notifications…", "Bildirimler yükleniyor…")}</p>
             ) : latestNotifications.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("staffDash.noNotifications")}</p>
             ) : (
@@ -694,7 +696,7 @@ export default function AdminDashboard() {
             </Select>
           </div>
           <div className="flex-1 min-h-[260px]">
-            {growthQuery.isError ? <PanelLoadError message={lang === "tr" ? "Trend verileri yüklenemedi." : "Trend data could not be loaded."} retryLabel={lang === "tr" ? "Yeniden dene" : "Retry"} onRetry={() => void growthQuery.refetch()} /> : <ResponsiveContainer width="100%" height="100%">
+            {growthQuery.isError ? <PanelLoadError message={translateUi(lang, "Trend data could not be loaded.", "Trend verileri yüklenemedi.")} retryLabel={translateUi(lang, "Retry", "Yeniden dene")} onRetry={() => void growthQuery.refetch()} /> : <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={growthData} margin={{ top: 10, right: 8, left: -24, bottom: 0 }}>
                 <defs>
                   <linearGradient id="admLeads" x1="0" y1="0" x2="0" y2="1">
@@ -762,9 +764,9 @@ export default function AdminDashboard() {
           </div>
           <div className="space-y-3">
             {upcomingQuery.isError ? (
-              <PanelLoadError message={lang === "tr" ? "Takip görevleri yüklenemedi." : "Follow-ups could not be loaded."} retryLabel={lang === "tr" ? "Yeniden dene" : "Retry"} onRetry={() => void upcomingQuery.refetch()} />
+              <PanelLoadError message={translateUi(lang, "Follow-ups could not be loaded.", "Takip görevleri yüklenemedi.")} retryLabel={translateUi(lang, "Retry", "Yeniden dene")} onRetry={() => void upcomingQuery.refetch()} />
             ) : upcomingQuery.isLoading ? (
-              <p role="status" className="text-sm text-muted-foreground">{lang === "tr" ? "Takip görevleri yükleniyor…" : "Loading follow-ups…"}</p>
+              <p role="status" className="text-sm text-muted-foreground">{translateUi(lang, "Loading follow-ups…", "Takip görevleri yükleniyor…")}</p>
             ) : upcomingFollowUps.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("adminDash.noFollowUps")}</p>
             ) : (

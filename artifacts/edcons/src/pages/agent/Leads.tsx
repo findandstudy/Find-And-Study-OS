@@ -191,7 +191,7 @@ function LeadCard({ lead, onView, showRevenue, variant }: {
             )}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground truncate">{lead.email || lead.phone || "No contact info"}</p>
+        <p className="text-xs text-muted-foreground truncate">{lead.email || lead.phone || translateUi(uiLanguage, "No contact info")}</p>
         {lead.interestedProgram && (
           <p className="text-xs font-medium text-primary mt-2 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">
             {lead.interestedProgram}
@@ -369,6 +369,7 @@ function FilterPopover({ filters, onChange, columns, sourceOptions }: {
 
 /* ── NationalityCombobox ──────────────────────────────────── */
 function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [searchVal, setSearchVal] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -400,7 +401,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
       />
       {open && (
         <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? translateUi(uiLanguage, "No match — custom value OK") : translateUi(uiLanguage, "No countries loaded")}</div>}
           {filtered.map(c => (
             <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
               onMouseDown={e => { e.preventDefault(); onChange(c.name); setSearchVal(""); setOpen(false); }}>
@@ -472,7 +473,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
         className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background hover:bg-accent/50 transition-colors"
       >
         <span className={`truncate ${localSelected.length === 0 ? "text-muted-foreground" : ""}`}>
-          {localSelected.length === 0 ? "Select countries..." : localSelected.length === 1 ? localSelected[0] : `${localSelected.length} countries selected`}
+          {localSelected.length === 0 ? translateUi(uiLanguage, "Select countries...") : localSelected.length === 1 ? localSelected[0] : `${localSelected.length} countries selected`}
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </button>
@@ -549,12 +550,12 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns, sourceOpt
       { id: lead.id, data: payload },
       {
         onSuccess: () => {
-          toast({ title: "Lead updated" });
+          toast({ title: translateUi(uiLanguage, "Lead updated") });
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
           onClose();
         },
         onError: () => {
-          toast({ title: "Error", description: "Failed to update lead", variant: "destructive" });
+          toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to update lead"), variant: "destructive" });
         },
       }
     );
@@ -630,7 +631,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns, sourceOpt
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleSave} disabled={updateLead.isPending || !form.firstName || !form.lastName}>
-            {updateLead.isPending ? "Saving…" : "Save Changes"}
+            {updateLead.isPending ? translateUi(uiLanguage, "Saving…") : translateUi(uiLanguage, "Save Changes")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -655,7 +656,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending}>
-            {isPending ? "Deleting…" : `Delete ${count} Lead${count > 1 ? "s" : ""}`}
+            {isPending ? translateUi(uiLanguage, "Deleting…") : `Delete ${count} Lead${count > 1 ? "s" : ""}`}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -673,6 +674,7 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
   currentSort: { key: SortKey; dir: SortDir };
   onSort: (key: SortKey) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const active = currentSort.key === sortKey;
   return (
     <>
@@ -966,7 +968,7 @@ export default function AgentLeadsPage() {
     if (failed === 0) {
       toast({ title: `${ids.length} lead${ids.length > 1 ? "s" : ""} deleted` });
     } else {
-      toast({ title: "Some leads could not be deleted", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Some leads could not be deleted"), variant: "destructive" });
     }
   }
 
@@ -1003,18 +1005,18 @@ export default function AgentLeadsPage() {
           queryClient.refetchQueries({ queryKey: ["/api/students"] }),
         ]);
         if (result.alreadyConverted) {
-          toast({ title: "Lead already converted", description: "This lead has already been converted to a student." });
+          toast({ title: translateUi(uiLanguage, "Lead already converted"), description: translateUi(uiLanguage, "This lead has already been converted to a student.") });
         } else {
           const studentName = `${result.student?.firstName || ""} ${result.student?.lastName || ""}`.trim();
           toast({
-            title: "Lead converted to student",
+            title: translateUi(uiLanguage, "Lead converted to student"),
             description: result.merged
               ? `Merged with existing student: ${studentName}`
               : `New student created: ${studentName}`,
           });
         }
       } catch (err: any) {
-        toast({ title: "Conversion failed", description: err.message || "Failed to convert lead", variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Conversion failed"), description: err.message || translateUi(uiLanguage, "Failed to convert lead"), variant: "destructive" });
         await queryClient.refetchQueries({ queryKey: ["/api/leads"] });
       }
       return;
@@ -1030,7 +1032,7 @@ export default function AgentLeadsPage() {
           toast({ title: `Lead moved to ${colLabel}` });
         },
         onError: () => {
-          toast({ title: "Error", description: "Failed to move lead", variant: "destructive" });
+          toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to move lead"), variant: "destructive" });
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
           queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
         },
@@ -1132,7 +1134,7 @@ export default function AgentLeadsPage() {
                         </h4>
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
-                        {activeCard.email || activeCard.phone || "No contact info"}
+                        {activeCard.email || activeCard.phone || translateUi(uiLanguage, "No contact info")}
                       </p>
                       {activeCard.interestedProgram && (
                         <p className="text-xs font-medium text-primary mt-2 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">

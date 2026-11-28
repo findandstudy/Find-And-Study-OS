@@ -515,7 +515,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       await invalidateAssignmentWorkspaceQueries(qc);
       toast({ title: targetUserId ? t("studentDetailPage.studentAssigned") : t("studentDetailPage.studentUnassigned") });
     } catch (err: any) {
-      toast({ title: "Error", description: err?.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err?.message, variant: "destructive" });
     } finally {
       setAssigning(false);
     }
@@ -571,10 +571,10 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [`/api/students/${id}/notes`, "general"] });
       qc.invalidateQueries({ queryKey: [`/api/students/${id}/notes`, "internal"] });
-      toast({ title: "Note deleted" });
+      toast({ title: translateUi(uiLanguage, "Note deleted") });
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -607,10 +607,10 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     onSuccess: async () => {
       await invalidateFollowUpWorkspaceQueries(qc);
       resetFollowUpForm();
-      toast({ title: "Follow-up scheduled" });
+      toast({ title: translateUi(uiLanguage, "Follow-up scheduled") });
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -624,7 +624,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       }).then(r => { if (!r.ok) throw new Error("Failed"); return r.json(); }),
     onSuccess: async () => {
       await invalidateFollowUpWorkspaceQueries(qc);
-      toast({ title: "Follow-up updated" });
+      toast({ title: translateUi(uiLanguage, "Follow-up updated") });
     },
   });
 
@@ -639,10 +639,10 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     onSuccess: async () => {
       await invalidateFollowUpWorkspaceQueries(qc);
       resetFollowUpForm();
-      toast({ title: "Follow-up updated" });
+      toast({ title: translateUi(uiLanguage, "Follow-up updated") });
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -800,7 +800,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           stage: "inquiry",
         }),
       });
-      toast({ title: "Application created", description: `${prog?.universityName} – ${prog?.name}` });
+      toast({ title: translateUi(uiLanguage, "Application created"), description: `${prog?.universityName} – ${prog?.name}` });
       await qc.refetchQueries({ queryKey: ["/api/applications"] });
       setShowNewApp(false);
       setAppCountry(""); setAppUniversityId(""); setAppProgramId(""); setAppIntake("");
@@ -816,12 +816,12 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     setDeletingAppId(app.id);
     try {
       await customFetch(`/api/applications/${app.id}`, { method: "DELETE" });
-      toast({ title: "Application deleted" });
+      toast({ title: translateUi(uiLanguage, "Application deleted") });
       await qc.refetchQueries({ queryKey: ["/api/applications"] });
     } catch (err: any) {
       toast({
-        title: "Failed to delete",
-        description: err?.data?.error || err?.message || "Could not delete application",
+        title: translateUi(uiLanguage, "Failed to delete"),
+        description: err?.data?.error || err?.message || translateUi(uiLanguage, "Could not delete application"),
         variant: "destructive",
       });
     } finally {
@@ -847,7 +847,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   function handleFileSelect(file: File) {
     const allowed = ["image/jpeg", "image/png", "application/pdf"];
     if (!allowed.includes(file.type)) {
-      toast({ title: "Invalid file type", description: "Only JPG, JPEG, PNG and PDF files are allowed.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Invalid file type"), description: translateUi(uiLanguage, "Only JPG, JPEG, PNG and PDF files are allowed."), variant: "destructive" });
       return;
     }
     setUploadFile(file);
@@ -882,11 +882,11 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
       await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && (k.includes("document") || k.includes("student") || k.includes(`/api/students`))) });
       setUploadOpen(false);
-      toast({ title: "Document uploaded" });
+      toast({ title: translateUi(uiLanguage, "Document uploaded") });
     } catch (err: any) {
       toast({
-        title: "Upload failed",
-        description: err?.message || "The document could not be uploaded.",
+        title: translateUi(uiLanguage, "Upload failed"),
+        description: err?.message || translateUi(uiLanguage, "The document could not be uploaded."),
         variant: "destructive",
       });
     } finally {
@@ -916,11 +916,11 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && (k.includes("document") || k.includes("student") || k.includes(`/api/students`))) });
       setPhotoRevision(value => value + 1);
       setPhotoLoadError(false);
-      toast({ title: "Photo updated" });
+      toast({ title: translateUi(uiLanguage, "Photo updated") });
     } catch (err: any) {
       toast({
-        title: "Photo upload failed",
-        description: err?.message || "The profile photo could not be updated.",
+        title: translateUi(uiLanguage, "Photo upload failed"),
+        description: err?.message || translateUi(uiLanguage, "The profile photo could not be updated."),
         variant: "destructive",
       });
     } finally {
@@ -1228,7 +1228,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                               }),
                             }).then(() => {
                               qc.invalidateQueries({ queryKey: [`/api/students/${id}`] });
-                              toast({ title: "Origin updated" });
+                              toast({ title: translateUi(uiLanguage, "Origin updated") });
                             });
                           }}
                         >
@@ -1289,7 +1289,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-foreground whitespace-pre-wrap break-words">{note.content}</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {note.authorName || "Team"} · {new Date(note.createdAt).toLocaleDateString()}
+                            {note.authorName || translateUi(uiLanguage, "Team")} · {new Date(note.createdAt).toLocaleDateString()}
                           </p>
                         </div>
                         {isStaffUser && (
@@ -1548,7 +1548,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                         onClick={handleCreateFollowUp}
                         disabled={(editingFuId ? editFollowUp.isPending : createFollowUp.isPending) || !fuTitle.trim() || !fuDate}
                       >
-                        {editingFuId ? "Save" : "Schedule"}
+                        {editingFuId ? translateUi(uiLanguage, "Save") : translateUi(uiLanguage, "Schedule")}
                       </Button>
                     </div>
                   </div>
@@ -1733,7 +1733,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setUploadOpen(false)} disabled={uploading}>{t("studentDetailPage.cancel")}</Button>
             <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
-              {uploading ? "Uploading\u2026" : "Save"}
+              {uploading ? translateUi(uiLanguage, "Uploading…") : translateUi(uiLanguage, "Save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1760,6 +1760,7 @@ const GRADING_SYSTEMS = [
 
 
 function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [searchVal, setSearchVal] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1792,7 +1793,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
       />
       {open && (
         <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? translateUi(uiLanguage, "No match — custom value OK") : translateUi(uiLanguage, "No countries loaded")}</div>}
           {filtered.map(c => (
             <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
               onMouseDown={e => { e.preventDefault(); onChange(c.name); setSearchVal(""); setOpen(false); }}>
@@ -1923,12 +1924,12 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast({ title: "Student updated" });
+      toast({ title: translateUi(uiLanguage, "Student updated") });
       qc.invalidateQueries({ queryKey: [`/api/students/${studentId}`] });
       qc.invalidateQueries({ queryKey: ["/api/students"] });
       onClose();
     } catch {
-      toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to update"), variant: "destructive" });
     } finally { setSaving(false); }
   }
 
@@ -2093,7 +2094,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
         <DialogFooter className="pt-3 border-t border-border/50">
           <Button variant="outline" onClick={onClose} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleSave} disabled={!form.firstName || !form.lastName || saving} className="rounded-xl">
-            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{translateUi(uiLanguage, "Saving...")}</> : "Save Changes"}
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{translateUi(uiLanguage, "Saving...")}</> : translateUi(uiLanguage, "Save Changes")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2111,6 +2112,7 @@ function InfoRow({
   label: string;
   value?: string | null;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const hasValue = !!(value && value.trim());
@@ -2134,7 +2136,7 @@ function InfoRow({
       toast({ title: `${label} kopyalandı`, description: value! });
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast({ title: "Kopyalanamadı", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Kopyalanamadı"), variant: "destructive" });
     }
   };
 
@@ -2252,7 +2254,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
       const resp = await fetch(`${BASE_URL}/api/documents/download-zip/${studentId}?profileOnly=true`, { credentials: "include" });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "Download failed" }));
-        toast({ title: "Error", description: err.error || "Download failed", variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Error"), description: err.error || translateUi(uiLanguage, "Download failed"), variant: "destructive" });
         return;
       }
       const blob = await resp.blob();
@@ -2263,7 +2265,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast({ title: "Error", description: "Failed to download ZIP", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to download ZIP"), variant: "destructive" });
     } finally {
       setDownloadingZip(false);
     }
@@ -2275,7 +2277,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
       const resp = await fetch(`${BASE_URL}/api/documents/download-zip/${studentId}?applicationId=${appId}`, { credentials: "include" });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "Download failed" }));
-        toast({ title: "Error", description: err.error || "Download failed", variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Error"), description: err.error || translateUi(uiLanguage, "Download failed"), variant: "destructive" });
         return;
       }
       const blob = await resp.blob();
@@ -2287,7 +2289,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast({ title: "Error", description: "Failed to download ZIP", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to download ZIP"), variant: "destructive" });
     } finally {
       setAppZipDownloading(null);
     }
@@ -2295,7 +2297,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
 
   const handleMergePdf = async () => {
     if (selectedForMerge.length < 2) {
-      toast({ title: "Select PDFs", description: "Select at least 2 PDF documents to merge.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Select PDFs"), description: translateUi(uiLanguage, "Select at least 2 PDF documents to merge."), variant: "destructive" });
       return;
     }
     setMergingPdf(true);
@@ -2308,7 +2310,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "Merge failed" }));
-        toast({ title: "Error", description: err.error || "Merge failed", variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Error"), description: err.error || translateUi(uiLanguage, "Merge failed"), variant: "destructive" });
         return;
       }
       const blob = await resp.blob();
@@ -2318,10 +2320,10 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
       a.download = "merged_documents.pdf";
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: "Success", description: "PDFs merged and downloaded." });
+      toast({ title: translateUi(uiLanguage, "Success"), description: translateUi(uiLanguage, "PDFs merged and downloaded.") });
       setSelectedForMerge([]);
     } catch {
-      toast({ title: "Error", description: "Failed to merge PDFs", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to merge PDFs"), variant: "destructive" });
     } finally {
       setMergingPdf(false);
     }

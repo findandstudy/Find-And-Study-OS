@@ -648,7 +648,7 @@ export default function CourseFinder() {
       toast({ title: t("courseFinderPage.pdfGenerated"), description: t("courseFinderPage.proposalDownloaded", { n: selected.length }) });
       if (missingStudyLevels.length > 0) {
         toast({
-          title: "Proposal generated with a partial document checklist",
+          title: translateUi(uiLanguage, "Proposal generated with a partial document checklist"),
           description: `No document requirements are configured for: ${missingStudyLevels.join(", ")}.`,
         });
       }
@@ -889,7 +889,7 @@ export default function CourseFinder() {
               <Label className="text-xs text-muted-foreground">
                 {t("courseFinderPage.tuitionFee")} {filters.feeMin || filters.feeMax ? (
                   <span className="text-primary">
-                    ({filters.feeMin ? `$${Number(filters.feeMin).toLocaleString()}` : "$0"} – {filters.feeMax ? `$${Number(filters.feeMax).toLocaleString()}` : "Max"})
+                    ({filters.feeMin ? `$${Number(filters.feeMin).toLocaleString()}` : "$0"} – {filters.feeMax ? `$${Number(filters.feeMax).toLocaleString()}` : translateUi(uiLanguage, "Max")})
                   </span>
                 ) : null}
               </Label>
@@ -1005,7 +1005,7 @@ export default function CourseFinder() {
                     ) : (
                       <Square className="w-3.5 h-3.5" />
                     )}
-                    {selectedIds.size > 0 ? "Deselect All" : "Select All"}
+                    {selectedIds.size > 0 ? translateUi(uiLanguage, "Deselect All") : translateUi(uiLanguage, "Select All")}
                   </Button>
                   {selectedIds.size > 0 && (
                     <>
@@ -1246,6 +1246,7 @@ export default function CourseFinder() {
 function SortHeader({ label, field, sortField, sortDir, onSort }: {
   label: string; field: string; sortField: string; sortDir: "asc" | "desc"; onSort: (f: string) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const active = sortField === field;
   return (
     <>
@@ -1540,7 +1541,7 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
                     {p.universityStatus && (
                       <div className="flex items-center gap-1.5 justify-center">
                         <div className={`w-2 h-2 rounded-full ${p.universityStatus === "open" ? "bg-emerald-500" : "bg-amber-500"}`} />
-                        <span className="text-[11px] capitalize">{p.universityStatus === "open" ? "Open" : "Closed"}</span>
+                        <span className="text-[11px] capitalize">{p.universityStatus === "open" ? translateUi(uiLanguage, "Open") : translateUi(uiLanguage, "Closed")}</span>
                       </div>
                     )}
                   </td>
@@ -1839,7 +1840,7 @@ function UniversityInfoDialog({ program: p, onClose }: {
                 {p.universityStatus && (
                   <Badge variant="outline" className={`text-[11px] h-5 px-2 ${p.universityStatus === "open" ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-amber-300 text-amber-700 bg-amber-50"}`}>
                     <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${p.universityStatus === "open" ? "bg-emerald-500" : "bg-amber-500"}`} />
-                    {p.universityStatus === "open" ? "Open for Applications" : "Closed"}
+                    {p.universityStatus === "open" ? translateUi(uiLanguage, "Open for Applications") : translateUi(uiLanguage, "Closed")}
                   </Badge>
                 )}
                 {p.universityType && <Badge variant="secondary" className="text-[11px] h-5 px-2 capitalize">{p.universityType}</Badge>}
@@ -2193,11 +2194,11 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
     if (files.length === 0) return;
     const currentPartCount = uploaded?.partCount || (uploaded ? 1 : 0);
     if (isSingleImageDocumentType(docType.key) && (uploaded || files.length > 1)) {
-      toast({ title: "Photograph accepts one file", description: "Remove the current photograph before choosing another PDF or image.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Photograph accepts one file"), description: translateUi(uiLanguage, "Remove the current photograph before choosing another PDF or image."), variant: "destructive" });
       return;
     }
     if (currentPartCount + files.length > MAX_DOCUMENT_PARTS) {
-      toast({ title: "Too many document parts", description: `You can combine up to ${MAX_DOCUMENT_PARTS} parts in one document box.`, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Too many document parts"), description: `You can combine up to ${MAX_DOCUMENT_PARTS} parts in one document box.`, variant: "destructive" });
       return;
     }
     for (const file of files) {
@@ -2224,7 +2225,7 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
       });
       onUpload({ key: docType.key, label: docType.label, file: merged.file, mediaType: merged.mediaType, isImage: false, partCount: currentPartCount + files.length });
     } catch (error) {
-      toast({ title: "Documents could not be combined", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Documents could not be combined"), description: error instanceof Error ? error.message : translateUi(uiLanguage, "Please try again."), variant: "destructive" });
     } finally {
       setMerging(false);
     }
@@ -2248,7 +2249,7 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
         {!isSingleImageDocumentType(docType.key) && (
           <div className="flex items-center gap-2">
             <button type="button" disabled={merging} onClick={() => inputRef.current?.click()} className="text-[9px] font-semibold text-primary hover:underline disabled:opacity-50">
-              {merging ? "Combining..." : "+ Add part"}
+              {merging ? translateUi(uiLanguage, "Combining...") : translateUi(uiLanguage, "+ Add part")}
             </button>
             <button type="button" disabled={merging} onClick={() => setScannerOpen(true)} className="text-[9px] font-semibold text-primary hover:underline disabled:opacity-50">{translateUi(uiLanguage, "Scan")}</button>
           </div>
@@ -2485,10 +2486,10 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
         nationality: created.nationality || null,
         createdAt: created.createdAt,
       });
-      toast({ title: "Student registered", description: `${created.firstName} ${created.lastName} has been added to the system.` });
+      toast({ title: translateUi(uiLanguage, "Student registered"), description: `${created.firstName} ${created.lastName} has been added to the system.` });
       setStep("documents");
     } catch (err: any) {
-      toast({ title: "Registration failed", description: err.message || "Could not create student", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Registration failed"), description: err.message || translateUi(uiLanguage, "Could not create student"), variant: "destructive" });
     } finally {
       setCreatingStudent(false);
     }
@@ -2595,7 +2596,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
             </div>
             <p className="text-lg font-semibold text-emerald-700">{translateUi(uiLanguage, "Application Created!")}</p>
             <p className="text-sm text-muted-foreground text-center">
-              {isStudentUser ? "Your application has been submitted for review." : "Application, commission and service fee records have been created automatically."}
+              {isStudentUser ? translateUi(uiLanguage, "Your application has been submitted for review.") : translateUi(uiLanguage, "Application, commission and service fee records have been created automatically.")}
             </p>
             {submittedDocumentCount > 0 && (
               <p className="text-xs text-muted-foreground">{submittedDocumentCount} {translateUi(uiLanguage, "document")}{submittedDocumentCount !== 1 ? "s" : ""} {translateUi(uiLanguage, "uploaded successfully.")}</p>
@@ -2662,7 +2663,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
                       ) : studentsToShow.length === 0 ? (
                         <div className="text-center py-6 text-muted-foreground">
                           <User className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                          <p className="text-sm">{debouncedSearch.length >= 2 ? "No students found" : "No students yet"}</p>
+                          <p className="text-sm">{debouncedSearch.length >= 2 ? translateUi(uiLanguage, "No students found") : translateUi(uiLanguage, "No students yet")}</p>
                         </div>
                       ) : (
                         studentsToShow.map(s => {

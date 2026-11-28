@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
@@ -152,6 +153,7 @@ function LanguageOption({ value }: { value: string }) {
 }
 
 export default function AgencyApplication() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang, isRTL } = useI18n();
   const copy = useMemo<Copy>(() => ({ ...EN, ...(COPY[lang] || {}) }), [lang]);
   const { data: countries = [] } = useCountrySearch("");

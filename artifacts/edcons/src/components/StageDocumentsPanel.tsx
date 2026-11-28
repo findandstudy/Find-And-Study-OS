@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -157,6 +158,7 @@ function StageSection({
   isCurrent: boolean;
   hideUpload?: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, lang } = useI18n();
   const [expanded, setExpanded] = useState(isCurrent || docs.length > 0 || missingNotes.length > 0);
   const { toast } = useToast();

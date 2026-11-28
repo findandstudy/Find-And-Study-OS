@@ -57,14 +57,14 @@ export function PublicLayout({ children }: { children: ReactNode }) {
 
   const currentMeta = LANGUAGE_META[lang];
 
-  const serviceLocale=lang==="tr"?"tr":"en";
+  const serviceLocale=translateUi(lang, "en", "tr");
   const navLinks: {href:string;label:string;children?:{href:string;label:string}[]}[] = [
     { href: localePath("/"), label: t("nav.home") },
     { href: localePath("/about"), label: t("nav.about") },
     { href: localePath("/countries"), label: t("nav.countries") },
     { href: localePath("/programs"), label: t("nav.programs") },
     { href: localePath("/blog"), label: t("nav.blog") },
-    { href: servicePath("services",serviceLocale), label: lang==="tr"?"Hizmetler":"Services", children:STUDENT_SERVICES.map(service=>({href:servicePath(service.slug,serviceLocale),label:serviceCopy(service,serviceLocale).name})) },
+    { href: servicePath("services",serviceLocale), label: translateUi(lang, "Services", "Hizmetler"), children:STUDENT_SERVICES.map(service=>({href:servicePath(service.slug,serviceLocale),label:serviceCopy(service,serviceLocale).name})) },
     { href: localePath("/contact"), label: t("nav.contact") },
   ];
 
@@ -155,7 +155,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           <nav aria-label={translateUi(uiLanguage, "Main navigation")} className="hidden xl:flex items-center gap-6 font-medium text-sm text-muted-foreground">
             {navLinks.map((link) => link.children ? (
               <div key={link.href} className="relative py-3" onMouseEnter={()=>setServicesOpen(true)} onMouseLeave={()=>setServicesOpen(false)} onKeyDown={event=>{if(event.key==="Escape")setServicesOpen(false);}}>
-                <div className="flex items-center gap-1"><Link href={link.href} onClick={()=>setServicesOpen(false)} className="hover:text-primary transition-colors">{link.label}</Link><button type="button" aria-label={lang==="tr"?"Hizmet seçenekleri":"Service options"} aria-expanded={servicesOpen} onClick={()=>setServicesOpen(!servicesOpen)}><ChevronDown className="h-3.5 w-3.5"/></button></div>
+                <div className="flex items-center gap-1"><Link href={link.href} onClick={()=>setServicesOpen(false)} className="hover:text-primary transition-colors">{link.label}</Link><button type="button" aria-label={translateUi(lang, "Service options", "Hizmet seçenekleri")} aria-expanded={servicesOpen} onClick={()=>setServicesOpen(!servicesOpen)}><ChevronDown className="h-3.5 w-3.5"/></button></div>
                 {servicesOpen&&<div className="absolute start-0 top-full z-[110] min-w-[250px] rounded-xl border bg-card p-2 shadow-xl">{link.children.map(child=><Link key={child.href} href={child.href} className="block rounded-lg px-4 py-3 text-sm text-foreground transition-colors hover:bg-primary/5 hover:text-primary focus-visible:bg-primary/5" onClick={()=>setServicesOpen(false)}>{child.label}</Link>)}</div>}
               </div>
             ) : (
@@ -228,7 +228,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
               ))}
               <div className="border-t mt-2 pt-2">
                 <p className="px-4 py-2 text-xs text-muted-foreground font-semibold uppercase tracking-wider">
-                  {t("nav.home") === "Home" ? "Language" : ""}
+                  {t("nav.home") === "Home" ? translateUi(uiLanguage, "Language") : ""}
                 </p>
                 <div className="grid grid-cols-2 gap-1">
                   {SUPPORTED_LANGUAGES.map((code) => {

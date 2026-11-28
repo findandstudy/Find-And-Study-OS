@@ -285,26 +285,26 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["website-blog-posts"] });
       setShowPostDialog(false);
-      toast({ title: editPost ? "Post updated" : "Post created" });
+      toast({ title: editPost ? translateUi(uiLanguage, "Post updated") : translateUi(uiLanguage, "Post created") });
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: translateUi(uiLanguage, "Error"), description: e.message, variant: "destructive" }),
   });
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => customFetch(`/api/website/blog-posts/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-posts"] }); toast({ title: "Post deleted" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-posts"] }); toast({ title: translateUi(uiLanguage, "Post deleted") }); },
   });
 
   const publishMut = useMutation({
     mutationFn: ({ id, action }: { id: number; action: "publish" | "unpublish" }) =>
       customFetch(`/api/website/blog-posts/${id}/${action}`, { method: "POST" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-posts"] }); toast({ title: "Status updated" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-posts"] }); toast({ title: translateUi(uiLanguage, "Status updated") }); },
   });
 
   const archiveMut = useMutation({
     mutationFn: (id: number) =>
       customFetch(`/api/website/blog-posts/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "archived" }) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-posts"] }); toast({ title: "Post archived" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-posts"] }); toast({ title: translateUi(uiLanguage, "Post archived") }); },
   });
 
   const postTagMut = useMutation({
@@ -323,13 +323,13 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
       if (editCat) return customFetch(`/api/website/blog-categories/${editCat.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
       return customFetch("/api/website/blog-categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-categories"] }); setCatDialog(false); toast({ title: editCat ? "Category updated" : "Category created" }); },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-categories"] }); setCatDialog(false); toast({ title: editCat ? translateUi(uiLanguage, "Category updated") : translateUi(uiLanguage, "Category created") }); },
+    onError: (e: Error) => toast({ title: translateUi(uiLanguage, "Error"), description: e.message, variant: "destructive" }),
   });
 
   const catDelMut = useMutation({
     mutationFn: (id: number) => customFetch(`/api/website/blog-categories/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-categories"] }); toast({ title: "Category deleted" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-categories"] }); toast({ title: translateUi(uiLanguage, "Category deleted") }); },
   });
 
   const tagMut = useMutation({
@@ -337,13 +337,13 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
       if (editTag) return customFetch(`/api/website/blog-tags/${editTag.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
       return customFetch("/api/website/blog-tags", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-tags"] }); setTagDialog(false); toast({ title: editTag ? "Tag updated" : "Tag created" }); },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-tags"] }); setTagDialog(false); toast({ title: editTag ? translateUi(uiLanguage, "Tag updated") : translateUi(uiLanguage, "Tag created") }); },
+    onError: (e: Error) => toast({ title: translateUi(uiLanguage, "Error"), description: e.message, variant: "destructive" }),
   });
 
   const tagDelMut = useMutation({
     mutationFn: (id: number) => customFetch(`/api/website/blog-tags/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-tags"] }); toast({ title: "Tag deleted" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-tags"] }); toast({ title: translateUi(uiLanguage, "Tag deleted") }); },
   });
 
   const generatePostMut = useMutation({
@@ -366,11 +366,11 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
       const used = data.sources.filter(source => source.used).length;
       const unavailable = data.sources.length - used;
       toast({
-        title: "AI draft created",
+        title: translateUi(uiLanguage, "AI draft created"),
         description: `${used} web source${used === 1 ? "" : "s"} used${unavailable ? `; ${unavailable} could not be read` : ""}. Review before publishing.`,
       });
     },
-    onError: (error: Error) => toast({ title: "AI draft could not be created", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: translateUi(uiLanguage, "AI draft could not be created"), description: error.message, variant: "destructive" }),
   });
 
   function openNewPost() {
@@ -431,21 +431,21 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
 
   async function handleSavePost() {
     if (!form.title.trim() || !form.slug.trim()) {
-      toast({ title: "Title and slug are required", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Title and slug are required"), variant: "destructive" });
       return;
     }
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(form.slug.trim())) {
-      toast({ title: "Invalid slug", description: "Use lowercase letters, numbers and single hyphens.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Invalid slug"), description: translateUi(uiLanguage, "Use lowercase letters, numbers and single hyphens."), variant: "destructive" });
       return;
     }
     if (form.status === "published" && !form.body.trim()) {
-      toast({ title: "Published articles need content", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Published articles need content"), variant: "destructive" });
       return;
     }
     if (form.canonicalUrl.trim()) {
       const expected = editPost ? new RegExp(`^/${form.locale}/guides/[a-z0-9-]+-${editPost.id}$`) : null;
       if (!expected?.test(form.canonicalUrl.trim())) {
-        toast({ title: "Canonical path is not valid", description: editPost ? `Use /${form.locale}/guides/article-slug-${editPost.id}, or leave it empty.` : "Save the new article first, then add a canonical override if needed.", variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Canonical path is not valid"), description: editPost ? `Use /${form.locale}/guides/article-slug-${editPost.id}, or leave it empty.` : translateUi(uiLanguage, "Save the new article first, then add a canonical override if needed."), variant: "destructive" });
         return;
       }
     }
@@ -807,7 +807,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
                 className="rounded-xl gap-2 bg-violet-600 hover:bg-violet-700"
               >
                 <Sparkles className={`h-4 w-4 ${generatePostMut.isPending ? "animate-pulse" : ""}`} />
-                {generatePostMut.isPending ? "Reading sources and creating..." : "Create complete draft"}
+                {generatePostMut.isPending ? translateUi(uiLanguage, "Reading sources and creating...") : translateUi(uiLanguage, "Create complete draft")}
               </Button>
             </div>
           </div>
@@ -816,7 +816,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
 
       <Dialog open={showPostDialog} onOpenChange={setShowPostDialog}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editPost ? "Edit Post" : "New Post"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editPost ? translateUi(uiLanguage, "Edit Post") : translateUi(uiLanguage, "New Post")}</DialogTitle></DialogHeader>
           <div className="space-y-5">
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
@@ -873,7 +873,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
               </div>
               <article className="mx-auto max-w-2xl p-5 sm:p-7">
                 {form.featuredImageUrl && <img src={form.featuredImageUrl} alt="" className="mb-6 h-48 w-full rounded-2xl object-cover" />}
-                <h2 className="font-display text-3xl font-bold leading-tight">{form.title || "Article title"}</h2>
+                <h2 className="font-display text-3xl font-bold leading-tight">{form.title || translateUi(uiLanguage, "Article title")}</h2>
                 {form.excerpt && <p className="mt-4 text-lg text-muted-foreground">{form.excerpt}</p>}
                 {form.body ? <div className="guide-html prose prose-slate mt-7 max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: sanitizePublicHtmlContent(form.body) }} /> : <p className="mt-7 text-sm text-muted-foreground">{translateUi(uiLanguage, "Start writing to preview the article body.")}</p>}
               </article>
@@ -948,7 +948,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
                       setForm({ ...base, ...tr });
                     } else {
                       setForm(base);
-                      toast({ title: "No translation yet", description: "Showing default content. Edit to create translation." });
+                      toast({ title: translateUi(uiLanguage, "No translation yet"), description: translateUi(uiLanguage, "Showing default content. Edit to create translation.") });
                     }
                   }
                   setEditLocale(v);
@@ -976,7 +976,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
                       const copy: Record<string, string> = {};
                       for (const f of TRANSLATABLE) copy[f] = base[f];
                       setForm(f => ({ ...f, ...copy }));
-                      toast({ title: "Copied from default (English)" });
+                      toast({ title: translateUi(uiLanguage, "Copied from default (English)") });
                     }}>{translateUi(uiLanguage, "Copy from English")}</Button>
                   </div>
                 )}
@@ -1065,15 +1065,15 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
                 </div>
                 <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Twitter image URL")}</Label><Input value={form.twitterImageUrl} onChange={e => setForm(f => ({ ...f, twitterImageUrl: e.target.value }))} className="rounded-xl" placeholder={translateUi(uiLanguage, "Defaults to Open Graph image")} /></div>
                 <div className="grid gap-3 lg:grid-cols-2">
-                  <div className="rounded-xl border bg-white p-4 text-slate-900"><p className="text-xs text-emerald-700">{translateUi(uiLanguage, "findandstudy.com")}</p><p className="mt-1 truncate text-lg text-blue-700">{form.metaTitle || form.title || "Article title"}</p><p className="mt-1 line-clamp-2 text-sm text-slate-600">{form.metaDescription || form.excerpt || "Add a meta description for the search preview."}</p></div>
-                  <div className="overflow-hidden rounded-xl border bg-white text-slate-900">{form.ogImageUrl ? <img src={form.ogImageUrl} alt="" className="h-28 w-full object-cover" /> : <div className="flex h-28 items-center justify-center bg-slate-100 text-xs text-slate-500">{translateUi(uiLanguage, "Social image preview")}</div>}<div className="p-3"><p className="truncate font-semibold">{form.ogTitle || form.metaTitle || form.title || "Article title"}</p><p className="line-clamp-2 text-xs text-slate-600">{form.ogDescription || form.metaDescription || form.excerpt || "Social description"}</p></div></div>
+                  <div className="rounded-xl border bg-white p-4 text-slate-900"><p className="text-xs text-emerald-700">{translateUi(uiLanguage, "findandstudy.com")}</p><p className="mt-1 truncate text-lg text-blue-700">{form.metaTitle || form.title || translateUi(uiLanguage, "Article title")}</p><p className="mt-1 line-clamp-2 text-sm text-slate-600">{form.metaDescription || form.excerpt || translateUi(uiLanguage, "Add a meta description for the search preview.")}</p></div>
+                  <div className="overflow-hidden rounded-xl border bg-white text-slate-900">{form.ogImageUrl ? <img src={form.ogImageUrl} alt="" className="h-28 w-full object-cover" /> : <div className="flex h-28 items-center justify-center bg-slate-100 text-xs text-slate-500">{translateUi(uiLanguage, "Social image preview")}</div>}<div className="p-3"><p className="truncate font-semibold">{form.ogTitle || form.metaTitle || form.title || translateUi(uiLanguage, "Article title")}</p><p className="line-clamp-2 text-xs text-slate-600">{form.ogDescription || form.metaDescription || form.excerpt || translateUi(uiLanguage, "Social description")}</p></div></div>
                 </div>
               </div>
             </div>
 
             <div className="flex gap-3 justify-end pt-2">
               <Button variant="outline" onClick={() => setShowPostDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
-              <Button onClick={handleSavePost} disabled={saveMut.isPending} className="rounded-xl">{saveMut.isPending ? "Saving..." : editPost ? "Update Post" : "Create Post"}</Button>
+              <Button onClick={handleSavePost} disabled={saveMut.isPending} className="rounded-xl">{saveMut.isPending ? translateUi(uiLanguage, "Saving...") : editPost ? translateUi(uiLanguage, "Update Post") : translateUi(uiLanguage, "Create Post")}</Button>
             </div>
           </div>
         </DialogContent>
@@ -1081,7 +1081,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
 
       <Dialog open={catDialog} onOpenChange={setCatDialog}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{editCat ? "Edit Category" : "New Category"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editCat ? translateUi(uiLanguage, "Edit Category") : translateUi(uiLanguage, "New Category")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label>{translateUi(uiLanguage, "Name *")}</Label>
@@ -1098,7 +1098,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setCatDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
               <Button onClick={() => catMut.mutate({ name: catForm.name, slug: catForm.slug, description: catForm.description || null })} disabled={catMut.isPending} className="rounded-xl">
-                {editCat ? "Update" : "Create"}
+                {editCat ? translateUi(uiLanguage, "Update") : translateUi(uiLanguage, "Create")}
               </Button>
             </div>
           </div>
@@ -1107,7 +1107,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
 
       <Dialog open={tagDialog} onOpenChange={setTagDialog}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>{editTag ? "Edit Tag" : "New Tag"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editTag ? translateUi(uiLanguage, "Edit Tag") : translateUi(uiLanguage, "New Tag")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label>{translateUi(uiLanguage, "Name *")}</Label>
@@ -1120,7 +1120,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setTagDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
               <Button onClick={() => tagMut.mutate({ name: tagForm.name, slug: tagForm.slug })} disabled={tagMut.isPending} className="rounded-xl">
-                {editTag ? "Update" : "Create"}
+                {editTag ? translateUi(uiLanguage, "Update") : translateUi(uiLanguage, "Create")}
               </Button>
             </div>
           </div>

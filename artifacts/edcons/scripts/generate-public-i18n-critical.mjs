@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = path.join(root, "src", "lib", "i18n", "translations");
 const outputDir = path.join(root, "dist", "public", "i18n-critical");
+const publicUiTextKeys = JSON.parse(fs.readFileSync(path.join(root, 'scripts/public-ui-text-keys.json'), 'utf8'));
 const namespaces = [
   "a11y", "nav", "footer", "cookie", "hero", "stats", "features",
   "countries", "countryDetail", "catalogDetail", "programs",
@@ -41,6 +42,10 @@ for (const file of files) {
       return [key, { ...source[key], ...publicLabels }];
     }
     return [key, source[key]];
+  }));
+  critical.uiText = Object.fromEntries(publicUiTextKeys.map(key => {
+    if (typeof source.uiText?.[key] !== 'string') throw new Error(`${file} missing public UI text ${key}`);
+    return [key, source.uiText[key]];
   }));
   fs.writeFileSync(path.join(outputDir, file), `${JSON.stringify(critical)}\n`, "utf8");
 }

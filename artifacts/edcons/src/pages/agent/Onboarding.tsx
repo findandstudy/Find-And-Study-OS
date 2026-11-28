@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
@@ -26,6 +27,7 @@ function readQueryParams(): { token: string; email: string; code: string } {
 }
 
 export default function AgentOnboardingPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const initial = readQueryParams();

@@ -128,21 +128,21 @@ export default function WebsitePublishHistory() {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="flex items-center gap-2 text-2xl font-bold">
               <History className="h-6 w-6 text-primary" />
-              {tr ? "Yayın ve İçerik Merkezi" : "Publication & Content Center"}
+              {tr ? translateUi(uiLanguage, "Yayın ve İçerik Merkezi") : translateUi(uiLanguage, "Publication & Content Center")}
             </h1>
             <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">
-              {tr ? "Kontrollü pilot kapalı" : "Governed pilot off"}
+              {tr ? translateUi(uiLanguage, "Kontrollü pilot kapalı") : translateUi(uiLanguage, "Governed pilot off")}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {tr
-              ? "Sayfa, SEO, indeks, çeviri ve yayın kanıtlarını tek çalışma kuyruğunda izleyin."
-              : "Monitor page, SEO, index, translation and publication evidence in one work queue."}
+              ? translateUi(uiLanguage, "Sayfa, SEO, indeks, çeviri ve yayın kanıtlarını tek çalışma kuyruğunda izleyin.")
+              : translateUi(uiLanguage, "Monitor page, SEO, index, translation and publication evidence in one work queue.")}
           </p>
         </div>
         <Button variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}>
           <RefreshCw className={`mr-2 h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`} />
-          {tr ? "Yenile" : "Refresh"}
+          {tr ? translateUi(uiLanguage, "Yenile") : translateUi(uiLanguage, "Refresh")}
         </Button>
       </div>
 
@@ -151,12 +151,12 @@ export default function WebsitePublishHistory() {
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
           <div className="text-sm">
             <p className="font-semibold text-blue-950 dark:text-blue-100">
-              {tr ? "Salt-okunur geçiş görünümü" : "Read-only transition view"}
+              {tr ? translateUi(uiLanguage, "Salt-okunur geçiş görünümü") : translateUi(uiLanguage, "Read-only transition view")}
             </p>
             <p className="mt-1 text-blue-800 dark:text-blue-200">
               {tr
-                ? "Mevcut CMS verisi burada denetlenir. Yeni maker-checker yayın komutları, active-context ve ayrı executor rollout'u açılmadan bu ekran değişiklik yapmaz."
-                : "Current CMS data is inspected here. This screen makes no changes until the new maker-checker commands, active context and dedicated executor rollout are enabled."}
+                ? translateUi(uiLanguage, "Mevcut CMS verisi burada denetlenir. Yeni maker-checker yayın komutları, active-context ve ayrı executor rollout'u açılmadan bu ekran değişiklik yapmaz.")
+                : translateUi(uiLanguage, "Current CMS data is inspected here. This screen makes no changes until the new maker-checker commands, active context and dedicated executor rollout are enabled.")}
             </p>
           </div>
         </CardContent>
@@ -167,10 +167,10 @@ export default function WebsitePublishHistory() {
           <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
             <AlertTriangle className="h-8 w-8 text-red-500" />
             <div>
-              <p className="font-semibold">{tr ? "Yayın görünümü yüklenemedi" : "Publication view could not load"}</p>
-              <p className="text-sm text-muted-foreground">{tr ? "Veri değiştirilmedi. Yeniden deneyebilirsiniz." : "No data was changed. You can retry safely."}</p>
+              <p className="font-semibold">{tr ? translateUi(uiLanguage, "Yayın görünümü yüklenemedi") : translateUi(uiLanguage, "Publication view could not load")}</p>
+              <p className="text-sm text-muted-foreground">{tr ? translateUi(uiLanguage, "Veri değiştirilmedi. Yeniden deneyebilirsiniz.") : translateUi(uiLanguage, "No data was changed. You can retry safely.")}</p>
             </div>
-            <Button variant="outline" onClick={() => void query.refetch()}>{tr ? "Tekrar dene" : "Try again"}</Button>
+            <Button variant="outline" onClick={() => void query.refetch()}>{tr ? translateUi(uiLanguage, "Tekrar dene") : translateUi(uiLanguage, "Try again")}</Button>
           </CardContent>
         </Card>
       ) : (
@@ -191,7 +191,7 @@ export default function WebsitePublishHistory() {
             <Card>
               <CardHeader className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="text-base">{tr ? "İçerik kontrol kuyruğu" : "Content review queue"}</CardTitle>
+                  <CardTitle className="text-base">{tr ? translateUi(uiLanguage, "İçerik kontrol kuyruğu") : translateUi(uiLanguage, "Content review queue")}</CardTitle>
                   <Badge variant="secondary">{visibleQueue.length}</Badge>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row">
@@ -202,10 +202,10 @@ export default function WebsitePublishHistory() {
                   <Select value={filter} onValueChange={setFilter}>
                     <SelectTrigger className="sm:w-44"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">{tr ? "Tümü" : "All"}</SelectItem>
-                      <SelectItem value="critical">{tr ? "Kritik" : "Critical"}</SelectItem>
-                      <SelectItem value="published">{tr ? "Yayında" : "Published"}</SelectItem>
-                      <SelectItem value="draft">{tr ? "Taslak" : "Draft"}</SelectItem>
+                      <SelectItem value="all">{tr ? translateUi(uiLanguage, "Tümü") : translateUi(uiLanguage, "All")}</SelectItem>
+                      <SelectItem value="critical">{tr ? translateUi(uiLanguage, "Kritik") : translateUi(uiLanguage, "Critical")}</SelectItem>
+                      <SelectItem value="published">{tr ? translateUi(uiLanguage, "Yayında") : translateUi(uiLanguage, "Published")}</SelectItem>
+                      <SelectItem value="draft">{tr ? translateUi(uiLanguage, "Taslak") : translateUi(uiLanguage, "Draft")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -229,7 +229,7 @@ export default function WebsitePublishHistory() {
                           <Progress value={item.seoScore} />
                         </div>
                         <div>
-                          <div className="mb-1 flex justify-between"><span>{tr ? "Dil" : "Locales"}</span><b>{item.translatedLocaleCount}/{item.totalLocaleCount}</b></div>
+                          <div className="mb-1 flex justify-between"><span>{tr ? translateUi(uiLanguage, "Dil") : translateUi(uiLanguage, "Locales")}</span><b>{item.translatedLocaleCount}/{item.totalLocaleCount}</b></div>
                           <Progress value={item.translationCoveragePercent} />
                         </div>
                       </div>
@@ -239,17 +239,17 @@ export default function WebsitePublishHistory() {
                         {item.blockers.map((blocker) => <Badge key={blocker} variant="outline" className="text-[11px]">{BLOCKER_LABELS[blocker]?.[tr ? "tr" : "en"] ?? blocker}</Badge>)}
                       </div>
                     ) : (
-                      <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" />{tr ? "Görünür kalite engeli yok" : "No visible quality blocker"}</p>
+                      <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" />{tr ? translateUi(uiLanguage, "Görünür kalite engeli yok") : translateUi(uiLanguage, "No visible quality blocker")}</p>
                     )}
                   </div>
                 ))}
-                {!query.isLoading && visibleQueue.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">{tr ? "Bu filtrede kayıt yok." : "No records match this filter."}</p>}
+                {!query.isLoading && visibleQueue.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">{tr ? translateUi(uiLanguage, "Bu filtrede kayıt yok.") : translateUi(uiLanguage, "No records match this filter.")}</p>}
               </CardContent>
             </Card>
 
             <div className="space-y-6">
               <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Languages className="h-4 w-4 text-primary" />{tr ? "Dil kapsamı" : "Locale coverage"}</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Languages className="h-4 w-4 text-primary" />{tr ? translateUi(uiLanguage, "Dil kapsamı") : translateUi(uiLanguage, "Locale coverage")}</CardTitle></CardHeader>
                 <CardContent className="max-h-80 space-y-3 overflow-y-auto pr-3">
                   {(query.data?.localeCoverage ?? []).map((row) => (
                     <div key={row.locale}>
@@ -261,7 +261,7 @@ export default function WebsitePublishHistory() {
               </Card>
 
               <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Clock3 className="h-4 w-4 text-primary" />{tr ? "Son sürümler" : "Recent versions"}</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Clock3 className="h-4 w-4 text-primary" />{tr ? translateUi(uiLanguage, "Son sürümler") : translateUi(uiLanguage, "Recent versions")}</CardTitle></CardHeader>
                 <CardContent className="space-y-2">
                   {(query.data?.recentVersions ?? []).slice(0, 8).map((version) => (
                     <a key={version.id} href={`/admin/website/pages/${version.pageId}/edit`} className="flex items-center justify-between rounded-lg border p-3 text-sm transition-colors hover:bg-muted/50">
@@ -269,7 +269,7 @@ export default function WebsitePublishHistory() {
                       <span className="text-xs text-muted-foreground">{formatDate(version.createdAt, tr)}</span>
                     </a>
                   ))}
-                  {!query.isLoading && (query.data?.recentVersions.length ?? 0) === 0 && <p className="py-6 text-center text-sm text-muted-foreground">{tr ? "Sürüm kaydı yok." : "No version record."}</p>}
+                  {!query.isLoading && (query.data?.recentVersions.length ?? 0) === 0 && <p className="py-6 text-center text-sm text-muted-foreground">{tr ? translateUi(uiLanguage, "Sürüm kaydı yok.") : translateUi(uiLanguage, "No version record.")}</p>}
                 </CardContent>
               </Card>
             </div>

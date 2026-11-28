@@ -185,7 +185,7 @@ export function PopupRenderer() {
                   >
                     <Button type="button" variant="default" size="default" data-testid="popup-link-btn">
                       <ExternalLink className="w-4 h-4 mr-2" />
-                      {currentPopup.linkText || "Learn more"}
+                      {currentPopup.linkText || translateUi(uiLanguage, "Learn more")}
                     </Button>
                   </a>
                 </div>

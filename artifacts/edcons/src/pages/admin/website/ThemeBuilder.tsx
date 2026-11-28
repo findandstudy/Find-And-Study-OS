@@ -127,10 +127,10 @@ export default function WebsiteThemeBuilder() {
       queryClient.invalidateQueries({ queryKey: ["website-theme-tokens"] });
       queryClient.invalidateQueries({ queryKey: ["public-cms-theme"] });
       setDirty(false);
-      toast({ title: "Theme saved", description: "Your theme tokens have been updated." });
+      toast({ title: translateUi(uiLanguage, "Theme saved"), description: translateUi(uiLanguage, "Your theme tokens have been updated.") });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to save theme tokens.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to save theme tokens."), variant: "destructive" });
     },
   });
 
@@ -182,10 +182,10 @@ export default function WebsiteThemeBuilder() {
       setDirty(false);
       queryClient.setQueryData(["website-theme-tokens"], []);
       queryClient.invalidateQueries({ queryKey: ["public-cms-theme"] });
-      toast({ title: "Theme reset", description: "All overrides removed. Branding defaults will be used." });
+      toast({ title: translateUi(uiLanguage, "Theme reset"), description: translateUi(uiLanguage, "All overrides removed. Branding defaults will be used.") });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to reset theme.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to reset theme."), variant: "destructive" });
     },
   });
 
@@ -210,10 +210,10 @@ export default function WebsiteThemeBuilder() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={handleReset} disabled={resetMutation.isPending}>
-              <RotateCcw className="w-4 h-4 mr-1" /> {resetMutation.isPending ? "Resetting..." : "Reset to Defaults"}
+              <RotateCcw className="w-4 h-4 mr-1" /> {resetMutation.isPending ? translateUi(uiLanguage, "Resetting...") : translateUi(uiLanguage, "Reset to Defaults")}
             </Button>
             <Button size="sm" onClick={handleSave} disabled={!dirty || saveMutation.isPending}>
-              <Save className="w-4 h-4 mr-1" /> {saveMutation.isPending ? "Saving..." : "Save Theme"}
+              <Save className="w-4 h-4 mr-1" /> {saveMutation.isPending ? translateUi(uiLanguage, "Saving...") : translateUi(uiLanguage, "Save Theme")}
             </Button>
           </div>
         </div>

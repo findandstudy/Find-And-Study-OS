@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
@@ -33,6 +34,7 @@ export function PublicProgramProposalActions({ results, selected }: {
   results: readonly PublicProgramCardData[];
   selected: ReadonlyMap<number, PublicProgramCardData>;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [busy, setBusy] = useState<"results" | "selected" | null>(null);

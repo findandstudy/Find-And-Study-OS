@@ -32,6 +32,7 @@ function StageActionEditor({
   onRemove: () => void;
   index: number;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const typeOpt = ACTION_TYPE_OPTIONS.find((o) => o.value === action.type);
   const typeDefaultLabel = typeOpt?.defaultLabelKey ? t(typeOpt.defaultLabelKey) : "";

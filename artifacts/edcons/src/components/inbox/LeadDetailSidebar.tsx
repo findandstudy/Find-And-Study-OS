@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
@@ -171,6 +172,7 @@ export function LeadDetailSidebar({
   onSendApplicationDocument,
   applicationDocumentSendingDisabled,
 }: LeadDetailSidebarProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [, navigate] = useLocation();

@@ -333,15 +333,15 @@ export default function CatalogPagesInventory() {
       toast({
         title: allFailed
           ? tr
-            ? "AI üretimi başlatılamadı"
-            : "AI generation could not start"
+            ? translateUi(uiLanguage, "AI üretimi başlatılamadı")
+            : translateUi(uiLanguage, "AI generation could not start")
           : result.summary.failed
             ? tr
-              ? "Üretim tamamlandı; bazı sayfalar kontrol edilmeli"
-              : "Generation finished with pages to review"
+              ? translateUi(uiLanguage, "Üretim tamamlandı; bazı sayfalar kontrol edilmeli")
+              : translateUi(uiLanguage, "Generation finished with pages to review")
             : tr
-              ? "AI taslakları hazır"
-              : "AI drafts are ready",
+              ? translateUi(uiLanguage, "AI taslakları hazır")
+              : translateUi(uiLanguage, "AI drafts are ready"),
         description: allFailed
           ? generationErrorText(firstFailure?.error, tr)
           : tr
@@ -352,7 +352,7 @@ export default function CatalogPagesInventory() {
     },
     onError: (error) =>
       toast({
-        title: tr ? "Sayfalar yenilenemedi" : "Pages could not be refreshed",
+        title: tr ? translateUi(uiLanguage, "Sayfalar yenilenemedi") : translateUi(uiLanguage, "Pages could not be refreshed"),
         description: error instanceof Error ? error.message : String(error),
         variant: "destructive",
       }),
@@ -381,8 +381,8 @@ export default function CatalogPagesInventory() {
       });
       toast({
         title: tr
-          ? "Çeviri taslakları kuyruğa alındı"
-          : "Translation drafts queued",
+          ? translateUi(uiLanguage, "Çeviri taslakları kuyruğa alındı")
+          : translateUi(uiLanguage, "Translation drafts queued"),
         description: tr
           ? `${result.queued} sayfa-dil işi · section metinleri ve SEO birlikte çevrilecek · ${result.batchId.slice(0, 8)}`
           : `${result.queued} page-language job(s) · sections and SEO will be translated together · ${result.batchId.slice(0, 8)}`,
@@ -390,7 +390,7 @@ export default function CatalogPagesInventory() {
     },
     onError: (error: Error) =>
       toast({
-        title: tr ? "Kuyruk oluşturulamadı" : "Queue could not be created",
+        title: tr ? translateUi(uiLanguage, "Kuyruk oluşturulamadı") : translateUi(uiLanguage, "Queue could not be created"),
         description: error.message,
         variant: "destructive",
       }),
@@ -545,7 +545,7 @@ export default function CatalogPagesInventory() {
               rel="noopener noreferrer"
             >
               <Database className="me-2 h-4 w-4" />
-              {tr ? "Katalog kaydını düzenle" : "Edit catalogue record"}
+              {tr ? translateUi(uiLanguage, "Katalog kaydını düzenle") : translateUi(uiLanguage, "Edit catalogue record")}
             </a>
           </DropdownMenuItem>
           {item.visible && item.canonicalPath && (
@@ -554,7 +554,7 @@ export default function CatalogPagesInventory() {
                 href={`${item.canonicalPath}${item.canonicalPath.includes("?") ? "&" : "?"}templatePreview=1`}
               >
                 <LayoutGrid className="me-2 h-4 w-4" />
-                {tr ? "Şablon önizlemesi" : "Template preview"}
+                {tr ? translateUi(uiLanguage, "Şablon önizlemesi") : translateUi(uiLanguage, "Template preview")}
               </a>
             </DropdownMenuItem>
           )}
@@ -574,8 +574,8 @@ export default function CatalogPagesInventory() {
                 className={`me-2 h-4 w-4 ${reapply.isPending ? "animate-spin" : ""}`}
               />
               {tr
-                ? "İçerik + SEO + görsel taslağı üret"
-                : "Generate content + SEO + image draft"}
+                ? translateUi(uiLanguage, "İçerik + SEO + görsel taslağı üret")
+                : translateUi(uiLanguage, "Generate content + SEO + image draft")}
             </DropdownMenuItem>
           ) : (
             <DropdownMenuItem
@@ -620,8 +620,8 @@ export default function CatalogPagesInventory() {
           >
             <Languages className="me-2 h-4 w-4" />
             {tr
-              ? "Tüm dillerde section + SEO"
-              : "Translate sections + SEO to all languages"}
+              ? translateUi(uiLanguage, "Tüm dillerde section + SEO")
+              : translateUi(uiLanguage, "Translate sections + SEO to all languages")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -661,11 +661,11 @@ export default function CatalogPagesInventory() {
         />
         {item.visible
           ? tr
-            ? "Public rota açık"
-            : "Public route open"
+            ? translateUi(uiLanguage, "Public rota açık")
+            : translateUi(uiLanguage, "Public route open")
           : tr
-            ? "Public rota gizli"
-            : "Public route hidden"}
+            ? translateUi(uiLanguage, "Public rota gizli")
+            : translateUi(uiLanguage, "Public route hidden")}
       </span>
       {item.admissionsOpen !== null && (
         <span
@@ -676,11 +676,11 @@ export default function CatalogPagesInventory() {
           />
           {item.admissionsOpen
             ? tr
-              ? "Başvuru açık"
-              : "Admissions open"
+              ? translateUi(uiLanguage, "Başvuru açık")
+              : translateUi(uiLanguage, "Admissions open")
             : tr
-              ? "Başvuru kapalı"
-              : "Admissions closed"}
+              ? translateUi(uiLanguage, "Başvuru kapalı")
+              : translateUi(uiLanguage, "Admissions closed")}
         </span>
       )}
     </div>
@@ -696,18 +696,18 @@ export default function CatalogPagesInventory() {
           <div className="max-w-3xl">
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
               <Database className="h-3.5 w-3.5" />
-              {tr ? "Katalog bağlantılı" : "Catalogue connected"}
+              {tr ? translateUi(uiLanguage, "Katalog bağlantılı") : translateUi(uiLanguage, "Catalogue connected")}
             </div>
             <h2
               id="catalog-pages-title"
               className="text-2xl font-semibold tracking-tight"
             >
-              {tr ? "Dinamik sayfa envanteri" : "Dynamic page inventory"}
+              {tr ? translateUi(uiLanguage, "Dinamik sayfa envanteri") : translateUi(uiLanguage, "Dynamic page inventory")}
             </h2>
             <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
               {tr
-                ? "Katalog kayıtlarından üretilen sayfaları tek yerden bulun, kontrol edin ve düzenleyin."
-                : "Find, review and edit every catalogue-generated page from one workspace."}
+                ? translateUi(uiLanguage, "Katalog kayıtlarından üretilen sayfaları tek yerden bulun, kontrol edin ve düzenleyin.")
+                : translateUi(uiLanguage, "Find, review and edit every catalogue-generated page from one workspace.")}
             </p>
           </div>
           <div className="flex gap-2">
@@ -721,7 +721,7 @@ export default function CatalogPagesInventory() {
               <RefreshCw
                 className={`me-2 h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`}
               />
-              {tr ? "Yenile" : "Refresh"}
+              {tr ? translateUi(uiLanguage, "Yenile") : translateUi(uiLanguage, "Refresh")}
             </Button>
             <Button
               variant="outline"
@@ -734,8 +734,8 @@ export default function CatalogPagesInventory() {
               {selectedRows.length
                 ? `${selectedRows.length} ${tr ? "seçileni aktar" : "selected"}`
                 : tr
-                  ? "Dışa aktar"
-                  : "Export"}
+                  ? translateUi(uiLanguage, "Dışa aktar")
+                  : translateUi(uiLanguage, "Export")}
             </Button>
           </div>
         </div>
@@ -766,19 +766,19 @@ export default function CatalogPagesInventory() {
                 >
                   {value === "country"
                     ? tr
-                      ? "Destinasyon"
-                      : "Destination"
+                      ? translateUi(uiLanguage, "Destinasyon")
+                      : translateUi(uiLanguage, "Destination")
                     : value === "city"
                       ? tr
-                        ? "Şehir rehberi"
-                        : "City guide"
+                        ? translateUi(uiLanguage, "Şehir rehberi")
+                        : translateUi(uiLanguage, "City guide")
                       : value === "university"
                         ? tr
-                          ? "Kurum profili"
-                          : "Institution"
+                          ? translateUi(uiLanguage, "Kurum profili")
+                          : translateUi(uiLanguage, "Institution")
                         : tr
-                          ? "Eğitim programı"
-                          : "Study program"}
+                          ? translateUi(uiLanguage, "Eğitim programı")
+                          : translateUi(uiLanguage, "Study program")}
                 </span>
               </span>
             </button>
@@ -796,8 +796,8 @@ export default function CatalogPagesInventory() {
               <div>
                 <strong>
                   {tr
-                    ? "Son dil üretim raporu"
-                    : "Latest language generation report"}
+                    ? translateUi(uiLanguage, "Son dil üretim raporu")
+                    : translateUi(uiLanguage, "Latest language generation report")}
                 </strong>
                 <p className="mt-1">
                   {tr
@@ -806,8 +806,8 @@ export default function CatalogPagesInventory() {
                 </p>
                 <p className="mt-1 text-xs opacity-80">
                   {tr
-                    ? "İçerik, SEO ve görseller tek taslakta hazırlanır; elle yüklenen yerel görseller korunur, önceki otomatik görseller yenilenir ve otomatik yayın yapılmaz."
-                    : "Content, SEO and images are prepared in one review draft; manually uploaded local images are preserved and previous generated images are refreshed. Nothing was auto-published."}
+                    ? translateUi(uiLanguage, "İçerik, SEO ve görseller tek taslakta hazırlanır; elle yüklenen yerel görseller korunur, önceki otomatik görseller yenilenir ve otomatik yayın yapılmaz.")
+                    : translateUi(uiLanguage, "Content, SEO and images are prepared in one review draft; manually uploaded local images are preserved and previous generated images are refreshed. Nothing was auto-published.")}
                 </p>
                 {generationReport.results.some((item) => item.quality) && (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -816,7 +816,7 @@ export default function CatalogPagesInventory() {
                       .slice(0, 20)
                       .map((item) => (
                         <Badge key={`quality-${item.entityId}-${item.locale}`} variant="outline">
-                          #{item.entityId} · {item.locale.toUpperCase()} · {tr ? "kalite" : "quality"} {item.quality!.score}/100 · {tr ? "kaynak" : "sources"} %{item.quality!.sourceCoverage}
+                          #{item.entityId} · {item.locale.toUpperCase()} · {tr ? translateUi(uiLanguage, "kalite") : translateUi(uiLanguage, "quality")} {item.quality!.score}/100 · {tr ? translateUi(uiLanguage, "kaynak") : translateUi(uiLanguage, "sources")} %{item.quality!.sourceCoverage}
                           {item.quality!.skippedSections.length ? ` · ${tr ? "kanıtsız atlandı" : "evidence skipped"}: ${item.quality!.skippedSections.join(", ")}` : ""}
                         </Badge>
                       ))}
@@ -857,12 +857,12 @@ export default function CatalogPagesInventory() {
         <div className="rounded-xl border bg-muted/20 p-3 sm:p-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
             <SlidersHorizontal className="h-4 w-4 text-primary" />
-            {tr ? "Ara ve filtrele" : "Search and filter"}
+            {tr ? translateUi(uiLanguage, "Ara ve filtrele") : translateUi(uiLanguage, "Search and filter")}
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <div className="space-y-1.5 md:col-span-2 xl:col-span-3">
               <Label htmlFor="page-search">
-                {tr ? "Sayfa adı veya kaynak ID" : "Page name or source ID"}
+                {tr ? translateUi(uiLanguage, "Sayfa adı veya kaynak ID") : translateUi(uiLanguage, "Page name or source ID")}
               </Label>
               <div className="relative">
                 <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -891,7 +891,7 @@ export default function CatalogPagesInventory() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="page-locale">{tr ? "Dil" : "Language"}</Label>
+              <Label htmlFor="page-locale">{tr ? translateUi(uiLanguage, "Dil") : translateUi(uiLanguage, "Language")}</Label>
               <Select
                 value={locale}
                 onValueChange={(value) => {
@@ -912,7 +912,7 @@ export default function CatalogPagesInventory() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="page-sort">{tr ? "Sıralama" : "Sort"}</Label>
+              <Label htmlFor="page-sort">{tr ? translateUi(uiLanguage, "Sıralama") : translateUi(uiLanguage, "Sort")}</Label>
               <Select
                 value={sort}
                 onValueChange={(value) => {
@@ -925,29 +925,29 @@ export default function CatalogPagesInventory() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="title_asc">
-                    {tr ? "Ad A–Z" : "Title A–Z"}
+                    {tr ? translateUi(uiLanguage, "Ad A–Z") : translateUi(uiLanguage, "Title A–Z")}
                   </SelectItem>
                   <SelectItem value="title_desc">
-                    {tr ? "Ad Z–A" : "Title Z–A"}
+                    {tr ? translateUi(uiLanguage, "Ad Z–A") : translateUi(uiLanguage, "Title Z–A")}
                   </SelectItem>
                   <SelectItem value="updated_desc">
-                    {tr ? "En yeni" : "Recently updated"}
+                    {tr ? translateUi(uiLanguage, "En yeni") : translateUi(uiLanguage, "Recently updated")}
                   </SelectItem>
                   <SelectItem value="updated_asc">
-                    {tr ? "En eski" : "Oldest updated"}
+                    {tr ? translateUi(uiLanguage, "En eski") : translateUi(uiLanguage, "Oldest updated")}
                   </SelectItem>
                   <SelectItem value="id_desc">
-                    {tr ? "En yüksek ID" : "Highest ID"}
+                    {tr ? translateUi(uiLanguage, "En yüksek ID") : translateUi(uiLanguage, "Highest ID")}
                   </SelectItem>
                   <SelectItem value="id_asc">
-                    {tr ? "En düşük ID" : "Lowest ID"}
+                    {tr ? translateUi(uiLanguage, "En düşük ID") : translateUi(uiLanguage, "Lowest ID")}
                   </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="page-size">
-                {tr ? "Sayfa başına" : "Per page"}
+                {tr ? translateUi(uiLanguage, "Sayfa başına") : translateUi(uiLanguage, "Per page")}
               </Label>
               <Select
                 value={String(pageSize)}
@@ -978,8 +978,8 @@ export default function CatalogPagesInventory() {
           >
             <p>
               {tr
-                ? "Envanter yüklenemedi. Kayıtlar değiştirilmedi."
-                : "Inventory could not load. Records were not changed."}
+                ? translateUi(uiLanguage, "Envanter yüklenemedi. Kayıtlar değiştirilmedi.")
+                : translateUi(uiLanguage, "Inventory could not load. Records were not changed.")}
             </p>
             <Button
               variant="outline"
@@ -1003,7 +1003,7 @@ export default function CatalogPagesInventory() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl border bg-background p-4">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  {tr ? "Toplam sonuç" : "Total results"}
+                  {tr ? translateUi(uiLanguage, "Toplam sonuç") : translateUi(uiLanguage, "Total results")}
                 </p>
                 <div className="mt-2 flex items-end justify-between">
                   <strong className="text-2xl">
@@ -1014,7 +1014,7 @@ export default function CatalogPagesInventory() {
               </div>
               <div className="rounded-xl border bg-background p-4">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  {tr ? "Şu anda canlı" : "Live now"}
+                  {tr ? translateUi(uiLanguage, "Şu anda canlı") : translateUi(uiLanguage, "Live now")}
                 </p>
                 <div className="mt-2 flex items-end justify-between">
                   <strong className="text-2xl">
@@ -1028,7 +1028,7 @@ export default function CatalogPagesInventory() {
               </div>
               <div className="rounded-xl border bg-background p-4">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  {tr ? "Yayın işlemi gereken" : "Needs publishing action"}
+                  {tr ? translateUi(uiLanguage, "Yayın işlemi gereken") : translateUi(uiLanguage, "Needs publishing action")}
                 </p>
                 <div className="mt-2 flex items-end justify-between">
                   <strong className="text-2xl">{needsPublicationCount}</strong>
@@ -1039,7 +1039,7 @@ export default function CatalogPagesInventory() {
               </div>
               <div className="rounded-xl border bg-background p-4">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  {tr ? "İçerik sorunu" : "Content issues"}
+                  {tr ? translateUi(uiLanguage, "İçerik sorunu") : translateUi(uiLanguage, "Content issues")}
                 </p>
                 <div className="mt-2 flex items-end justify-between">
                   <strong className="text-2xl">{issueCount}</strong>
@@ -1056,14 +1056,14 @@ export default function CatalogPagesInventory() {
                   <>
                     <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
                       <strong>{selected.length}</strong>{" "}
-                      {tr ? "sayfa seçildi" : "pages selected"}
+                      {tr ? translateUi(uiLanguage, "sayfa seçildi") : translateUi(uiLanguage, "pages selected")}
                       <Button
                         size="sm"
                         variant="ghost"
                         className="h-6 px-2"
                         onClick={() => setSelected([])}
                       >
-                        {tr ? "Temizle" : "Clear"}
+                        {tr ? translateUi(uiLanguage, "Temizle") : translateUi(uiLanguage, "Clear")}
                       </Button>
                     </div>
                     {locale === "en" ? (
@@ -1091,8 +1091,8 @@ export default function CatalogPagesInventory() {
                           className={`me-2 h-4 w-4 ${reapply.isPending ? "animate-spin" : ""}`}
                         />
                         {tr
-                          ? "İçerik + SEO + görsel üret"
-                          : "Regenerate content + SEO + images"}
+                          ? translateUi(uiLanguage, "İçerik + SEO + görsel üret")
+                          : translateUi(uiLanguage, "Regenerate content + SEO + images")}
                       </Button>
                     ) : (
                       <Button
@@ -1144,15 +1144,15 @@ export default function CatalogPagesInventory() {
                     >
                       <Languages className="me-2 h-4 w-4" />
                       {tr
-                        ? "Tüm dillerde section + SEO"
-                        : "All languages · sections + SEO"}
+                        ? translateUi(uiLanguage, "Tüm dillerde section + SEO")
+                        : translateUi(uiLanguage, "All languages · sections + SEO")}
                     </Button>
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
                     {tr
-                      ? "Bir sayfayı düzenlemek veya önizlemek için satırdaki işlemleri kullanın."
-                      : "Use the row actions to edit or preview a page."}
+                      ? translateUi(uiLanguage, "Bir sayfayı düzenlemek veya önizlemek için satırdaki işlemleri kullanın.")
+                      : translateUi(uiLanguage, "Use the row actions to edit or preview a page.")}
                   </p>
                 )}
               </div>
@@ -1169,7 +1169,7 @@ export default function CatalogPagesInventory() {
                   onClick={() => setView("table")}
                 >
                   <List className="me-1 h-4 w-4" />
-                  {tr ? "Tablo" : "Table"}
+                  {tr ? translateUi(uiLanguage, "Tablo") : translateUi(uiLanguage, "Table")}
                 </Button>
                 <Button
                   size="sm"
@@ -1179,7 +1179,7 @@ export default function CatalogPagesInventory() {
                   onClick={() => setView("cards")}
                 >
                   <LayoutGrid className="me-1 h-4 w-4" />
-                  {tr ? "Kartlar" : "Cards"}
+                  {tr ? translateUi(uiLanguage, "Kartlar") : translateUi(uiLanguage, "Cards")}
                 </Button>
               </div>
             </div>
@@ -1190,13 +1190,13 @@ export default function CatalogPagesInventory() {
                 <p>
                   <strong className="block">
                     {tr
-                      ? "Canlılık durumu CMS kaydından okunuyor"
-                      : "Live status comes from the CMS record"}
+                      ? translateUi(uiLanguage, "Canlılık durumu CMS kaydından okunuyor")
+                      : translateUi(uiLanguage, "Live status comes from the CMS record")}
                   </strong>
                   <span className="text-sky-800 dark:text-sky-200">
                     {tr
-                      ? "Canlı, taslak ve bekleyen değişiklik bilgileri günceldir. Yalnız gelişmiş SEO kalite değerlendirmesi henüz etkin değildir."
-                      : "Live, draft and pending-change states are current. Only the advanced SEO quality evaluation is not enabled yet."}
+                      ? translateUi(uiLanguage, "Canlı, taslak ve bekleyen değişiklik bilgileri günceldir. Yalnız gelişmiş SEO kalite değerlendirmesi henüz etkin değildir.")
+                      : translateUi(uiLanguage, "Live, draft and pending-change states are current. Only the advanced SEO quality evaluation is not enabled yet.")}
                   </span>
                 </p>
               </div>
@@ -1206,12 +1206,12 @@ export default function CatalogPagesInventory() {
               <div className="rounded-xl border border-dashed py-16 text-center">
                 <Search className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
                 <p className="font-medium">
-                  {tr ? "Eşleşen sayfa bulunamadı" : "No matching pages"}
+                  {tr ? translateUi(uiLanguage, "Eşleşen sayfa bulunamadı") : translateUi(uiLanguage, "No matching pages")}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {tr
-                    ? "Arama kelimesini veya filtreleri değiştirin."
-                    : "Try changing the search or filters."}
+                    ? translateUi(uiLanguage, "Arama kelimesini veya filtreleri değiştirin.")
+                    : translateUi(uiLanguage, "Try changing the search or filters.")}
                 </p>
               </div>
             ) : view === "table" ? (
@@ -1246,22 +1246,22 @@ export default function CatalogPagesInventory() {
                         />
                       </th>
                       <th className="w-[34%] min-w-[230px] p-3 text-start 2xl:sticky 2xl:start-0 2xl:z-20 2xl:w-[260px] 2xl:border-e 2xl:bg-muted 2xl:shadow-[4px_0_12px_-8px_rgba(15,23,42,0.45)]">
-                        {tr ? "Sayfa" : "Page"}
+                        {tr ? translateUi(uiLanguage, "Sayfa") : translateUi(uiLanguage, "Page")}
                       </th>
                       <th className="w-[170px] p-3 text-start">
-                        {tr ? "Canlılık durumu" : "Live status"}
+                        {tr ? translateUi(uiLanguage, "Canlılık durumu") : translateUi(uiLanguage, "Live status")}
                       </th>
                       <th className="hidden p-3 text-start xl:table-cell xl:w-[180px]">
-                        {tr ? "SEO ve içerik" : "SEO & content"}
+                        {tr ? translateUi(uiLanguage, "SEO ve içerik") : translateUi(uiLanguage, "SEO & content")}
                       </th>
                       <th className="hidden p-3 text-start 2xl:table-cell 2xl:w-[230px]">
-                        {tr ? "İçerik kontrolü" : "Content check"}
+                        {tr ? translateUi(uiLanguage, "İçerik kontrolü") : translateUi(uiLanguage, "Content check")}
                       </th>
                       <th className="hidden p-3 text-start 2xl:table-cell 2xl:w-[130px]">
-                        {tr ? "Güncellendi" : "Updated"}
+                        {tr ? translateUi(uiLanguage, "Güncellendi") : translateUi(uiLanguage, "Updated")}
                       </th>
                   <th className="sticky end-0 z-20 w-[290px] border-s bg-muted p-3 text-start shadow-[-4px_0_12px_-8px_rgba(15,23,42,0.45)]">
-                        {tr ? "İşlemler" : "Actions"}
+                        {tr ? translateUi(uiLanguage, "İşlemler") : translateUi(uiLanguage, "Actions")}
                       </th>
                     </tr>
                   </thead>
@@ -1298,7 +1298,7 @@ export default function CatalogPagesInventory() {
                                 title={item.canonicalPath || undefined}
                               >
                                 {item.canonicalPath ||
-                                  (tr ? "Public rota yok" : "No public route")}
+                                  (tr ? translateUi(uiLanguage, "Public rota yok") : translateUi(uiLanguage, "No public route"))}
                               </p>
                             </div>
                           </div>
@@ -1313,7 +1313,7 @@ export default function CatalogPagesInventory() {
                           </p>
                           {item.editorial.publishedVersionNumber && (
                             <p className="mt-1 text-xs text-muted-foreground">
-                              {tr ? "Canlı sürüm" : "Live version"} · v
+                              {tr ? translateUi(uiLanguage, "Canlı sürüm") : translateUi(uiLanguage, "Live version")} · v
                               {item.editorial.publishedVersionNumber}
                             </p>
                           )}
@@ -1334,7 +1334,7 @@ export default function CatalogPagesInventory() {
                           ) : (
                             <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
                               <CheckCircle2 className="h-4 w-4" />
-                              {tr ? "Sorun görünmüyor" : "No issues"}
+                              {tr ? translateUi(uiLanguage, "Sorun görünmüyor") : translateUi(uiLanguage, "No issues")}
                             </span>
                           )}
                         </td>
@@ -1395,7 +1395,7 @@ export default function CatalogPagesInventory() {
                     <div className="my-4 grid grid-cols-2 gap-3 rounded-xl bg-muted/30 p-3 text-xs">
                       <div>
                         <span className="text-muted-foreground">
-                          {tr ? "Canlılık" : "Live status"}
+                          {tr ? translateUi(uiLanguage, "Canlılık") : translateUi(uiLanguage, "Live status")}
                         </span>
                         <strong className="mt-1 block">
                           {label(item.editorial.status)}
@@ -1440,7 +1440,7 @@ export default function CatalogPagesInventory() {
                 {t("common.previous")}
               </Button>
               <form className="flex items-center gap-2" onSubmit={jumpTo}>
-                <Label htmlFor="page-jump">{tr ? "Sayfa" : "Page"}</Label>
+                <Label htmlFor="page-jump">{tr ? translateUi(uiLanguage, "Sayfa") : translateUi(uiLanguage, "Page")}</Label>
                 <Input
                   id="page-jump"
                   inputMode="numeric"
@@ -1454,7 +1454,7 @@ export default function CatalogPagesInventory() {
                   / {Math.max(1, pagination?.totalPages ?? 1)}
                 </span>
                 <Button type="submit" size="sm" variant="outline">
-                  {tr ? "Git" : "Go"}
+                  {tr ? translateUi(uiLanguage, "Git") : translateUi(uiLanguage, "Go")}
                 </Button>
               </form>
               <Button

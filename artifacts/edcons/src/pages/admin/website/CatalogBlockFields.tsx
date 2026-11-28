@@ -1,4 +1,4 @@
-import { translateUi } from "@/lib/ui-localization";
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -43,6 +43,7 @@ function Filter({ field, value, onChange }: { field: Field; value: string; onCha
     </select></div>;
 }
 export function CatalogBlockFields({ content, locale, onChange }: { content: Record<string, unknown>; locale: string; onChange: (key: string, value: unknown) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang } = useI18n();
   const copy = (en: string, tr: string) => translateUi(lang, en, tr);
   const parameters = catalogParameters(content, locale);

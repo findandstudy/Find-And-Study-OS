@@ -101,7 +101,7 @@ function SearchableSelectFilter({
           )}
           onClick={() => { filter.onChange(allValue); setQ(""); }}
         >
-          {filter.allLabel ?? "All"}
+          {filter.allLabel ?? translateUi(uiLanguage, "All")}
         </button>
         {filtered.map(opt => (
           <button
@@ -133,7 +133,7 @@ function FilterControl({ filter, onClose }: { filter: ColumnFilterConfig; onClos
   return (
     <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between gap-2">
-        <Label className="text-xs font-semibold">{filter.label || "Filter"}</Label>
+        <Label className="text-xs font-semibold">{filter.label || translateUi(uiLanguage, "Filter")}</Label>
         {active && (
           <Button
             variant="ghost"
@@ -172,7 +172,7 @@ function FilterControl({ filter, onClose }: { filter: ColumnFilterConfig; onClos
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="max-h-72">
-            {!filter.hideAll && <SelectItem value={allValue}>{filter.allLabel || "All"}</SelectItem>}
+            {!filter.hideAll && <SelectItem value={allValue}>{filter.allLabel || translateUi(uiLanguage, "All")}</SelectItem>}
             {filter.options.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
                 {opt.label}

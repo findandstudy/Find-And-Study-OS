@@ -283,10 +283,10 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
     onSuccess: async () => {
       await invalidateFollowUpWorkspaceQueries(queryClient);
       resetFollowUpForm();
-      toast({ title: "Follow-up scheduled" });
+      toast({ title: translateUi(uiLanguage, "Follow-up scheduled") });
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -300,7 +300,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
       }).then(r => { if (!r.ok) throw new Error("Failed"); return r.json(); }),
     onSuccess: async () => {
       await invalidateFollowUpWorkspaceQueries(queryClient);
-      toast({ title: "Follow-up updated" });
+      toast({ title: translateUi(uiLanguage, "Follow-up updated") });
     },
   });
 
@@ -403,10 +403,10 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/notes`, "general"] });
       queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/notes`, "internal"] });
-      toast({ title: "Note deleted" });
+      toast({ title: translateUi(uiLanguage, "Note deleted") });
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -426,10 +426,10 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
     onSuccess: async () => {
       await invalidateFollowUpWorkspaceQueries(queryClient);
       resetFollowUpForm();
-      toast({ title: "Follow-up updated" });
+      toast({ title: translateUi(uiLanguage, "Follow-up updated") });
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -700,7 +700,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                       onClick={handleCreateFollowUp}
                       disabled={(editingFuId ? editFollowUp.isPending : createFollowUp.isPending) || !fuTitle.trim() || !fuDate}
                     >
-                      {editingFuId ? "Save" : "Schedule"}
+                      {editingFuId ? translateUi(uiLanguage, "Save") : translateUi(uiLanguage, "Schedule")}
                     </Button>
                   </div>
                 </div>
@@ -814,7 +814,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-foreground whitespace-pre-wrap break-words">{note.content}</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {note.authorName || "Team"} · {formatDate(note.createdAt, lang)}
+                            {note.authorName || translateUi(uiLanguage, "Team")} · {formatDate(note.createdAt, lang)}
                           </p>
                         </div>
                         {isStaffUser && (
@@ -974,10 +974,10 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                             queryClient.setQueryData([`/api/leads/${id}`], updated);
                             queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}`] });
                             queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-                            toast({ title: "Origin updated" });
+                            toast({ title: translateUi(uiLanguage, "Origin updated") });
                           },
                           onError: (err: any) => {
-                            toast({ title: "Failed to update origin", description: err?.message, variant: "destructive" });
+                            toast({ title: translateUi(uiLanguage, "Failed to update origin"), description: err?.message, variant: "destructive" });
                           },
                         });
                       }}
@@ -1059,6 +1059,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
 }
 
 function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [searchVal, setSearchVal] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1090,7 +1091,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
       />
       {open && (
         <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? translateUi(uiLanguage, "No match — custom value OK") : translateUi(uiLanguage, "No countries loaded")}</div>}
           {filtered.map(c => (
             <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
               onMouseDown={e => { e.preventDefault(); onChange(c.name); setSearchVal(""); setOpen(false); }}>
@@ -1158,7 +1159,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
         className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background hover:bg-accent/50 transition-colors"
       >
         <span className={`truncate ${localSelected.length === 0 ? "text-muted-foreground" : ""}`}>
-          {localSelected.length === 0 ? "Select countries..." : localSelected.length === 1 ? localSelected[0] : `${localSelected.length} countries selected`}
+          {localSelected.length === 0 ? translateUi(uiLanguage, "Select countries...") : localSelected.length === 1 ? localSelected[0] : `${localSelected.length} countries selected`}
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </button>
@@ -1236,13 +1237,13 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
       { id: leadId, data: payload },
       {
         onSuccess: () => {
-          toast({ title: "Lead updated" });
+          toast({ title: translateUi(uiLanguage, "Lead updated") });
           queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
           onClose();
         },
         onError: () => {
-          toast({ title: "Error", description: "Failed to update lead", variant: "destructive" });
+          toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to update lead"), variant: "destructive" });
         },
       }
     );
@@ -1316,7 +1317,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("leadDetailPage.cancel")}</Button>
           <Button onClick={handleSave} disabled={updateLead.isPending || !form.firstName || !form.lastName}>
-            {updateLead.isPending ? "Saving…" : "Save Changes"}
+            {updateLead.isPending ? translateUi(uiLanguage, "Saving…") : translateUi(uiLanguage, "Save Changes")}
           </Button>
         </DialogFooter>
       </DialogContent>

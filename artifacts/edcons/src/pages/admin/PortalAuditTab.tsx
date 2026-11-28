@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 /**
  * PortalAuditTab.tsx — SUB-STEP J
  *
@@ -72,6 +73,7 @@ function formatAction(action: string): string {
 // ---------------------------------------------------------------------------
 
 export default function PortalAuditTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
 
@@ -183,7 +185,7 @@ export default function PortalAuditTab() {
               {/* Actor + time */}
               <div className="text-right shrink-0">
                 <p className="text-xs font-medium text-foreground">
-                  {e.userName ?? "System"}
+                  {e.userName ?? translateUi(uiLanguage, "System")}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
                   {new Date(e.createdAt).toLocaleString()}

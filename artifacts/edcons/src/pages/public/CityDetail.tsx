@@ -1,3 +1,4 @@
+import { translateUi } from "@/lib/ui-localization";
 import { DetailLayout } from "./DetailLayout";
 import { lazy, Suspense, useEffect, useContext, type CSSProperties } from "react";
 import { DetailPreviewContext } from "./DetailPreviewContext";
@@ -204,7 +205,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
       </section>
       <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", cityName)}><div className="detail-wrap">
         {(overviewDescription || hasEditorialOverview) && <a href="#overview">{copy.overview}</a>}<a href="#language-courses">{languageCourseNavigationLabel(lang)}</a><a href="#facts">{t("countryDetail.quickFacts")}</a>
-        {city.weather && <a href="#weather">{lang === "tr" ? "Hava" : "Weather"}</a>}
+        {city.weather && <a href="#weather">{translateUi(lang, "Weather", "Hava")}</a>}
         {city.universities.length > 0 && <a href="#universities">{t("countryDetail.universities")}</a>}
         {city.programCount > 0 && <a href="#programs">{t("countryDetail.programs")}</a>}
         {detailContentNavigation(editorial)}

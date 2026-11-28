@@ -115,7 +115,7 @@ export default function SelfFillLinksPage() {
   async function create() {
     if (!form.templateId) { toast({ title: t("selfFill.selectTemplate"), variant: "destructive" }); return; }
     if (form.subjectType && form.subjectType !== "other" && (!form.subjectId || Number(form.subjectId) < 1)) {
-      toast({ title: "Select a record for the association", variant: "destructive" }); return;
+      toast({ title: translateUi(uiLanguage, "Select a record for the association"), variant: "destructive" }); return;
     }
     setCreating(true);
     try {
@@ -152,7 +152,7 @@ export default function SelfFillLinksPage() {
   async function remind(id: number) {
     try {
       const res: any = await customFetch(`/api/contracts/sessions/${id}/remind`, { method: "POST" });
-      toast({ title: "Reminder sent", description: res.data?.emailSent === false ? "A new link was created, but email delivery failed." : undefined });
+      toast({ title: translateUi(uiLanguage, "Reminder sent"), description: res.data?.emailSent === false ? translateUi(uiLanguage, "A new link was created, but email delivery failed.") : undefined });
       await load();
     } catch (err: any) { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); }
   }
@@ -168,7 +168,7 @@ export default function SelfFillLinksPage() {
   async function saveEdit() {
     if (!editSession) return;
     if (editForm.subjectType && editForm.subjectType !== "other" && (!editForm.subjectId || Number(editForm.subjectId) < 1)) {
-      toast({ title: "Select a record for the association", variant: "destructive" }); return;
+      toast({ title: translateUi(uiLanguage, "Select a record for the association"), variant: "destructive" }); return;
     }
     setEditSaving(true);
     try {
@@ -289,7 +289,7 @@ export default function SelfFillLinksPage() {
                   <td className="px-4 py-3"><Badge variant={STATUS_TONE[s.status]}>{t(`selfFill.status.${s.status}`)}</Badge></td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">
                     <div>{s.sendCount || 0} {translateUi(uiLanguage, "send")}{s.sendCount === 1 ? "" : "s"}</div>
-                    <div>{s.lastReminderAt ? `Reminder ${formatDateTime(lang, s.lastReminderAt)}` : s.lastSentAt ? formatDateTime(lang, s.lastSentAt) : "Not sent"}</div>
+                    <div>{s.lastReminderAt ? `Reminder ${formatDateTime(lang, s.lastReminderAt)}` : s.lastSentAt ? formatDateTime(lang, s.lastSentAt) : translateUi(uiLanguage, "Not sent")}</div>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{formatDateTime(lang, s.expiresAt)}</td>
                   <td className="px-4 py-3 text-right space-x-1">
@@ -367,7 +367,7 @@ export default function SelfFillLinksPage() {
               </div>
             </div>
             {form.subjectType && <div>
-              <Label>{form.subjectType === "other" ? "Association label" : `Select ${SUBJECT_LABELS[form.subjectType]}`}</Label>
+              <Label>{form.subjectType === "other" ? translateUi(uiLanguage, "Association label") : `Select ${SUBJECT_LABELS[form.subjectType]}`}</Label>
               {form.subjectType === "other" ? (
                 <Input value={form.subjectLabel} onChange={e => setForm(f => ({ ...f, subjectLabel: e.target.value }))} placeholder={translateUi(uiLanguage, "Name or reference")} />
               ) : (
@@ -416,7 +416,7 @@ export default function SelfFillLinksPage() {
               </Select>
             </div>
             {editForm.subjectType && <div>
-              <Label>{editForm.subjectType === "other" ? "Association label" : `Select ${SUBJECT_LABELS[editForm.subjectType]}`}</Label>
+              <Label>{editForm.subjectType === "other" ? translateUi(uiLanguage, "Association label") : `Select ${SUBJECT_LABELS[editForm.subjectType]}`}</Label>
               {editForm.subjectType === "other" ? (
                 <Input value={editForm.subjectLabel} onChange={e => setEditForm(f => ({ ...f, subjectLabel: e.target.value }))} />
               ) : (

@@ -237,16 +237,16 @@ export default function SocialAdvertisingPanel({
       setCreateOpen(false);
       await invalidate();
       toast({
-        title: tr ? "Kampanya onaya gönderildi" : "Campaign sent for approval",
+        title: tr ? translateUi(uiLanguage, "Kampanya onaya gönderildi") : translateUi(uiLanguage, "Campaign sent for approval"),
         description: tr
-          ? "İlk çalıştırma kampanyayı PAUSED olarak oluşturur; harcama için ayrıca RESUME onayı gerekir."
-          : "The first execution creates the campaign PAUSED; spending requires a separate RESUME approval.",
+          ? translateUi(uiLanguage, "İlk çalıştırma kampanyayı PAUSED olarak oluşturur; harcama için ayrıca RESUME onayı gerekir.")
+          : translateUi(uiLanguage, "The first execution creates the campaign PAUSED; spending requires a separate RESUME approval."),
       });
     },
     onError: (error) =>
       toast({
         variant: "destructive",
-        title: tr ? "Kampanya oluşturulamadı" : "Campaign could not be created",
+        title: tr ? translateUi(uiLanguage, "Kampanya oluşturulamadı") : translateUi(uiLanguage, "Campaign could not be created"),
         description: error instanceof Error ? error.message : undefined,
       }),
   });
@@ -277,13 +277,13 @@ export default function SocialAdvertisingPanel({
       setBudgetCampaign(null);
       await invalidate();
       toast({
-        title: tr ? "İşlem onaya gönderildi" : "Operation sent for approval",
+        title: tr ? translateUi(uiLanguage, "İşlem onaya gönderildi") : translateUi(uiLanguage, "Operation sent for approval"),
       });
     },
     onError: (error) =>
       toast({
         variant: "destructive",
-        title: tr ? "İşlem oluşturulamadı" : "Operation could not be created",
+        title: tr ? translateUi(uiLanguage, "İşlem oluşturulamadı") : translateUi(uiLanguage, "Operation could not be created"),
         description: error instanceof Error ? error.message : undefined,
       }),
   });
@@ -310,12 +310,12 @@ export default function SocialAdvertisingPanel({
       setRejectOperation(null);
       setRejectionReason("");
       await invalidate();
-      toast({ title: tr ? "Karar kaydedildi" : "Decision recorded" });
+      toast({ title: tr ? translateUi(uiLanguage, "Karar kaydedildi") : translateUi(uiLanguage, "Decision recorded") });
     },
     onError: (error) =>
       toast({
         variant: "destructive",
-        title: tr ? "Karar kaydedilemedi" : "Decision could not be recorded",
+        title: tr ? translateUi(uiLanguage, "Karar kaydedilemedi") : translateUi(uiLanguage, "Decision could not be recorded"),
         description: error instanceof Error ? error.message : undefined,
       }),
   });
@@ -331,12 +331,12 @@ export default function SocialAdvertisingPanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold">
-            {tr ? "Reklam Kontrol Merkezi" : "Advertising Control Center"}
+            {tr ? translateUi(uiLanguage, "Reklam Kontrol Merkezi") : translateUi(uiLanguage, "Advertising Control Center")}
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {tr
-              ? "Kampanya oluşturma, bütçe değişikliği, durdurma ve yeniden başlatma işlemlerini iki aşamalı onay ve sağlayıcı makbuzuyla yönetir."
-              : "Manages campaign creation, budget changes, pause and resume with two-person approval and provider receipts."}
+              ? translateUi(uiLanguage, "Kampanya oluşturma, bütçe değişikliği, durdurma ve yeniden başlatma işlemlerini iki aşamalı onay ve sağlayıcı makbuzuyla yönetir.")
+              : translateUi(uiLanguage, "Manages campaign creation, budget changes, pause and resume with two-person approval and provider receipts.")}
           </p>
         </div>
         <Button
@@ -355,7 +355,7 @@ export default function SocialAdvertisingPanel({
           }
         >
           <Plus className="mr-2 size-4" />
-          {tr ? "Yeni reklam kampanyası" : "New ad campaign"}
+          {tr ? translateUi(uiLanguage, "Yeni reklam kampanyası") : translateUi(uiLanguage, "New ad campaign")}
         </Button>
       </div>
 
@@ -378,8 +378,8 @@ export default function SocialAdvertisingPanel({
             <AlertTriangle className="mt-0.5 size-5 text-amber-600" />
             <p className="text-sm">
               {tr
-                ? "Kampanya için VERIFIED bir AD_ACCOUNT ve onaylanmış AD_CREATIVE brief gerekir."
-                : "Campaigns require a VERIFIED AD_ACCOUNT and an approved AD_CREATIVE brief."}
+                ? translateUi(uiLanguage, "Kampanya için VERIFIED bir AD_ACCOUNT ve onaylanmış AD_CREATIVE brief gerekir.")
+                : translateUi(uiLanguage, "Campaigns require a VERIFIED AD_ACCOUNT and an approved AD_CREATIVE brief.")}
             </p>
           </CardContent>
         </Card>
@@ -391,14 +391,14 @@ export default function SocialAdvertisingPanel({
         <Card>
           <CardContent className="p-5 text-sm text-destructive">
             {tr
-              ? "Reklam kampanyaları yüklenemedi."
-              : "Ad campaigns could not be loaded."}
+              ? translateUi(uiLanguage, "Reklam kampanyaları yüklenemedi.")
+              : translateUi(uiLanguage, "Ad campaigns could not be loaded.")}
           </CardContent>
         </Card>
       ) : (campaigns.data?.data ?? []).length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            {tr ? "Henüz reklam kampanyası yok." : "No ad campaigns yet."}
+            {tr ? translateUi(uiLanguage, "Henüz reklam kampanyası yok.") : translateUi(uiLanguage, "No ad campaigns yet.")}
           </CardContent>
         </Card>
       ) : (
@@ -432,7 +432,7 @@ export default function SocialAdvertisingPanel({
                   <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/50 p-3">
                     <div>
                       <p className="text-xs text-muted-foreground">
-                        {tr ? "Günlük" : "Daily"}
+                        {tr ? translateUi(uiLanguage, "Günlük") : translateUi(uiLanguage, "Daily")}
                       </p>
                       <p className="font-medium">
                         {money(
@@ -443,7 +443,7 @@ export default function SocialAdvertisingPanel({
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">
-                        {tr ? "Toplam sınır" : "Lifetime cap"}
+                        {tr ? translateUi(uiLanguage, "Toplam sınır") : translateUi(uiLanguage, "Lifetime cap")}
                       </p>
                       <p className="font-medium">
                         {money(
@@ -476,7 +476,7 @@ export default function SocialAdvertisingPanel({
                           disabled={review.isPending}
                         >
                           <CheckCircle2 className="mr-1 size-3.5" />
-                          {tr ? "Onayla" : "Approve"}
+                          {tr ? translateUi(uiLanguage, "Onayla") : translateUi(uiLanguage, "Approve")}
                         </Button>
                         <Button
                           size="sm"
@@ -485,7 +485,7 @@ export default function SocialAdvertisingPanel({
                             setRejectOperation(campaign.latest_operation_id)
                           }
                         >
-                          {tr ? "Reddet" : "Reject"}
+                          {tr ? translateUi(uiLanguage, "Reddet") : translateUi(uiLanguage, "Reject")}
                         </Button>
                       </>
                     )}
@@ -503,7 +503,7 @@ export default function SocialAdvertisingPanel({
                           }
                         >
                           <Pause className="mr-1 size-3.5" />{" "}
-                          {tr ? "Durdur" : "Pause"}
+                          {tr ? translateUi(uiLanguage, "Durdur") : translateUi(uiLanguage, "Pause")}
                         </Button>
                       )}
                     {!pendingReview &&
@@ -520,7 +520,7 @@ export default function SocialAdvertisingPanel({
                           }
                         >
                           <Play className="mr-1 size-3.5" />{" "}
-                          {tr ? "Başlat" : "Resume"}
+                          {tr ? translateUi(uiLanguage, "Başlat") : translateUi(uiLanguage, "Resume")}
                         </Button>
                       )}
                     {!pendingReview &&
@@ -543,7 +543,7 @@ export default function SocialAdvertisingPanel({
                             }}
                           >
                             <WalletCards className="mr-1 size-3.5" />{" "}
-                            {tr ? "Bütçe" : "Budget"}
+                            {tr ? translateUi(uiLanguage, "Bütçe") : translateUi(uiLanguage, "Budget")}
                           </Button>
                           <Button
                             size="sm"
@@ -556,7 +556,7 @@ export default function SocialAdvertisingPanel({
                             }
                           >
                             <Square className="mr-1 size-3.5" />{" "}
-                            {tr ? "Sonlandır" : "End"}
+                            {tr ? translateUi(uiLanguage, "Sonlandır") : translateUi(uiLanguage, "End")}
                           </Button>
                         </>
                       )}
@@ -577,12 +577,12 @@ export default function SocialAdvertisingPanel({
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {tr ? "Reklam kampanyası oluştur" : "Create ad campaign"}
+              {tr ? translateUi(uiLanguage, "Reklam kampanyası oluştur") : translateUi(uiLanguage, "Create ad campaign")}
             </DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
             <div>
-              <Label>{tr ? "Reklam hesabı" : "Ad account"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Reklam hesabı") : translateUi(uiLanguage, "Ad account")}</Label>
               <select
                 className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={form.accountId}
@@ -616,7 +616,7 @@ export default function SocialAdvertisingPanel({
               </select>
             </div>
             <div>
-              <Label>{tr ? "Kampanya adı" : "Campaign name"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Kampanya adı") : translateUi(uiLanguage, "Campaign name")}</Label>
               <Input
                 className="mt-1"
                 value={form.name}
@@ -626,7 +626,7 @@ export default function SocialAdvertisingPanel({
               />
             </div>
             <div>
-              <Label>{tr ? "Amaç" : "Objective"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Amaç") : translateUi(uiLanguage, "Objective")}</Label>
               <select
                 className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={form.objective}
@@ -646,7 +646,7 @@ export default function SocialAdvertisingPanel({
               </select>
             </div>
             <div className="sm:col-span-2">
-              <Label>{tr ? "Hedef bağlantı" : "Destination URL"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Hedef bağlantı") : translateUi(uiLanguage, "Destination URL")}</Label>
               <Input
                 className="mt-1"
                 type="url"
@@ -657,7 +657,7 @@ export default function SocialAdvertisingPanel({
               />
             </div>
             <div>
-              <Label>{tr ? "Ülkeler" : "Countries"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Ülkeler") : translateUi(uiLanguage, "Countries")}</Label>
               <Input
                 className="mt-1"
                 value={form.countryCodes}
@@ -668,7 +668,7 @@ export default function SocialAdvertisingPanel({
               />
             </div>
             <div>
-              <Label>{tr ? "Diller" : "Languages"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Diller") : translateUi(uiLanguage, "Languages")}</Label>
               <Input
                 className="mt-1"
                 value={form.languageCodes}
@@ -679,7 +679,7 @@ export default function SocialAdvertisingPanel({
               />
             </div>
             <div>
-              <Label>{tr ? "Minimum yaş" : "Minimum age"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Minimum yaş") : translateUi(uiLanguage, "Minimum age")}</Label>
               <Input
                 className="mt-1"
                 type="number"
@@ -692,7 +692,7 @@ export default function SocialAdvertisingPanel({
               />
             </div>
             <div>
-              <Label>{tr ? "Maksimum yaş" : "Maximum age"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Maksimum yaş") : translateUi(uiLanguage, "Maximum age")}</Label>
               <Input
                 className="mt-1"
                 type="number"
@@ -706,7 +706,7 @@ export default function SocialAdvertisingPanel({
             </div>
             <div>
               <Label>
-                {tr ? "Günlük bütçe (minor unit)" : "Daily budget (minor unit)"}
+                {tr ? translateUi(uiLanguage, "Günlük bütçe (minor unit)") : translateUi(uiLanguage, "Daily budget (minor unit)")}
               </Label>
               <Input
                 className="mt-1"
@@ -724,8 +724,8 @@ export default function SocialAdvertisingPanel({
             <div>
               <Label>
                 {tr
-                  ? "Toplam bütçe (minor unit)"
-                  : "Lifetime budget (minor unit)"}
+                  ? translateUi(uiLanguage, "Toplam bütçe (minor unit)")
+                  : translateUi(uiLanguage, "Lifetime budget (minor unit)")}
               </Label>
               <Input
                 className="mt-1"
@@ -742,7 +742,7 @@ export default function SocialAdvertisingPanel({
               />
             </div>
             <div>
-              <Label>{tr ? "Başlangıç" : "Starts at"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Başlangıç") : translateUi(uiLanguage, "Starts at")}</Label>
               <Input
                 className="mt-1"
                 type="datetime-local"
@@ -753,7 +753,7 @@ export default function SocialAdvertisingPanel({
               />
             </div>
             <div>
-              <Label>{tr ? "Bitiş" : "Ends at"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Bitiş") : translateUi(uiLanguage, "Ends at")}</Label>
               <Input
                 className="mt-1"
                 type="datetime-local"
@@ -771,7 +771,7 @@ export default function SocialAdvertisingPanel({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              {tr ? "İptal" : "Cancel"}
+              {tr ? translateUi(uiLanguage, "İptal") : translateUi(uiLanguage, "Cancel")}
             </Button>
             <Button
               disabled={
@@ -787,7 +787,7 @@ export default function SocialAdvertisingPanel({
               {createCampaign.isPending && (
                 <Loader2 className="mr-2 size-4 animate-spin" />
               )}
-              {tr ? "Onaya gönder" : "Send for approval"}
+              {tr ? translateUi(uiLanguage, "Onaya gönder") : translateUi(uiLanguage, "Send for approval")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -800,12 +800,12 @@ export default function SocialAdvertisingPanel({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {tr ? "Bütçe değişikliği" : "Budget change"}
+              {tr ? translateUi(uiLanguage, "Bütçe değişikliği") : translateUi(uiLanguage, "Budget change")}
             </DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
             <div>
-              <Label>{tr ? "Günlük minor unit" : "Daily minor units"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Günlük minor unit") : translateUi(uiLanguage, "Daily minor units")}</Label>
               <Input
                 className="mt-1"
                 type="number"
@@ -820,7 +820,7 @@ export default function SocialAdvertisingPanel({
               />
             </div>
             <div>
-              <Label>{tr ? "Toplam minor unit" : "Lifetime minor units"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Toplam minor unit") : translateUi(uiLanguage, "Lifetime minor units")}</Label>
               <Input
                 className="mt-1"
                 type="number"
@@ -838,7 +838,7 @@ export default function SocialAdvertisingPanel({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBudgetCampaign(null)}>
-              {tr ? "İptal" : "Cancel"}
+              {tr ? translateUi(uiLanguage, "İptal") : translateUi(uiLanguage, "Cancel")}
             </Button>
             <Button
               disabled={
@@ -854,7 +854,7 @@ export default function SocialAdvertisingPanel({
                 })
               }
             >
-              {tr ? "Onaya gönder" : "Send for approval"}
+              {tr ? translateUi(uiLanguage, "Onaya gönder") : translateUi(uiLanguage, "Send for approval")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -867,11 +867,11 @@ export default function SocialAdvertisingPanel({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {tr ? "İşlemi reddet" : "Reject operation"}
+              {tr ? translateUi(uiLanguage, "İşlemi reddet") : translateUi(uiLanguage, "Reject operation")}
             </DialogTitle>
           </DialogHeader>
           <div className="py-2">
-            <Label>{tr ? "Gerekçe" : "Reason"}</Label>
+            <Label>{tr ? translateUi(uiLanguage, "Gerekçe") : translateUi(uiLanguage, "Reason")}</Label>
             <Textarea
               className="mt-1"
               value={rejectionReason}
@@ -880,7 +880,7 @@ export default function SocialAdvertisingPanel({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRejectOperation(null)}>
-              {tr ? "İptal" : "Cancel"}
+              {tr ? translateUi(uiLanguage, "İptal") : translateUi(uiLanguage, "Cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -894,7 +894,7 @@ export default function SocialAdvertisingPanel({
                 })
               }
             >
-              {tr ? "Reddet" : "Reject"}
+              {tr ? translateUi(uiLanguage, "Reddet") : translateUi(uiLanguage, "Reject")}
             </Button>
           </DialogFooter>
         </DialogContent>

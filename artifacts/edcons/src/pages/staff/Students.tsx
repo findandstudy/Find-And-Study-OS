@@ -356,7 +356,7 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
       const { students } = await res.json();
       setPreview(students);
     } catch (err: any) {
-      toast({ title: "CSV parse failed", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "CSV parse failed"), description: err.message, variant: "destructive" });
     } finally {
       setParsing(false);
     }
@@ -377,7 +377,7 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
       setResult({ success: data.success, errors: data.errors?.length || 0 });
       onSuccess();
     } catch (err: any) {
-      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Import failed"), description: err.message, variant: "destructive" });
     } finally {
       setImporting(false);
     }
@@ -534,7 +534,7 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
               disabled={!preview || importing || preview.length === 0}
               className="rounded-xl gap-2"
             >
-              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />} {translateUi(uiLanguage, "Import")} {preview ? `${preview.length} Students` : "Students"}
+              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />} {translateUi(uiLanguage, "Import")} {preview ? `${preview.length} Students` : translateUi(uiLanguage, "Students")}
             </Button>
           </div>
         )}
@@ -552,6 +552,7 @@ type StuSortDir = "asc" | "desc";
 function StuSortHeader({ label, sortKey, currentSort, onSort }: {
   label: string; sortKey: StuSortKey; currentSort: { key: StuSortKey; dir: StuSortDir }; onSort: (k: StuSortKey) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const active = currentSort.key === sortKey;
   return (
     <>
@@ -611,7 +612,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
           <StudentAvatar student={student} />
           <div className="min-w-0">
             <h4 className="font-bold text-sm text-foreground line-clamp-1">{student.firstName} {student.lastName}</h4>
-            <p className="text-xs text-muted-foreground truncate">{student.email || student.phone || "No contact"}</p>
+            <p className="text-xs text-muted-foreground truncate">{student.email || student.phone || translateUi(uiLanguage, "No contact")}</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
@@ -917,15 +918,15 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
             });
             if (!eduRes.ok) throw new Error(`HTTP ${eduRes.status}`);
           } catch {
-            toast({ title: "Warning", description: "Student saved, but education record could not be updated.", variant: "destructive" });
+            toast({ title: translateUi(uiLanguage, "Warning"), description: translateUi(uiLanguage, "Student saved, but education record could not be updated."), variant: "destructive" });
           }
         }
       }
-      toast({ title: "Student updated" });
+      toast({ title: translateUi(uiLanguage, "Student updated") });
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
       onClose();
     } catch {
-      toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to update"), variant: "destructive" });
     } finally { setSaving(false); }
   }
 
@@ -1095,7 +1096,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
         <DialogFooter className="pt-3 border-t border-border/50">
           <Button variant="outline" onClick={onClose} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleSave} disabled={!form.firstName || !form.lastName || saving} className="rounded-xl">
-            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{translateUi(uiLanguage, "Saving...")}</> : "Save Changes"}
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{translateUi(uiLanguage, "Saving...")}</> : translateUi(uiLanguage, "Save Changes")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1371,9 +1372,9 @@ export default function StudentsPage() {
         body: JSON.stringify({ assignedToId: userId }),
       });
       await invalidateAssignmentWorkspaceQueries(queryClient);
-      toast({ title: "Student assigned" });
+      toast({ title: translateUi(uiLanguage, "Student assigned") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -1514,7 +1515,7 @@ export default function StudentsPage() {
       if (!res.ok) throw new Error("Failed");
       const d = await res.json();
       toast({ title: `${d.updated} student${d.updated !== 1 ? "s" : ""} deleted` });
-    } catch { toast({ title: "Some could not be deleted", variant: "destructive" }); }
+    } catch { toast({ title: translateUi(uiLanguage, "Some could not be deleted"), variant: "destructive" }); }
     setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
     invalidate();
   }
@@ -1526,7 +1527,7 @@ export default function StudentsPage() {
       const d = await res.json();
       toast({ title: `${d.updated} student${d.updated !== 1 ? "s" : ""} assigned` });
       await invalidateAssignmentWorkspaceQueries(queryClient);
-    } catch { toast({ title: "Could not assign students", variant: "destructive" }); }
+    } catch { toast({ title: translateUi(uiLanguage, "Could not assign students"), variant: "destructive" }); }
     setSelectedIds(new Set()); invalidate();
   }
 
@@ -1536,7 +1537,7 @@ export default function StudentsPage() {
       if (!res.ok) throw new Error("Failed");
       const d = await res.json();
       toast({ title: `${d.updated} student${d.updated !== 1 ? "s" : ""} moved` });
-    } catch { toast({ title: "Could not move students", variant: "destructive" }); }
+    } catch { toast({ title: translateUi(uiLanguage, "Could not move students"), variant: "destructive" }); }
     setSelectedIds(new Set()); invalidate();
   }
 
@@ -1553,7 +1554,7 @@ export default function StudentsPage() {
     if (!over) return;
 
     if (!canMoveCards) {
-      toast({ title: "You don't have permission to move cards", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "You don't have permission to move cards"), variant: "destructive" });
       return;
     }
 
@@ -1582,7 +1583,7 @@ export default function StudentsPage() {
       const colLabel = pipelineStages.find(s => s.key === targetStatus)?.label ?? targetStatus;
       toast({ title: `Student moved → ${colLabel}` });
     }).catch(() => {
-      toast({ title: "Error", description: "Could not move student", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Could not move student"), variant: "destructive" });
       invalidate();
       queryClient.invalidateQueries({ queryKey: [`/api/students/${studentId}`] });
     });
@@ -1677,7 +1678,7 @@ export default function StudentsPage() {
                         <StudentAvatar student={activeStuCard} />
                         <div className="min-w-0">
                           <h4 className="font-bold text-sm text-foreground line-clamp-1">{activeStuCard.firstName} {activeStuCard.lastName}</h4>
-                          <p className="text-xs text-muted-foreground truncate">{activeStuCard.email || activeStuCard.phone || "No contact"}</p>
+                          <p className="text-xs text-muted-foreground truncate">{activeStuCard.email || activeStuCard.phone || translateUi(uiLanguage, "No contact")}</p>
                         </div>
                       </div>
                       {activeStuCard.nationality && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{activeStuCard.nationality}</span>}

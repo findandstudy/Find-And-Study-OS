@@ -102,6 +102,7 @@ function isYearLikeField(f: { key?: string; label?: string; type?: string }): bo
 const CURRENT_YEAR = String(new Date().getFullYear());
 
 export default function SignFlow({ token }: { token: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [step, setStep] = useState<Step>("loading");
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [session, setSession] = useState<SessionView | null>(null);
@@ -761,6 +762,7 @@ function FieldLabel({ children, required }: { children: React.ReactNode; require
 }
 
 function BrandHeader({ brand }: { brand: Brand }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [globalImgError, setGlobalImgError] = useState(false);
   const [customImgError, setCustomImgError] = useState(false);
 
@@ -786,7 +788,7 @@ function BrandHeader({ brand }: { brand: Brand }) {
             <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center">
               <FileText className="w-5 h-5" />
             </div>
-            <span className="text-lg font-semibold tracking-tight">{brand.companyName || "Contract Signing"}</span>
+            <span className="text-lg font-semibold tracking-tight">{brand.companyName || translateUi(uiLanguage, "Contract Signing")}</span>
           </>
         )}
       </div>

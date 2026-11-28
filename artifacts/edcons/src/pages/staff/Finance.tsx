@@ -330,7 +330,7 @@ function CommissionModal({
       qc.invalidateQueries({ queryKey: ["commissions"] });
       qc.invalidateQueries({ queryKey: ["finance-summary"] });
       qc.invalidateQueries({ queryKey: ["university-breakdown"] });
-      toast({ title: editId ? "Commission updated" : "Commission created" });
+      toast({ title: editId ? translateUi(uiLanguage, "Commission updated") : translateUi(uiLanguage, "Commission created") });
       onClose();
     } catch { toast({ title: t("financePage.errorSavingCommission"), variant: "destructive" }); }
     finally { setSaving(false); }
@@ -775,7 +775,7 @@ function ServiceFeeModal({
 
   async function save() {
     if (!editId && (!form.studentId || !form.applicationId)) {
-      toast({ title: "Select a student and application", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Select a student and application"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -797,7 +797,7 @@ function ServiceFeeModal({
       }
       qc.invalidateQueries({ queryKey: ["service-fees"] });
       qc.invalidateQueries({ queryKey: ["finance-summary"] });
-      toast({ title: editId ? "Service fee updated" : "Service fee created" });
+      toast({ title: editId ? translateUi(uiLanguage, "Service fee updated") : translateUi(uiLanguage, "Service fee created") });
       onClose();
     } catch { toast({ title: t("financePage.errorSavingServiceFee"), variant: "destructive" }); }
     finally { setSaving(false); }
@@ -1146,7 +1146,7 @@ function TransactionModal({
           <Button variant="outline" onClick={onClose}>{t("financePage.cancel")}</Button>
           <Button onClick={save} disabled={saving || uploading}>
             {(saving || uploading) ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-            {uploading ? "Uploading..." : "Save"}
+            {uploading ? translateUi(uiLanguage, "Uploading...") : translateUi(uiLanguage, "Save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2411,7 +2411,7 @@ export default function FinancePage() {
                         `${BASE}/api/finance/export/commissions?${params}`,
                         `commissions_${season}_${new Date().toISOString().slice(0, 10)}.xlsx`
                       );
-                    } catch { toast({ title: t("financePage.exportExcel"), description: "Export failed", variant: "destructive" }); }
+                    } catch { toast({ title: t("financePage.exportExcel"), description: translateUi(uiLanguage, "Export failed"), variant: "destructive" }); }
                     finally { setCommExporting(false); }
                   }}
                 >
@@ -2444,7 +2444,7 @@ export default function FinancePage() {
                   className="ml-auto"
                 >
                   <Trash2 className="w-4 h-4 mr-1.5" />
-                  {bulkDeleting ? "Deleting..." : `Delete Selected (${commSelected.size})`}
+                  {bulkDeleting ? translateUi(uiLanguage, "Deleting...") : `Delete Selected (${commSelected.size})`}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setCommSelected(new Set())}> {translateUi(uiLanguage, "Clear Selection")} </Button>
               </div>
@@ -2840,7 +2840,7 @@ export default function FinancePage() {
                       `${BASE}/api/finance/export/university-breakdown?${params}`,
                       `university_breakdown_${season}_${new Date().toISOString().slice(0, 10)}.xlsx`
                     );
-                  } catch { toast({ title: t("financePage.exportExcel"), description: "Export failed", variant: "destructive" }); }
+                  } catch { toast({ title: t("financePage.exportExcel"), description: translateUi(uiLanguage, "Export failed"), variant: "destructive" }); }
                   finally { setUniExporting(false); }
                 }}
               >
@@ -2851,7 +2851,7 @@ export default function FinancePage() {
             {uniSelected.size > 0 && (
               <div className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
                 <span className="text-sm font-medium text-foreground">
-                  {uniSelected.size} {translateUi(uiLanguage, "universit")}{uniSelected.size > 1 ? "ies" : "y"} {translateUi(uiLanguage, "selected")} </span>
+                  {uniSelected.size} {translateUi(uiLanguage, "universit")}{uniSelected.size > 1 ? translateUi(uiLanguage, "ies") : "y"} {translateUi(uiLanguage, "selected")} </span>
                 <Button
                   variant="destructive"
                   size="sm"
@@ -2860,7 +2860,7 @@ export default function FinancePage() {
                   className="ml-auto"
                 >
                   <Trash2 className="w-4 h-4 mr-1.5" />
-                  {uniBulkDeleting ? "Deleting..." : `Delete All Commissions (${uniSelected.size})`}
+                  {uniBulkDeleting ? translateUi(uiLanguage, "Deleting...") : `Delete All Commissions (${uniSelected.size})`}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setUniSelected(new Set())}> {translateUi(uiLanguage, "Clear Selection")} </Button>
               </div>
@@ -3069,7 +3069,7 @@ export default function FinancePage() {
                                           `${u.universityName.replace(/[^a-z0-9]+/gi, "_")}_${season}_reconciliation.xlsx`,
                                         );
                                       } catch {
-                                        toast({ title: "Student list export failed", variant: "destructive" });
+                                        toast({ title: translateUi(uiLanguage, "Student list export failed"), variant: "destructive" });
                                       }
                                     }}>
                                       <Download className="w-4 h-4 mr-1" /> {translateUi(uiLanguage, "Export students")} </Button>
@@ -3167,7 +3167,7 @@ export default function FinancePage() {
                         `${BASE}/api/finance/export/service-fees?${params}`,
                         `service_fees_${season}_${new Date().toISOString().slice(0, 10)}.xlsx`
                       );
-                    } catch { toast({ title: t("financePage.exportExcel"), description: "Export failed", variant: "destructive" }); }
+                    } catch { toast({ title: t("financePage.exportExcel"), description: translateUi(uiLanguage, "Export failed"), variant: "destructive" }); }
                     finally { setFeeExporting(false); }
                   }}
                 >
@@ -3191,7 +3191,7 @@ export default function FinancePage() {
                   className="ml-auto"
                 >
                   <Trash2 className="w-4 h-4 mr-1.5" />
-                  {feeBulkDeleting ? "Deleting..." : `Delete Selected (${feeSelected.size})`}
+                  {feeBulkDeleting ? translateUi(uiLanguage, "Deleting...") : `Delete Selected (${feeSelected.size})`}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setFeeSelected(new Set())}> {translateUi(uiLanguage, "Clear Selection")} </Button>
               </div>

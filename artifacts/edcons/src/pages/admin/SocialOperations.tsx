@@ -523,12 +523,12 @@ export default function SocialOperations() {
       }));
       await invalidate();
       toast({
-        title: tr ? "İçerik brief'i oluşturuldu" : "Content brief created",
+        title: tr ? translateUi(uiLanguage, "İçerik brief'i oluşturuldu") : translateUi(uiLanguage, "Content brief created"),
       });
     },
     onError: (error) =>
       toast({
-        title: tr ? "Brief oluşturulamadı" : "Brief could not be created",
+        title: tr ? translateUi(uiLanguage, "Brief oluşturulamadı") : translateUi(uiLanguage, "Brief could not be created"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       }),
@@ -539,7 +539,7 @@ export default function SocialOperations() {
     const available = 10 - briefMediaAssets.length;
     if (files.length > available) {
       toast({
-        title: tr ? "En fazla 10 medya dosyası" : "Maximum 10 media files",
+        title: tr ? translateUi(uiLanguage, "En fazla 10 medya dosyası") : translateUi(uiLanguage, "Maximum 10 media files"),
         variant: "destructive",
       });
       return;
@@ -556,11 +556,11 @@ export default function SocialOperations() {
         setBriefMediaAssets([...uploaded]);
       }
       toast({
-        title: tr ? "Medya güvenle eklendi" : "Media attached securely",
+        title: tr ? translateUi(uiLanguage, "Medya güvenle eklendi") : translateUi(uiLanguage, "Media attached securely"),
       });
     } catch (error) {
       toast({
-        title: tr ? "Medya yüklenemedi" : "Media upload failed",
+        title: tr ? translateUi(uiLanguage, "Medya yüklenemedi") : translateUi(uiLanguage, "Media upload failed"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       });
@@ -601,13 +601,13 @@ export default function SocialOperations() {
       await invalidate();
       toast({
         title: tr
-          ? "Hesap kaydı eklendi; doğrulama bekliyor"
-          : "Account registered; verification is pending",
+          ? translateUi(uiLanguage, "Hesap kaydı eklendi; doğrulama bekliyor")
+          : translateUi(uiLanguage, "Account registered; verification is pending"),
       });
     },
     onError: (error) =>
       toast({
-        title: tr ? "Hesap eklenemedi" : "Account could not be added",
+        title: tr ? translateUi(uiLanguage, "Hesap eklenemedi") : translateUi(uiLanguage, "Account could not be added"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       }),
@@ -625,15 +625,15 @@ export default function SocialOperations() {
       await invalidate();
       toast({
         title: tr
-          ? "Hesap bağlantı doğrulaması tamamlandı"
-          : "Account connection verification completed",
+          ? translateUi(uiLanguage, "Hesap bağlantı doğrulaması tamamlandı")
+          : translateUi(uiLanguage, "Account connection verification completed"),
       });
     },
     onError: (error) =>
       toast({
         title: tr
-          ? "Hesap bağlantısı doğrulanamadı"
-          : "Account connection could not be verified",
+          ? translateUi(uiLanguage, "Hesap bağlantısı doğrulanamadı")
+          : translateUi(uiLanguage, "Account connection could not be verified"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       }),
@@ -648,7 +648,7 @@ export default function SocialOperations() {
     onSuccess: invalidate,
     onError: (error) =>
       toast({
-        title: tr ? "Onaya gönderilemedi" : "Could not submit for review",
+        title: tr ? translateUi(uiLanguage, "Onaya gönderilemedi") : translateUi(uiLanguage, "Could not submit for review"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       }),
@@ -678,14 +678,14 @@ export default function SocialOperations() {
       });
       await invalidate();
       toast({
-        title: tr ? "Yayın taslağı oluşturuldu" : "Publication draft created",
+        title: tr ? translateUi(uiLanguage, "Yayın taslağı oluşturuldu") : translateUi(uiLanguage, "Publication draft created"),
       });
     },
     onError: (error) =>
       toast({
         title: tr
-          ? "Yayın taslağı oluşturulamadı"
-          : "Publication draft could not be created",
+          ? translateUi(uiLanguage, "Yayın taslağı oluşturulamadı")
+          : translateUi(uiLanguage, "Publication draft could not be created"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       }),
@@ -703,8 +703,8 @@ export default function SocialOperations() {
     onError: (error) =>
       toast({
         title: tr
-          ? "Yayın onaya gönderilemedi"
-          : "Publication could not be submitted",
+          ? translateUi(uiLanguage, "Yayın onaya gönderilemedi")
+          : translateUi(uiLanguage, "Publication could not be submitted"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       }),
@@ -729,8 +729,8 @@ export default function SocialOperations() {
     onError: (error) =>
       toast({
         title: tr
-          ? "Yayın kararı kaydedilemedi"
-          : "Publication decision could not be saved",
+          ? translateUi(uiLanguage, "Yayın kararı kaydedilemedi")
+          : translateUi(uiLanguage, "Publication decision could not be saved"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       }),
@@ -748,8 +748,8 @@ export default function SocialOperations() {
     onError: (error) =>
       toast({
         title: tr
-          ? "Yayın iptal edilemedi"
-          : "Publication could not be canceled",
+          ? translateUi(uiLanguage, "Yayın iptal edilemedi")
+          : translateUi(uiLanguage, "Publication could not be canceled"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       }),
@@ -767,15 +767,15 @@ export default function SocialOperations() {
       await invalidate();
       toast({
         title: tr
-          ? "Performans yenileme kuyruğa alındı"
-          : "Performance refresh queued",
+          ? translateUi(uiLanguage, "Performans yenileme kuyruğa alındı")
+          : translateUi(uiLanguage, "Performance refresh queued"),
       });
     },
     onError: (error) =>
       toast({
         title: tr
-          ? "Performans yenileme başlatılamadı"
-          : "Performance refresh could not be started",
+          ? translateUi(uiLanguage, "Performans yenileme başlatılamadı")
+          : translateUi(uiLanguage, "Performance refresh could not be started"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       }),
@@ -799,7 +799,7 @@ export default function SocialOperations() {
     onSuccess: invalidate,
     onError: (error) =>
       toast({
-        title: tr ? "İnceleme kaydedilemedi" : "Review could not be saved",
+        title: tr ? translateUi(uiLanguage, "İnceleme kaydedilemedi") : translateUi(uiLanguage, "Review could not be saved"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       }),
@@ -846,15 +846,15 @@ export default function SocialOperations() {
       await invalidate();
       toast({
         title: tr
-          ? "AI üretim isteği onaya gönderildi"
-          : "AI generation request sent for approval",
+          ? translateUi(uiLanguage, "AI üretim isteği onaya gönderildi")
+          : translateUi(uiLanguage, "AI generation request sent for approval"),
       });
     },
     onError: (error) =>
       toast({
         title: tr
-          ? "AI üretim isteği oluşturulamadı"
-          : "AI generation request could not be created",
+          ? translateUi(uiLanguage, "AI üretim isteği oluşturulamadı")
+          : translateUi(uiLanguage, "AI generation request could not be created"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       }),
@@ -882,8 +882,8 @@ export default function SocialOperations() {
     onError: (error) =>
       toast({
         title: tr
-          ? "AI üretim kararı kaydedilemedi"
-          : "AI generation decision could not be saved",
+          ? translateUi(uiLanguage, "AI üretim kararı kaydedilemedi")
+          : translateUi(uiLanguage, "AI generation decision could not be saved"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       }),
@@ -954,24 +954,24 @@ export default function SocialOperations() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            {tr ? "Sosyal Medya Operasyonları" : "Social Media Operations"}
+            {tr ? translateUi(uiLanguage, "Sosyal Medya Operasyonları") : translateUi(uiLanguage, "Social Media Operations")}
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {tr
-              ? "Çoklu hesap, içerik brief'i, maker-checker onayı, yayın takvimi, UTM ve performans kanıtını tek alanda yönetir."
-              : "Manages multi-account registry, content briefs, maker-checker approval, publishing calendar, UTM and performance evidence in one place."}
+              ? translateUi(uiLanguage, "Çoklu hesap, içerik brief'i, maker-checker onayı, yayın takvimi, UTM ve performans kanıtını tek alanda yönetir.")
+              : translateUi(uiLanguage, "Manages multi-account registry, content briefs, maker-checker approval, publishing calendar, UTM and performance evidence in one place.")}
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" asChild>
             <a href="/admin/settings">
               <Settings className="mr-2 size-4" />
-              {tr ? "Bağlantılar" : "Connections"}
+              {tr ? translateUi(uiLanguage, "Bağlantılar") : translateUi(uiLanguage, "Connections")}
             </a>
           </Button>
           <Button onClick={() => setBriefOpen(true)} disabled={!canManage}>
             <Plus className="mr-2 size-4" />
-            {tr ? "Yeni brief" : "New brief"}
+            {tr ? translateUi(uiLanguage, "Yeni brief") : translateUi(uiLanguage, "New brief")}
           </Button>
         </div>
       </div>
@@ -983,13 +983,13 @@ export default function SocialOperations() {
             <div>
               <p className="font-semibold">
                 {tr
-                  ? "Tenant kapsamı henüz bağlanmadı"
-                  : "Tenant scope is not configured"}
+                  ? translateUi(uiLanguage, "Tenant kapsamı henüz bağlanmadı")
+                  : translateUi(uiLanguage, "Tenant scope is not configured")}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {tr
-                  ? "Güvensiz tek-tenant varsayımı yapılmadı. Yerel ortamda SOCIAL_OPERATIONS_TENANT_ID ve SOCIAL_OPERATIONS_ORGANIZATION_ID açıkça tanımlanınca planlama ve onay akışları açılır."
-                  : "No unsafe single-tenant assumption was made. Planning and approvals become available after explicitly setting SOCIAL_OPERATIONS_TENANT_ID and SOCIAL_OPERATIONS_ORGANIZATION_ID locally."}
+                  ? translateUi(uiLanguage, "Güvensiz tek-tenant varsayımı yapılmadı. Yerel ortamda SOCIAL_OPERATIONS_TENANT_ID ve SOCIAL_OPERATIONS_ORGANIZATION_ID açıkça tanımlanınca planlama ve onay akışları açılır.")
+                  : translateUi(uiLanguage, "No unsafe single-tenant assumption was made. Planning and approvals become available after explicitly setting SOCIAL_OPERATIONS_TENANT_ID and SOCIAL_OPERATIONS_ORGANIZATION_ID locally.")}
               </p>
               <Badge variant="outline" className="mt-3">
                 {context.data?.reason ??
@@ -1053,10 +1053,10 @@ export default function SocialOperations() {
         <span>
           {tr
             ? context.data?.publishingEnabled
-              ? "Yayın worker'ı yalnız ikinci onaydan sonra çalışır; başarı ancak provider receipt ve post referansı doğrulanınca kaydedilir."
+              ? translateUi(uiLanguage, "Yayın worker'ı yalnız ikinci onaydan sonra çalışır; başarı ancak provider receipt ve post referansı doğrulanınca kaydedilir.")
               : `Gerçek provider yayını güvenlik kapısında kapalıdır (${context.data?.publicationGate?.reason ?? "SOCIAL_PROVIDER_PUBLISHING_DISABLED"}). İçerik ve yayın onayı birbirinden ayrıdır.`
             : context.data?.publishingEnabled
-              ? "The publishing worker runs only after a second approval; success is recorded only with verified provider receipt and post references."
+              ? translateUi(uiLanguage, "The publishing worker runs only after a second approval; success is recorded only with verified provider receipt and post references.")
               : `Real provider publishing is safety-gated (${context.data?.publicationGate?.reason ?? "SOCIAL_PROVIDER_PUBLISHING_DISABLED"}). Content and publication approvals are separate.`}
         </span>
       </div>
@@ -1094,19 +1094,19 @@ export default function SocialOperations() {
                       <p className="font-medium">
                         {worker.kind === "publication"
                           ? tr
-                            ? "Yayın worker'ı"
-                            : "Publication worker"
+                            ? translateUi(uiLanguage, "Yayın worker'ı")
+                            : translateUi(uiLanguage, "Publication worker")
                           : worker.kind === "performance"
                             ? tr
-                              ? "Performans worker'ı"
-                              : "Performance worker"
+                              ? translateUi(uiLanguage, "Performans worker'ı")
+                              : translateUi(uiLanguage, "Performance worker")
                             : worker.kind === "creative"
                               ? tr
-                                ? "AI üretim worker'ı"
-                                : "AI creative worker"
+                                ? translateUi(uiLanguage, "AI üretim worker'ı")
+                                : translateUi(uiLanguage, "AI creative worker")
                               : tr
-                                ? "Reklam worker'ı"
-                                : "Advertising worker"}
+                                ? translateUi(uiLanguage, "Reklam worker'ı")
+                                : translateUi(uiLanguage, "Advertising worker")}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {disabled
@@ -1118,12 +1118,12 @@ export default function SocialOperations() {
                               ? `${worker.currentReleaseWorkers} güncel release worker'ı canlı.`
                               : `${worker.currentReleaseWorkers} current-release worker(s) are live.`
                             : tr
-                              ? "Worker bekleniyor fakat güncel release heartbeat'i alınamıyor."
-                              : "Worker is expected but no current-release heartbeat is available."}
+                              ? translateUi(uiLanguage, "Worker bekleniyor fakat güncel release heartbeat'i alınamıyor.")
+                              : translateUi(uiLanguage, "Worker is expected but no current-release heartbeat is available.")}
                       </p>
                       {!disabled && (
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {tr ? "Son sinyal" : "Last signal"}:{" "}
+                          {tr ? translateUi(uiLanguage, "Son sinyal") : translateUi(uiLanguage, "Last signal")}:{" "}
                           {date(worker.lastSeenAt)}
                         </p>
                       )}
@@ -1152,35 +1152,35 @@ export default function SocialOperations() {
         <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-xl bg-muted/60 p-1">
           <TabsTrigger value="calendar">
             <CalendarDays className="mr-2 size-4" />
-            {tr ? "Takvim" : "Calendar"}
+            {tr ? translateUi(uiLanguage, "Takvim") : translateUi(uiLanguage, "Calendar")}
           </TabsTrigger>
           <TabsTrigger value="briefs">
             <FileText className="mr-2 size-4" />
-            {tr ? "İçerikler" : "Content"}
+            {tr ? translateUi(uiLanguage, "İçerikler") : translateUi(uiLanguage, "Content")}
           </TabsTrigger>
           <TabsTrigger value="creative">
             <WandSparkles className="mr-2 size-4" />
-            {tr ? "AI stüdyo" : "AI studio"}
+            {tr ? translateUi(uiLanguage, "AI stüdyo") : translateUi(uiLanguage, "AI studio")}
           </TabsTrigger>
           <TabsTrigger value="accounts">
             <Link2 className="mr-2 size-4" />
-            {tr ? "Hesaplar" : "Accounts"}
+            {tr ? translateUi(uiLanguage, "Hesaplar") : translateUi(uiLanguage, "Accounts")}
           </TabsTrigger>
           <TabsTrigger value="publications">
             <Send className="mr-2 size-4" />
-            {tr ? "Yayın kuyruğu" : "Publishing queue"}
+            {tr ? translateUi(uiLanguage, "Yayın kuyruğu") : translateUi(uiLanguage, "Publishing queue")}
           </TabsTrigger>
           <TabsTrigger value="performance">
             <BarChart3 className="mr-2 size-4" />
-            {tr ? "Performans" : "Performance"}
+            {tr ? translateUi(uiLanguage, "Performans") : translateUi(uiLanguage, "Performance")}
           </TabsTrigger>
           <TabsTrigger value="attribution">
             <Target className="mr-2 size-4" />
-            {tr ? "CRM katkısı" : "CRM attribution"}
+            {tr ? translateUi(uiLanguage, "CRM katkısı") : translateUi(uiLanguage, "CRM attribution")}
           </TabsTrigger>
           <TabsTrigger value="advertising">
             <WalletCards className="mr-2 size-4" />
-            {tr ? "Reklam yönetimi" : "Advertising"}
+            {tr ? translateUi(uiLanguage, "Reklam yönetimi") : translateUi(uiLanguage, "Advertising")}
           </TabsTrigger>
         </TabsList>
 
@@ -1188,7 +1188,7 @@ export default function SocialOperations() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {tr ? "Yayın takvimi" : "Publishing calendar"}
+                {tr ? translateUi(uiLanguage, "Yayın takvimi") : translateUi(uiLanguage, "Publishing calendar")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -1196,7 +1196,7 @@ export default function SocialOperations() {
                 <div className="py-12 text-center">
                   <CalendarDays className="mx-auto size-8 text-muted-foreground" />
                   <p className="mt-3 text-sm text-muted-foreground">
-                    {tr ? "Planlanmış içerik yok." : "No scheduled content."}
+                    {tr ? translateUi(uiLanguage, "Planlanmış içerik yok.") : translateUi(uiLanguage, "No scheduled content.")}
                   </p>
                 </div>
               ) : (
@@ -1236,13 +1236,13 @@ export default function SocialOperations() {
                 <div>
                   <CardTitle className="text-base">
                     {tr
-                      ? "İçerik üretim ve onay kuyruğu"
-                      : "Content production and approval queue"}
+                      ? translateUi(uiLanguage, "İçerik üretim ve onay kuyruğu")
+                      : translateUi(uiLanguage, "Content production and approval queue")}
                   </CardTitle>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {tr
-                      ? "AI üretimi daha sonra aynı brief'e taslak öneri olarak bağlanacak; kendiliğinden onay veya yayın yapamaz."
-                      : "AI generation will attach as a draft suggestion to the same brief; it cannot approve or publish itself."}
+                      ? translateUi(uiLanguage, "AI üretimi daha sonra aynı brief'e taslak öneri olarak bağlanacak; kendiliğinden onay veya yayın yapamaz.")
+                      : translateUi(uiLanguage, "AI generation will attach as a draft suggestion to the same brief; it cannot approve or publish itself.")}
                   </p>
                 </div>
                 <Button
@@ -1251,14 +1251,14 @@ export default function SocialOperations() {
                   disabled={!canManage}
                 >
                   <Plus className="mr-2 size-4" />
-                  {tr ? "Brief" : "Brief"}
+                  {tr ? translateUi(uiLanguage, "Brief") : translateUi(uiLanguage, "Brief")}
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
               {briefs.length === 0 ? (
                 <p className="py-10 text-center text-sm text-muted-foreground">
-                  {tr ? "Henüz brief yok." : "No briefs yet."}
+                  {tr ? translateUi(uiLanguage, "Henüz brief yok.") : translateUi(uiLanguage, "No briefs yet.")}
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -1297,7 +1297,7 @@ export default function SocialOperations() {
                               disabled={!canManage || submitBrief.isPending}
                               onClick={() => submitBrief.mutate(brief.id)}
                             >
-                              {tr ? "Onaya gönder" : "Submit"}
+                              {tr ? translateUi(uiLanguage, "Onaya gönder") : translateUi(uiLanguage, "Submit")}
                             </Button>
                           )}
                           {brief.status === "IN_REVIEW" &&
@@ -1315,7 +1315,7 @@ export default function SocialOperations() {
                                     })
                                   }
                                 >
-                                  {tr ? "Reddet" : "Reject"}
+                                  {tr ? translateUi(uiLanguage, "Reddet") : translateUi(uiLanguage, "Reject")}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -1327,7 +1327,7 @@ export default function SocialOperations() {
                                     })
                                   }
                                 >
-                                  {tr ? "Onayla" : "Approve"}
+                                  {tr ? translateUi(uiLanguage, "Onayla") : translateUi(uiLanguage, "Approve")}
                                 </Button>
                               </>
                             )}
@@ -1347,12 +1347,12 @@ export default function SocialOperations() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle className="text-base">
-                    {tr ? "AI içerik ve video stüdyosu" : "AI content and video studio"}
+                    {tr ? translateUi(uiLanguage, "AI içerik ve video stüdyosu") : translateUi(uiLanguage, "AI content and video studio")}
                   </CardTitle>
                   <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
                     {tr
-                      ? "Caption, görsel ve video üretimi ayrı maliyet onayından geçer. Üretilen çıktı yalnız taslak brief'e eklenir; içerik ve yayın maker-checker onaylarını atlayamaz."
-                      : "Caption, image and video generation has a separate spend approval. Output is attached only to a draft brief and cannot bypass content or publication maker-checker review."}
+                      ? translateUi(uiLanguage, "Caption, görsel ve video üretimi ayrı maliyet onayından geçer. Üretilen çıktı yalnız taslak brief'e eklenir; içerik ve yayın maker-checker onaylarını atlayamaz.")
+                      : translateUi(uiLanguage, "Caption, image and video generation has a separate spend approval. Output is attached only to a draft brief and cannot bypass content or publication maker-checker review.")}
                   </p>
                 </div>
                 <Button
@@ -1364,7 +1364,7 @@ export default function SocialOperations() {
                   }
                 >
                   <WandSparkles className="mr-2 size-4" />
-                  {tr ? "Üretim isteği" : "Generation request"}
+                  {tr ? translateUi(uiLanguage, "Üretim isteği") : translateUi(uiLanguage, "Generation request")}
                 </Button>
               </div>
             </CardHeader>
@@ -1381,8 +1381,8 @@ export default function SocialOperations() {
                   <WandSparkles className="mx-auto size-8 text-muted-foreground" />
                   <p className="mt-3 text-sm text-muted-foreground">
                     {tr
-                      ? "Henüz AI üretim isteği yok. Önce bir taslak brief oluşturun."
-                      : "No AI generation requests yet. Create a draft brief first."}
+                      ? translateUi(uiLanguage, "Henüz AI üretim isteği yok. Önce bir taslak brief oluşturun.")
+                      : translateUi(uiLanguage, "No AI generation requests yet. Create a draft brief first.")}
                   </p>
                 </div>
               ) : (
@@ -1415,7 +1415,7 @@ export default function SocialOperations() {
                           </p>
                           {creative.usage?.estimatedCostMinor !== undefined && (
                             <p className="mt-1 text-xs text-muted-foreground">
-                              {tr ? "Kaydedilen maliyet" : "Recorded cost"}: {creative.usage.estimatedCostMinor}{" "}
+                              {tr ? translateUi(uiLanguage, "Kaydedilen maliyet") : translateUi(uiLanguage, "Recorded cost")}: {creative.usage.estimatedCostMinor}{" "}
                               {String(creative.usage.currencyCode ?? creative.currency_code)}
                             </p>
                           )}
@@ -1431,7 +1431,7 @@ export default function SocialOperations() {
                                 target="_blank"
                                 rel="noreferrer"
                               >
-                                {tr ? "Üretilen medyayı aç" : "Open generated media"}
+                                {tr ? translateUi(uiLanguage, "Üretilen medyayı aç") : translateUi(uiLanguage, "Open generated media")}
                                 <ExternalLink className="ml-2 size-3" />
                               </a>
                             </Button>
@@ -1439,8 +1439,8 @@ export default function SocialOperations() {
                           {creative.status === "GENERATED" && !creative.applied_at && (
                             <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
                               {tr
-                                ? "Çıktı üretildi fakat brief üretim sırasında taslak olmadığı veya medya kuralıyla çakıştığı için otomatik eklenmedi."
-                                : "Output was generated but not auto-applied because the brief was no longer a draft or its media contract had changed."}
+                                ? translateUi(uiLanguage, "Çıktı üretildi fakat brief üretim sırasında taslak olmadığı veya medya kuralıyla çakıştığı için otomatik eklenmedi.")
+                                : translateUi(uiLanguage, "Output was generated but not auto-applied because the brief was no longer a draft or its media contract had changed.")}
                             </p>
                           )}
                           {creative.last_error_code && (
@@ -1469,7 +1469,7 @@ export default function SocialOperations() {
                                     });
                                 }}
                               >
-                                {tr ? "Reddet" : "Reject"}
+                                {tr ? translateUi(uiLanguage, "Reddet") : translateUi(uiLanguage, "Reject")}
                               </Button>
                               <Button
                                 size="sm"
@@ -1481,7 +1481,7 @@ export default function SocialOperations() {
                                   })
                                 }
                               >
-                                {tr ? "Maliyeti onayla" : "Approve spend"}
+                                {tr ? translateUi(uiLanguage, "Maliyeti onayla") : translateUi(uiLanguage, "Approve spend")}
                               </Button>
                             </div>
                           )}
@@ -1500,12 +1500,12 @@ export default function SocialOperations() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-base">
-                    {tr ? "Çoklu sosyal hesap kaydı" : "Multi-account registry"}
+                    {tr ? translateUi(uiLanguage, "Çoklu sosyal hesap kaydı") : translateUi(uiLanguage, "Multi-account registry")}
                   </CardTitle>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {tr
-                      ? "Secret değerleri burada tutulmaz; mevcut entegrasyon kasasına yalnız anahtar referansı bağlanır."
-                      : "Secrets are never stored here; only a key reference to the existing integration vault is linked."}
+                      ? translateUi(uiLanguage, "Secret değerleri burada tutulmaz; mevcut entegrasyon kasasına yalnız anahtar referansı bağlanır.")
+                      : translateUi(uiLanguage, "Secrets are never stored here; only a key reference to the existing integration vault is linked.")}
                   </p>
                 </div>
                 <Button
@@ -1514,7 +1514,7 @@ export default function SocialOperations() {
                   disabled={!canManage}
                 >
                   <Plus className="mr-2 size-4" />
-                  {tr ? "Hesap" : "Account"}
+                  {tr ? translateUi(uiLanguage, "Hesap") : translateUi(uiLanguage, "Account")}
                 </Button>
               </div>
             </CardHeader>
@@ -1522,8 +1522,8 @@ export default function SocialOperations() {
               {(accounts.data?.data ?? []).length === 0 ? (
                 <p className="py-10 text-center text-sm text-muted-foreground">
                   {tr
-                    ? "Kayıtlı sosyal hesap yok."
-                    : "No registered social accounts."}
+                    ? translateUi(uiLanguage, "Kayıtlı sosyal hesap yok.")
+                    : translateUi(uiLanguage, "No registered social accounts.")}
                 </p>
               ) : (
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1550,10 +1550,10 @@ export default function SocialOperations() {
                       </div>
                       <p className="mt-3 text-xs text-muted-foreground">
                         {account.integration_key ||
-                          (tr ? "Kasa referansı yok" : "No vault reference")}
+                          (tr ? translateUi(uiLanguage, "Kasa referansı yok") : translateUi(uiLanguage, "No vault reference"))}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {tr ? "Son doğrulama" : "Last verification"}:{" "}
+                        {tr ? translateUi(uiLanguage, "Son doğrulama") : translateUi(uiLanguage, "Last verification")}:{" "}
                         {date(account.last_verification_at)}
                       </p>
                       {account.last_verification_error_code && (
@@ -1580,7 +1580,7 @@ export default function SocialOperations() {
                             ) : (
                               <ShieldCheck className="mr-2 size-4" />
                             )}
-                            {tr ? "Bağlantıyı doğrula" : "Verify connection"}
+                            {tr ? translateUi(uiLanguage, "Bağlantıyı doğrula") : translateUi(uiLanguage, "Verify connection")}
                           </Button>
                         )}
                     </div>
@@ -1597,8 +1597,8 @@ export default function SocialOperations() {
               <Button variant="link" asChild className="mt-4 px-0">
                 <a href="/admin/settings">
                   {tr
-                    ? "Entegrasyon bağlantılarını yönet"
-                    : "Manage integration connections"}
+                    ? translateUi(uiLanguage, "Entegrasyon bağlantılarını yönet")
+                    : translateUi(uiLanguage, "Manage integration connections")}
                   <ExternalLink className="ml-2 size-3" />
                 </a>
               </Button>
@@ -1613,13 +1613,13 @@ export default function SocialOperations() {
                 <div>
                   <CardTitle className="text-base">
                     {tr
-                      ? "Onaylı yayın orkestrasyonu"
-                      : "Approved publication orchestration"}
+                      ? translateUi(uiLanguage, "Onaylı yayın orkestrasyonu")
+                      : translateUi(uiLanguage, "Approved publication orchestration")}
                   </CardTitle>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {tr
-                      ? "Her yayın ayrı onaylanır; retry ve dead-letter kayıtları diğer hesapların akışını durdurmaz."
-                      : "Every publication is approved separately; retries and dead letters do not block other accounts."}
+                      ? translateUi(uiLanguage, "Her yayın ayrı onaylanır; retry ve dead-letter kayıtları diğer hesapların akışını durdurmaz.")
+                      : translateUi(uiLanguage, "Every publication is approved separately; retries and dead letters do not block other accounts.")}
                   </p>
                 </div>
                 <Button
@@ -1632,7 +1632,7 @@ export default function SocialOperations() {
                   onClick={() => setPublicationOpen(true)}
                 >
                   <Plus className="mr-2 size-4" />
-                  {tr ? "Yayın taslağı" : "Publication draft"}
+                  {tr ? translateUi(uiLanguage, "Yayın taslağı") : translateUi(uiLanguage, "Publication draft")}
                 </Button>
               </div>
             </CardHeader>
@@ -1640,15 +1640,15 @@ export default function SocialOperations() {
               {verifiedAccounts.length === 0 && (
                 <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                   {tr
-                    ? "Yayın oluşturmak için en az bir hesabın bağlantı testiyle VERIFIED olması gerekir."
-                    : "At least one account must be VERIFIED by a connection test before creating a publication."}
+                    ? translateUi(uiLanguage, "Yayın oluşturmak için en az bir hesabın bağlantı testiyle VERIFIED olması gerekir.")
+                    : translateUi(uiLanguage, "At least one account must be VERIFIED by a connection test before creating a publication.")}
                 </div>
               )}
               {(publications.data?.data ?? []).length === 0 ? (
                 <p className="py-10 text-center text-sm text-muted-foreground">
                   {tr
-                    ? "Henüz yayın niyeti yok."
-                    : "No publication intents yet."}
+                    ? translateUi(uiLanguage, "Henüz yayın niyeti yok.")
+                    : translateUi(uiLanguage, "No publication intents yet.")}
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -1670,7 +1670,7 @@ export default function SocialOperations() {
                           <p className="mt-2 text-xs text-muted-foreground">
                             {publication.account_name} ·{" "}
                             {date(publication.scheduled_for)} ·{" "}
-                            {tr ? "deneme" : "attempt"}{" "}
+                            {tr ? translateUi(uiLanguage, "deneme") : translateUi(uiLanguage, "attempt")}{" "}
                             {publication.attempt_count}/
                             {publication.max_attempts}
                           </p>
@@ -1693,8 +1693,8 @@ export default function SocialOperations() {
                               }
                             >
                               {tr
-                                ? "Yayın onayına gönder"
-                                : "Submit publication"}
+                                ? translateUi(uiLanguage, "Yayın onayına gönder")
+                                : translateUi(uiLanguage, "Submit publication")}
                             </Button>
                           )}
                           {publication.status === "PENDING_APPROVAL" &&
@@ -1713,7 +1713,7 @@ export default function SocialOperations() {
                                     })
                                   }
                                 >
-                                  {tr ? "Reddet" : "Reject"}
+                                  {tr ? translateUi(uiLanguage, "Reddet") : translateUi(uiLanguage, "Reject")}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -1725,7 +1725,7 @@ export default function SocialOperations() {
                                     })
                                   }
                                 >
-                                  {tr ? "Yayını onayla" : "Approve publication"}
+                                  {tr ? translateUi(uiLanguage, "Yayını onayla") : translateUi(uiLanguage, "Approve publication")}
                                 </Button>
                               </>
                             )}
@@ -1746,7 +1746,7 @@ export default function SocialOperations() {
                                 cancelPublication.mutate(publication.id)
                               }
                             >
-                              {tr ? "İptal" : "Cancel"}
+                              {tr ? translateUi(uiLanguage, "İptal") : translateUi(uiLanguage, "Cancel")}
                             </Button>
                           )}
                         </div>
@@ -1766,13 +1766,13 @@ export default function SocialOperations() {
                 <div>
                   <CardTitle className="text-base">
                     {tr
-                      ? "Doğrulanmış yayın performansı"
-                      : "Verified publication performance"}
+                      ? translateUi(uiLanguage, "Doğrulanmış yayın performansı")
+                      : translateUi(uiLanguage, "Verified publication performance")}
                   </CardTitle>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {tr
-                      ? "Her kart yalnız sağlayıcı receipt'ine bağlı en güncel snapshot'ı kullanır."
-                      : "Each card uses only the latest snapshot bound to a provider receipt."}
+                      ? translateUi(uiLanguage, "Her kart yalnız sağlayıcı receipt'ine bağlı en güncel snapshot'ı kullanır.")
+                      : translateUi(uiLanguage, "Each card uses only the latest snapshot bound to a provider receipt.")}
                   </p>
                 </div>
                 <Badge
@@ -1784,11 +1784,11 @@ export default function SocialOperations() {
                 >
                   {performance.data?.performanceWorkerEnabled
                     ? tr
-                      ? "Toplayıcı aktif"
-                      : "Collector active"
+                      ? translateUi(uiLanguage, "Toplayıcı aktif")
+                      : translateUi(uiLanguage, "Collector active")
                     : tr
-                      ? "Toplayıcı kapalı"
-                      : "Collector disabled"}
+                      ? translateUi(uiLanguage, "Toplayıcı kapalı")
+                      : translateUi(uiLanguage, "Collector disabled")}
                 </Badge>
               </div>
             </CardHeader>
@@ -1822,8 +1822,8 @@ export default function SocialOperations() {
               {(performance.data?.data ?? []).length === 0 ? (
                 <div className="mt-4 rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
                   {tr
-                    ? "Henüz receipt-bound performans snapshot'ı yok; oran veya ROI uydurulmuyor."
-                    : "There is no receipt-bound performance snapshot yet; no rates or ROI are fabricated."}
+                    ? translateUi(uiLanguage, "Henüz receipt-bound performans snapshot'ı yok; oran veya ROI uydurulmuyor.")
+                    : translateUi(uiLanguage, "There is no receipt-bound performance snapshot yet; no rates or ROI are fabricated.")}
                 </div>
               ) : (
                 <div className="mt-4 space-y-3">
@@ -1843,17 +1843,17 @@ export default function SocialOperations() {
                           </Badge>
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {item.account_name} · {tr ? "Gözlem" : "Observed"}:{" "}
+                          {item.account_name} · {tr ? translateUi(uiLanguage, "Gözlem") : translateUi(uiLanguage, "Observed")}:{" "}
                           {date(item.observed_at)}
                         </p>
                         <p className="mt-2 text-xs text-muted-foreground">
-                          {tr ? "Gösterim" : "Impressions"}:{" "}
+                          {tr ? translateUi(uiLanguage, "Gösterim") : translateUi(uiLanguage, "Impressions")}:{" "}
                           {metric(item.metrics?.impressions)} ·{" "}
-                          {tr ? "Etkileşim" : "Engagements"}:{" "}
+                          {tr ? translateUi(uiLanguage, "Etkileşim") : translateUi(uiLanguage, "Engagements")}:{" "}
                           {metric(item.metrics?.engagements)} ·{" "}
-                          {tr ? "Tıklama" : "Clicks"}:{" "}
+                          {tr ? translateUi(uiLanguage, "Tıklama") : translateUi(uiLanguage, "Clicks")}:{" "}
                           {metric(item.metrics?.clicks)} ·{" "}
-                          {tr ? "Lead" : "Leads"}: {metric(item.metrics?.leads)}
+                          {tr ? translateUi(uiLanguage, "Lead") : translateUi(uiLanguage, "Leads")}: {metric(item.metrics?.leads)}
                         </p>
                         {item.last_error_code && (
                           <p className="mt-1 text-xs text-red-600">
@@ -1876,7 +1876,7 @@ export default function SocialOperations() {
                         {requestPerformanceSync.isPending && (
                           <Loader2 className="mr-2 size-4 animate-spin" />
                         )}
-                        {tr ? "Yenilemeyi sırala" : "Queue refresh"}
+                        {tr ? translateUi(uiLanguage, "Yenilemeyi sırala") : translateUi(uiLanguage, "Queue refresh")}
                       </Button>
                     </div>
                   ))}
@@ -1901,21 +1901,21 @@ export default function SocialOperations() {
                   <div>
                     <CardTitle className="text-base">
                       {tr
-                        ? "Sosyal medya → CRM sonuçları"
-                        : "Social media → CRM outcomes"}
+                        ? translateUi(uiLanguage, "Sosyal medya → CRM sonuçları")
+                        : translateUi(uiLanguage, "Social media → CRM outcomes")}
                     </CardTitle>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {tr
-                        ? "Provider metriklerini, sistem tarafından üretilen değişmez takip anahtarıyla CRM lead ve başvurularından ayrı gösterir."
-                        : "Shows provider metrics separately from CRM leads and applications matched through an immutable system tracking key."}
+                        ? translateUi(uiLanguage, "Provider metriklerini, sistem tarafından üretilen değişmez takip anahtarıyla CRM lead ve başvurularından ayrı gösterir.")
+                        : translateUi(uiLanguage, "Shows provider metrics separately from CRM leads and applications matched through an immutable system tracking key.")}
                     </p>
                   </div>
                   <Badge variant="outline">
                     {attribution.data
                       ? `${attribution.data.period.from} → ${attribution.data.period.to}`
                       : tr
-                        ? "Son 30 gün"
-                        : "Last 30 days"}
+                        ? translateUi(uiLanguage, "Son 30 gün")
+                        : translateUi(uiLanguage, "Last 30 days")}
                   </Badge>
                 </div>
               </CardHeader>
@@ -1923,13 +1923,13 @@ export default function SocialOperations() {
                 {attribution.isLoading ? (
                   <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
                     <Loader2 className="mr-2 size-4 animate-spin" />
-                    {tr ? "Katkı modeli hesaplanıyor" : "Calculating attribution"}
+                    {tr ? translateUi(uiLanguage, "Katkı modeli hesaplanıyor") : translateUi(uiLanguage, "Calculating attribution")}
                   </div>
                 ) : attribution.isError ? (
                   <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
                     {tr
-                      ? "CRM katkı görünümü yüklenemedi."
-                      : "CRM attribution view could not be loaded."}
+                      ? translateUi(uiLanguage, "CRM katkı görünümü yüklenemedi.")
+                      : translateUi(uiLanguage, "CRM attribution view could not be loaded.")}
                   </div>
                 ) : (
                   <>
@@ -1986,7 +1986,7 @@ export default function SocialOperations() {
                     {(attribution.data?.spendByCurrency.length ?? 0) > 0 && (
                       <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border p-3">
                         <span className="text-sm font-medium">
-                          {tr ? "Doğrulanmış reklam harcaması" : "Verified ad spend"}
+                          {tr ? translateUi(uiLanguage, "Doğrulanmış reklam harcaması") : translateUi(uiLanguage, "Verified ad spend")}
                         </span>
                         {attribution.data!.spendByCurrency.map((item) => (
                           <Badge key={item.currency_code} variant="outline">
@@ -2005,15 +2005,15 @@ export default function SocialOperations() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">
-                    {tr ? "İçerik bazında gerçek sonuç" : "Actual outcome by content"}
+                    {tr ? translateUi(uiLanguage, "İçerik bazında gerçek sonuç") : translateUi(uiLanguage, "Actual outcome by content")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   {(attribution.data?.briefs ?? []).length === 0 ? (
                     <p className="py-10 text-center text-sm text-muted-foreground">
                       {tr
-                        ? "Bu dönemde takip anahtarıyla eşleşen CRM sonucu yok."
-                        : "No CRM outcome matched a tracking key in this period."}
+                        ? translateUi(uiLanguage, "Bu dönemde takip anahtarıyla eşleşen CRM sonucu yok.")
+                        : translateUi(uiLanguage, "No CRM outcome matched a tracking key in this period.")}
                     </p>
                   ) : (
                     <div className="space-y-3">
@@ -2040,13 +2040,13 @@ export default function SocialOperations() {
                                 {brief.converted_students}
                               </p>
                               <p className="text-[11px] text-muted-foreground">
-                                {tr ? "Öğrenci" : "Student"}
+                                {tr ? translateUi(uiLanguage, "Öğrenci") : translateUi(uiLanguage, "Student")}
                               </p>
                             </div>
                             <div className="rounded-lg bg-muted/60 p-2">
                               <p className="font-semibold">{brief.applications}</p>
                               <p className="text-[11px] text-muted-foreground">
-                                {tr ? "Başvuru" : "Application"}
+                                {tr ? translateUi(uiLanguage, "Başvuru") : translateUi(uiLanguage, "Application")}
                               </p>
                             </div>
                           </div>
@@ -2060,7 +2060,7 @@ export default function SocialOperations() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">
-                    {tr ? "Başvuru aşamaları" : "Application stages"}
+                    {tr ? translateUi(uiLanguage, "Başvuru aşamaları") : translateUi(uiLanguage, "Application stages")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -2087,8 +2087,8 @@ export default function SocialOperations() {
               <ShieldCheck className="mt-0.5 size-4 shrink-0" />
               <span>
                 {tr
-                  ? "CRM sayıları first-touch takip anahtarından üretilir; provider'ın bildirdiği lead/conversion değerleriyle birleştirilmez ve farklar gizlenmez."
-                  : "CRM counts use first-touch tracking keys; they are not merged with provider-reported lead/conversion values, so discrepancies stay visible."}
+                  ? translateUi(uiLanguage, "CRM sayıları first-touch takip anahtarından üretilir; provider'ın bildirdiği lead/conversion değerleriyle birleştirilmez ve farklar gizlenmez.")
+                  : translateUi(uiLanguage, "CRM counts use first-touch tracking keys; they are not merged with provider-reported lead/conversion values, so discrepancies stay visible.")}
               </span>
             </div>
           </div>
@@ -2110,12 +2110,12 @@ export default function SocialOperations() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {tr ? "AI üretim isteği" : "AI generation request"}
+              {tr ? translateUi(uiLanguage, "AI üretim isteği") : translateUi(uiLanguage, "AI generation request")}
             </DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Label>{tr ? "Taslak brief" : "Draft brief"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Taslak brief") : translateUi(uiLanguage, "Draft brief")}</Label>
               <select
                 className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={creativeForm.briefId}
@@ -2149,7 +2149,7 @@ export default function SocialOperations() {
               </select>
             </div>
             <div>
-              <Label>{tr ? "Çıktı türü" : "Output kind"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Çıktı türü") : translateUi(uiLanguage, "Output kind")}</Label>
               <select
                 className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={creativeForm.outputKind}
@@ -2168,7 +2168,7 @@ export default function SocialOperations() {
               </select>
             </div>
             <div>
-              <Label>{tr ? "Dil" : "Locale"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Dil") : translateUi(uiLanguage, "Locale")}</Label>
               <Input
                 className="mt-1"
                 value={creativeForm.locale}
@@ -2195,7 +2195,7 @@ export default function SocialOperations() {
               />
             </div>
             <div>
-              <Label>{tr ? "Entegrasyon kasa anahtarı" : "Integration vault key"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Entegrasyon kasa anahtarı") : translateUi(uiLanguage, "Integration vault key")}</Label>
               <select
                 className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={creativeForm.integrationKey}
@@ -2225,7 +2225,7 @@ export default function SocialOperations() {
               </select>
             </div>
             <div>
-              <Label>{tr ? "Model (isteğe bağlı)" : "Model (optional)"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Model (isteğe bağlı)") : translateUi(uiLanguage, "Model (optional)")}</Label>
               <Input
                 className="mt-1"
                 value={creativeForm.model}
@@ -2236,7 +2236,7 @@ export default function SocialOperations() {
             </div>
             {creativeForm.outputKind !== "CAPTION" && (
               <div>
-                <Label>{tr ? "En-boy oranı" : "Aspect ratio"}</Label>
+                <Label>{tr ? translateUi(uiLanguage, "En-boy oranı") : translateUi(uiLanguage, "Aspect ratio")}</Label>
                 <select
                   className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                   value={creativeForm.aspectRatio}
@@ -2258,7 +2258,7 @@ export default function SocialOperations() {
             )}
             {creativeForm.outputKind === "VIDEO" && (
               <div>
-                <Label>{tr ? "Süre (saniye)" : "Duration (seconds)"}</Label>
+                <Label>{tr ? translateUi(uiLanguage, "Süre (saniye)") : translateUi(uiLanguage, "Duration (seconds)")}</Label>
                 <Input
                   className="mt-1"
                   type="number"
@@ -2290,7 +2290,7 @@ export default function SocialOperations() {
             </div>
             {creativeForm.outputKind !== "CAPTION" && (
               <div className="sm:col-span-2">
-                <Label>{tr ? "Negatif prompt" : "Negative prompt"}</Label>
+                <Label>{tr ? translateUi(uiLanguage, "Negatif prompt") : translateUi(uiLanguage, "Negative prompt")}</Label>
                 <Textarea
                   className="mt-1"
                   maxLength={4_000}
@@ -2305,7 +2305,7 @@ export default function SocialOperations() {
               </div>
             )}
             <div>
-              <Label>{tr ? "Azami hata denemesi" : "Maximum failure attempts"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Azami hata denemesi") : translateUi(uiLanguage, "Maximum failure attempts")}</Label>
               <Input
                 className="mt-1"
                 type="number"
@@ -2326,7 +2326,7 @@ export default function SocialOperations() {
             <div className="grid grid-cols-[1fr_96px] gap-2">
               <div>
                 <Label>
-                  {tr ? "Maliyet tavanı (minor birim)" : "Cost cap (minor unit)"}
+                  {tr ? translateUi(uiLanguage, "Maliyet tavanı (minor birim)") : translateUi(uiLanguage, "Cost cap (minor unit)")}
                 </Label>
                 <Input
                   className="mt-1"
@@ -2346,7 +2346,7 @@ export default function SocialOperations() {
                 />
               </div>
               <div>
-                <Label>{tr ? "Para" : "Currency"}</Label>
+                <Label>{tr ? translateUi(uiLanguage, "Para") : translateUi(uiLanguage, "Currency")}</Label>
                 <Input
                   className="mt-1 uppercase"
                   maxLength={3}
@@ -2362,13 +2362,13 @@ export default function SocialOperations() {
             </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
               {tr
-                ? "Bu onay yalnız AI maliyetini açar. Çıktı taslakta kalır ve ayrıca içerik/yayın onayı ister."
-                : "This approval authorizes only AI spend. Output remains a draft and still needs content and publication approval."}
+                ? translateUi(uiLanguage, "Bu onay yalnız AI maliyetini açar. Çıktı taslakta kalır ve ayrıca içerik/yayın onayı ister.")
+                : translateUi(uiLanguage, "This approval authorizes only AI spend. Output remains a draft and still needs content and publication approval.")}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreativeOpen(false)}>
-              {tr ? "İptal" : "Cancel"}
+              {tr ? translateUi(uiLanguage, "İptal") : translateUi(uiLanguage, "Cancel")}
             </Button>
             <Button
               disabled={
@@ -2384,7 +2384,7 @@ export default function SocialOperations() {
               {createCreative.isPending && (
                 <Loader2 className="mr-2 size-4 animate-spin" />
               )}
-              {tr ? "Onaya gönder" : "Submit for approval"}
+              {tr ? translateUi(uiLanguage, "Onaya gönder") : translateUi(uiLanguage, "Submit for approval")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2394,12 +2394,12 @@ export default function SocialOperations() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {tr ? "Yeni yayın taslağı" : "New publication draft"}
+              {tr ? translateUi(uiLanguage, "Yeni yayın taslağı") : translateUi(uiLanguage, "New publication draft")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <Label>{tr ? "Onaylı içerik" : "Approved content"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Onaylı içerik") : translateUi(uiLanguage, "Approved content")}</Label>
               <select
                 className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={publicationForm.briefId}
@@ -2421,7 +2421,7 @@ export default function SocialOperations() {
               </select>
             </div>
             <div>
-              <Label>{tr ? "Doğrulanmış hesap" : "Verified account"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Doğrulanmış hesap") : translateUi(uiLanguage, "Verified account")}</Label>
               <select
                 className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={publicationForm.accountId}
@@ -2442,7 +2442,7 @@ export default function SocialOperations() {
             </div>
             <div>
               <Label>
-                {tr ? "Planlanan yayın zamanı" : "Scheduled publication time"}
+                {tr ? translateUi(uiLanguage, "Planlanan yayın zamanı") : translateUi(uiLanguage, "Scheduled publication time")}
               </Label>
               <Input
                 type="datetime-local"
@@ -2457,7 +2457,7 @@ export default function SocialOperations() {
               />
             </div>
             <div>
-              <Label>{tr ? "Azami deneme" : "Maximum attempts"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Azami deneme") : translateUi(uiLanguage, "Maximum attempts")}</Label>
               <Input
                 type="number"
                 min={1}
@@ -2478,7 +2478,7 @@ export default function SocialOperations() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPublicationOpen(false)}>
-              {tr ? "İptal" : "Cancel"}
+              {tr ? translateUi(uiLanguage, "İptal") : translateUi(uiLanguage, "Cancel")}
             </Button>
             <Button
               disabled={
@@ -2491,7 +2491,7 @@ export default function SocialOperations() {
               {createPublication.isPending && (
                 <Loader2 className="mr-2 size-4 animate-spin" />
               )}
-              {tr ? "Taslak oluştur" : "Create draft"}
+              {tr ? translateUi(uiLanguage, "Taslak oluştur") : translateUi(uiLanguage, "Create draft")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2501,12 +2501,12 @@ export default function SocialOperations() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {tr ? "Yeni içerik brief'i" : "New content brief"}
+              {tr ? translateUi(uiLanguage, "Yeni içerik brief'i") : translateUi(uiLanguage, "New content brief")}
             </DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Label>{tr ? "Başlık" : "Title"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Başlık") : translateUi(uiLanguage, "Title")}</Label>
               <Input
                 className="mt-1"
                 value={briefForm.title}
@@ -2516,7 +2516,7 @@ export default function SocialOperations() {
               />
             </div>
             <div>
-              <Label>{tr ? "Hedef" : "Objective"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Hedef") : translateUi(uiLanguage, "Objective")}</Label>
               <Textarea
                 className="mt-1"
                 value={briefForm.objective}
@@ -2526,7 +2526,7 @@ export default function SocialOperations() {
               />
             </div>
             <div>
-              <Label>{tr ? "Hedef kitle" : "Audience"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Hedef kitle") : translateUi(uiLanguage, "Audience")}</Label>
               <Textarea
                 className="mt-1"
                 value={briefForm.audience}
@@ -2536,7 +2536,7 @@ export default function SocialOperations() {
               />
             </div>
             <div>
-              <Label>{tr ? "İçerik türü" : "Content kind"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "İçerik türü") : translateUi(uiLanguage, "Content kind")}</Label>
               <select
                 className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={briefForm.contentKind}
@@ -2554,7 +2554,7 @@ export default function SocialOperations() {
             </div>
             <div>
               <Label>
-                {tr ? "Diller (virgülle)" : "Locales (comma separated)"}
+                {tr ? translateUi(uiLanguage, "Diller (virgülle)") : translateUi(uiLanguage, "Locales (comma separated)")}
               </Label>
               <Input
                 className="mt-1"
@@ -2565,7 +2565,7 @@ export default function SocialOperations() {
               />
             </div>
             <div className="sm:col-span-2">
-              <Label>{tr ? "Kanallar" : "Channels"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Kanallar") : translateUi(uiLanguage, "Channels")}</Label>
               <div className="mt-2 flex flex-wrap gap-2">
                 {CHANNELS.map((channel) => (
                   <button
@@ -2589,7 +2589,7 @@ export default function SocialOperations() {
               </div>
             </div>
             <div className="sm:col-span-2">
-              <Label>{tr ? "Medya dosyaları" : "Media files"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Medya dosyaları") : translateUi(uiLanguage, "Media files")}</Label>
               <div className="mt-2 rounded-xl border border-dashed p-4">
                 <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-muted/60 px-4 py-3 text-sm font-medium hover:bg-muted">
                   {mediaUploading ? (
@@ -2599,11 +2599,11 @@ export default function SocialOperations() {
                   )}
                   {mediaUploading
                     ? tr
-                      ? "Yükleniyor…"
-                      : "Uploading…"
+                      ? translateUi(uiLanguage, "Yükleniyor…")
+                      : translateUi(uiLanguage, "Uploading…")
                     : tr
-                      ? "Görsel veya MP4 seç"
-                      : "Choose images or MP4"}
+                      ? translateUi(uiLanguage, "Görsel veya MP4 seç")
+                      : translateUi(uiLanguage, "Choose images or MP4")}
                   <input
                     className="sr-only"
                     type="file"
@@ -2618,8 +2618,8 @@ export default function SocialOperations() {
                 </label>
                 <p className="mt-2 text-xs text-muted-foreground">
                   {tr
-                    ? "En fazla 10 dosya. Görseller 15 MB, MP4 videolar 25 MB. Reel ve video için tek MP4 zorunludur."
-                    : "Up to 10 files. Images 15 MB, MP4 videos 25 MB. Reels and videos require exactly one MP4."}
+                    ? translateUi(uiLanguage, "En fazla 10 dosya. Görseller 15 MB, MP4 videolar 25 MB. Reel ve video için tek MP4 zorunludur.")
+                    : translateUi(uiLanguage, "Up to 10 files. Images 15 MB, MP4 videos 25 MB. Reels and videos require exactly one MP4.")}
                 </p>
                 {briefMediaAssets.length > 0 && (
                   <div className="mt-3 space-y-2">
@@ -2657,7 +2657,7 @@ export default function SocialOperations() {
               </div>
             </div>
             <div>
-              <Label>{tr ? "Planlanan zaman" : "Scheduled time"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Planlanan zaman") : translateUi(uiLanguage, "Scheduled time")}</Label>
               <Input
                 type="datetime-local"
                 className="mt-1"
@@ -2698,8 +2698,8 @@ export default function SocialOperations() {
             </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
               {tr
-                ? "utm_content sistem tarafından değişmez bir takip anahtarı olarak üretilecek. Böylece provider lead sayısı ile gerçek CRM sonucu ayrı ayrı doğrulanabilir."
-                : "utm_content is generated as an immutable system tracking key so provider leads and actual CRM outcomes can be verified separately."}
+                ? translateUi(uiLanguage, "utm_content sistem tarafından değişmez bir takip anahtarı olarak üretilecek. Böylece provider lead sayısı ile gerçek CRM sonucu ayrı ayrı doğrulanabilir.")
+                : translateUi(uiLanguage, "utm_content is generated as an immutable system tracking key so provider leads and actual CRM outcomes can be verified separately.")}
             </div>
             <div className="sm:col-span-2">
               <Label>{translateUi(uiLanguage, "Caption / copy")}</Label>
@@ -2714,7 +2714,7 @@ export default function SocialOperations() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBriefOpen(false)}>
-              {tr ? "İptal" : "Cancel"}
+              {tr ? translateUi(uiLanguage, "İptal") : translateUi(uiLanguage, "Cancel")}
             </Button>
             <Button
               disabled={
@@ -2731,7 +2731,7 @@ export default function SocialOperations() {
               {createBrief.isPending && (
                 <Loader2 className="mr-2 size-4 animate-spin" />
               )}
-              {tr ? "Taslak oluştur" : "Create draft"}
+              {tr ? translateUi(uiLanguage, "Taslak oluştur") : translateUi(uiLanguage, "Create draft")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2741,7 +2741,7 @@ export default function SocialOperations() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {tr ? "Sosyal hesap kaydı" : "Register social account"}
+              {tr ? translateUi(uiLanguage, "Sosyal hesap kaydı") : translateUi(uiLanguage, "Register social account")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -2773,7 +2773,7 @@ export default function SocialOperations() {
               />
             </div>
             <div>
-              <Label>{tr ? "Görünen ad" : "Display name"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Görünen ad") : translateUi(uiLanguage, "Display name")}</Label>
               <Input
                 className="mt-1"
                 value={accountForm.displayName}
@@ -2786,7 +2786,7 @@ export default function SocialOperations() {
               />
             </div>
             <div>
-              <Label>{tr ? "Hesap türü" : "Account type"}</Label>
+              <Label>{tr ? translateUi(uiLanguage, "Hesap türü") : translateUi(uiLanguage, "Account type")}</Label>
               <select
                 className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={accountForm.accountKind}
@@ -2809,7 +2809,7 @@ export default function SocialOperations() {
             </div>
             {accountForm.accountKind === "AD_ACCOUNT" && (
               <div>
-                <Label>{tr ? "Hesap para birimi" : "Account currency"}</Label>
+                <Label>{tr ? translateUi(uiLanguage, "Hesap para birimi") : translateUi(uiLanguage, "Account currency")}</Label>
                 <Input
                   className="mt-1 uppercase"
                   maxLength={3}
@@ -2828,7 +2828,7 @@ export default function SocialOperations() {
             )}
             <div>
               <Label>
-                {tr ? "Entegrasyon kasa anahtarı" : "Integration vault key"}
+                {tr ? translateUi(uiLanguage, "Entegrasyon kasa anahtarı") : translateUi(uiLanguage, "Integration vault key")}
               </Label>
               <select
                 className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
@@ -2858,7 +2858,7 @@ export default function SocialOperations() {
             </div>
             <div>
               <Label>
-                {tr ? "Harici hesap referansı" : "External account reference"}
+                {tr ? translateUi(uiLanguage, "Harici hesap referansı") : translateUi(uiLanguage, "External account reference")}
               </Label>
               <Input
                 className="mt-1"
@@ -2872,14 +2872,14 @@ export default function SocialOperations() {
               />
               <p className="mt-1 text-xs text-muted-foreground">
                 {tr
-                  ? "Ham değer saklanmaz; yalnız SHA-256 özeti tutulur."
-                  : "The raw value is not stored; only its SHA-256 digest is retained."}
+                  ? translateUi(uiLanguage, "Ham değer saklanmaz; yalnız SHA-256 özeti tutulur.")
+                  : translateUi(uiLanguage, "The raw value is not stored; only its SHA-256 digest is retained.")}
               </p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAccountOpen(false)}>
-              {tr ? "İptal" : "Cancel"}
+              {tr ? translateUi(uiLanguage, "İptal") : translateUi(uiLanguage, "Cancel")}
             </Button>
             <Button
               disabled={
@@ -2895,7 +2895,7 @@ export default function SocialOperations() {
               {createAccount.isPending && (
                 <Loader2 className="mr-2 size-4 animate-spin" />
               )}
-              {tr ? "Kaydet" : "Register"}
+              {tr ? translateUi(uiLanguage, "Kaydet") : translateUi(uiLanguage, "Register")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -951,6 +951,7 @@ function DataQualityPanel({
   copy: ReportingCopy;
   retry: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   if (!report) return <ReportError retry={retry} copy={copy} />;
   const coverage = [
     { label: copy.leadSource, value: report.data.coverage.leadSourcePercent },

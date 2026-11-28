@@ -80,11 +80,11 @@ export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onCh
   function loadCompanySignature(file?: File) {
     if (!file) return;
     if (!(["image/png", "image/jpeg"].includes(file.type))) {
-      toast({ title: "PNG or JPEG required", description: "Upload the official stamp/signature as a PNG or JPEG image.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "PNG or JPEG required"), description: translateUi(uiLanguage, "Upload the official stamp/signature as a PNG or JPEG image."), variant: "destructive" });
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      toast({ title: "Signature image is too large", description: "Maximum file size is 2 MB.", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Signature image is too large"), description: translateUi(uiLanguage, "Maximum file size is 2 MB."), variant: "destructive" });
       return;
     }
     const reader = new FileReader();
@@ -95,13 +95,13 @@ export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onCh
         config: { ...current.config, companySignatureDataUrl: String(reader.result || "") },
       }));
     };
-    reader.onerror = () => toast({ title: "Signature image could not be read", variant: "destructive" });
+    reader.onerror = () => toast({ title: translateUi(uiLanguage, "Signature image could not be read"), variant: "destructive" });
     reader.readAsDataURL(file);
   }
 
   async function save() {
     if (!form.key.trim() || !form.name.trim()) {
-      toast({ title: "Brand key and name are required", variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Brand key and name are required"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -114,11 +114,11 @@ export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onCh
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...form, config }),
       });
-      toast({ title: editing ? "Brand profile updated" : "Brand profile created" });
+      toast({ title: editing ? translateUi(uiLanguage, "Brand profile updated") : translateUi(uiLanguage, "Brand profile created") });
       reset();
       await onChanged();
     } catch (error: any) {
-      toast({ title: "Brand profile could not be saved", description: error.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Brand profile could not be saved"), description: error.message, variant: "destructive" });
     }
     setSaving(false);
   }
@@ -129,7 +129,7 @@ export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onCh
       await customFetch(`/api/contract-brands/${profile.id}`, { method: "DELETE" });
       await onChanged();
     } catch (error: any) {
-      toast({ title: "Brand profile could not be deactivated", description: error.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Brand profile could not be deactivated"), description: error.message, variant: "destructive" });
     }
   }
 
@@ -157,10 +157,10 @@ export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onCh
                 {profile.config.logoUrl ? <img src={profile.config.logoUrl} alt="" className="h-10 w-14 object-contain rounded border" /> : <div className="h-10 w-14 rounded border" style={{ background: profile.config.primaryColor || "#143591" }} />}
                 <div className="min-w-0 flex-1">
                   <div className="font-medium truncate">{profile.name}</div>
-                  <div className="text-xs text-muted-foreground font-mono">{profile.key} · {profile.isActive ? "active" : "inactive"}</div>
+                  <div className="text-xs text-muted-foreground font-mono">{profile.key} · {profile.isActive ? "active" : translateUi(uiLanguage, "inactive")}</div>
                   <div className={`mt-1 inline-flex items-center gap-1 text-xs ${profile.hasCompanySignature ? "text-emerald-600" : "text-amber-600"}`}>
                     {profile.hasCompanySignature ? <FileCheck2 className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                    {profile.hasCompanySignature ? "Official signature configured" : "Official signature required"}
+                    {profile.hasCompanySignature ? translateUi(uiLanguage, "Official signature configured") : translateUi(uiLanguage, "Official signature required")}
                   </div>
                 </div>
                 <Button type="button" size="icon" variant="ghost" onClick={() => edit(profile)}><Edit className="h-4 w-4" /></Button>
@@ -170,7 +170,7 @@ export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onCh
           </div>
           <div className="rounded-lg border p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold">{editing ? `Edit ${editing.name}` : "New brand profile"}</h3>
+              <h3 className="font-semibold">{editing ? `Edit ${editing.name}` : translateUi(uiLanguage, "New brand profile")}</h3>
               {editing && <Button type="button" size="sm" variant="ghost" onClick={reset}><Plus className="h-4 w-4 mr-1" /> {translateUi(uiLanguage, "New")}</Button>}
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -194,7 +194,7 @@ export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onCh
               </div>
               <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed px-3 py-3 text-sm hover:bg-muted/50">
                 <Upload className="h-4 w-4" />
-                {signatureConfigured ? "Replace stamp/signature" : "Upload stamp/signature"}
+                {signatureConfigured ? translateUi(uiLanguage, "Replace stamp/signature") : translateUi(uiLanguage, "Upload stamp/signature")}
                 <input className="sr-only" type="file" accept="image/png,image/jpeg" onChange={event => loadCompanySignature(event.target.files?.[0])} />
               </label>
               {form.config.companySignatureDataUrl ? (
@@ -218,7 +218,7 @@ export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onCh
               )}
             </div>
             <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} /><Power className="h-4 w-4" /> {translateUi(uiLanguage, "Active")}</label>
-            <Button type="button" onClick={save} disabled={saving}>{saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}{editing ? "Save brand profile" : "Create brand profile"}</Button>
+            <Button type="button" onClick={save} disabled={saving}>{saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}{editing ? translateUi(uiLanguage, "Save brand profile") : translateUi(uiLanguage, "Create brand profile")}</Button>
           </div>
         </div>
         <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{translateUi(uiLanguage, "Close")}</Button></DialogFooter>

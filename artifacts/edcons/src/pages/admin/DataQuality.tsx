@@ -153,13 +153,13 @@ export default function DataQualityPage() {
                       <p className="text-xs text-muted-foreground">{row.universityName} · {[row.city, row.country].filter(Boolean).join(", ")}</p>
                     </td>
                     <td className="p-3"><Badge variant={row.confidence === "verified" ? "default" : row.confidence === "missing" ? "destructive" : "secondary"}>{row.confidence}</Badge></td>
-                    <td className="p-3 text-xs">{row.missingFields.join(", ") || "None"}</td>
+                    <td className="p-3 text-xs">{row.missingFields.join(", ") || translateUi(uiLanguage, "None")}</td>
                     <td className="p-3 text-xs">
                       <div className="flex items-center gap-1">
-                        <span>{row.sourceName || "No verified source"}</span>
+                        <span>{row.sourceName || translateUi(uiLanguage, "No verified source")}</span>
                         {row.sourceUrl && <a href={row.sourceUrl} target="_blank" rel="noreferrer" aria-label={translateUi(uiLanguage, "Open evidence source")}><ExternalLink className="size-3.5" /></a>}
                       </div>
-                      <p className="text-muted-foreground">{row.lastVerifiedAt ? new Date(row.lastVerifiedAt).toLocaleString() : "Not verified"}</p>
+                      <p className="text-muted-foreground">{row.lastVerifiedAt ? new Date(row.lastVerifiedAt).toLocaleString() : translateUi(uiLanguage, "Not verified")}</p>
                     </td>
                     <td className="p-3 text-xs">
                       <p>{row.publicPagesAffected} {translateUi(uiLanguage, "public page(s)")}</p>
@@ -226,7 +226,7 @@ export default function DataQualityPage() {
                     </Badge>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {row.activeApplicationCount} {translateUi(uiLanguage, "active application(s) · Evidence:")} {row.evidence.join(", ") || "none"}
+                    {row.activeApplicationCount} {translateUi(uiLanguage, "active application(s) · Evidence:")} {row.evidence.join(", ") || translateUi(uiLanguage, "none")}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">

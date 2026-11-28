@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import {
   lazy,
   Suspense,
@@ -916,6 +917,7 @@ function HeroFields({
   copy: Copy;
   context: HeroEditorContext | null;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang } = useI18n();
   const patch = (value: Partial<DetailContentSection>) =>
     onChange({ ...section, ...value });
@@ -1577,10 +1579,11 @@ export default function DetailContentEditor({
   onClose: () => void;
   onSaved?: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang } = useI18n();
   const { user } = useAuth();
   const canSelfPublish = user?.role === "super_admin";
-  const copy: Copy = (en, tr) => (lang === "tr" ? tr : en);
+  const copy: Copy = (en, tr) => (translateUi(lang, en, tr));
   const [locale, setLocale] = useState(target.locale);
   const [saved, setSaved] = useState<SavedContent | null>(null);
   const [content, setContent] = useState<DetailContent | null>(null);

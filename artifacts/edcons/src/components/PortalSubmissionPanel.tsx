@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 /**
  * PortalSubmissionPanel.tsx — "Üniversite portalına gönder" paneli
  *
@@ -135,6 +136,7 @@ interface Props {
 // ---------------------------------------------------------------------------
 
 export default function PortalSubmissionPanel({ applicationId, universityName }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, dir } = useI18n();
   const { toast } = useToast();
   const { user: authUser } = useAuth();

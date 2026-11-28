@@ -535,9 +535,9 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
         }),
       });
       await qc.invalidateQueries({ queryKey: ["agent-me"] });
-      toast({ title: "Agency updated", description: "Your business name has been saved." });
+      toast({ title: translateUi(uiLanguage, "Agency updated"), description: translateUi(uiLanguage, "Your business name has been saved.") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -552,9 +552,9 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
         body: JSON.stringify({ [field]: url }),
       });
       await qc.invalidateQueries({ queryKey: ["agent-me"] });
-      toast({ title: "Document uploaded" });
+      toast({ title: translateUi(uiLanguage, "Document uploaded") });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Upload failed"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -566,9 +566,9 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
         body: JSON.stringify({ [field]: "" }),
       });
       await qc.invalidateQueries({ queryKey: ["agent-me"] });
-      toast({ title: "Document removed" });
+      toast({ title: translateUi(uiLanguage, "Document removed") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -627,8 +627,8 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
               />
               <p className="text-[11px] text-muted-foreground">
                 {isStaff
-                  ? "Only the account owner can edit the business name"
-                  : "Enter your registered legal company / business name"}
+                  ? translateUi(uiLanguage, "Only the account owner can edit the business name")
+                  : translateUi(uiLanguage, "Enter your registered legal company / business name")}
               </p>
             </div>
 
@@ -728,6 +728,7 @@ function DocumentUploader({
   previewAsImage?: boolean;
   readOnly?: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -772,7 +773,7 @@ function DocumentUploader({
           <button onClick={() => inputRef.current?.click()} disabled={uploading || readOnly}
             className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors p-4 disabled:cursor-default disabled:hover:text-muted-foreground">
             {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : icon || <Upload className="w-5 h-5" />}
-            <span className="text-[10px] font-medium">{uploading ? "Uploading..." : readOnly ? "Not uploaded" : "Upload"}</span>
+            <span className="text-[10px] font-medium">{uploading ? translateUi(uiLanguage, "Uploading...") : readOnly ? translateUi(uiLanguage, "Not uploaded") : translateUi(uiLanguage, "Upload")}</span>
           </button>
         )}
       </div>
@@ -940,7 +941,7 @@ function AgencyIntegrationCard({
       onSaved();
       toast({ title: `${title} saved` });
     } catch (error: any) {
-      toast({ title: "Integration could not be saved", description: error.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Integration could not be saved"), description: error.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -1119,15 +1120,15 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
   const handleCopy = () => {
     navigator.clipboard.writeText(formCode);
     setCopied(true);
-    toast({ title: "Copied!", description: "Form code copied to clipboard." });
+    toast({ title: translateUi(uiLanguage, "Copied!"), description: translateUi(uiLanguage, "Form code copied to clipboard.") });
     setTimeout(() => setCopied(false), 2000);
   };
 
   async function saveEmbedWidget() {
     if (catalogMode && universityScope === "selected" && presetUniversityIds.length === 0) {
       toast({
-        title: "Select at least one university",
-        description: "Choose one or more universities, or switch the scope to All Universities.",
+        title: translateUi(uiLanguage, "Select at least one university"),
+        description: translateUi(uiLanguage, "Choose one or more universities, or switch the scope to All Universities."),
         variant: "destructive",
       });
       return;
@@ -1157,9 +1158,9 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
         }),
       });
       await qc.invalidateQueries({ queryKey: ["agent-embed-widget"] });
-      toast({ title: "Embed widget saved" });
+      toast({ title: translateUi(uiLanguage, "Embed widget saved") });
     } catch (error: any) {
-      toast({ title: "Embed widget could not be saved", description: error.message, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Embed widget could not be saved"), description: error.message, variant: "destructive" });
     } finally {
       setSavingEmbed(false);
     }
@@ -1182,7 +1183,7 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
               <h3 className="font-display font-semibold text-base">{translateUi(uiLanguage, "Website Widget")}</h3>
               <p className="text-sm text-muted-foreground mt-1">{translateUi(uiLanguage, "Create a responsive website experience with your agency branding applied automatically.")}</p>
             </div>
-            <Badge variant="outline">{agentProfile.planTier || "standard"}</Badge>
+            <Badge variant="outline">{agentProfile.planTier || translateUi(uiLanguage, "standard")}</Badge>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -1314,7 +1315,7 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
             <div className="flex justify-end">
               <Button onClick={saveEmbedWidget} disabled={savingEmbed} className="gap-2">
                 {savingEmbed ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {widget ? "Update embed" : "Create embed"}
+                {widget ? translateUi(uiLanguage, "Update embed") : translateUi(uiLanguage, "Create embed")}
               </Button>
             </div>
           )}
@@ -1322,7 +1323,7 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
             <div className="relative">
               <Button size="sm" variant="secondary" className="absolute right-3 top-3 z-10 gap-1.5" onClick={() => {
                 navigator.clipboard.writeText(embedCode);
-                toast({ title: "Embed code copied" });
+                toast({ title: translateUi(uiLanguage, "Embed code copied") });
               }}><Copy className="h-3.5 w-3.5" /> {translateUi(uiLanguage, "Copy embed")}</Button>
               <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-xl border bg-secondary/50 p-4 pr-32 text-xs">{embedCode}</pre>
             </div>
