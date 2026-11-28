@@ -127,7 +127,7 @@ interface EditStagesDialogProps {
   open: boolean;
   onClose: () => void;
   stages: PipelineStage[];
-  onSave: (stages: PipelineStage[]) => Promise<void>;
+  onSave: (stages: PipelineStage[], expectedStageIds: number[]) => Promise<void>;
   isSaving: boolean;
   entityLabel: string;
   /**
@@ -742,6 +742,7 @@ function StageEditForm({
 export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, entityLabel, studentStages }: EditStagesDialogProps) {
   const showStudentMapping = !!studentStages && (stages[0]?.entityType === "application");
   const [localStages, setLocalStages] = useState<PipelineStage[]>([]);
+  const [expectedStageIds, setExpectedStageIds] = useState<number[]>([]);
   const [error, setError] = useState("");
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [approvedTemplates, setApprovedTemplates] = useState<ApprovedTemplate[]>([]);
@@ -754,6 +755,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
   useEffect(() => {
     if (open) {
       setLocalStages(stages.map(s => ({ ...s })));
+      setExpectedStageIds(stages.flatMap(stage => stage.id == null ? [] : [stage.id]));
       setError("");
       setEditIndex(null);
     }
@@ -873,10 +875,14 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
       return;
     }
     try {
-      await onSave(localStages.map((s, i) => ({ ...s, sortOrder: i })));
+      await onSave(localStages.map((s, i) => ({ ...s, sortOrder: i })), expectedStageIds);
       toast({ title: t("editStages.savedSuccess") });
       onClose();
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === "PIPELINE_STAGES_CHANGED") {
+        setError(t("workPipelines.conflict"));
+        return;
+      }
       toast({ title: t("editStages.errorTitle"), description: t("editStages.saveFailedDesc"), variant: "destructive" });
     }
   }
@@ -958,6 +964,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
                 />
                 <Input
                   value={stage.key}
+                  maxLength={160}
                   onChange={e => {
                     const newKey = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_");
                     updateStageAtIndex(idx, { ...stage, key: newKey });

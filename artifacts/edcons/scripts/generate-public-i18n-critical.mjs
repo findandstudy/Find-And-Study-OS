@@ -10,7 +10,7 @@ const publicUiTextKeys = JSON.parse(fs.readFileSync(path.join(root, 'scripts/pub
 const namespaces = [
   "a11y", "nav", "footer", "cookie", "hero", "stats", "features",
   "countries", "countryDetail", "catalogDetail", "programs",
-  "courseFinderPage", "studentJourney", "common", "seo", "apply", "contact", "phone",
+  "courseFinderPage", "studentJourney", "common", "seo", "apply", "about", "blog", "contact", "phone",
 ];
 const publicCatalogDetailKeys = [
   "advancedFee",

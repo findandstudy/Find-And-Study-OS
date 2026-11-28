@@ -501,6 +501,9 @@ export function matchPublicCatalogRenderPath(
   if (segments.length === 2 && segments[1] === "programs") {
     return { kind: "program_list", locale, path };
   }
+  if (segments.length === 2 && ["about", "contact", "blog"].includes(segments[1])) {
+    return { kind: "page_detail", locale, path, slug: segments[1] };
+  }
   if (segments.length === 3 && segments[1] === "programs") {
     return {
       kind: "program_detail",
@@ -1821,11 +1824,12 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
   }
   if (model.kind === "page_detail") {
     const webPage = {
-      "@type": "WebPage",
+      "@type": model.page.slug === "about" ? "AboutPage" : model.page.slug === "contact" ? "ContactPage" :
+        model.page.slug === "blog" ? "Blog" : "WebPage",
       name: model.page.title,
       description: model.description,
       url: `${siteUrl}${model.canonicalPath}`,
-      datePublished: model.page.publishedAt,
+      ...(model.page.id > 0 ? { datePublished: model.page.publishedAt } : {}),
       inLanguage: model.locale,
       isPartOf: {
         "@type": "WebSite",

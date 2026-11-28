@@ -19,11 +19,17 @@ export type Notice = {
   channel: "email" | "whatsapp";
   policy: unknown;
   created_at: Date;
+  event_binding_hash?: string | null;
+  origin_txid?: string | null;
+  journey_key?: string | null;
+  attempts?: number;
   claim_token?: string;
   email_queue_id?: number;
   recipient_hash?: string;
   context_hash?: string;
 };
+export type NoticeContact =
+  | { kind: "lead" | "student" | "agent" | "workConversation"; id: number };
 export const COMMON_NOTICE_VARIABLES = [
   "recordName",
   "recipientName",
@@ -72,6 +78,7 @@ export async function noticeContext(
       userId: number | null;
       actorId: number;
       recipientKey: string;
+      contact: NoticeContact | null;
     }
 > {
   if (Date.now() - new Date(n.created_at).getTime() > 86400000)
@@ -171,12 +178,6 @@ export async function noticeContext(
     [policy.configuredById],
   );
   if (!actor.rows.length) return { code: "NOTICE_CONFIGURATOR_INACTIVE" };
-  if (
-    board &&
-    board.createdBy !== policy.configuredById &&
-    !board.memberIds.includes(policy.configuredById)
-  )
-    return { code: "NOTICE_SCOPE_CHANGED" };
   let agent: any = null;
   if (agentId) {
     const r = await c.query(
@@ -287,8 +288,29 @@ export async function noticeContext(
   )
     return { code: "NOTICE_EMAIL_UNVERIFIED" };
   const normalizedPhone = toE164(phone);
-  if (n.channel === "whatsapp" && !normalizedPhone)
-    return { code: "NOTICE_PHONE_MISSING" };
+  if (n.channel === "whatsapp") {
+    if (!normalizedPhone) return { code: "NOTICE_PHONE_MISSING" };
+    const blocked = await c.query(
+      "SELECT 1 FROM external_contacts WHERE channel='whatsapp' AND is_blocked AND (phone_e164=$1 OR external_id=$2 OR external_id=$3) LIMIT 1",
+      [normalizedPhone, normalizedPhone.replace(/^\+/, ""), `wa_out:${normalizedPhone.replace(/^\+/, "")}`],
+    );
+    if (blocked.rows.length) return { code: "NOTICE_RECIPIENT_BLOCKED" };
+  }
+  let contact: NoticeContact | null = null;
+  if (recipient === "agent" && agent) contact = { kind: "agent", id: agent.id };
+  if (recipient === "contact") {
+    if (n.entity_kind === "work") {
+      const sourceConversationId = record.source?.conversationId;
+      if (record.source?.kind === "channel" && Number.isSafeInteger(sourceConversationId) && sourceConversationId > 0 &&
+          String(policy.channelAccountId) === record.source.key) {
+        contact = { kind: "workConversation", id: sourceConversationId };
+      }
+    } else {
+      contact = n.entity_kind === "lead" && !subject.converted_student_id
+        ? { kind: "lead", id: subject.id }
+        : { kind: "student", id: subject.converted_student_id ?? subject.id };
+    }
+  }
   const label = stage.label || stage.name;
   const common = {
     recordName: display,
@@ -323,5 +345,6 @@ export async function noticeContext(
     userId,
     actorId: policy.configuredById,
     recipientKey,
+    contact,
   };
 }

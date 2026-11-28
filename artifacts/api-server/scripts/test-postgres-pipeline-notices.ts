@@ -21,7 +21,7 @@ const u = new URL(process.env.DATABASE_URL!);
 if (
   u.hostname !== "127.0.0.1" ||
   u.port !== "5433" ||
-  u.pathname !== "/fasos_apply_local" ||
+  !["/fasos_apply_local", "/fas_dev_pipeline_hardening"].includes(u.pathname) ||
   u.username !== "postgres" ||
   u.password ||
   process.env.NODE_ENV !== "test" ||
@@ -54,7 +54,7 @@ test("all four kinds: durable intents, template rendering, mock WA, last-mile ch
     )
   ).rows[0];
   assert.deepEqual(identity, {
-    name: "fasos_apply_local",
+    name: u.pathname.slice(1),
     host: "127.0.0.1/32",
     port: 5433,
   });
@@ -446,11 +446,24 @@ test("all four kinds: durable intents, template rendering, mock WA, last-mile ch
       }
     },
   );
-  await t.test("same stage update/re-entry deduplicates", async () => {
-    await pool.query("UPDATE leads SET status=$2 WHERE id=$1", [lead.id, key]);
-    await pool.query("UPDATE leads SET status='new' WHERE id=$1", [lead.id]);
+  await t.test("same-stage updates enqueue nothing and a genuine re-entry has its own transition", async () => {
     await pool.query("UPDATE leads SET status=$2 WHERE id=$1", [lead.id, key]);
     assert.equal((await intents()).length, 8);
+    await pool.query("UPDATE leads SET status='new' WHERE id=$1", [lead.id]);
+    await pool.query("UPDATE leads SET status=$2 WHERE id=$1", [lead.id, key]);
+    const list = await intents();
+    assert.equal(list.length, 10);
+    const leadNotices = list.filter(row => row.entity_kind === "lead");
+    assert.equal(new Set(leadNotices.map(row => row.transition_id)).size, 2);
+  });
+  await t.test("an event-time recipient cannot silently change before the worker claims it", async () => {
+    await pool.query("UPDATE leads SET email=$2, phone=$3, phone_e164=$3 WHERE id=$1", [
+      lead.id, key + "-changed@example.test", "+12025550123",
+    ]);
+    await processPipelineNotices(mock);
+    const list = (await intents()).filter(row => row.entity_kind === "lead" && row.status === "skipped");
+    assert.equal(list.length, 2);
+    assert.ok(list.every(row => row.error_code === "NOTICE_RECIPIENT_CHANGED"));
   });
   await t.test(
     "preferences, account revision and stage drift block queued delivery",

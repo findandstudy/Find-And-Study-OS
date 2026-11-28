@@ -94,13 +94,14 @@ export interface SaveStagesResult {
   warnings: string[];
 }
 
-async function saveStages(entityType: string, stages: PipelineStage[]): Promise<SaveStagesResult> {
+async function saveStages(entityType: string, stages: PipelineStage[], expectedStageIds: number[]): Promise<SaveStagesResult> {
   const r = await fetch(`${BASE_URL}/api/pipeline-stages/${entityType}`, {
     method: "PUT",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ stages }),
+    body: JSON.stringify({ stages, expectedStageIds }),
   });
+  if (r.status === 409) throw new Error("PIPELINE_STAGES_CHANGED");
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const body = await r.json();
   // Backwards-compat: server may return either an array of stages
@@ -125,7 +126,8 @@ export function usePipelineStages(entityType: string, includeHidden = false) {
   );
 
   const mutation = useMutation({
-    mutationFn: (stages: PipelineStage[]) => saveStages(entityType, stages),
+    mutationFn: ({ stages, expectedStageIds }: { stages: PipelineStage[]; expectedStageIds: number[] }) =>
+      saveStages(entityType, stages, expectedStageIds),
     onSuccess: (data) => {
       queryClient.setQueryData(["pipeline-stages", entityType, includeHidden], data.stages);
     },

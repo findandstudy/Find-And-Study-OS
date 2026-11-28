@@ -45,7 +45,7 @@ import { hasPublishedDetailContent, readPublishedDetailContent, readPublishedDet
 import { buildWebsiteSeoDraft } from "./websiteSeoDraft";
 import { buildAutomaticEnglishDetailSeo } from "./websiteDetailSeo";
 import { readPublicCatalogPrices } from "./publicCatalogPriceReadModel";
-import { projectPublicTuition } from "./publicCatalogTuition";
+import { programWithCurrentPublicFees, projectPublicTuition } from "./publicCatalogTuition";
 import { projectPublicProgramBrief } from "./publicCatalogProgramBrief";
 import { readCityWeatherSnapshot, readCityWeatherSnapshotByLocation } from "./cityWeather";
 import { publicCatalogRequirements } from "./publicCatalogRequirements";
@@ -76,6 +76,7 @@ const CACHE_STALE_MS = 60 * 60_000;
 const CACHE_MAX_ENTRIES = 500;
 const MAX_CRITICAL_DICTIONARY_BYTES = 128 * 1024;
 const publicHomeFallbackCache = new Map<ProgramSupportedLocale, PublicCatalogRenderModel>();
+const builtinPageFallbackCache = new Map<string, PublicCatalogRenderModel>();
 const publicConsentCopyCache = new Map<ProgramSupportedLocale, NonNullable<PublicCatalogRenderModel["consentCopy"]>>();
 
 function readPublicConsentCopy(locale: ProgramSupportedLocale): PublicCatalogRenderModel["consentCopy"] | undefined {
@@ -99,6 +100,36 @@ function readPublicConsentCopy(locale: ProgramSupportedLocale): PublicCatalogRen
   } catch {
     return undefined;
   }
+}
+
+function readPublicPageFallback(slug: string, locale: ProgramSupportedLocale): PublicCatalogRenderModel | null {
+  if (slug === "home") return readPublicHomeFallback(locale);
+  if (!["about", "contact", "blog"].includes(slug)) return null;
+  const canonicalPath = `/${locale}/${slug}`;
+  const cached = builtinPageFallbackCache.get(canonicalPath);
+  if (cached) return cached;
+  try {
+    const file = path.join(process.cwd(), "artifacts", "edcons", "dist", "public", "i18n-critical", `${locale}.json`);
+    const stat = fs.statSync(file);
+    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_CRITICAL_DICTIONARY_BYTES) return null;
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    const nav = isRecord(parsed.nav) ? parsed.nav : {};
+    const seo = isRecord(parsed.seo) ? parsed.seo : {};
+    const title = boundedString(nav[slug], 500).trim();
+    const metaTitle = boundedString(seo[`${slug}Title`], 500).trim();
+    const description = boundedString(seo[`${slug}Desc`], 2_000).trim();
+    if (!title || !metaTitle || !description) return null;
+    const model: PublicCatalogRenderModel = {
+      kind: "page_detail", locale, canonicalPath, title: metaTitle, description, indexable: true,
+      alternatePaths: Object.fromEntries(PROGRAM_SUPPORTED_LOCALES.map(item => [item, `/${item}/${slug}`])),
+      page: {
+        id: 0, slug, title, versionNumber: 0, publishedAt: new Date(0).toISOString(),
+        blocks: [{ blockType: "hero", sortOrder: 0, content: { title, subtitle: description }, settings: {} }],
+      },
+    };
+    builtinPageFallbackCache.set(canonicalPath, model);
+    return model;
+  } catch { return null; }
 }
 
 function readPublicHomeFallback(locale: ProgramSupportedLocale): PublicCatalogRenderModel | null {
@@ -645,6 +676,8 @@ async function readProgramDetail(
       duration: sql<string | null>`COALESCE(${programTranslationsTable.duration}, ${programsTable.duration})`,
       language: programsTable.language,
       tuitionFee: programsTable.tuitionFee,
+      priceValidFrom: programsTable.priceValidFrom,
+      priceValidUntil: programsTable.priceValidUntil,
       discountedFee: programsTable.discountedFee,
       scholarship: programsTable.scholarship,
       applicationFee: programsTable.applicationFee,
@@ -727,6 +760,8 @@ async function readProgramDetail(
         requirements: sql<string | null>`COALESCE(${programTranslationsTable.requirements}, ${programsTable.requirements})`,
         isActive: programsTable.isActive,
         tuitionFee: programsTable.tuitionFee,
+        priceValidFrom: programsTable.priceValidFrom,
+        priceValidUntil: programsTable.priceValidUntil,
         discountedFee: programsTable.discountedFee,
         currency: programsTable.currency,
         universityId: universitiesTable.id,
@@ -834,6 +869,7 @@ async function readProgramDetail(
   const fallbackDescription = route.locale === "en"
     ? automaticSeo.description
     : [program.degree, program.field, program.duration, program.universityName, program.country].filter(Boolean).join(" · ");
+  const currentFees = programWithCurrentPublicFees(program, now);
   return {
     kind: "program_detail",
     locale: route.locale,
@@ -864,14 +900,14 @@ async function readProgramDetail(
       field: program.field,
       duration: program.duration,
       language: program.language,
-      tuitionFee: program.tuitionFee,
-      discountedFee: program.discountedFee,
-      scholarship: program.scholarship,
-      applicationFee: program.applicationFee,
-      enrollmentFee: program.enrollmentFee,
-      advancedFee: program.advancedFee,
-      depositFee: program.depositFee,
-      languageFee: program.languageFee,
+      tuitionFee: currentFees.tuitionFee,
+      discountedFee: currentFees.discountedFee,
+      scholarship: currentFees.scholarship,
+      applicationFee: currentFees.applicationFee,
+      enrollmentFee: currentFees.enrollmentFee,
+      advancedFee: currentFees.advancedFee,
+      depositFee: currentFees.depositFee,
+      languageFee: currentFees.languageFee,
       currency: program.currency,
       verifiedTuition: verifiedTuition
         ? {
@@ -1374,6 +1410,8 @@ async function readCityDetail(
       description: sql<string | null>`COALESCE(${programTranslationsTable.description}, ${programsTable.description})`,
       requirements: sql<string | null>`COALESCE(${programTranslationsTable.requirements}, ${programsTable.requirements})`,
       tuitionFee: programsTable.tuitionFee,
+      priceValidFrom: programsTable.priceValidFrom,
+      priceValidUntil: programsTable.priceValidUntil,
       discountedFee: programsTable.discountedFee,
       currency: programsTable.currency,
       degree: programsTable.degree,
@@ -1788,7 +1826,7 @@ export async function readPageDetail(
   // Ambiguous legacy aliases must not select an arbitrary published page.
   const page = pages.length === 1 ? pages[0] : null;
   if (!page || !page.publishedAt) {
-    const fallback = route.slug === "home" ? readPublicHomeFallback(route.locale) : null;
+    const fallback = readPublicPageFallback(route.slug, route.locale);
     if (fallback) return fallback;
     return {
       kind: "not_found",
@@ -1815,7 +1853,7 @@ export async function readPageDetail(
     .orderBy(desc(websitePageVersionsTable.versionNumber))
     .limit(1);
   if (!version || !version.publishedAt) {
-    const fallback = route.slug === "home" ? readPublicHomeFallback(route.locale) : null;
+    const fallback = readPublicPageFallback(route.slug, route.locale);
     if (fallback) return fallback;
     return {
       kind: "not_found",

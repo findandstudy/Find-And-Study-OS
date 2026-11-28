@@ -44,7 +44,7 @@ import {
 } from "../lib/publicWebDiscoveryReadModel";
 import { resolveLocalizedUniversityFields, selectLocalizedEntityDelivery } from "../lib/publicLocalizedEntityContract";
 import { readPublicCatalogPrices } from "../lib/publicCatalogPriceReadModel";
-import { projectPublicTuition, publicCurrency } from "../lib/publicCatalogTuition";
+import { programWithCurrentPublicFees, projectPublicTuition, publicCurrency, publicLegacyFeeValidity } from "../lib/publicCatalogTuition";
 import { resolvePublicCatalogLocationLinks } from "../lib/publicCatalogLocationLinks";
 import { projectPublicProgramBrief } from "../lib/publicCatalogProgramBrief";
 import { readCityWeatherSnapshotByLocation } from "../lib/cityWeather";
@@ -112,6 +112,8 @@ router.get(
         language: programsTable.language,
         duration: sql<string | null>`COALESCE(${programTranslationsTable.duration}, ${programsTable.duration})`,
         tuitionFee: programsTable.tuitionFee,
+        priceValidFrom: programsTable.priceValidFrom,
+        priceValidUntil: programsTable.priceValidUntil,
         discountedFee: programsTable.discountedFee,
         scholarship: programsTable.scholarship,
         currency: programsTable.currency,
@@ -209,6 +211,8 @@ router.get(
           enrollmentFee: programsTable.enrollmentFee,
           isActive: programsTable.isActive,
           tuitionFee: programsTable.tuitionFee,
+          priceValidFrom: programsTable.priceValidFrom,
+          priceValidUntil: programsTable.priceValidUntil,
           discountedFee: programsTable.discountedFee,
           currency: programsTable.currency,
           universityId: universitiesTable.id,
@@ -326,7 +330,8 @@ router.get(
     res.json({
       editorial: await readPublishedDetailContent("program", program.id, locale),
       data: {
-        ...program,
+        ...programWithCurrentPublicFees(program, now),
+        priceValidity: publicLegacyFeeValidity(program, now),
         sourceName: undefined,
         sourceField: undefined,
         description: program.description || (locale === "en" ? automaticSeo.description : null),
@@ -467,6 +472,8 @@ router.get(
           language: programsTable.language,
           duration: sql<string | null>`COALESCE(${programTranslationsTable.duration}, ${programsTable.duration})`,
           tuitionFee: programsTable.tuitionFee,
+          priceValidFrom: programsTable.priceValidFrom,
+          priceValidUntil: programsTable.priceValidUntil,
           discountedFee: programsTable.discountedFee,
           scholarship: programsTable.scholarship,
           currency: programsTable.currency,
@@ -558,7 +565,7 @@ router.get(
         canonicalPath,
       },
       programs: deliveredPrograms.map((program) => ({
-        ...program,
+        ...programWithCurrentPublicFees(program),
         tuition: projectPublicTuition(program, programPrices.get(program.id) ?? []),
         canonicalPath: publicCatalogPath({
           locale,

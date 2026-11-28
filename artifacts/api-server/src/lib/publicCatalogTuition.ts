@@ -24,7 +24,28 @@ export function publicMinorAmount(value: unknown, currency: unknown): number | n
 }
 
 type Price = { componentType: string; amountMinor: unknown; currencyCode: string; frequency: string; intakeId?: string | null };
-type Legacy = { tuitionFee?: number | string | null; discountedFee?: number | string | null; currency?: string | null };
+type Legacy = {
+  tuitionFee?: number | string | null; discountedFee?: number | string | null; currency?: string | null;
+  priceValidFrom?: string | null; priceValidUntil?: string | null;
+};
+
+const LEGACY_FEE_FIELDS = [
+  "tuitionFee", "discountedFee", "applicationFee", "enrollmentFee", "adaptationFee",
+  "advancedFee", "depositFee", "languageFee", "scholarship",
+] as const;
+
+export function publicLegacyFeeValidity(row: Legacy, now = new Date()): "current" | "upcoming" | "expired" {
+  const day = now.toISOString().slice(0, 10);
+  if (row.priceValidUntil && day > row.priceValidUntil) return "expired";
+  if (row.priceValidFrom && day < row.priceValidFrom) return "upcoming";
+  return "current";
+}
+
+export function programWithCurrentPublicFees<T extends Legacy>(row: T, now = new Date()): T {
+  if (publicLegacyFeeValidity(row, now) === "current") return row;
+  const omitted = LEGACY_FEE_FIELDS.filter(key => Object.hasOwn(row, key)).map(key => [key, null]);
+  return { ...row, ...Object.fromEntries(omitted) };
+}
 
 function publicLegacyAmount(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : null;
@@ -52,6 +73,7 @@ export function projectPublicTuition(legacy: Legacy, verifiedPrices: readonly Pr
     return { amount: first.amount!, currency: first.currency!, verified: true, source: "verified",
       frequency: first.price.frequency, isFrom: new Set(valid.map(item => item.amount)).size > 1 };
   }
+  if (publicLegacyFeeValidity(legacy) !== "current") return null;
   const currency = publicCurrency(legacy.currency);
   const amount = publicLegacyAmount(legacy.discountedFee ?? legacy.tuitionFee);
   if (!currency || amount === null) return null;

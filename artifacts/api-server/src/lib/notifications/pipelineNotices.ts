@@ -10,7 +10,7 @@ import { noticeHash } from "./pipelineNoticePolicy";
 import { stageEmailRuntime, stageWhatsAppRuntime } from "./stageEmailPolicy";
 import { renderApprovedEmailVersion } from "./emailTemplateLibrary";
 import { resolveEmailSenderAccount } from "./emailSenderAccounts";
-import { sendPipelineWhatsAppSnapshot } from "../inbox/startWhatsAppTemplate";
+import { sendPipelineWhatsAppSnapshot, WhatsAppTemplateSendError } from "../inbox/startWhatsAppTemplate";
 
 type Intent = Notice & { sender_revision: number | null };
 async function scoped<T>(fn: (c: any) => Promise<T>): Promise<T> {
@@ -37,8 +37,40 @@ export async function boundPipelineNotice(c: any, n: Intent) {
     new Date(n.created_at) < runtime.since
   )
     return { code: "NOTICE_RUNTIME_DISABLED" } as const;
+  if (!n.event_binding_hash) return { code: "NOTICE_EVENT_BINDING_MISSING" } as const;
+  const { rows: [event] } = await c.query(
+    `SELECT pipeline_notice_event_binding($1,$2,$3,$4) AS binding, EXISTS (
+       SELECT 1 FROM pipeline_notice_dispatches newer
+       WHERE newer.entity_kind=$1 AND newer.entity_id=$2 AND newer.tenant_id IS NOT DISTINCT FROM $3::uuid
+       AND newer.board_id IS NOT DISTINCT FROM $4::uuid AND newer.channel=$5 AND newer.id>$6
+     ) AS superseded`,
+    [n.entity_kind, n.entity_id, n.tenant_id, n.board_id, n.channel, n.id],
+  );
+  if (event?.superseded) return { code: "NOTICE_TRANSITION_SUPERSEDED" } as const;
+  if (event?.binding !== n.event_binding_hash) return { code: "NOTICE_RECIPIENT_CHANGED" } as const;
   const binding = await noticeContext(c, n);
   if ("code" in binding) return binding;
+  if (n.origin_txid && n.journey_key && n.entity_kind !== "application") {
+    const { rows: related } = await c.query(
+      `SELECT * FROM pipeline_notice_dispatches
+       WHERE origin_txid=$1 AND journey_key=$2 AND channel=$3
+         AND entity_kind=ANY($4::text[]) ORDER BY id LIMIT 16`,
+      [n.origin_txid, n.journey_key, n.channel, n.entity_kind === "lead" ? ["application", "student"] : ["application"]],
+    );
+    for (const higher of related as Notice[]) {
+      const recipient = await noticeContext(c, higher);
+      if ("code" in recipient) {
+        const competingPolicy = higher.policy as { recipientType?: string } | null;
+        if (competingPolicy?.recipientType === binding.policy.recipientType &&
+            competingPolicy.recipientType !== "assignee") return { code: "NOTICE_LINKED_TRANSITION_OWNS_DELIVERY" } as const;
+        continue;
+      }
+      const sameDestination = n.channel === "email" ? recipient.email === binding.email : recipient.phone === binding.phone;
+      if (sameDestination && recipient.userId === binding.userId) {
+        return { code: "NOTICE_LINKED_TRANSITION_OWNS_DELIVERY" } as const;
+      }
+    }
+  }
   if (n.channel === "email") {
     if (
       !n.sender_revision ||
@@ -70,6 +102,7 @@ const fingerprint = (b: any) =>
     phone: b.phone,
     userId: b.userId,
     key: b.recipientKey,
+    contact: b.contact,
   });
 const contextHash = (b: any) =>
   noticeHash({
@@ -90,7 +123,7 @@ export async function processPipelineNotices(
       process.env.NODE_ENV !== "test" ||
       u.hostname !== "127.0.0.1" ||
       u.port !== "5433" ||
-      u.pathname !== "/fasos_apply_local" ||
+      !["/fasos_apply_local", "/fas_dev_pipeline_hardening"].includes(u.pathname) ||
       process.env.ALLOW_LIVE_INTEGRATIONS !== "false" ||
       process.env.EMAIL_DELIVERY_DISABLED !== "true"
     )
@@ -112,7 +145,7 @@ export async function processPipelineNotices(
     const token = randomUUID();
     const claimed = await scoped(async (c) => {
       const r = await c.query(
-        "SELECT * FROM pipeline_notice_dispatches WHERE status='queued' AND ((channel='email' AND $1) OR (channel='whatsapp' AND $2)) ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED",
+        "SELECT * FROM pipeline_notice_dispatches WHERE status='queued' AND next_attempt_at <= now() AND ((channel='email' AND $1) OR (channel='whatsapp' AND $2)) ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED",
         [emailEnabled, whatsappEnabled],
       );
       const n = r.rows[0] as Intent | undefined;
@@ -152,7 +185,7 @@ export async function processPipelineNotices(
       if (process.env.ALLOW_LIVE_INTEGRATIONS !== "true" && !mockWhatsApp)
         return { disabled: true } as const;
       await c.query(
-        "UPDATE pipeline_notice_dispatches SET status='processing',claim_token=$2,claimed_at=now(),recipient_hash=$3,context_hash=$4,updated_at=now() WHERE id=$1",
+        "UPDATE pipeline_notice_dispatches SET status='processing',claim_token=$2,claimed_at=now(),recipient_hash=$3,context_hash=$4,attempts=attempts+1,updated_at=now() WHERE id=$1",
         [n.id, token, fingerprint(b), contextHash(b)],
       );
       return { n, b };
@@ -164,6 +197,7 @@ export async function processPipelineNotices(
       continue;
     }
     const { n, b } = claimed;
+    let providerStarted = false;
     try {
       const [actor] = await db
         .select()
@@ -179,6 +213,7 @@ export async function processPipelineNotices(
           key: b.recipientKey,
         }),
         phone: b.phone,
+        contact: b.contact,
         name: b.variables.recipientName,
         templateId: b.policy.templateId!,
         channelAccountId: b.policy.channelAccountId!,
@@ -200,20 +235,30 @@ export async function processPipelineNotices(
             )
               throw Error("NOTICE_BINDING_CHANGED");
           });
+          providerStarted = true;
         },
       });
       await scoped((c) =>
         c.query(
           "UPDATE pipeline_notice_dispatches SET status='sent',provider_message_id=$3,updated_at=now() WHERE id=$1 AND claim_token=$2 AND status='processing'",
-          [n.id, token, result.externalMessageId],
+          [n.id, token, result.externalMessageId ?? result.providerBroadcastId],
         ),
       );
       count++;
-    } catch {
+    } catch (error) {
+      const denied = error instanceof WhatsAppTemplateSendError && error.status < 500;
+      const bindingChanged = error instanceof Error && error.message === "NOTICE_BINDING_CHANGED";
+      const retry = !providerStarted && !denied && !bindingChanged && (n.attempts ?? 0) < 2;
+      const status = retry ? "queued" : providerStarted ? "unknown" : denied || bindingChanged ? "skipped" : "failed";
+      const code = providerStarted ? "NOTICE_DELIVERY_UNCONFIRMED" : denied
+        ? error.code.toUpperCase() : bindingChanged ? "NOTICE_BINDING_CHANGED" : "NOTICE_PREFLIGHT_FAILED";
       await scoped((c) =>
         c.query(
-          "UPDATE pipeline_notice_dispatches SET status='unknown',error_code='NOTICE_DELIVERY_UNCONFIRMED',updated_at=now() WHERE id=$1 AND claim_token=$2 AND status='processing'",
-          [n.id, token],
+          `UPDATE pipeline_notice_dispatches
+           SET status=$3,error_code=$4,claim_token=NULL,claimed_at=NULL,
+             next_attempt_at=CASE WHEN $3='queued' THEN now()+make_interval(secs=>30*attempts) ELSE next_attempt_at END,updated_at=now()
+           WHERE id=$1 AND claim_token=$2 AND status='processing'`,
+          [n.id, token, status, code],
         ),
       );
     }

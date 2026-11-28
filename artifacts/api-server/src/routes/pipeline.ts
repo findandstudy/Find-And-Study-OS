@@ -420,7 +420,7 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
     return;
   }
 
-  const { stages } = req.body;
+  const { stages, expectedStageIds } = req.body;
   if (!Array.isArray(stages) || stages.length === 0) {
     res.status(400).json({ error: "stages array is required" });
     return;
@@ -431,10 +431,15 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
   }
 
   for (const s of stages) {
-    if (!s.key || !s.label) {
+    if (!s || typeof s.key !== "string" || !s.key.trim() || s.key.length > 160 || !s.label) {
       res.status(400).json({ error: "Each stage needs key and label" });
       return;
     }
+  }
+  if (expectedStageIds !== undefined && (!Array.isArray(expectedStageIds) || expectedStageIds.length > 100 ||
+    expectedStageIds.some(id => !Number.isSafeInteger(id) || id < 1))) {
+    res.status(400).json({ error: "Invalid pipeline revision" });
+    return;
   }
 
   const normalizedKeys = stages.map((s: any) => String(s.key).toLowerCase().replace(/[^a-z0-9_]/g, "_"));
@@ -470,7 +475,7 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
   }
 
   const targetKeyByStageIdx: (string | null)[] = [];
-  const existingEmails = await db.select({ key: pipelineStagesTable.key, config: pipelineStagesTable.automaticEmail })
+  const existingEmails = await db.select({ id: pipelineStagesTable.id, key: pipelineStagesTable.key, config: pipelineStagesTable.automaticEmail })
     .from(pipelineStagesTable).where(eq(pipelineStagesTable.entityType, entityType));
   const emailByKey = new Map(existingEmails.map(row => [row.key, row.config]));
   let requestedAutomaticEmails: Array<StageAutomaticEmail | null>;
@@ -631,8 +636,16 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
 
   try {
     const { rows: inserted, triggerStageReconciliation } = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('pipeline_stages_write:' || ${entityType}))`);
       if (entityType === "application") {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('portal_automation_trigger_stages_v1'))`);
+      }
+      const current = await tx.select({ id: pipelineStagesTable.id })
+        .from(pipelineStagesTable).where(eq(pipelineStagesTable.entityType, entityType))
+        .orderBy(asc(pipelineStagesTable.id));
+      const expected = [...(expectedStageIds ?? existingEmails.map(row => row.id))].sort((a, b) => a - b);
+      if (current.map(row => row.id).join(",") !== expected.join(",")) {
+        throw new Error("PIPELINE_STAGES_CHANGED");
       }
 
       await tx.delete(pipelineStagesTable).where(eq(pipelineStagesTable.entityType, entityType));
@@ -807,6 +820,10 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
   } catch (err: any) {
     if (err instanceof ActionValidationError) {
       res.status(400).json({ error: err.message, code: "INVALID_ACTION" });
+      return;
+    }
+    if (err instanceof Error && err.message === "PIPELINE_STAGES_CHANGED") {
+      res.status(409).json({ error: "PIPELINE_STAGES_CHANGED" });
       return;
     }
     console.error("Failed to save pipeline stages:", err);

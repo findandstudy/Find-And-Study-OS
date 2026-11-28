@@ -14,11 +14,11 @@ import {
 
 export default function TeamWorkspaceEntry() {
   const { lang: uiLanguage } = useUiLanguage();
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const [, setLocation] = useLocation();
   const copy = (tr: string, en: string) => translateUi(lang, en, tr);
   const [projects, setProjects] = useState<PersonaWorkspaceProject[]>([]);
-  const [phase, setPhase] = useState<"loading" | "ready" | "unavailable" | "session" | "error">("loading");
+  const [phase, setPhase] = useState<"loading" | "ready" | "unavailable" | "session" | "projectAccess" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -42,8 +42,9 @@ export default function TeamWorkspaceEntry() {
         if (!mounted) return;
         setPhase(error instanceof WorkspaceRequestError && error.status === 503
           ? "unavailable"
-          : error instanceof WorkspaceRequestError && (error.status === 401 || error.status === 403)
-            ? "session" : "error");
+          : error instanceof WorkspaceRequestError && error.status === 401
+            ? "session"
+            : error instanceof WorkspaceRequestError && error.status === 403 ? "projectAccess" : "error");
       })
       .finally(() => window.clearTimeout(timeout));
     return () => { mounted = false; controller.abort(); window.clearTimeout(timeout); };
@@ -72,10 +73,8 @@ export default function TeamWorkspaceEntry() {
       <p>{phase === "unavailable" ? copy(
         "Kalıcı çalışma alanı bu ortamda henüz kullanıma açılmadı. Görsel önizlemenin açık olması, bu alanın hazır olduğu anlamına gelmez.",
         "The persistent workspace is not enabled in this environment yet. An available visual preview does not mean this workspace is ready.",
-      ) : phase === "session" ? copy(
-        "Projeler için oturum veya erişim doğrulanamadı. Admin ya da Super Admin hesabınızla giriş yaptığınızı kontrol edin.",
-        "Your session or project access could not be verified. Check that you are signed in with an Admin or Super Admin account.",
-      ) : copy(
+      ) : phase === "session" ? t("catalogPage.sessionExpired")
+        : phase === "projectAccess" ? t("catalogPage.permissionDenied") : copy(
         "Projeler yüklenemedi. Bağlantınızı kontrol edip tekrar deneyin.",
         "Projects could not be loaded. Check your connection and try again.",
       )}</p>

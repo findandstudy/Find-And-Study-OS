@@ -34,6 +34,7 @@ import {
   type MessageTemplateVariableContext,
 } from "./templateVariables";
 import { syncConversationOwner } from "./assignmentSync";
+import type { NoticeContact } from "../notifications/pipelineNoticeContext";
 
 export class WhatsAppTemplateSendError extends Error {
   constructor(
@@ -434,13 +435,35 @@ export async function sendWhatsAppTemplateToEntity(params: {
 /** Internal notification adapter. No HTTP route accepts these resolved targets. */
 export async function sendPipelineWhatsAppSnapshot(params: {
  actor:AuthUser; noticeId:number; recipientKey:string; phone:string; name:string; templateId:number; channelAccountId:number;
+ contact?: NoticeContact | null;
  context:Record<string,string>; beforeSend:()=>Promise<void>;
 }) {
- const externalId='stage_notice:'+params.recipientKey;
+ const fallbackId = "stage_notice:" + params.recipientKey;
+ const contact = params.contact;
+ const phoneMatches = eq(externalContactsTable.phoneE164, params.phone);
+ let condition = eq(externalContactsTable.externalId, fallbackId);
+ if (contact?.kind === "lead") condition = and(phoneMatches, eq(externalContactsTable.leadId, contact.id))!;
+ if (contact?.kind === "student") condition = and(phoneMatches, eq(externalContactsTable.studentId, contact.id))!;
+ if (contact?.kind === "agent") condition = and(phoneMatches, eq(externalContactsTable.agentId, contact.id))!;
+ if (contact?.kind === "workConversation") {
+   const [source] = await db.select({ contactId: conversationsTable.externalContactId })
+     .from(conversationsTable)
+     .where(and(eq(conversationsTable.id, contact.id), eq(conversationsTable.channelAccountId, params.channelAccountId),
+       eq(conversationsTable.channel, "whatsapp"))).limit(1);
+   if (!source?.contactId) throw new WhatsAppTemplateSendError(409, "pipeline_contact_scope_changed");
+   condition = and(phoneMatches, eq(externalContactsTable.id, source.contactId))!;
+ }
+ const [linked] = await db.select({ externalId: externalContactsTable.externalId, blocked: externalContactsTable.isBlocked })
+   .from(externalContactsTable).where(and(eq(externalContactsTable.channel, "whatsapp"), condition))
+   .limit(1);
+ if (linked?.blocked) throw new WhatsAppTemplateSendError(409, "contact_blocked");
+ if (contact?.kind === "workConversation" && !linked) throw new WhatsAppTemplateSendError(409, "pipeline_contact_scope_changed");
+ const externalId = linked?.externalId ?? fallbackId;
  return sendResolvedWhatsAppTemplate({actor:params.actor,entityType:'stage_notice',entityId:params.noticeId,templateId:params.templateId,
   channelAccountId:params.channelAccountId,expectedPhoneE164:params.phone,beforeSend:params.beforeSend},
   {entityType:'stage_notice',entityId:params.noticeId,agentId:null,phoneE164:params.phone,displayName:params.name,
-   resolvedStudentId:null,contactExternalId:externalId,contactCondition:and(eq(externalContactsTable.channel,'whatsapp'),eq(externalContactsTable.externalId,externalId))!},params.context);
+   resolvedStudentId:contact?.kind === "student" ? contact.id : null,contactExternalId:externalId,
+   contactCondition:linked ? condition : eq(externalContactsTable.externalId,externalId)},params.context);
 }
 async function sendResolvedWhatsAppTemplate(params:{actor:AuthUser;entityType:string;entityId:number;templateId:number;expectedPhoneE164?:string;
  channelAccountId?:number;parameters?:string[];requestIp?:string;beforeSend?:()=>Promise<void>},

@@ -14,5 +14,6 @@ export function workPipelineEnvironmentAllowed(env: NodeJS.ProcessEnv): boolean 
   }
   return !env.WORK_PIPELINES_ENV && env.NODE_ENV !== "production"
     && db.hostname === "127.0.0.1" && db.port === "5433"
-    && db.pathname === "/fasos_apply_local";
+    && (db.pathname === "/fasos_apply_local" ||
+      (env.NODE_ENV === "test" && env.EMAIL_DELIVERY_DISABLED === "true" && db.pathname === "/fas_dev_pipeline_hardening"));
 }

@@ -39,6 +39,7 @@ type ProgramDetailPayload = {
     scholarship: number | null;
     applicationFee: number | null;
     currency: string | null;
+    priceValidity?: "current" | "upcoming" | "expired";
     intakes: string | null;
     requirements: string | null;
     refundProcess: string | null;
@@ -324,6 +325,12 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     const verified = verifiedFeeItems.filter(price => feeComponentKey(price.componentType) === item.key && (item.key !== "discounted" || !price.isFree));
     if (verified.length > 0) return verified;
     if (item.key === "discounted" && (item.value == null || item.value <= 0)) return [];
+    if (program.priceValidity === "upcoming" || program.priceValidity === "expired") {
+      return [{
+        id: `catalogue-${item.key}`, componentType: item.componentType, amount: t("studentWishlist.feeNotSpecified"),
+        numericAmount: null, currency: null, frequency: null, verified: false, isFree: false,
+      }];
+    }
     const isFree = item.value == null || item.value <= 0;
     return [{
       id: `catalogue-${item.key}`,

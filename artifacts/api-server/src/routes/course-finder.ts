@@ -4,7 +4,7 @@ import { parseCourseFinderDetailContext } from "../lib/courseFinderDetailContext
 import { readIndexableUniversityProgramIds } from "../lib/publicWebDiscoveryReadModel";
 import { parsePublicWebInternalLinkMode } from "../lib/publicCatalogRouteContract";
 import { readPublicCatalogPrices } from "../lib/publicCatalogPriceReadModel";
-import { projectPublicTuition } from "../lib/publicCatalogTuition";
+import { programWithCurrentPublicFees, projectPublicTuition } from "../lib/publicCatalogTuition";
 import { getPublicCatalogCacheGeneration, invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
 import { db, programsTable, programTranslationsTable, universitiesTable, countriesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable, documentsTable, auditLogsTable, catalogOptionsTable } from "@workspace/db";
 import { eq, ilike, sql, and, inArray, isNull, desc, or } from "drizzle-orm";
@@ -328,6 +328,8 @@ router.get("/course-finder", async (req, res): Promise<void> => {
           language: programsTable.language,
           duration: sql<string | null>`COALESCE(${programTranslationsTable.duration}, ${programsTable.duration})`,
           tuitionFee: programsTable.tuitionFee,
+          priceValidFrom: programsTable.priceValidFrom,
+          priceValidUntil: programsTable.priceValidUntil,
           currency: programsTable.currency,
           scholarship: programsTable.scholarship,
           intakes: sql<string | null>`COALESCE(${programTranslationsTable.intakes}, ${programsTable.intakes})`,
@@ -383,7 +385,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
       const detailPrices = publicDetailRequest ? await readPublicCatalogPrices(rows.map(row => row.id)) : null;
       const sanitizedRows = rows.map(({ universityHasLogo, ...row }) => {
         const sanitized = sanitizeCourseFinderProgram({
-          ...row,
+          ...(publicDetailRequest || !req.user || req.user.role === "student" ? programWithCurrentPublicFees(row) : row),
           contentLocale,
           fallbackUsed: contentLocale !== "en" && row.translatedLocale !== contentLocale,
           translatedLocale: undefined,
@@ -927,6 +929,8 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
       degree: programsTable.degree,
       language: programsTable.language,
       tuitionFee: programsTable.tuitionFee,
+      priceValidFrom: programsTable.priceValidFrom,
+      priceValidUntil: programsTable.priceValidUntil,
       discountedFee: programsTable.discountedFee,
       currency: programsTable.currency,
       scholarship: programsTable.scholarship,
@@ -1167,6 +1171,8 @@ router.get("/wishlists/details", requireAuth, async (req, res): Promise<void> =>
       language: programsTable.language,
       duration: programsTable.duration,
       tuitionFee: programsTable.tuitionFee,
+      priceValidFrom: programsTable.priceValidFrom,
+      priceValidUntil: programsTable.priceValidUntil,
       discountedFee: programsTable.discountedFee,
       currency: programsTable.currency,
       scholarship: programsTable.scholarship,
