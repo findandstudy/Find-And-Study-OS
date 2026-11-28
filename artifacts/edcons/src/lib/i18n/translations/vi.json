@@ -7167,7 +7167,7 @@
     "sources": "Nguồn đã kết nối",
     "save": "Lưu",
     "cancel": "Hủy",
-    "assignee": "Người được chuyển nhượng",
+    "assignee": "Người phụ trách",
     "none": "Chưa được giao",
     "status": "Trạng thái",
     "stage": "Giai đoạn",
@@ -7233,7 +7233,7 @@
     "addFollowup": "Theo dõi mới",
     "followupTitle": "Tiêu đề theo dõi",
     "dateAndTime": "Ngày và giờ",
-    "assignedTo": "Đã giao cho",
+    "assignedTo": "Người phụ trách",
     "notesOptional": "Ghi chú (tùy chọn)",
     "noFollowupsScheduled": "Chưa có lịch theo dõi.",
     "overdue": "Quá hạn",
@@ -7268,6 +7268,7 @@
     "conflict": "Bản ghi đã thay đổi hoặc xung đột với cài đặt quy trình. Làm mới rồi kiểm tra giai đoạn, người phụ trách và nguồn.",
     "forbidden": "Bạn không có quyền truy cập quy trình này.",
     "invalidRow": "Dòng không hợp lệ. Kiểm tra các trường, giai đoạn và thành viên của quy trình này.",
-    "phoneSearch": "Tìm quốc gia hoặc mã điện thoại…"
+    "phoneSearch": "Tìm quốc gia hoặc mã điện thoại…",
+    "notes": "Ghi chú"
   }
 }

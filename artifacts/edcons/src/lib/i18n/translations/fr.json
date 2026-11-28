@@ -7268,6 +7268,7 @@
     "conflict": "La fiche a changé ou entre en conflit avec les paramètres du pipeline. Actualisez puis vérifiez l’étape, le responsable et la source.",
     "forbidden": "Vous n’avez pas accès à ce pipeline.",
     "invalidRow": "Ligne non valide. Vérifiez les champs, les étapes et les membres de ce pipeline.",
-    "phoneSearch": "Rechercher un pays ou un indicatif…"
+    "phoneSearch": "Rechercher un pays ou un indicatif…",
+    "notes": "Notes"
   }
 }

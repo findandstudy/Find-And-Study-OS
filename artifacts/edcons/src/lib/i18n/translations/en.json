@@ -7259,6 +7259,7 @@
     "conflict": "The record changed or conflicts with pipeline settings. Reload and check the stage, assignee and source.",
     "forbidden": "You do not have access to this pipeline.",
     "invalidRow": "Invalid row. Check the record fields and this pipeline’s stages and team members.",
-    "phoneSearch": "Search country or code…"
+    "phoneSearch": "Search country or code…",
+    "notes": "Notes"
   }
 }

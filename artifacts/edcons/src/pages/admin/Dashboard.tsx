@@ -426,7 +426,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-8">
-        <WorkPipelineDashboardWidget />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

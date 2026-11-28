@@ -142,7 +142,7 @@ function ContactCard({
           </div>
         </div>
         <p className="text-xs text-muted-foreground truncate">
-          {c.email || c.phone || m.l.noContact}
+          {c.email || c.phone ? <bdi dir="ltr">{c.email || c.phone}</bdi> : m.l.noContact}
         </p>
         {c.description && (
           <p className="text-xs text-muted-foreground mt-2 line-clamp-2 whitespace-pre-line">
@@ -344,18 +344,18 @@ export default function WorkPipelines() {
   if (!m.feature.data?.enabled) return <p role="alert">{l.noPipelines}</p>;
   return (
     <div
-      className="h-[calc(100vh-8rem)] flex flex-col"
+      className="h-[calc(100vh-8rem)] w-full min-w-0 max-w-full flex flex-col"
       dir={m.isRTL ? "rtl" : "ltr"}
     >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6 shrink-0 min-w-0">
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground">
             {l.title}
           </h1>
           <p className="text-muted-foreground text-sm mt-1">{l.simpleIntro}</p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative w-64">
+        <div className="flex items-center gap-3 flex-wrap min-w-0 max-w-full">
+          <div className="relative w-64 max-w-full">
             <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder={l.search}
@@ -585,8 +585,8 @@ export default function WorkPipelines() {
                         {r.document.title}
                       </button>
                     </TableCell>
-                    <TableCell>{r.document.email || "—"}</TableCell>
-                    <TableCell>{r.document.phone || "—"}</TableCell>
+                    <TableCell><bdi dir="ltr">{r.document.email || "—"}</bdi></TableCell>
+                    <TableCell><bdi dir="ltr">{r.document.phone || "—"}</bdi></TableCell>
                     <TableCell>
                       <span className="text-xs px-2 py-1 rounded-full bg-secondary">
                         {

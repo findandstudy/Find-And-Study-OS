@@ -71,7 +71,7 @@ export function WorkPipelineActivity({
         </TabsTrigger>
         <TabsTrigger value="notes">
           <MessageSquare className="w-4 h-4 me-2" />
-          {t("common.notes")} ({row.document.notes.length})
+          {t("workPipelines.notes")} ({row.document.notes.length})
         </TabsTrigger>
         <TabsTrigger value="history">
           {t("workPipelines.historyText")}

@@ -180,7 +180,6 @@ export default function StaffDashboard() {
 
   return (
       <div className="space-y-8">
-        <WorkPipelineDashboardWidget />
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground">{t("staffDash.welcomeBack")}</h1>
           <p className="text-muted-foreground mt-1">{t("staffDash.welcomeSubtitle")}</p>

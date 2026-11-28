@@ -7268,6 +7268,7 @@
     "conflict": "Il record è cambiato o è in conflitto con le impostazioni. Aggiorna e controlla la fase, il responsabile e la fonte.",
     "forbidden": "Non hai accesso a questa pipeline.",
     "invalidRow": "Riga non valida. Controlla i campi, le fasi e i membri di questa pipeline.",
-    "phoneSearch": "Cerca paese o prefisso…"
+    "phoneSearch": "Cerca paese o prefisso…",
+    "notes": "Note"
   }
 }

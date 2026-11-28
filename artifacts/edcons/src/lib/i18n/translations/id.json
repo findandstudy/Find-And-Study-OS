@@ -7244,6 +7244,7 @@
     "conflict": "Catatan berubah atau tidak sesuai dengan pengaturan alur. Muat ulang lalu periksa tahapan, penanggung jawab, dan sumber.",
     "forbidden": "Anda tidak memiliki akses ke alur kerja ini.",
     "invalidRow": "Baris tidak valid. Periksa kolom catatan, tahapan, dan anggota alur ini.",
-    "phoneSearch": "Cari negara atau kode telepon…"
+    "phoneSearch": "Cari negara atau kode telepon…",
+    "notes": "Catatan"
   }
 }

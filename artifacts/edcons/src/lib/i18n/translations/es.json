@@ -7268,6 +7268,7 @@
     "conflict": "El registro cambió o entra en conflicto con la configuración del pipeline. Actualiza y revisa la etapa, el responsable y la fuente.",
     "forbidden": "No tienes acceso a este pipeline.",
     "invalidRow": "Fila no válida. Revisa los campos, las etapas y los miembros de este pipeline.",
-    "phoneSearch": "Buscar país o prefijo…"
+    "phoneSearch": "Buscar país o prefijo…",
+    "notes": "Notas"
   }
 }

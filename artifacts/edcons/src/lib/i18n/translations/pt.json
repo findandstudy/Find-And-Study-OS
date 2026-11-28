@@ -7167,7 +7167,7 @@
     "sources": "Fontes conectadas",
     "save": "Salvar",
     "cancel": "Cancelar",
-    "assignee": "Destinatário",
+    "assignee": "Responsável",
     "none": "Não atribuído",
     "status": "Status",
     "stage": "Etapa",
@@ -7233,7 +7233,7 @@
     "addFollowup": "Novo acompanhamento",
     "followupTitle": "Título de acompanhamento",
     "dateAndTime": "Data e hora",
-    "assignedTo": "Atribuído a",
+    "assignedTo": "Responsável",
     "notesOptional": "Notas (opcional)",
     "noFollowupsScheduled": "Não há acompanhamentos agendados.",
     "overdue": "Atrasado",
@@ -7268,6 +7268,7 @@
     "conflict": "O registro mudou ou está em conflito com as configurações do pipeline. Atualize e confira a etapa, o responsável e a fonte.",
     "forbidden": "Você não tem acesso a este pipeline.",
     "invalidRow": "Linha inválida. Confira os campos, as etapas e os membros deste pipeline.",
-    "phoneSearch": "Pesquisar país ou código…"
+    "phoneSearch": "Pesquisar país ou código…",
+    "notes": "Notas"
   }
 }

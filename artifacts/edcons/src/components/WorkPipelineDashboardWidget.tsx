@@ -35,7 +35,9 @@ export function WorkPipelineDashboardWidget() {
     refetchOnWindowFocus: true,
     refetchInterval: 30_000,
   });
-  if (!feature.data?.enabled) return null;
+  if (!feature.data?.enabled || q.isPending) return null;
+  // Activity belongs on the dashboard, but empty pipelines must not add empty panels.
+  if (q.isSuccess && !q.data.followUps.length && !q.data.notes.length) return null;
   const href = (r: Item<unknown>) =>
     `/staff/pipelines?pipeline=${r.boardId}&card=${r.cardId}`;
   return (
