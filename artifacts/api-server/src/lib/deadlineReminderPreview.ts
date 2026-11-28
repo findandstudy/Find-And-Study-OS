@@ -24,7 +24,7 @@ export function reminderScheduleFingerprint(input: {
   periodId: number;
   deadline: string | null;
   timezone: string;
-  daysBefore: 30 | 7;
+  daysBefore: number;
 }) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }

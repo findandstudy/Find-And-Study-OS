@@ -1,3 +1,4 @@
+import { ApplicationCalendarInfo } from "@/components/ApplicationCalendarInfo";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -1856,6 +1857,7 @@ function UniversityInfoDialog({ program: p, onClose }: {
         </DialogHeader>
 
         <div className="px-6 py-5 space-y-5">
+          <ApplicationCalendarInfo universityId={p.universityId} />
           {p.universityDescription && (
             <p className="text-sm text-muted-foreground leading-relaxed">{p.universityDescription}</p>
           )}
@@ -2029,16 +2031,17 @@ function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate
         </DialogHeader>
 
         <div className="space-y-5 mt-2">
+          <ApplicationCalendarInfo programId={p.id} />
           {sections.map((section) => (
             <div key={section.title}>
               <div className="flex items-center gap-2 mb-2">
                 <section.icon className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-sm">{section.title}</h3>
+                <h3 className="font-semibold text-sm">{translateUi(uiLanguage, section.title)}</h3>
               </div>
               <div className="bg-muted/30 rounded-xl p-3 space-y-1.5">
                 {section.items.filter(item => item.value && item.value !== "—").map((item, i) => (
                   <div key={i} className="flex justify-between text-sm">
-                    <span className={item.highlight === "amber" ? "text-amber-600" : item.highlight === "indigo" ? "text-indigo-600" : item.highlight === "green" ? "text-emerald-600" : "text-muted-foreground"}>{item.label}</span>
+                    <span className={item.highlight === "amber" ? "text-amber-600" : item.highlight === "indigo" ? "text-indigo-600" : item.highlight === "green" ? "text-emerald-600" : "text-muted-foreground"}>{translateUi(uiLanguage, item.label)}</span>
                     <span className={`font-medium text-right max-w-[60%] ${item.highlight === "amber" ? "text-amber-600" : item.highlight === "indigo" ? "text-indigo-600 font-semibold" : item.highlight === "green" ? "text-emerald-600 font-semibold" : ""}`}>{item.value}</span>
                   </div>
                 ))}

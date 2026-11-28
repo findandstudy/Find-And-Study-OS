@@ -11585,5 +11585,25 @@
     "sb5b61f6d": "PDF faylini yuklab bo‘lmadi. Qayta urinib ko‘ring.",
     "s6ce7d67e": "Shartnoma imzolandi — xodimlar tasdig‘i kutilmoqda",
     "sa488d41b": "Imzolash yakunlandi. Komissiya stavkalari va tijorat faoliyatini boshqarish vositalari jamoamizning yakuniy tasdig‘idan so‘ng ochiladi. Qayta imzolashingiz shart emas."
+  },
+  "deadlineReminders": {
+    "title": "Ariza muddati eslatmalari",
+    "globalHelp": "Barcha universitetlar uchun standart kunlar. Alohida sozlamalar saqlanadi.",
+    "universityHelp": "Umumiy sozlamadan foydalaning yoki bu universitet uchun alohida jadval saqlang.",
+    "inherit": "Umumiy sozlamani ishlatish",
+    "custom": "Alohida jadval",
+    "days": "Muddatdan necha kun oldin",
+    "help": "0–3650 oralig‘idagi ko‘pi bilan 20 butun sonni vergul bilan ajratib kiriting. 0 — oxirgi kun; bo‘sh qoldirish eslatmalarni o‘chiradi.",
+    "effective": "Amaldagi kunlar",
+    "off": "O‘chirilgan",
+    "preview": "Oldindan ko‘rish",
+    "previewOnly": "Faqat sinov ma’lumotlari ko‘rsatiladi. Haqiqiy xabar yuborilmaydi.",
+    "invalid": "Kunlarni to‘g‘ri butun son bilan kiriting.",
+    "saveError": "Saqlanmadi. Sozlamalarni yangilab qayta urinib ko‘ring.",
+    "calendarTitle": "Ariza taqvimi",
+    "selectPeriod": "Dastur uchun to‘g‘ri davrni tanlang yoki sanalarni tuzating.",
+    "missingDate": "Tasdiqlangan ariza taqvimi yo‘q.",
+    "saveFirst": "Oldindan ko‘rishdan avval taqvim o‘zgarishlarini saqlang.",
+    "scheduledOn": "Rejalashtirilgan sana"
   }
 }

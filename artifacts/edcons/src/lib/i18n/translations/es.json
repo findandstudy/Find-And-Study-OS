@@ -11585,5 +11585,25 @@
     "sb5b61f6d": "No se ha podido descargar el PDF. Inténtalo de nuevo.",
     "s6ce7d67e": "Contrato firmado — pendiente de aprobación del equipo",
     "sa488d41b": "La firma se ha completado. Las tasas de comisión y las herramientas de gestión comercial estarán disponibles tras la aprobación final de nuestro equipo. No necesitas volver a firmar."
+  },
+  "deadlineReminders": {
+    "title": "Recordatorios de fecha límite de solicitud",
+    "globalHelp": "Días predeterminados para todas las universidades. Se conservan los ajustes particulares.",
+    "universityHelp": "Use el ajuste general o guarde un calendario propio para esta universidad.",
+    "inherit": "Usar ajuste general",
+    "custom": "Calendario personalizado",
+    "days": "Días antes de la fecha límite",
+    "help": "Introduzca hasta 20 enteros entre 0 y 3650, separados por comas. 0 indica el día límite; deje vacío para desactivar los recordatorios.",
+    "effective": "Días aplicados",
+    "off": "Desactivado",
+    "preview": "Vista previa",
+    "previewOnly": "Solo vista previa con datos ficticios. No se envían mensajes reales.",
+    "invalid": "Introduzca días como números enteros válidos.",
+    "saveError": "No se pudo guardar. Actualice los ajustes e inténtelo de nuevo.",
+    "calendarTitle": "Calendario de solicitudes",
+    "selectPeriod": "Seleccione un período válido para el programa o corrija sus fechas.",
+    "missingDate": "No hay un calendario de solicitudes verificado.",
+    "saveFirst": "Guarde los cambios del calendario antes de la vista previa.",
+    "scheduledOn": "Fecha programada"
   }
 }

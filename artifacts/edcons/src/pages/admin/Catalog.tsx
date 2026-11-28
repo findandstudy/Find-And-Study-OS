@@ -1,3 +1,4 @@
+import { DeadlineReminderSettings, DeadlineReminderPreview } from "@/components/DeadlineReminderSettings";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { Card } from "@/components/ui/card";
@@ -1780,7 +1781,7 @@ function UniversitiesTab() {
     applicationPeriods: (current?.applicationPeriods ?? []).map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row),
   }));
 
-  const openReminderPreview = async (period: ApplicationPeriod, daysBefore: 30 | 7) => {
+  const openReminderPreview = async (period: ApplicationPeriod, daysBefore: number) => {
     if (!form?.id || !period.id) return;
     setReminderPreviewLoading(true);
     try {
@@ -2132,6 +2133,7 @@ function UniversitiesTab() {
               </div>
             </div>
 
+            {form?.id && <DeadlineReminderSettings universityId={form.id} />}
             {/* Institution calendar: application windows and teaching dates
                 are intentionally separate; unknown values stay blank. */}
             <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
@@ -2163,12 +2165,7 @@ function UniversitiesTab() {
                   <div className="xl:col-span-3"><Label className="text-xs">{translateUi(uiLanguage, "Kaynak URL *")}</Label><Input className="mt-1" type="url" value={period.sourceUrl} onChange={e => setApplicationPeriod(index, { sourceUrl: e.target.value })} placeholder="https://…" /></div>
                   <div><Label className="text-xs">{translateUi(uiLanguage, "Doğrulama tarihi *")}</Label><Input className="mt-1" type="date" value={period.verifiedAt?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { verifiedAt: e.target.value })} /></div>
                 </div>
-                {period.id && <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                  <span className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Sentetik bildirim önizlemesi:")}</span>
-                  <Button type="button" size="sm" variant="outline" disabled={reminderPreviewLoading || !period.applicationDeadlineAt} onClick={() => void openReminderPreview(period, 30)}>{translateUi(uiLanguage, "30 gün")}</Button>
-                  <Button type="button" size="sm" variant="outline" disabled={reminderPreviewLoading || !period.applicationDeadlineAt} onClick={() => void openReminderPreview(period, 7)}>{translateUi(uiLanguage, "7 gün")}</Button>
-                  <Badge variant="outline">{translateUi(uiLanguage, "Gerçek gönderim kapalı")}</Badge>
-                </div>}
+                {period.id && form?.id && <DeadlineReminderPreview universityId={form.id} disabled={reminderPreviewLoading || !period.applicationDeadlineAt || !period.isActive} onPreview={day=>void openReminderPreview(period,day)} />}
               </div>)}
             </div>
 
@@ -2264,6 +2261,7 @@ function UniversitiesTab() {
               <tbody className="divide-y">{(reminderPreview?.data ?? []).map((row: any) => <tr key={row.reference}><td className="px-3 py-2 font-mono text-xs">{row.reference}</td><td className="px-3 py-2">{row.channel ?? "—"}</td><td className="px-3 py-2"><Badge variant="outline" className={row.eligible ? "border-emerald-300 text-emerald-700" : "border-amber-300 text-amber-700"}>{row.eligible ? translateUi(uiLanguage, "Uygun") : translateUi(uiLanguage, "Dışlandı")}</Badge></td><td className="px-3 py-2 text-xs text-muted-foreground">{row.reason}</td></tr>)}</tbody>
             </table>
           </div>
+          {reminderPreview?.timing&&<p className="text-sm"><span>{t('deadlineReminders.scheduledOn')}: </span><bdi dir="ltr">{reminderPreview.timing.scheduledOn} · {reminderPreview.timing.timezone}</bdi></p>}
           <DialogFooter><Button variant="outline" onClick={() => setReminderPreview(null)}>{translateUi(uiLanguage, "Kapat")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>

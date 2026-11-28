@@ -11585,5 +11585,25 @@
     "sb5b61f6d": "Impossibile scaricare il PDF. Riprova.",
     "s6ce7d67e": "Contratto firmato — in attesa dell'approvazione del personale",
     "sa488d41b": "La firma è stata completata. Le percentuali di commissione e gli strumenti di gestione commerciale saranno disponibili dopo l'approvazione finale del nostro team. Non è necessario firmare di nuovo."
+  },
+  "deadlineReminders": {
+    "title": "Promemoria della scadenza delle domande",
+    "globalHelp": "Giorni predefiniti per tutte le università. Le impostazioni specifiche sono mantenute.",
+    "universityHelp": "Usa le impostazioni generali o salva un calendario per questa università.",
+    "inherit": "Usa impostazioni generali",
+    "custom": "Calendario personalizzato",
+    "days": "Giorni prima della scadenza",
+    "help": "Inserisci fino a 20 interi da 0 a 3650, separati da virgole. 0 indica il giorno della scadenza; lascia vuoto per disattivare i promemoria.",
+    "effective": "Giorni applicati",
+    "off": "Disattivato",
+    "preview": "Anteprima",
+    "previewOnly": "Solo anteprima con dati fittizi. Non vengono inviati messaggi reali.",
+    "invalid": "Inserisci un numero intero di giorni valido.",
+    "saveError": "Salvataggio non riuscito. Aggiorna le impostazioni e riprova.",
+    "calendarTitle": "Calendario delle domande",
+    "selectPeriod": "Seleziona un periodo valido per il programma o correggi le date.",
+    "missingDate": "Nessun calendario delle domande verificato disponibile.",
+    "saveFirst": "Salva le modifiche al calendario prima dell’anteprima.",
+    "scheduledOn": "Data prevista"
   }
 }

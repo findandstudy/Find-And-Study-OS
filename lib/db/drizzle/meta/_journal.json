@@ -1016,6 +1016,13 @@
       "when": 1795824000000,
       "tag": "0144_independent_work_pipelines",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1795881600000,
+      "tag": "0145_configurable_deadline_reminders",
+      "breakpoints": true
     }
   ]
 }

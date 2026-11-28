@@ -1,3 +1,4 @@
+import { usersTable } from "./users";
 import { pgTable, text, serial, timestamp, integer, boolean, real, jsonb, index, date, unique, check } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -181,7 +182,7 @@ export const applicationDeadlineReminderIntentsTable = pgTable("application_dead
   index("application_deadline_reminder_intents_period_status_idx").on(table.universityApplicationPeriodId, table.status, table.daysBefore),
   check("application_deadline_reminder_intents_subject_chk", sql`${table.subjectType} IN ('LEAD', 'APPLICATION')`),
   check("application_deadline_reminder_intents_channel_chk", sql`${table.channel} IN ('EMAIL', 'WHATSAPP')`),
-  check("application_deadline_reminder_intents_days_chk", sql`${table.daysBefore} IN (30, 7)`),
+  check("application_deadline_reminder_intents_days_chk", sql`${table.daysBefore} BETWEEN 0 AND 3650`),
   check("application_deadline_reminder_intents_status_chk", sql`${table.status} IN ('PREVIEW_ONLY', 'PENDING', 'CANCELLED', 'SENT', 'SUPPRESSED')`),
   check("application_deadline_reminder_intents_hash_chk", sql`${table.scheduleFingerprint} ~ '^[0-9a-f]{64}$'`),
 ]);
@@ -193,3 +194,16 @@ export type University = typeof universitiesTable.$inferSelect;
 export const insertProgramSchema = createInsertSchema(programsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertProgram = z.infer<typeof insertProgramSchema>;
 export type Program = typeof programsTable.$inferSelect;
+
+// Shared catalogue configuration; scope is system-wide or an explicit university.
+export const applicationDeadlineReminderPoliciesTable = pgTable("application_deadline_reminder_policies", {
+  scopeKey: text("scope_key").primaryKey(),
+  universityId: integer("university_id").unique().references(()=>universitiesTable.id,{onDelete:"cascade"}),
+  daysBefore: jsonb("days_before").$type<number[]>().notNull(),
+  revision: integer("revision").notNull().default(sql`nextval('application_deadline_policy_revision_seq')`),
+  updatedById: integer("updated_by_id").references(()=>usersTable.id,{onDelete:"set null"}),
+  updatedAt: timestamp("updated_at",{withTimezone:true}).notNull().defaultNow(),
+},table=>[
+ check("deadline_policy_scope_chk",sql`(${table.scopeKey} = 'SYSTEM' AND ${table.universityId} IS NULL) OR (${table.universityId} IS NOT NULL AND ${table.scopeKey} = 'UNIVERSITY:' || ${table.universityId}::text)`),
+ check("deadline_policy_array_chk",sql`jsonb_typeof(${table.daysBefore}) = 'array' AND jsonb_array_length(${table.daysBefore}) <= 20`),
+]);

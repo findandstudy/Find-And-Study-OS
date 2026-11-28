@@ -11585,5 +11585,25 @@
     "sb5b61f6d": "Impossible de télécharger le PDF. Veuillez réessayer.",
     "s6ce7d67e": "Contrat signé — en attente de validation par notre équipe",
     "sa488d41b": "La signature est terminée. Les taux de commission et les outils de gestion commerciale seront disponibles après la validation finale de notre équipe. Il n’est pas nécessaire de signer à nouveau."
+  },
+  "deadlineReminders": {
+    "title": "Rappels de date limite de candidature",
+    "globalHelp": "Jours de rappel par défaut pour toutes les universités. Les réglages propres aux universités sont conservés.",
+    "universityHelp": "Utilisez le réglage général ou enregistrez un calendrier propre à cette université.",
+    "inherit": "Utiliser le réglage général",
+    "custom": "Calendrier personnalisé",
+    "days": "Jours avant la date limite",
+    "help": "Saisissez au maximum 20 entiers de 0 à 3650, séparés par des virgules. 0 correspond au jour limite ; laissez vide pour désactiver les rappels.",
+    "effective": "Jours appliqués",
+    "off": "Désactivé",
+    "preview": "Aperçu",
+    "previewOnly": "Aperçu avec données fictives uniquement. Aucun message réel n’est envoyé.",
+    "invalid": "Saisissez des nombres entiers de jours valides.",
+    "saveError": "Échec de l’enregistrement. Actualisez les réglages et réessayez.",
+    "calendarTitle": "Calendrier des candidatures",
+    "selectPeriod": "Sélectionnez une période valide pour le programme ou corrigez ses dates.",
+    "missingDate": "Aucun calendrier de candidature vérifié n’est disponible.",
+    "saveFirst": "Enregistrez les changements du calendrier avant l’aperçu.",
+    "scheduledOn": "Date prévue"
   }
 }

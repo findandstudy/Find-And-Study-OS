@@ -11585,5 +11585,25 @@
     "sb5b61f6d": "Không thể tải xuống tệp PDF. Vui lòng thử lại.",
     "s6ce7d67e": "Hợp đồng đã ký — đang chờ nhân viên phê duyệt",
     "sa488d41b": "Đã hoàn tất ký kết. Tỷ lệ hoa hồng và các công cụ quản lý kinh doanh sẽ khả dụng sau khi đội ngũ của chúng tôi phê duyệt lần cuối. Bạn không cần ký lại."
+  },
+  "deadlineReminders": {
+    "title": "Nhắc hạn nộp hồ sơ",
+    "globalHelp": "Số ngày nhắc mặc định cho mọi trường. Cài đặt riêng của từng trường được giữ nguyên.",
+    "universityHelp": "Dùng cài đặt chung hoặc lưu lịch riêng cho trường này.",
+    "inherit": "Dùng cài đặt chung",
+    "custom": "Lịch tùy chỉnh",
+    "days": "Số ngày trước hạn",
+    "help": "Nhập tối đa 20 số nguyên từ 0 đến 3650, cách nhau bằng dấu phẩy. 0 là ngày hết hạn; để trống để tắt nhắc nhở.",
+    "effective": "Số ngày áp dụng",
+    "off": "Tắt",
+    "preview": "Xem trước",
+    "previewOnly": "Chỉ xem trước dữ liệu giả lập. Không gửi tin nhắn thật.",
+    "invalid": "Nhập số ngày nguyên hợp lệ.",
+    "saveError": "Không thể lưu. Tải lại cài đặt và thử lại.",
+    "calendarTitle": "Lịch nộp hồ sơ",
+    "selectPeriod": "Chọn kỳ hợp lệ cho chương trình hoặc sửa ngày.",
+    "missingDate": "Chưa có lịch nộp hồ sơ đã xác minh.",
+    "saveFirst": "Lưu thay đổi lịch trước khi xem trước.",
+    "scheduledOn": "Ngày đã lên lịch"
   }
 }

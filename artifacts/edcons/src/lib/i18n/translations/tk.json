@@ -11585,5 +11585,25 @@
     "sb5b61f6d": "PDF-i göçürip alyp bolmady. Gaýtadan synanyşyň.",
     "s6ce7d67e": "Şertnama gol çekildi — işgärleriň tassyklamagyna garaşylýar",
     "sa488d41b": "Gol çekmek tamamlandy. Toparymyzyň gutarnykly tassyklamasyndan soň komissiýa möçberleri we täjirçilik dolandyryş gurallary elýeterli bolar. Gaýtadan gol çekmegiňiz hökman däl."
+  },
+  "deadlineReminders": {
+    "title": "Arza möhleti barada ýatlatmalar",
+    "globalHelp": "Ähli uniwersitetler üçin deslapky günler. Aýratyn sazlamalar saklanýar.",
+    "universityHelp": "Umumy sazlamany ulanyň ýa-da bu uniwersitet üçin aýratyn tertibi ýazdyryň.",
+    "inherit": "Umumy sazlamany ulan",
+    "custom": "Aýratyn tertip",
+    "days": "Möhletden näçe gün öň",
+    "help": "0–3650 aralygynda iň köp 20 bitin sany otur bilen bölüp giriziň. 0 möhletiň soňky günüdir; boş goýmak ýatlatmalary öçürýär.",
+    "effective": "Ulanylýan günler",
+    "off": "Öçürilen",
+    "preview": "Öňünden gör",
+    "previewOnly": "Diňe synag maglumatlary görkezilýär. Hakyky habar iberilmeýär.",
+    "invalid": "Günleri dogry bitin san bilen giriziň.",
+    "saveError": "Ýazdyrylmady. Sazlamalary täzeläp gaýtadan synanyşyň.",
+    "calendarTitle": "Arza senenamasy",
+    "selectPeriod": "Programma üçin dogry döwri saýlaň ýa-da seneleri düzediň.",
+    "missingDate": "Tassyklanan arza senenamasy ýok.",
+    "saveFirst": "Öňünden görmezden öň senenama üýtgeşmelerini ýazdyryň.",
+    "scheduledOn": "Meýilleşdirilen sene"
   }
 }

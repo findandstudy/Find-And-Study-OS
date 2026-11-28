@@ -1,3 +1,4 @@
+import { DeadlineReminderSettings } from "@/components/DeadlineReminderSettings";
 import { translateUi, UiText, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
@@ -674,6 +675,7 @@ export default function SettingsPage() {
     const isSuperAdminLocal = user?.role === "super_admin";
     return (
       <div className="space-y-6">
+        {isManager && <DeadlineReminderSettings />}
         {isSuperAdminLocal && <OfferExpiryThresholdsCard />}
         {isSuperAdminLocal && <ContractExpiryThresholdsCard />}
         <SigningDeadlineDaysCard />

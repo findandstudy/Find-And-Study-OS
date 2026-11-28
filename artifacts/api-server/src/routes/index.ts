@@ -9,6 +9,7 @@ import agentEmbedRouter from "./agentEmbed";
 import applicationsRouter from "./applications";
 import documentsRouter from "./documents";
 import universitiesRouter from "./universities";
+import deadlineRemindersRouter from "./deadlineReminders";
 import financeRouter from "./finance";
 import contentRouter from "./content";
 import settingsRouter from "./settings";
@@ -237,6 +238,7 @@ router.use(documentsRouter);
 // cannot interpret "import-template" as an id.
 router.use(catalogRouter);
 router.use(universitiesRouter);
+router.use(deadlineRemindersRouter);
 router.use(financeRouter);
 router.use(contentRouter);
 router.use(settingsRouter);

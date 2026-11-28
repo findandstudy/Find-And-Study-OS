@@ -11585,5 +11585,25 @@
     "sb5b61f6d": "Could not download the PDF. Please try again.",
     "s6ce7d67e": "Contract signed — awaiting staff approval",
     "sa488d41b": "Signing is complete. Commission rates and commercial management tools become available after our team's final approval. You do not need to sign again."
+  },
+  "deadlineReminders": {
+    "title": "Application deadline reminders",
+    "globalHelp": "Default reminder days for all universities. University overrides are preserved.",
+    "universityHelp": "Use the system default or save a separate schedule for this university.",
+    "inherit": "Use system default",
+    "custom": "Custom schedule",
+    "days": "Days before deadline",
+    "help": "Enter up to 20 whole numbers from 0 to 3650, separated by commas. 0 means the deadline day; blank turns reminders off.",
+    "effective": "Effective days",
+    "off": "Off",
+    "preview": "Preview",
+    "previewOnly": "Synthetic preview only. No real messages are sent.",
+    "invalid": "Enter valid whole-number days.",
+    "saveError": "Could not save. Refresh the settings and try again.",
+    "calendarTitle": "Application calendar",
+    "selectPeriod": "The program needs a valid period selection or its dates need correction.",
+    "missingDate": "No verified application calendar is available.",
+    "saveFirst": "Save calendar changes before previewing.",
+    "scheduledOn": "Scheduled date"
   }
 }

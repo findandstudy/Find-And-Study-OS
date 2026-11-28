@@ -26,7 +26,10 @@ import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
 import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import { createHash } from "node:crypto";
-import { buildSyntheticDeadlinePreview, reminderScheduleFingerprint } from "../lib/deadlineReminderPreview";
+import { buildSyntheticDeadlinePreview } from "../lib/deadlineReminderPreview";
+import { parseReminderDay, deadlineTiming, calendarFingerprint } from "../lib/deadlineReminderPolicy";
+import { readDeadlinePolicy } from "../lib/deadlineReminderPolicyStore";
+import { resolveProgramApplicationCalendar } from "../lib/programApplicationCalendar";
 
 const router: IRouter = Router();
 const universityLogoObjectStorage = new ObjectStorageService();
@@ -274,6 +277,15 @@ async function requireProgramPeriodScope(universityId: number, periodId: unknown
     .where(and(eq(universityApplicationPeriodsTable.id, id), eq(universityApplicationPeriodsTable.universityId, universityId), eq(universityApplicationPeriodsTable.isActive, true)));
   if (!period) throw new Error("Selected application period does not belong to the program university");
   return id;
+}
+
+async function validateProgramCalendar(input:{universityId:number;universityApplicationPeriodId:number|null;applicationsOpenOverrideAt:unknown;applicationDeadlineOverrideAt:unknown;classesStartOverrideOn:unknown;classesEndOverrideOn:unknown}) {
+ const program={...input,applicationsOpenOverrideAt:optionalDateOnly(input.applicationsOpenOverrideAt,'applicationsOpenOverrideAt'),applicationDeadlineOverrideAt:optionalDateOnly(input.applicationDeadlineOverrideAt,'applicationDeadlineOverrideAt'),classesStartOverrideOn:optionalDateOnly(input.classesStartOverrideOn,'classesStartOverrideOn'),classesEndOverrideOn:optionalDateOnly(input.classesEndOverrideOn,'classesEndOverrideOn')};
+ const hasOverrides=[program.applicationsOpenOverrideAt,program.applicationDeadlineOverrideAt,program.classesStartOverrideOn,program.classesEndOverrideOn].some(Boolean);
+ if(!hasOverrides)return;
+ const periods=await db.select().from(universityApplicationPeriodsTable).where(and(eq(universityApplicationPeriodsTable.universityId,program.universityId),eq(universityApplicationPeriodsTable.isActive,true)));
+ const result=resolveProgramApplicationCalendar(program,periods);
+ if(result.applicationCalendarStatus!=='VERIFIED')throw new Error('Program calendar needs a valid school period and consistent application and class dates');
 }
 
 /* ─── UNIVERSITIES ───────────────────────────────────────────── */
@@ -624,17 +636,27 @@ router.put("/universities/:id/application-periods", requireAuth, requireRole(...
 router.get("/universities/:id/application-periods/:periodId/reminder-preview", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const universityId = Number(req.params.id);
   const periodId = Number(req.params.periodId);
-  const daysBefore = Number(req.query.daysBefore ?? 30) === 7 ? 7 : 30;
+  if (!Number.isSafeInteger(universityId)||universityId<1||!Number.isSafeInteger(periodId)||periodId<1){res.status(400).json({code:"INVALID_CALENDAR_ID"});return;}
+  const policy=await readDeadlinePolicy(universityId);
+  let daysBefore:number;
+  try { daysBefore=req.query.daysBefore===undefined?policy.effectiveDays[0]:parseReminderDay(req.query.daysBefore); }
+  catch { res.status(400).json({code:"INVALID_REMINDER_DAYS"});return; }
+  if(!policy.effectiveDays.includes(daysBefore)){res.status(409).json({code:"REMINDER_DAY_NOT_CONFIGURED"});return;}
   const [period] = await db.select().from(universityApplicationPeriodsTable)
     .where(and(eq(universityApplicationPeriodsTable.id, periodId), eq(universityApplicationPeriodsTable.universityId, universityId)));
   if (!period) { res.status(404).json({ error: "Application period not found" }); return; }
+  if(!period.isActive||!period.verifiedAt||!period.applicationDeadlineAt){res.status(409).json({code:"CALENDAR_NOT_READY"});return;}
+  const timing=deadlineTiming(period.applicationDeadlineAt,period.sourceTimezone,daysBefore);
   const rows = buildSyntheticDeadlinePreview();
   res.json({
     mode: "synthetic",
     deliveryEnabled: false,
     period,
     daysBefore,
-    scheduleFingerprint: reminderScheduleFingerprint({
+    policy,
+    timing,
+    scheduleFingerprint: calendarFingerprint({
+      policyVersion:policy.version,active:period.isActive,verifiedAt:period.verifiedAt,opensAt:period.applicationsOpenAt,
       periodId,
       deadline: period.applicationDeadlineAt ?? null,
       timezone: period.sourceTimezone,
@@ -927,6 +949,7 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     normalizedSourceMetadata = normalizeCatalogSourceMetadata("program", sourceMetadata);
     normalizedCurrency = normalizeCurrency(currency);
     normalizedPeriodId = await requireProgramPeriodScope(Number(universityId), universityApplicationPeriodId);
+    await validateProgramCalendar({universityId:Number(universityId),universityApplicationPeriodId:normalizedPeriodId,applicationsOpenOverrideAt,applicationDeadlineOverrideAt,classesStartOverrideOn,classesEndOverrideOn});
     const hasAnyFee = [tuitionFee, scholarship, applicationFee, enrollmentFee, adaptationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee]
       .some(value => value !== undefined && value !== null && value !== "");
     if (hasAnyFee && !normalizedCurrency) throw new Error("currency is required when a fee is provided");
@@ -1085,33 +1108,8 @@ router.get("/programs/:id", async (req, res): Promise<void> => {
   const reqs = await db.select().from(programDocumentRequirementsTable)
     .where(eq(programDocumentRequirementsTable.programId, id))
     .orderBy(programDocumentRequirementsTable.sortOrder);
-  const [schoolPeriod] = prog.universityApplicationPeriodId
-    ? await db.select().from(universityApplicationPeriodsTable)
-      .where(and(
-        eq(universityApplicationPeriodsTable.id, prog.universityApplicationPeriodId),
-        eq(universityApplicationPeriodsTable.universityId, prog.universityId),
-        eq(universityApplicationPeriodsTable.isActive, true),
-      ))
-    : [];
-  const effectiveApplicationPeriod = schoolPeriod ? {
-    id: schoolPeriod.id,
-    termName: schoolPeriod.termName,
-    academicYear: schoolPeriod.academicYear,
-    campusName: schoolPeriod.campusName,
-    sourceTimezone: schoolPeriod.sourceTimezone,
-    sourceUrl: schoolPeriod.sourceUrl,
-    verifiedAt: schoolPeriod.verifiedAt,
-    applicationsOpenAt: prog.applicationsOpenOverrideAt ?? schoolPeriod.applicationsOpenAt,
-    applicationDeadlineAt: prog.applicationDeadlineOverrideAt ?? schoolPeriod.applicationDeadlineAt,
-    classesStartOn: prog.classesStartOverrideOn ?? schoolPeriod.classesStartOn,
-    classesEndOn: prog.classesEndOverrideOn ?? schoolPeriod.classesEndOn,
-    overrides: {
-      applicationsOpenAt: prog.applicationsOpenOverrideAt != null,
-      applicationDeadlineAt: prog.applicationDeadlineOverrideAt != null,
-      classesStartOn: prog.classesStartOverrideOn != null,
-      classesEndOn: prog.classesEndOverrideOn != null,
-    },
-  } : null;
+  const schoolPeriods=await db.select().from(universityApplicationPeriodsTable).where(and(eq(universityApplicationPeriodsTable.universityId,prog.universityId),eq(universityApplicationPeriodsTable.isActive,true)));
+  const {effectiveApplicationPeriod,applicationCalendarStatus}=resolveProgramApplicationCalendar(prog,schoolPeriods);
   const visibleProgram = sanitizeCourseFinderProgram(
     prog,
     programResponseVisibility(req.user),
@@ -1272,6 +1270,7 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
       .some(value => value != null);
     if (hasAnyFee && !mergedProgram.currency) throw new Error("currency is required when a fee is provided");
     if (mergedProgram.priceValidFrom && mergedProgram.priceValidUntil && mergedProgram.priceValidUntil < mergedProgram.priceValidFrom) throw new Error("priceValidUntil cannot be before priceValidFrom");
+    await validateProgramCalendar(mergedProgram);
     if (mergedProgram.applicationsOpenOverrideAt && mergedProgram.applicationDeadlineOverrideAt && mergedProgram.applicationDeadlineOverrideAt < mergedProgram.applicationsOpenOverrideAt) throw new Error("program application deadline override cannot be before opening");
     if (mergedProgram.classesStartOverrideOn && mergedProgram.classesEndOverrideOn && mergedProgram.classesEndOverrideOn < mergedProgram.classesStartOverrideOn) throw new Error("program class end override cannot be before class start");
     requireCurrentAdmissionEvidence({

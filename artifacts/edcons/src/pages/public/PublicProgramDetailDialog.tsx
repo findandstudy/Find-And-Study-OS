@@ -1,3 +1,4 @@
+import { ApplicationCalendarInfo } from "@/components/ApplicationCalendarInfo";
 import React, { useRef, type ReactNode } from "react";
 import { Award, BookOpen, Clock, DollarSign, ExternalLink, GraduationCap, Languages, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -112,6 +113,7 @@ export function PublicProgramDetailDialog({ open, onClose, program, tuitionConte
         </DialogHeader>
 
         <div className="space-y-4 mt-2 min-w-0">
+          <ApplicationCalendarInfo programId={program.id} />
           {(program.universityCity || program.universityCountry) && <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <MapPin className="w-4 h-4 text-primary/60 shrink-0" aria-hidden="true" />
             <span className="min-w-0 break-words"><bdi>{[program.universityCity, program.universityCountry].filter(Boolean).join(", ")}</bdi></span>

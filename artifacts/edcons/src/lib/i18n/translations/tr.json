@@ -11585,5 +11585,25 @@
     "sb5b61f6d": "PDF indirilemedi. Lütfen tekrar deneyin.",
     "s6ce7d67e": "Sözleşmeniz imzalandı; yönetici onayı bekleniyor",
     "sa488d41b": "İmza işlemi tamamlandı. Komisyon ve ticari yönetim araçları, ekibimizin son onayından sonra açılacak. Tekrar imza atmanız gerekmez."
+  },
+  "deadlineReminders": {
+    "title": "Son başvuru tarihi hatırlatmaları",
+    "globalHelp": "Tüm üniversiteler için varsayılan günler. Üniversiteye özel ayarlar korunur.",
+    "universityHelp": "Genel ayarı kullanın veya bu üniversiteye ayrı bir takvim kaydedin.",
+    "inherit": "Genel ayarı kullan",
+    "custom": "Özel takvim",
+    "days": "Son başvurudan kaç gün önce",
+    "help": "Virgülle ayırarak 0–3650 arasında en fazla 20 tam sayı girin. 0 son başvuru günüdür; boş bırakmak hatırlatmaları kapatır.",
+    "effective": "Etkin günler",
+    "off": "Kapalı",
+    "preview": "Önizleme",
+    "previewOnly": "Yalnız sentetik önizleme. Gerçek mesaj gönderilmez.",
+    "invalid": "Geçerli tam sayı gün değerleri girin.",
+    "saveError": "Kaydedilemedi. Ayarları yenileyip tekrar deneyin.",
+    "calendarTitle": "Başvuru takvimi",
+    "selectPeriod": "Program için geçerli bir dönem seçilmeli veya tarihler düzeltilmelidir.",
+    "missingDate": "Doğrulanmış başvuru takvimi bulunmuyor.",
+    "saveFirst": "Önizlemeden önce takvim değişikliklerini kaydedin.",
+    "scheduledOn": "Planlanan tarih"
   }
 }

@@ -332,7 +332,9 @@
     "test:postgres-public-web-draft-intake": "tsx --test ./scripts/test-postgres-public-web-draft-intake.ts",
     "test:postgres-public-web-draft-source-resolver": "tsx --test ./scripts/test-postgres-public-web-draft-source-resolver-integration.ts",
     "test:postgres-catalog-entity-graph": "tsx --test ./scripts/test-postgres-catalog-entity-graph.ts",
-    "test:agency-platform-overhaul": "tsx --test ./scripts/test-agency-platform-overhaul.ts"
+    "test:agency-platform-overhaul": "tsx --test ./scripts/test-agency-platform-overhaul.ts",
+    "test:deadline-reminders": "tsx --test ./scripts/test-deadline-reminder-policy.ts ./src/lib/deadlineReminderPreview.test.ts",
+    "test:local-deadline-reminders": "tsx ./scripts/test-local-deadline-reminders.ts"
   },
   "dependencies": {
     "@workspace/corporate-facts": "workspace:*",

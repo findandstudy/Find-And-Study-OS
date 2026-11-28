@@ -11585,5 +11585,25 @@
     "sb5b61f6d": "Não foi possível baixar o PDF. Tente novamente.",
     "s6ce7d67e": "Contrato assinado — aguardando aprovação da equipe",
     "sa488d41b": "A assinatura foi concluída. As taxas de comissão e as ferramentas de gestão comercial ficarão disponíveis após a aprovação final da nossa equipe. Não é necessário assinar novamente."
+  },
+  "deadlineReminders": {
+    "title": "Lembretes do prazo de candidatura",
+    "globalHelp": "Dias padrão para todas as universidades. As configurações específicas são preservadas.",
+    "universityHelp": "Use a configuração geral ou salve um calendário para esta universidade.",
+    "inherit": "Usar configuração geral",
+    "custom": "Calendário personalizado",
+    "days": "Dias antes do prazo",
+    "help": "Insira até 20 inteiros de 0 a 3650, separados por vírgulas. 0 indica o dia do prazo; deixe vazio para desativar os lembretes.",
+    "effective": "Dias aplicados",
+    "off": "Desativado",
+    "preview": "Prévia",
+    "previewOnly": "Apenas prévia com dados fictícios. Nenhuma mensagem real é enviada.",
+    "invalid": "Insira dias como números inteiros válidos.",
+    "saveError": "Não foi possível salvar. Atualize as configurações e tente novamente.",
+    "calendarTitle": "Calendário de candidaturas",
+    "selectPeriod": "Selecione um período válido para o programa ou corrija as datas.",
+    "missingDate": "Nenhum calendário de candidaturas verificado está disponível.",
+    "saveFirst": "Salve as alterações no calendário antes da prévia.",
+    "scheduledOn": "Data agendada"
   }
 }

@@ -11586,5 +11586,25 @@
     "sb5b61f6d": "Tidak dapat mengunduh PDF. Silakan coba lagi.",
     "s6ce7d67e": "Kontrak telah ditandatangani — menunggu persetujuan staf",
     "sa488d41b": "Penandatanganan selesai. Tarif komisi dan alat pengelolaan komersial akan tersedia setelah persetujuan akhir dari tim kami. Anda tidak perlu menandatangani lagi."
+  },
+  "deadlineReminders": {
+    "title": "Pengingat batas waktu pendaftaran",
+    "globalHelp": "Hari pengingat bawaan untuk semua universitas. Pengaturan khusus universitas tetap dipertahankan.",
+    "universityHelp": "Gunakan pengaturan umum atau simpan jadwal khusus universitas ini.",
+    "inherit": "Gunakan pengaturan umum",
+    "custom": "Jadwal khusus",
+    "days": "Hari sebelum batas waktu",
+    "help": "Masukkan hingga 20 bilangan bulat dari 0 sampai 3650, dipisahkan koma. 0 berarti hari batas waktu; kosongkan untuk mematikan pengingat.",
+    "effective": "Hari yang berlaku",
+    "off": "Nonaktif",
+    "preview": "Pratinjau",
+    "previewOnly": "Hanya pratinjau data simulasi. Tidak ada pesan nyata yang dikirim.",
+    "invalid": "Masukkan jumlah hari berupa bilangan bulat yang valid.",
+    "saveError": "Tidak dapat menyimpan. Muat ulang pengaturan dan coba lagi.",
+    "calendarTitle": "Kalender pendaftaran",
+    "selectPeriod": "Pilih periode yang valid untuk program atau perbaiki tanggalnya.",
+    "missingDate": "Kalender pendaftaran terverifikasi belum tersedia.",
+    "saveFirst": "Simpan perubahan kalender sebelum pratinjau.",
+    "scheduledOn": "Tanggal terjadwal"
   }
 }
