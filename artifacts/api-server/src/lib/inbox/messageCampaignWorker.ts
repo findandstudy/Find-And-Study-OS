@@ -401,8 +401,6 @@ async function tick(): Promise<void> {
       lastStaleRecoveryAt = now;
       await recoverStaleProcessing();
     }
-    const {processPipelineNotices}=await import("../notifications/pipelineNotices");
-    await processPipelineNotices();
     const dispatch = await claimStageDispatch();
     if (dispatch) {
       try {

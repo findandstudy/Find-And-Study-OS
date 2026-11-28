@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Response } from "express";
-import { db, pool, universitiesTable, programsTable, programTranslationsTable, applicationsTable, pipelineStagesTable, programDocumentRequirementsTable, universityApplicationPeriodsTable } from "@workspace/db";
-import { eq, ilike, sql, and, or, inArray, isNull, getTableColumns, asc } from "drizzle-orm";
+import { db, pool, auditLogsTable, universitiesTable, programsTable, programTranslationsTable, applicationsTable, pipelineStagesTable, programDocumentRequirementsTable, universityApplicationPeriodsTable } from "@workspace/db";
+import { eq, ilike, sql, and, or, inArray, isNull, getTableColumns, asc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getCurrentSeason } from "../lib/season";
@@ -30,6 +30,7 @@ import { buildSyntheticDeadlinePreview } from "../lib/deadlineReminderPreview";
 import { parseReminderDay, deadlineTiming, calendarFingerprint } from "../lib/deadlineReminderPolicy";
 import { readDeadlinePolicy } from "../lib/deadlineReminderPolicyStore";
 import { resolveProgramApplicationCalendar } from "../lib/programApplicationCalendar";
+import { addPublicCatalogConditions, getPublicCatalogPolicy } from "../lib/publicCatalogQueryPolicy";
 
 const router: IRouter = Router();
 const universityLogoObjectStorage = new ObjectStorageService();
@@ -121,6 +122,27 @@ function programResponseVisibility(user?: { role: string; agentStaffPermissions?
     internalFees: backOfficeRole && (!agentStaff || (user?.agentStaffPermissions ?? []).includes("view_commission_amount")),
     serviceFee: backOfficeRole && (!agentStaff || (user?.agentStaffPermissions ?? []).includes("view_service_fee")),
   };
+}
+
+async function programReadConditions(user?: { role: string }) {
+  const conditions: SQL[] = [];
+  if (user && MANAGER_ROLES.includes(user.role)) return conditions;
+  const isPortalViewer = user && (STAFF_ROLES.includes(user.role) || AGENT_ROLES.includes(user.role));
+  conditions.push(eq(programsTable.isActive, true));
+  addPublicCatalogConditions(conditions, isPortalViewer ? null : await getPublicCatalogPolicy());
+  return conditions;
+}
+
+function programForViewer<T extends { financeNotes?: unknown; sourceMetadata?: unknown }>(
+  row: T,
+  user?: { role: string; agentStaffPermissions?: string[] },
+) {
+  const result = sanitizeCourseFinderProgram(row, programResponseVisibility(user));
+  if (!user || !MANAGER_ROLES.includes(user.role)) {
+    delete result.financeNotes;
+    delete result.sourceMetadata;
+  }
+  return result;
 }
 
 // Internal fields that must never leak through unauthenticated /universities
@@ -574,13 +596,20 @@ router.get("/universities/:id", async (req, res): Promise<void> => {
   res.json(maskContacts(uni as any, userRole));
 });
 
+function applicationPeriodRevision(rows: (typeof universityApplicationPeriodsTable.$inferSelect)[]): string {
+  return createHash("sha256").update(JSON.stringify(
+    [...rows].sort((left, right) => left.id - right.id),
+  )).digest("hex");
+}
+
 router.get("/universities/:id/application-periods", requireAuth, async (req, res): Promise<void> => {
   const universityId = Number(req.params.id);
   if (!Number.isSafeInteger(universityId) || universityId < 1) { res.status(400).json({ error: "Invalid university id" }); return; }
   const rows = await db.select().from(universityApplicationPeriodsTable)
     .where(eq(universityApplicationPeriodsTable.universityId, universityId))
     .orderBy(asc(universityApplicationPeriodsTable.academicYear), asc(universityApplicationPeriodsTable.applicationDeadlineAt), asc(universityApplicationPeriodsTable.id));
-  res.json({ data: rows });
+  res.set("Cache-Control", "private, no-store");
+  res.json({ data: rows, revision: applicationPeriodRevision(rows) });
 });
 
 router.put("/universities/:id/application-periods", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
@@ -593,11 +622,21 @@ router.put("/universities/:id/application-periods", requireAuth, requireRole(...
   try { normalized = req.body.periods.map((row: UniversityApplicationPeriodInput) => normalizeApplicationPeriod(row, req.user!.id)); }
   catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
   const providedIds = req.body.periods.map((row: UniversityApplicationPeriodInput) => Number(row.id)).filter((id: number) => Number.isSafeInteger(id) && id > 0);
+  if (new Set(providedIds).size !== providedIds.length) {
+    res.status(400).json({ error: "Application period ids must be unique" }); return;
+  }
   try {
     const saved = await db.transaction(async tx => {
-      const existing = await tx.select({ id: universityApplicationPeriodsTable.id })
+      const [school] = await tx.select({ id: universitiesTable.id }).from(universitiesTable)
+        .where(eq(universitiesTable.id, universityId)).for("update");
+      if (!school) return { status: "missing" } as const;
+      const existing = await tx.select()
         .from(universityApplicationPeriodsTable)
-        .where(eq(universityApplicationPeriodsTable.universityId, universityId));
+        .where(eq(universityApplicationPeriodsTable.universityId, universityId)).for("update");
+      const expected = req.body.revision;
+      if (expected !== applicationPeriodRevision(existing) && !(expected == null && existing.length === 0)) {
+        return { status: "changed" } as const;
+      }
       const existingIds = new Set(existing.map(row => row.id));
       if (providedIds.some((id: number) => !existingIds.has(id))) throw new Error("Application period does not belong to this university");
       const output = [];
@@ -618,16 +657,24 @@ router.put("/universities/:id/application-periods", requireAuth, requireRole(...
       }
       const retained = new Set(providedIds);
       for (const row of existing) {
-        if (!retained.has(row.id)) {
+        if (!retained.has(row.id) && row.isActive) {
           await tx.update(universityApplicationPeriodsTable)
             .set({ isActive: false, updatedById: req.user!.id, updatedAt: new Date() })
             .where(eq(universityApplicationPeriodsTable.id, row.id));
         }
       }
-      return output;
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id, action: "replace_university_application_periods",
+        resource: "university", resourceId: universityId,
+        changes: JSON.stringify({ rows: output.length }), ipAddress: req.ip ?? null,
+      });
+      const current = await tx.select().from(universityApplicationPeriodsTable)
+        .where(eq(universityApplicationPeriodsTable.universityId, universityId));
+      return { status: "saved", data: output, revision: applicationPeriodRevision(current) } as const;
     });
-    await logAudit(req.user!.id, "replace_university_application_periods", "university", universityId, { rows: saved.length }, req.ip);
-    res.json({ data: saved });
+    if (saved.status === "missing") { res.status(404).json({ error: "University not found" }); return; }
+    if (saved.status === "changed") { res.status(409).json({ error: "APPLICATION_CALENDAR_CHANGED" }); return; }
+    res.json({ data: saved.data, revision: saved.revision });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Application calendar could not be saved" });
   }
@@ -828,11 +875,7 @@ router.get("/programs", async (req, res): Promise<void> => {
   const limitNum = Math.min(100, Math.max(1, safeInt(limit, 20)));
   const offset = (pageNum - 1) * limitNum;
 
-  const conditions = [];
-  if (!req.user || !MANAGER_ROLES.includes(req.user.role)) {
-    conditions.push(eq(programsTable.isActive, true));
-    conditions.push(sql`EXISTS (SELECT 1 FROM ${universitiesTable} WHERE ${universitiesTable.id} = ${programsTable.universityId} AND ${universitiesTable.isActive} = true)`);
-  }
+  const conditions = await programReadConditions(req.user);
   if (universityId && /^\d+$/.test(universityId)) conditions.push(eq(programsTable.universityId, parseInt(universityId, 10)));
   if (language) conditions.push(ilike(programsTable.language, language));
   if (search) conditions.push(localized
@@ -852,6 +895,7 @@ router.get("/programs", async (req, res): Promise<void> => {
   );
   const [{ count }] = await db.select({ count: sql<number>`count(*)` })
     .from(programsTable)
+    .leftJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
     .leftJoin(programTranslationsTable, translationJoin)
     .where(where);
   const rows = await db
@@ -878,8 +922,7 @@ router.get("/programs", async (req, res): Promise<void> => {
   // Apply the same server-side projection to every caller. Agent staff's
   // explicit switches must hold here too because application forms load their
   // program metadata from this legacy endpoint.
-  const visibility = programResponseVisibility(req.user);
-  const visibleRows: any[] = rows.map((row) => sanitizeCourseFinderProgram(row, visibility));
+  const visibleRows = rows.map((row) => programForViewer(row, req.user));
 
   let data: any[] = visibleRows.map((row) => ({
     ...row,
@@ -1087,6 +1130,7 @@ router.get("/programs/:id", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const locale = normalizeProgramLocale(req.query.locale);
+  const conditions = await programReadConditions(req.user);
   const [prog] = await db.select({
     ...getTableColumns(programsTable),
     name: sql<string>`coalesce(${programTranslationsTable.name}, ${programsTable.name})`,
@@ -1098,28 +1142,27 @@ router.get("/programs/:id", async (req, res): Promise<void> => {
     refundProcess: sql<string | null>`coalesce(${programTranslationsTable.refundProcess}, ${programsTable.refundProcess})`,
     translatedLocale: programTranslationsTable.locale,
   }).from(programsTable)
+    .leftJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
     .leftJoin(programTranslationsTable, and(
       eq(programTranslationsTable.programId, programsTable.id),
       eq(programTranslationsTable.locale, locale),
       eq(programTranslationsTable.status, "published"),
     ))
-    .where(eq(programsTable.id, id));
+    .where(and(eq(programsTable.id, id), ...conditions));
   if (!prog) { res.status(404).json({ error: "Program not found" }); return; }
   const reqs = await db.select().from(programDocumentRequirementsTable)
     .where(eq(programDocumentRequirementsTable.programId, id))
     .orderBy(programDocumentRequirementsTable.sortOrder);
   const schoolPeriods=await db.select().from(universityApplicationPeriodsTable).where(and(eq(universityApplicationPeriodsTable.universityId,prog.universityId),eq(universityApplicationPeriodsTable.isActive,true)));
   const {effectiveApplicationPeriod,applicationCalendarStatus}=resolveProgramApplicationCalendar(prog,schoolPeriods);
-  const visibleProgram = sanitizeCourseFinderProgram(
-    prog,
-    programResponseVisibility(req.user),
-  );
+  const visibleProgram = programForViewer(prog, req.user);
   res.json({
     ...visibleProgram,
     contentLocale: prog.translatedLocale || "en",
     fallbackUsed: locale !== "en" && !prog.translatedLocale,
     translatedLocale: undefined,
     effectiveApplicationPeriod,
+    applicationCalendarStatus,
     documentRequirements: reqs.map(r => ({ documentType: r.documentType, mandatory: r.mandatory, sortOrder: r.sortOrder })),
   });
 });
@@ -1264,7 +1307,7 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
   try {
     updates.universityApplicationPeriodId = await requireProgramPeriodScope(
       Number(updates.universityId ?? currentProgram.universityId),
-      updates.universityApplicationPeriodId ?? currentProgram.universityApplicationPeriodId,
+      mergedProgram.universityApplicationPeriodId,
     );
     const hasAnyFee = [mergedProgram.tuitionFee, mergedProgram.scholarship, mergedProgram.applicationFee, mergedProgram.enrollmentFee, mergedProgram.adaptationFee, mergedProgram.advancedFee, mergedProgram.depositFee, mergedProgram.serviceFeeAmount, mergedProgram.discountedFee, mergedProgram.languageFee]
       .some(value => value != null);
@@ -1284,10 +1327,6 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No valid fields" }); return; }
   const [prog] = await db.update(programsTable).set(updates).where(eq(programsTable.id, id)).returning();
   if (!prog) { res.status(404).json({ error: "Program not found" }); return; }
-  if (!req.user) {
-    const [parent] = await db.select({ isActive: universitiesTable.isActive }).from(universitiesTable).where(eq(universitiesTable.id, prog.universityId));
-    if (!prog.isActive || !parent?.isActive) { res.status(404).json({ error: "Program not found" }); return; }
-  }
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
   invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "update_program", "program", id, updates, req.ip);

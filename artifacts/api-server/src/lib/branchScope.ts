@@ -1,7 +1,12 @@
 import { db, usersTable, agentsTable, agentBranchesTable } from "@workspace/db";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, isNull, or, type AnyColumn } from "drizzle-orm";
 
 const SUPER_ROLES = new Set(["super_admin"]);
+
+export function visibleRecordBranches(column: AnyColumn, branchIds: number[] | null) {
+  if (branchIds === null) return undefined;
+  return branchIds.length ? or(isNull(column), inArray(column, branchIds))! : isNull(column);
+}
 
 type BranchContext = {
   branchId?: number | null;

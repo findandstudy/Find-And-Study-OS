@@ -2231,6 +2231,7 @@ router.post("/public/embed/:slug/apply", embedApplicationSubmitLimiter, embedApp
           role: "student",
           isActive: false,
           emailVerified: false,
+          activationPending: true,
           language: "en",
           passwordResetToken: crypto.createHash("sha256").update(passwordToken).digest("hex"),
           passwordResetExpires: new Date(Date.now() + 48 * 60 * 60 * 1000),

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = path.join(root, "src", "lib", "i18n", "translations");
 const outputDir = path.join(root, "dist", "public", "i18n-critical");
+const maxCriticalDictionaryBytes = 128 * 1024;
 const publicUiTextKeys = JSON.parse(fs.readFileSync(path.join(root, 'scripts/public-ui-text-keys.json'), 'utf8'));
 const namespaces = [
   "a11y", "nav", "footer", "cookie", "hero", "stats", "features",
@@ -47,7 +48,11 @@ for (const file of files) {
     if (typeof source.uiText?.[key] !== 'string') throw new Error(`${file} missing public UI text ${key}`);
     return [key, source.uiText[key]];
   }));
-  fs.writeFileSync(path.join(outputDir, file), `${JSON.stringify(critical)}\n`, "utf8");
+  const output = `${JSON.stringify(critical)}\n`;
+  if (Buffer.byteLength(output, "utf8") > maxCriticalDictionaryBytes) {
+    throw new Error(`${file} exceeds the public renderer's critical dictionary budget`);
+  }
+  fs.writeFileSync(path.join(outputDir, file), output, "utf8");
 }
 
 console.log(`[public-i18n] emitted ${files.length} bounded critical dictionaries`);

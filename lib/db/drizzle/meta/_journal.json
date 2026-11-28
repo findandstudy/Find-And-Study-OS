@@ -1030,6 +1030,13 @@
       "when": 1795885200000,
       "tag": "0146_all_pipeline_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1795892400000,
+      "tag": "0147_student_activation_authority",
+      "breakpoints": true
     }
   ]
 }

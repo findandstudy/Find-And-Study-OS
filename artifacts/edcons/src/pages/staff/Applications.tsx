@@ -1,4 +1,5 @@
 import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
+import { downloadCrmExcel } from "@/lib/crmExcel";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { QuickContactDialog } from "@/components/QuickContact";
@@ -2271,7 +2272,7 @@ export default function ApplicationsPage() {
               />
             )}
             {isAdmin && (
-              <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => { const a = document.createElement("a"); const idsParam = selectedIds.size > 0 ? `&ids=${Array.from(selectedIds).join(",")}` : ""; a.href = `${BASE_URL}/api/export/applications?season=${encodeURIComponent(season || "")}${idsParam}`; a.click(); }}>
+              <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => downloadCrmExcel(BASE_URL, "applications", applicationListParams, selectedIds)}>
                 <Download className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Excel")} </Button>
             )}
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>

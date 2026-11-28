@@ -9,6 +9,15 @@ export function stageEmailRuntime(env = process.env): { enabled: boolean; since:
   };
 }
 
+export function stageWhatsAppRuntime(env = process.env): { enabled: boolean; since: Date | null } {
+  // Use the existing rollout date on installations that previously shared the
+  // email gate. The email switch itself cannot stop WhatsApp processing.
+  const raw = env.PIPELINE_WHATSAPP_AUTOMATION_SINCE ?? env.PIPELINE_EMAIL_AUTOMATION_SINCE;
+  const parsed = raw && /^\d{4}-\d{2}-\d{2}T/.test(raw) ? new Date(raw) : null;
+  const since = parsed && Number.isFinite(parsed.getTime()) ? parsed : null;
+  return { enabled: !!since && env.PIPELINE_WHATSAPP_AUTOMATION_ENABLED !== "false", since };
+}
+
 export function parseStageAutomaticEmail(raw: unknown): StageAutomaticEmail | null {
   if (raw == null) return null;
   if (typeof raw !== "object" || Array.isArray(raw)) throw new Error("EMAIL_CONFIGURATION_INVALID");

@@ -248,6 +248,7 @@ type University = {
   admissionSourceUrl?: string | null; admissionVerifiedAt?: string | null; admissionValidUntil?: string | null;
   sourceMetadata?: CatalogSourceMetadata;
   applicationPeriods?: ApplicationPeriod[];
+  applicationPeriodsRevision?: string;
   status: string;
 };
 type UniversityOption = Pick<University, "id" | "name">;
@@ -459,6 +460,7 @@ type BulkPreviewResult = {
   rows: Array<{ row: number; action: "add" | "update" | "error"; program: string; university: string; currency?: string | null; wouldCreateUniversity?: boolean; errors: string[] }>;
   summary: { add: number; update: number; error: number };
   canImport: boolean;
+  revision?: string;
 };
 
 function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImport, onPreview, partnerProgramWorkbook = false }: {
@@ -470,6 +472,7 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
   onImport: (
     rows: Record<string, string>[],
     onProgress: (progress: BulkImportProgress) => void,
+    previewRevision?: string,
   ) => Promise<BulkImportResult>;
 }) {
   const { lang: uiLanguage } = useUiLanguage();
@@ -539,7 +542,7 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
     try {
       setLoading(true);
       setError("");
-      const res = await onImport(pendingRows, setProgress);
+      const res = await onImport(pendingRows, setProgress, preview.revision);
       setResult(res);
       setPendingRows(null);
       setPreview(null);
@@ -1694,14 +1697,14 @@ function UniversitiesTab() {
 
   const save = useMutation({
     mutationFn: async (f: Partial<University>) => {
-      const { applicationPeriods = [], ...universityPayload } = f;
+      const { applicationPeriods = [], applicationPeriodsRevision, ...universityPayload } = f;
       const university = f.id
         ? await api(`/api/universities/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(universityPayload) })
         : await api("/api/universities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(universityPayload) });
       await api(`/api/universities/${university.id}/application-periods`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ periods: applicationPeriods }),
+        body: JSON.stringify({ periods: applicationPeriods, revision: applicationPeriodsRevision }),
       });
       return university;
     },
@@ -1797,7 +1800,7 @@ function UniversitiesTab() {
         api(`/api/universities/${id}`),
         api(`/api/universities/${id}/application-periods`),
       ]);
-      setForm({ ...university, applicationPeriods: periods.data ?? [] });
+      setForm({ ...university, applicationPeriods: periods.data ?? [], applicationPeriodsRevision: periods.revision });
       setSelCountryId(findCatalogCountry(allCountries, university.country)?.id ?? null);
     } catch (error: any) {
       toast({
@@ -2699,6 +2702,7 @@ function ProgramsTab() {
   const handleBulkImport = async (
     rows: Record<string, string>[],
     onProgress: (progress: BulkImportProgress) => void,
+    previewRevision?: string,
   ) => {
     const collisions = findProgramIdentityCollisions(rows);
     if (collisions.extraRows > 0) {
@@ -2712,7 +2716,13 @@ function ProgramsTab() {
       }));
     }
 
-    const res = await importRowsInChunks("/api/programs/bulk", rows, onProgress);
+    onProgress({ total: rows.length, completed: 0 });
+    const res: BulkImportResult = await api("/api/programs/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(previewRevision ? { "X-Program-Import-Preview": previewRevision } : {}) },
+      body: JSON.stringify(rows),
+    });
+    onProgress({ total: rows.length, completed: rows.length });
     qc.invalidateQueries({ queryKey: ["programs"] });
     return res;
   };

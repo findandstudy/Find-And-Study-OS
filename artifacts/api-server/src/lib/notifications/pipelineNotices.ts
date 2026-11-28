@@ -7,7 +7,7 @@ import {
   type Notice,
 } from "./pipelineNoticeContext";
 import { noticeHash } from "./pipelineNoticePolicy";
-import { stageEmailRuntime } from "./stageEmailPolicy";
+import { stageEmailRuntime, stageWhatsAppRuntime } from "./stageEmailPolicy";
 import { renderApprovedEmailVersion } from "./emailTemplateLibrary";
 import { resolveEmailSenderAccount } from "./emailSenderAccounts";
 import { sendPipelineWhatsAppSnapshot } from "../inbox/startWhatsAppTemplate";
@@ -30,7 +30,7 @@ async function scoped<T>(fn: (c: any) => Promise<T>): Promise<T> {
   }
 }
 export async function boundPipelineNotice(c: any, n: Intent) {
-  const runtime = stageEmailRuntime();
+  const runtime = n.channel === "email" ? stageEmailRuntime() : stageWhatsAppRuntime();
   if (
     !runtime.enabled ||
     !runtime.since ||
@@ -82,6 +82,7 @@ const contextHash = (b: any) =>
 type MockWhatsApp = typeof sendPipelineWhatsAppSnapshot;
 export async function processPipelineNotices(
   mockWhatsApp?: MockWhatsApp,
+  channel?: Notice["channel"],
 ): Promise<number> {
   if (mockWhatsApp) {
     const u = new URL(process.env.DATABASE_URL ?? "invalid:");
@@ -95,11 +96,15 @@ export async function processPipelineNotices(
     )
       throw Error("NOTICE_MOCK_SCOPE_DENIED");
   }
-  if (!stageEmailRuntime().enabled) return 0;
+  const emailEnabled = channel !== "whatsapp" && stageEmailRuntime().enabled;
+  const whatsappEnabled = channel !== "email" && stageWhatsAppRuntime().enabled &&
+    (process.env.ALLOW_LIVE_INTEGRATIONS === "true" || !!mockWhatsApp);
+  if (!emailEnabled && !whatsappEnabled) return 0;
   // Ambiguous/crashed WhatsApp sends are never automatically retried.
   await scoped((c) =>
     c.query(
-      "UPDATE pipeline_notice_dispatches SET status='unknown',error_code='NOTICE_CLAIM_EXPIRED',updated_at=now() WHERE status='processing' AND claimed_at<now()-interval '10 minutes'",
+      "UPDATE pipeline_notice_dispatches SET status='unknown',error_code='NOTICE_CLAIM_EXPIRED',updated_at=now() WHERE status='processing' AND claimed_at<now()-interval '10 minutes' AND ($1::text IS NULL OR channel=$1)",
+      [channel ?? null],
     ),
   );
   let count = 0;
@@ -107,8 +112,8 @@ export async function processPipelineNotices(
     const token = randomUUID();
     const claimed = await scoped(async (c) => {
       const r = await c.query(
-        "SELECT * FROM pipeline_notice_dispatches WHERE status='queued' AND (channel='email' OR $1) ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED",
-        [process.env.ALLOW_LIVE_INTEGRATIONS === "true" || !!mockWhatsApp],
+        "SELECT * FROM pipeline_notice_dispatches WHERE status='queued' AND ((channel='email' AND $1) OR (channel='whatsapp' AND $2)) ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED",
+        [emailEnabled, whatsappEnabled],
       );
       const n = r.rows[0] as Intent | undefined;
       if (!n) return null;
@@ -214,6 +219,32 @@ export async function processPipelineNotices(
     }
   }
   return count;
+}
+
+export function startPipelineNoticeWorker() {
+  const running = new Map<Notice["channel"], Promise<number>>();
+  let stopped = false;
+  const tick = () => {
+    if (stopped) return;
+    for (const channel of ["email", "whatsapp"] as const) {
+      if (running.has(channel)) continue;
+      const attempt = processPipelineNotices(undefined, channel);
+      running.set(channel, attempt);
+      void attempt.catch(() => console.error("[pipeline-notices] Worker pass failed", { channel }))
+        .finally(() => running.delete(channel));
+    }
+  };
+  const interval = setInterval(tick, 5_000);
+  interval.unref();
+  tick();
+  return async () => {
+    stopped = true;
+    clearInterval(interval);
+    await Promise.race([
+      Promise.allSettled(running.values()),
+      new Promise<void>(resolve => { setTimeout(resolve, 10_000).unref(); }),
+    ]);
+  };
 }
 export async function validatePipelineNoticeQueueItem(
   queueId: number,

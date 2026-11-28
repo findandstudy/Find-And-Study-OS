@@ -6,7 +6,7 @@ import { z } from "zod";
 import { toLatinUpper, normalizePhoneField } from "../lib/textNormalize";
 import { db, usersTable, emailVerificationCodesTable, studentsTable, leadsTable, studentRegistrationProfilesTable, countriesTable, programsTable, universitiesTable, auditLogsTable, sessionsTable } from "@workspace/db";
 import { getEffectivePermissionSet } from "../lib/permissions";
-import { eq, and, gt, sql, isNotNull, isNull } from "drizzle-orm";
+import { eq, and, desc, gt, sql, isNotNull, isNull, or } from "drizzle-orm";
 import { sendEmail } from "../lib/email";
 import { directOrigin } from "../lib/originHelper";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
@@ -25,7 +25,7 @@ import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { PasswordSchema } from "../lib/passwordPolicy";
 import { logAudit } from "../lib/auth";
 import { validate, getValidated } from "../middlewares/validate";
-import { consumeEmailVerificationToken, issueEmailVerificationToken } from "../lib/emailVerificationToken";
+import { consumeEmailVerificationToken, findEmailVerificationRecipient, issueEmailVerificationToken } from "../lib/emailVerificationToken";
 import { evaluateRegistrationCandidate } from "../lib/studentRegistrationMatching";
 import { registrationIdentitySchema } from "../lib/registrationIdentitySchema";
 import {
@@ -259,7 +259,7 @@ router.post("/auth/login", validate({ body: loginBodySchema }), async (req: Requ
 
     const maskedEmail = normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2");
     const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
-    if (!user || !user.passwordHash) {
+    if (!user || user.deletedAt || !user.passwordHash) {
       await recordFailedLogin(ipKey, emailKey);
       await logAudit(null, "auth.login.failure", "user", undefined, { email: maskedEmail, reason: "no_user_or_no_password" }, ip);
       res.status(401).json({ error: "Invalid email or password" });
@@ -275,7 +275,8 @@ router.post("/auth/login", validate({ body: loginBodySchema }), async (req: Requ
     }
 
     if (!user.isActive) {
-      const isPublicApplyPendingVerification = user.createdFromSource === "public_apply" && !user.emailVerified && user.passwordHash;
+      const isPublicApplyPendingVerification = user.role === "student" && user.activationPending
+        && user.createdFromSource === "public_apply" && !user.emailVerified;
       if (!isPublicApplyPendingVerification) {
         await recordFailedLogin(ipKey, emailKey);
         await logAudit(user.id, "auth.login.failure", "user", user.id, { email: maskedEmail, reason: "deactivated" }, ip);
@@ -359,34 +360,62 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     }
 
     const [archivedStudent] = await db.select().from(studentsTable).where(and(eq(studentsTable.userId, existing.id), isNotNull(studentsTable.deletedAt)));
-    if (archivedStudent) {
+    if (archivedStudent && !existing.deletedAt) {
       const hash = await bcrypt.hash(password, 10);
-      await db.update(usersTable).set({ passwordHash: hash, isActive: false, emailVerified: false, firstName: toLatinUpper(firstName.trim()), lastName: toLatinUpper(lastName.trim()), phone: phone ? normalizePhoneField(phone) : null }).where(eq(usersTable.id, existing.id));
-      await db.update(studentsTable).set({ deletedAt: null }).where(eq(studentsTable.id, archivedStudent.id));
-      if (matchingProfile?.success) {
-        await db.insert(studentRegistrationProfilesTable).values({
-          userId: existing.id,
-          ...matchingProfile.data,
-          languageTestDate: matchingProfile.data.languageTestDate ? new Date(matchingProfile.data.languageTestDate) : null,
-        }).onConflictDoUpdate({ target: studentRegistrationProfilesTable.userId, set: {
-          ...matchingProfile.data,
-          languageTestDate: matchingProfile.data.languageTestDate ? new Date(matchingProfile.data.languageTestDate) : null,
-          declarationStatus: "declared",
-          updatedAt: new Date(),
-        } });
-      }
-
       const code = generateVerificationCode();
-      await db.insert(emailVerificationCodesTable).values({ email: normalizedEmail, code, expiresAt: new Date(Date.now() + 15 * 60 * 1000) });
-      console.log(`[EMAIL VERIFICATION] Archived student restored, code sent to ${normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2")}`);
-      try {
-        const emailContent = buildVerificationCodeEmail(firstName.trim(), code);
-        await sendEmail(normalizedEmail, emailContent);
-      } catch (err) {
-        console.error("[EMAIL VERIFICATION] Failed to send verification email:", err);
+      const restored = await db.transaction(async tx => {
+        const [archived] = await tx.select({ id: studentsTable.id }).from(studentsTable).where(and(
+          eq(studentsTable.id, archivedStudent.id), eq(studentsTable.userId, existing.id),
+          isNotNull(studentsTable.deletedAt),
+        )).for("update");
+        if (!archived) return false;
+        const [account] = await tx.select().from(usersTable).where(and(
+          eq(usersTable.id, existing.id), eq(usersTable.email, normalizedEmail),
+          eq(usersTable.role, "student"), isNull(usersTable.deletedAt),
+        )).for("update");
+        if (!account) return false;
+        if (!account.isActive && !account.activationPending) {
+          const [latestAdminStatus] = await tx.select({
+            suspended: sql<boolean>`${auditLogsTable.changes} ~ '"isActive"[[:space:]]*:[[:space:]]*false'`,
+          }).from(auditLogsTable).where(and(
+            eq(auditLogsTable.resource, "user"), eq(auditLogsTable.resourceId, account.id),
+            eq(auditLogsTable.action, "update_user"),
+            sql`${auditLogsTable.changes} ~ '"isActive"[[:space:]]*:[[:space:]]*(true|false)'`,
+          )).orderBy(desc(auditLogsTable.id)).limit(1);
+          if (latestAdminStatus?.suspended) return false;
+        }
+        await tx.update(usersTable).set({
+          passwordHash: hash, isActive: false, activationPending: true, emailVerified: false,
+          passwordResetToken: null, passwordResetExpires: null, emailVerificationToken: null,
+          firstName: toLatinUpper(firstName.trim()), lastName: toLatinUpper(lastName.trim()),
+          phone: phone ? normalizePhoneField(phone) : null,
+        }).where(eq(usersTable.id, account.id));
+        await tx.update(studentsTable).set({ deletedAt: null, deletedBy: null }).where(eq(studentsTable.id, archived.id));
+        if (matchingProfile?.success) {
+          const profile = {
+            ...matchingProfile.data,
+            languageTestDate: matchingProfile.data.languageTestDate ? new Date(matchingProfile.data.languageTestDate) : null,
+          };
+          await tx.insert(studentRegistrationProfilesTable).values({ userId: account.id, ...profile })
+            .onConflictDoUpdate({ target: studentRegistrationProfilesTable.userId, set: {
+              ...profile, declarationStatus: "declared", updatedAt: new Date(),
+            } });
+        }
+        await tx.update(emailVerificationCodesTable).set({ used: true })
+          .where(eq(emailVerificationCodesTable.email, normalizedEmail));
+        await tx.insert(emailVerificationCodesTable).values({ email: normalizedEmail, code, expiresAt: new Date(Date.now() + 15 * 60 * 1000) });
+        return true;
+      });
+      if (restored) {
+        try {
+          const emailContent = buildVerificationCodeEmail(firstName.trim(), code);
+          await sendEmail(normalizedEmail, emailContent);
+        } catch {
+          console.error("[EMAIL VERIFICATION] Archived student code could not be delivered");
+        }
+        res.status(201).json({ message: "Account restored. Please verify your email.", requiresVerification: true, email: normalizedEmail });
+        return;
       }
-      res.status(201).json({ message: "Account restored. Please verify your email.", requiresVerification: true, email: normalizedEmail });
-      return;
     }
 
     res.status(409).json({ error: "An account with this email already exists" });
@@ -406,6 +435,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       passwordHash: hash,
       role: "student",
       isActive: false,
+      activationPending: true,
       emailVerified: false,
       language: "en",
     }).returning();
@@ -449,7 +479,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 
 router.post("/auth/verify-email", async (req: Request, res: Response) => {
   const { email, code } = req.body;
-  if (!email || !code) {
+  if (typeof email !== "string" || typeof code !== "string" || !/^\d{6}$/.test(code.trim())) {
     res.status(400).json({ error: "Email and verification code are required" });
     return;
   }
@@ -465,54 +495,47 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
     return;
   }
 
-  const [verificationRecord] = await db
-    .select()
-    .from(emailVerificationCodesTable)
-    .where(
-      and(
+  const confirmed = await db.transaction(async (tx) => {
+    const [account] = await tx.select().from(usersTable)
+      .where(and(
+        eq(usersTable.email, normalizedEmail),
+        isNull(usersTable.deletedAt),
+        eq(usersTable.emailVerified, false),
+        or(eq(usersTable.isActive, true), eq(usersTable.activationPending, true)),
+      )).for("update");
+    if (!account) return null;
+
+    const [consumed] = await tx.update(emailVerificationCodesTable).set({ used: true })
+      .where(and(
         eq(emailVerificationCodesTable.email, normalizedEmail),
         eq(emailVerificationCodesTable.code, code.trim()),
         eq(emailVerificationCodesTable.used, false),
+        isNull(emailVerificationCodesTable.token),
         gt(emailVerificationCodesTable.expiresAt, new Date()),
-      )
-    );
+      )).returning({ id: emailVerificationCodesTable.id });
+    if (!consumed) return null;
+    await tx.update(emailVerificationCodesTable).set({ used: true })
+      .where(eq(emailVerificationCodesTable.email, normalizedEmail));
 
-  if (!verificationRecord) {
-    res.status(400).json({ error: "Invalid or expired verification code" });
-    return;
-  }
-
-  await db
-    .update(emailVerificationCodesTable)
-    .set({ used: true })
-    .where(eq(emailVerificationCodesTable.email, normalizedEmail));
-
-  const [user] = await db
-    .update(usersTable)
-    .set({ emailVerified: true, isActive: true })
-    .where(eq(usersTable.email, normalizedEmail))
-    .returning();
-
-  if (!user) {
-    res.status(404).json({ error: "User not found" });
-    return;
-  }
-
-  // Create a CRM Lead so the staff can see this newly-confirmed registration
-  // in the leads list. Skip if the user already has a non-deleted lead with
-  // the same email (e.g. they came in through a different funnel first).
-  if (user.role === "student" && user.email) {
-    try {
-      const [profile] = await db.select().from(studentRegistrationProfilesTable)
+    const activate = account.activationPending && account.role === "student" && Boolean(account.passwordHash);
+    const [user] = await tx.update(usersTable).set({
+      emailVerified: true,
+      isActive: account.isActive || activate,
+      activationPending: account.activationPending && !activate,
+      emailVerificationToken: null,
+    }).where(eq(usersTable.id, account.id)).returning();
+    let createdLead: typeof leadsTable.$inferSelect | undefined;
+    if (user.role === "student" && user.email) {
+      const [profile] = await tx.select().from(studentRegistrationProfilesTable)
         .where(eq(studentRegistrationProfilesTable.userId, user.id)).limit(1);
       if (profile) {
         const [country] = profile.nationalityCode
-          ? await db.select({ name: countriesTable.name }).from(countriesTable).where(eq(countriesTable.code, profile.nationalityCode)).limit(1)
+          ? await tx.select({ name: countriesTable.name }).from(countriesTable).where(eq(countriesTable.code, profile.nationalityCode)).limit(1)
           : [];
-        const [existingStudent] = await db.select({ id: studentsTable.id }).from(studentsTable)
+        const [existingStudent] = await tx.select({ id: studentsTable.id }).from(studentsTable)
           .where(and(eq(studentsTable.userId, user.id), isNull(studentsTable.deletedAt))).limit(1);
         if (!existingStudent) {
-          await db.insert(studentsTable).values({
+          await tx.insert(studentsTable).values({
             userId: user.id,
             firstName: toLatinUpper((user.firstName || "").trim()).slice(0, 100) || "STUDENT",
             lastName: toLatinUpper((user.lastName || "").trim()).slice(0, 100) || "REGISTRATION",
@@ -527,14 +550,14 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
           });
         }
       }
-      const [existingLead] = await db
+      const [existingLead] = await tx
         .select({ id: leadsTable.id })
         .from(leadsTable)
         .where(and(eq(leadsTable.email, user.email), isNull(leadsTable.deletedAt)))
         .limit(1);
       if (!existingLead) {
         const phone = user.phone ? normalizePhoneField(user.phone).slice(0, 30) : null;
-        const [createdLead] = await db.insert(leadsTable).values({
+        [createdLead] = await tx.insert(leadsTable).values({
           firstName: toLatinUpper((user.firstName || "").trim()).slice(0, 100) || "STUDENT",
           lastName: toLatinUpper((user.lastName || "").trim()).slice(0, 100) || "REGISTRATION",
           email: user.email.slice(0, 255),
@@ -544,11 +567,29 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
           status: "new",
           ...directOrigin(),
         }).returning();
-        if (createdLead) await applyLeadAssignmentRules(createdLead, req.ip);
       }
-    } catch (err) {
-      console.error("[AUTH VERIFY-EMAIL] Failed to create lead for verified registration:", err);
     }
+    await tx.insert(auditLogsTable).values({
+      userId: user.id, action: "auth.email_verify", resource: "user", resourceId: user.id,
+      changes: JSON.stringify({ method: "code" }), ipAddress: req.ip ?? null,
+    });
+    return { user, createdLead };
+  });
+  if (!confirmed) {
+    res.status(400).json({ error: "Invalid or expired verification code" });
+    return;
+  }
+  const { user, createdLead } = confirmed;
+  if (createdLead) {
+    try {
+      await applyLeadAssignmentRules(createdLead, req.ip);
+    } catch {
+      console.error("[AUTH VERIFY-EMAIL] Lead assignment could not be completed");
+    }
+  }
+  if (!user.isActive) {
+    res.json({ verified: true });
+    return;
   }
 
   const sessionUser = buildSessionUser(user);
@@ -559,13 +600,12 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
 
   const sid = await createSession(sessionData, user.id);
   setSessionCookie(req, res, sid);
-  await logAudit(user.id, "auth.email_verify", "user", user.id, {}, req.ip);
   res.json({ user: sessionUser, verified: true });
 });
 
 router.post("/auth/resend-code", async (req: Request, res: Response) => {
   const { email } = req.body;
-  if (!email) {
+  if (typeof email !== "string" || !email.trim()) {
     res.status(400).json({ error: "Email is required" });
     return;
   }
@@ -581,7 +621,26 @@ router.post("/auth/resend-code", async (req: Request, res: Response) => {
     return;
   }
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+  const code = generateVerificationCode();
+  const user = await db.transaction(async tx => {
+    const [account] = await tx.select().from(usersTable)
+      .where(and(
+        eq(usersTable.email, normalizedEmail),
+        isNull(usersTable.deletedAt),
+        or(eq(usersTable.isActive, true), eq(usersTable.activationPending, true)),
+      )).for("update");
+    if (!account || account.emailVerified) return account;
+
+    await tx.update(emailVerificationCodesTable).set({ used: true }).where(and(
+      eq(emailVerificationCodesTable.email, normalizedEmail),
+      eq(emailVerificationCodesTable.used, false),
+      isNull(emailVerificationCodesTable.token),
+    ));
+    await tx.insert(emailVerificationCodesTable).values({
+      email: normalizedEmail, code, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    });
+    return account;
+  });
   if (!user) {
     res.json({ message: "If an account exists, a new code has been sent." });
     return;
@@ -591,20 +650,6 @@ router.post("/auth/resend-code", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Email is already verified" });
     return;
   }
-
-  await db
-    .update(emailVerificationCodesTable)
-    .set({ used: true })
-    .where(and(eq(emailVerificationCodesTable.email, normalizedEmail), eq(emailVerificationCodesTable.used, false)));
-
-  const code = generateVerificationCode();
-  await db.insert(emailVerificationCodesTable).values({
-    email: normalizedEmail,
-    code,
-    expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-  });
-
-  console.log(`[EMAIL VERIFICATION] New code sent to ${normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2")}`);
 
   try {
     const emailContent = buildVerificationCodeEmail(user.firstName || "Student", code);
@@ -636,7 +681,7 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
 
-  if (!user) {
+  if (!user || user.deletedAt || (!user.isActive && !user.activationPending)) {
     res.json({ message: "If an account with that email exists, a password reset link has been sent." });
     return;
   }
@@ -646,10 +691,20 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
   const tokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
   const resetExpires = new Date(Date.now() + 60 * 60 * 1000);
 
-  await db
+  const [issued] = await db
     .update(usersTable)
     .set({ passwordResetToken: tokenHash, passwordResetExpires: resetExpires })
-    .where(eq(usersTable.id, user.id));
+    .where(and(
+      eq(usersTable.id, user.id),
+      eq(usersTable.email, normalizedEmail),
+      isNull(usersTable.deletedAt),
+      or(eq(usersTable.isActive, true), eq(usersTable.activationPending, true)),
+    ))
+    .returning({ id: usersTable.id });
+  if (!issued) {
+    res.json({ message: "If an account with that email exists, a password reset link has been sent." });
+    return;
+  }
 
   const baseUrl = getAppBaseUrl();
   const resetUrl = `${baseUrl}/login?token=${resetToken}`;
@@ -658,11 +713,10 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
     firstName: user.firstName || "User",
     resetUrl,
   });
-  await sendEmail(user.email || normalizedEmail, emailContent);
-
-  console.log(`[PASSWORD RESET] Reset email sent to ${normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2")}`);
-
-  await logAudit(user.id, "auth.password_reset.request", "user", user.id, { email: normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2") }, req.ip);
+  const accepted = await sendEmail(normalizedEmail, emailContent);
+  await logAudit(user.id, "auth.password_reset.request", "user", user.id, {
+    delivery: accepted ? "accepted" : "unconfirmed",
+  }, req.ip);
   res.json({ message: "If an account with that email exists, a password reset link has been sent." });
 });
 
@@ -695,6 +749,8 @@ router.post("/auth/set-password", async (req: Request, res: Response) => {
       and(
         eq(usersTable.passwordResetToken, tokenHash),
         gt(usersTable.passwordResetExpires, new Date()),
+        isNull(usersTable.deletedAt),
+        or(eq(usersTable.isActive, true), eq(usersTable.activationPending, true)),
       )
     );
 
@@ -711,12 +767,15 @@ router.post("/auth/set-password", async (req: Request, res: Response) => {
         passwordHash: hash,
         passwordResetToken: null,
         passwordResetExpires: null,
-        ...(user.emailVerified ? { isActive: true } : {}),
+        isActive: sql`${usersTable.isActive} OR (${usersTable.activationPending} AND ${usersTable.emailVerified} AND ${usersTable.role} = 'student')`,
+        activationPending: sql`${usersTable.activationPending} AND NOT ${usersTable.emailVerified}`,
       })
       .where(and(
         eq(usersTable.id, user.id),
         eq(usersTable.passwordResetToken, tokenHash),
         gt(usersTable.passwordResetExpires, new Date()),
+        isNull(usersTable.deletedAt),
+        or(eq(usersTable.isActive, true), eq(usersTable.activationPending, true)),
       ))
       .returning({ id: usersTable.id });
     if (!claimed) return false;
@@ -766,39 +825,37 @@ router.get("/auth/verify-email-token/:token", async (req: Request, res: Response
     return;
   }
 
-  const verifiedEmail = await consumeEmailVerificationToken(String(token));
-  let [user] = verifiedEmail
-    ? await db.select().from(usersTable).where(eq(usersTable.email, verifiedEmail))
-    : [];
-
-  // Transitional compatibility for links issued before hashed, expiring link
-  // tokens were introduced. Restrict this fallback to recently created users;
-  // older accounts must request a new verification link.
-  if (!user) {
-    [user] = await db
-      .select()
-      .from(usersTable)
-      .where(and(
-        eq(usersTable.emailVerificationToken, String(token)),
-        gt(usersTable.createdAt, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)),
-      ));
-  }
-
+  const rawToken = String(token);
+  const verifiedEmail = await findEmailVerificationRecipient(rawToken);
+  const user = await db.transaction(async tx => {
+    // Transitional compatibility for raw links on recently created accounts.
+    const identity = verifiedEmail
+      ? eq(usersTable.email, verifiedEmail)
+      : and(eq(usersTable.emailVerificationToken, rawToken),
+            gt(usersTable.createdAt, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
+    const [account] = await tx.select().from(usersTable).where(and(
+      identity, isNull(usersTable.deletedAt), eq(usersTable.emailVerified, false),
+      or(eq(usersTable.isActive, true), eq(usersTable.activationPending, true)),
+    )).for("update");
+    if (!account || (verifiedEmail && !await consumeEmailVerificationToken(rawToken, verifiedEmail, tx))) return null;
+    const activate = account.activationPending && account.role === "student" && Boolean(account.passwordHash);
+    await tx.update(usersTable).set({
+      emailVerified: true,
+      emailVerificationToken: null,
+      isActive: account.isActive || activate,
+      activationPending: account.activationPending && !activate,
+    }).where(eq(usersTable.id, account.id));
+    await tx.insert(auditLogsTable).values({
+      userId: account.id, action: "auth.email_verify", resource: "user", resourceId: account.id,
+      changes: JSON.stringify({ method: "token" }), ipAddress: req.ip ?? null,
+    });
+    return account.id;
+  });
   if (!user) {
     res.redirect("/login?verifyError=invalid");
     return;
   }
 
-  await db
-    .update(usersTable)
-    .set({
-      emailVerified: true,
-      emailVerificationToken: null,
-      ...(user.passwordHash ? { isActive: true } : {}),
-    })
-    .where(eq(usersTable.id, user.id));
-
-  await logAudit(user.id, "auth.email_verify", "user", user.id, { method: "token" }, req.ip);
   res.redirect("/login?verified=true");
 });
 
@@ -823,12 +880,12 @@ router.post("/auth/resend-verification-email", async (req: Request, res: Respons
   const [user] = req.user
     ? await db.select().from(usersTable).where(eq(usersTable.id, req.user.id))
     : await db.select().from(usersTable).where(eq(usersTable.email, emailParam));
-  if (!user || user.emailVerified) {
+  if (!user || user.emailVerified || user.deletedAt || (!user.isActive && !user.activationPending)) {
     res.json({ message: "If the email is registered and unverified, a verification link has been sent." });
     return;
   }
 
-  const { generateSecureToken, buildVerificationEmail, sendEmail, getAppBaseUrl } = await import("../lib/email");
+  const { buildVerificationEmail, sendEmail, getAppBaseUrl } = await import("../lib/email");
 
   const verificationToken = await issueEmailVerificationToken(user.email || "");
   // Clear legacy raw tokens once a new hashed, expiring link is issued.

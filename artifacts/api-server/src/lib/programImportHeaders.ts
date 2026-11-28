@@ -124,7 +124,8 @@ export function normalizeProgramImportRow(
   const explicit = new Set<string>();
   for (const [rawKey, value] of Object.entries(row)) {
     const trimmed = rawKey.trim();
-    const alias = HEADER_ALIASES[trimmed.toLowerCase()];
+    const lower = trimmed.toLowerCase();
+    const alias = Object.hasOwn(HEADER_ALIASES, lower) ? HEADER_ALIASES[lower] : undefined;
     if (!alias) {
       // Unknown header — keep as-is (doc columns are matched verbatim later).
       if (!(trimmed in out)) out[trimmed] = value;

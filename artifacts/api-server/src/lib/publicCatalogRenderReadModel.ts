@@ -74,6 +74,7 @@ const PILOT_LIST_LIMIT = 12;
 const CACHE_FRESH_MS = 5 * 60_000;
 const CACHE_STALE_MS = 60 * 60_000;
 const CACHE_MAX_ENTRIES = 500;
+const MAX_CRITICAL_DICTIONARY_BYTES = 128 * 1024;
 const publicHomeFallbackCache = new Map<ProgramSupportedLocale, PublicCatalogRenderModel>();
 const publicConsentCopyCache = new Map<ProgramSupportedLocale, NonNullable<PublicCatalogRenderModel["consentCopy"]>>();
 
@@ -83,7 +84,7 @@ function readPublicConsentCopy(locale: ProgramSupportedLocale): PublicCatalogRen
   try {
     const file = path.join(process.cwd(), "artifacts", "edcons", "dist", "public", "i18n-critical", `${locale}.json`);
     const stat = fs.statSync(file);
-    if (!stat.isFile() || stat.size <= 0 || stat.size > 65_536) return undefined;
+    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_CRITICAL_DICTIONARY_BYTES) return undefined;
     const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
     const cookie = isRecord(parsed.cookie) ? parsed.cookie : {};
     const value = {
@@ -106,7 +107,7 @@ function readPublicHomeFallback(locale: ProgramSupportedLocale): PublicCatalogRe
   try {
     const file = path.join(process.cwd(), "artifacts", "edcons", "dist", "public", "i18n-critical", `${locale}.json`);
     const stat = fs.statSync(file);
-    if (!stat.isFile() || stat.size <= 0 || stat.size > 65_536) return null;
+    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_CRITICAL_DICTIONARY_BYTES) return null;
     const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
     const hero = isRecord(parsed.hero) ? parsed.hero : {};
     const seo = isRecord(parsed.seo) ? parsed.seo : {};

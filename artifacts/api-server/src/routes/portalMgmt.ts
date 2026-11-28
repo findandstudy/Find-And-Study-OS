@@ -319,7 +319,7 @@ type PutSettingsSchemas = { body: typeof putSettingsBodySchema };
 router.put(
   "/portal-automation/settings",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ body: putSettingsBodySchema }),
   async (req, res): Promise<void> => {
     const body = getValidated<PutSettingsSchemas>(req).body;
@@ -651,7 +651,7 @@ type CreateUniSchemas = { body: typeof createUniversityBodySchema };
 router.post(
   "/portal-universities",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ body: createUniversityBodySchema }),
   async (req, res): Promise<void> => {
     const body = getValidated<CreateUniSchemas>(req).body;
@@ -728,7 +728,7 @@ type ToggleAutoProcessSchemas = { params: typeof idParamsSchema; body: typeof to
 router.patch(
   "/portal-universities/:id/auto-process",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ params: idParamsSchema, body: toggleAutoProcessBodySchema }),
   async (req, res): Promise<void> => {
     const { id } = getValidated<ToggleAutoProcessSchemas>(req).params;
@@ -806,7 +806,7 @@ type ToggleFanOutModeSchemas = { params: typeof idParamsSchema; body: typeof tog
 router.patch(
   "/portal-universities/:id/fan-out-mode",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ params: idParamsSchema, body: toggleFanOutModeBodySchema }),
   async (req, res): Promise<void> => {
     const { id }        = getValidated<ToggleFanOutModeSchemas>(req).params;
@@ -873,7 +873,7 @@ type ToggleSchemas = { params: typeof idParamsSchema; body: typeof toggleActiveB
 router.patch(
   "/portal-universities/:id/active",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ params: idParamsSchema, body: toggleActiveBodySchema }),
   async (req, res): Promise<void> => {
     const { id } = getValidated<ToggleSchemas>(req).params;
@@ -948,7 +948,7 @@ type UpdateUniSchemas = { params: typeof idParamsSchema; body: typeof updateUniv
 router.patch(
   "/portal-universities/:id",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ params: idParamsSchema, body: updateUniversityBodySchema }),
   async (req, res): Promise<void> => {
     const { id } = getValidated<UpdateUniSchemas>(req).params;
@@ -1106,7 +1106,7 @@ router.patch(
 router.delete(
   "/portal-universities/:id",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ params: idParamsSchema }),
   async (req, res): Promise<void> => {
     const { id } = getValidated<IdSchemas>(req).params;
@@ -1158,7 +1158,7 @@ type BulkActiveSchemas = { body: typeof bulkActiveBodySchema };
 router.post(
   "/portal-universities/bulk-active",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ body: bulkActiveBodySchema }),
   async (req, res): Promise<void> => {
     const { ids, isActive } = getValidated<BulkActiveSchemas>(req).body;
@@ -1218,7 +1218,7 @@ type BulkAutoProcessSchemas = { body: typeof bulkAutoProcessBodySchema };
 router.post(
   "/portal-universities/bulk-auto-process",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ body: bulkAutoProcessBodySchema }),
   async (req, res): Promise<void> => {
     const { ids, autoProcess } = getValidated<BulkAutoProcessSchemas>(req).body;
@@ -1279,7 +1279,7 @@ type BulkUniIdsSchemas = { body: typeof bulkUniIdsBodySchema };
 router.post(
   "/portal-universities/bulk-delete",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ body: bulkUniIdsBodySchema }),
   async (req, res): Promise<void> => {
     const { ids } = getValidated<BulkUniIdsSchemas>(req).body;
@@ -1329,7 +1329,7 @@ type TestLoginSchemas = { params: typeof idParamsSchema; body: typeof testLoginB
 router.post(
   "/portal-universities/:id/test-login",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ params: idParamsSchema, body: testLoginBodySchema }),
   async (req, res): Promise<void> => {
     const { id } = getValidated<TestLoginSchemas>(req).params;
@@ -1738,7 +1738,7 @@ type CreateAdapterSchemas = { body: typeof createAdapterBodySchema };
 router.post(
   "/portal-adapters",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ body: createAdapterBodySchema }),
   async (req, res): Promise<void> => {
     const body = getValidated<CreateAdapterSchemas>(req).body;
@@ -1806,7 +1806,7 @@ type UpdateAdapterSchemas = { params: typeof idParamsSchema; body: typeof update
 router.patch(
   "/portal-adapters/:id",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ params: idParamsSchema, body: updateAdapterBodySchema }),
   async (req, res): Promise<void> => {
     const { id } = getValidated<UpdateAdapterSchemas>(req).params;
@@ -1865,7 +1865,7 @@ router.patch(
 router.delete(
   "/portal-adapters/:id",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ params: idParamsSchema }),
   async (req, res): Promise<void> => {
     const { id } = getValidated<IdSchemas>(req).params;

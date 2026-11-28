@@ -266,6 +266,7 @@ export async function authMiddleware(
   const isPublicApplyPendingVerification = (
     dbUser.role === "student"
     && dbUser.createdFromSource === "public_apply"
+    && dbUser.activationPending
     && dbUser.emailVerified === false
     && Boolean(dbUser.passwordHash)
   );

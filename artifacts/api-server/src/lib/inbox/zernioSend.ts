@@ -190,7 +190,6 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
         body: JSON.stringify({ accountId: params.externalAccountId, message: text }),
       });
       const bodyText = await resp.text().catch(() => "");
-      console.log(`[ZERNIO] text send response (${resp.status}):`, bodyText);
       if (resp.ok) {
         let data: any = {};
         try { data = JSON.parse(bodyText); } catch { /* non-JSON body */ }
@@ -203,11 +202,11 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
           ok = true;
           externalMessageId = messageId;
         } else {
-          error = `Zernio text send returned ${resp.status} but no messageId in response: ${bodyText}`;
+          error = `Zernio text send returned ${resp.status} without a message ID`;
           console.error("[ZERNIO] " + error);
         }
       } else {
-        error = `Zernio text send failed (${resp.status}): ${bodyText}`;
+        error = `Zernio text send failed (${resp.status})`;
         console.error("[ZERNIO] " + error);
       }
     }
@@ -226,8 +225,8 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
       }
     }
   } catch (err: any) {
-    error = `Zernio send error: ${err?.message || "Unknown"}`;
-    console.error("[ZERNIO] send exception:", err?.stack || err);
+    error = "Zernio text or attachment delivery could not be confirmed";
+    console.error("[ZERNIO] MESSAGE_DELIVERY_UNCONFIRMED");
   }
 
   return { ok, error, externalMessageId };
@@ -287,7 +286,7 @@ export async function resolveZernioProfileId(
         accountId: requestedAccountId,
         auth: `Bearer ${maskApiKey(apiKey)}`,
       }));
-      const resp = await fetch(accountsUrl, { headers: { Authorization: `Bearer ${apiKey}` } });
+      const resp = await fetch(accountsUrl, { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(10_000) });
       const bodyText = await resp.text().catch(() => "");
       if (!resp.ok) {
         console.error(`[ZERNIO] resolve account profile failed (${resp.status})`);
@@ -350,9 +349,8 @@ export async function resolveZernioProfileId(
   const url = "https://zernio.com/api/v1/profiles";
   try {
     console.log("[ZERNIO] resolve profile request", { authConfigured: Boolean(apiKey) });
-    const resp = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(10_000) });
     const bodyText = await resp.text().catch(() => "");
-    console.log(`[ZERNIO] resolve profile response (${resp.status}):`, bodyText.slice(0, 600));
     if (!resp.ok) {
       return { id: null, error: `Zernio profili çözümlenemedi (HTTP ${resp.status})` };
     }
@@ -405,8 +403,8 @@ export interface ZernioTemplateSendOutcome extends ZernioSendOutcome {
 }
 
 /** Turn a raw step failure into a human-readable (Turkish) user message. */
-function humanizeZernioTemplateError(raw: string): string {
-  const s = raw.toLowerCase();
+function humanizeZernioTemplateError(raw: string, providerMessage = ""): string {
+  const s = providerMessage.toLowerCase();
   if (s.includes("131047") || s.includes("24 hour") || s.includes("24-hour") || s.includes("re-engagement")) {
     return "Template gönderilemedi: 24 saat kuralı — müşteri son 24 saat içinde yazmadığı için yalnızca onaylı template gönderilebilir; template'in Meta onayının geçerli olduğundan emin olun.";
   }
@@ -479,59 +477,46 @@ export async function sendZernioTemplate(params: ZernioTemplateSendParams): Prom
         ...(variableMapping ? { variableMapping } : {}),
       },
     };
-    console.log("[ZERNIO] broadcast create request:", JSON.stringify({
-      url: baseUrl,
-      profileId: profile.id,
-      accountId: params.externalAccountId,
-      templateName: params.templateName,
-      language: params.language,
-      paramCount: params.parameters?.length ?? 0,
-      broadcastName,
-      auth: `Bearer ${maskApiKey(apiKey)}`,
-    }));
-    const createResp = await fetch(baseUrl, { method: "POST", headers, body: JSON.stringify(createBody) });
+    const createResp = await fetch(baseUrl, { method: "POST", headers, body: JSON.stringify(createBody), signal: AbortSignal.timeout(10_000) });
     const createText = await createResp.text().catch(() => "");
-    console.log(`[ZERNIO] broadcast create response (${createResp.status}):`, createText.slice(0, 600));
     if (!createResp.ok) {
-      console.error(`[ZERNIO] broadcast create failed (${createResp.status}):`, createText.slice(0, 600));
-      return { ok: false, error: humanizeZernioTemplateError(`broadcast oluşturulamadı (HTTP ${createResp.status}) — ${createText.slice(0, 300)}`) };
+      console.error("[ZERNIO] BROADCAST_CREATE_FAILED", { status: createResp.status });
+      return { ok: false, error: humanizeZernioTemplateError(`broadcast oluşturulamadı (HTTP ${createResp.status})`, createText) };
     }
     let createData: any = {};
     try { createData = JSON.parse(createText); } catch { /* non-JSON */ }
     const broadcastId: string | undefined =
       createData?.broadcast?.id ?? createData?.broadcast?._id ?? createData?.id ?? createData?._id ?? undefined;
     if (!broadcastId) {
-      console.error("[ZERNIO] broadcast create returned no id:", createText.slice(0, 300));
+      console.error("[ZERNIO] BROADCAST_ID_MISSING");
       return { ok: false, error: "Template gönderilemedi: broadcast oluşturulamadı (Zernio yanıtında broadcast id yok)." };
     }
 
     // ── Step 2: add recipient ────────────────────────────────────────────
     const recUrl = `${baseUrl}/${encodeURIComponent(String(broadcastId))}/recipients`;
     console.log("[ZERNIO] broadcast recipients request", { recipientCount: 1 });
-    const recResp = await fetch(recUrl, { method: "POST", headers, body: JSON.stringify({ phones: [params.toPhoneE164] }) });
+    const recResp = await fetch(recUrl, { method: "POST", headers, body: JSON.stringify({ phones: [params.toPhoneE164] }), signal: AbortSignal.timeout(10_000) });
     const recText = await recResp.text().catch(() => "");
-    console.log(`[ZERNIO] broadcast recipients response (${recResp.status}):`, recText.slice(0, 600));
     if (!recResp.ok) {
-      console.error(`[ZERNIO] broadcast recipients failed (${recResp.status}):`, recText.slice(0, 600));
+      console.error("[ZERNIO] BROADCAST_RECIPIENT_REJECTED", { status: recResp.status });
       return {
         ok: false,
         broadcastId: String(broadcastId),
-        error: humanizeZernioTemplateError(`alıcı eklenemedi (HTTP ${recResp.status}) — ${recText.slice(0, 300)}`),
+        error: humanizeZernioTemplateError(`alıcı eklenemedi (HTTP ${recResp.status})`, recText),
       };
     }
 
     // ── Step 3: send ─────────────────────────────────────────────────────
     const sendUrl = `${baseUrl}/${encodeURIComponent(String(broadcastId))}/send`;
     console.log("[ZERNIO] broadcast send request");
-    const sendResp = await fetch(sendUrl, { method: "POST", headers, body: JSON.stringify({}) });
+    const sendResp = await fetch(sendUrl, { method: "POST", headers, body: JSON.stringify({}), signal: AbortSignal.timeout(10_000) });
     const sendText = await sendResp.text().catch(() => "");
-    console.log(`[ZERNIO] broadcast send response (${sendResp.status}):`, sendText.slice(0, 600));
     if (!sendResp.ok) {
-      console.error(`[ZERNIO] broadcast send failed (${sendResp.status}):`, sendText.slice(0, 600));
+      console.error("[ZERNIO] BROADCAST_SEND_FAILED", { status: sendResp.status });
       return {
         ok: false,
         broadcastId: String(broadcastId),
-        error: humanizeZernioTemplateError(`gönderilemedi (HTTP ${sendResp.status}) — ${sendText.slice(0, 300)}`),
+        error: humanizeZernioTemplateError(`gönderilemedi (HTTP ${sendResp.status})`, sendText),
       };
     }
     let sendData: any = {};
@@ -540,7 +525,7 @@ export async function sendZernioTemplate(params: ZernioTemplateSendParams): Prom
     const failed = Number(sendData?.failed ?? sendData?.data?.failed ?? 0);
 
     // {sent:0, failed:1} (or any zero-sent outcome) must NOT be marked sent.
-    if (sent < 1 || failed > 0) {
+    if (!Number.isSafeInteger(sent) || sent < 1 || failed !== 0) {
       console.error(`[ZERNIO] broadcast send reported sent=${sent} failed=${failed} for broadcast ${broadcastId}`);
       return {
         ok: false,
@@ -552,9 +537,9 @@ export async function sendZernioTemplate(params: ZernioTemplateSendParams): Prom
     }
 
     return { ok: true, broadcastId: String(broadcastId), sent, failed };
-  } catch (err: any) {
-    console.error("[ZERNIO] template broadcast exception:", err?.stack || err);
-    return { ok: false, error: `Template gönderilemedi: ${err?.message || "bilinmeyen hata"}` };
+  } catch {
+    console.error("[ZERNIO] TEMPLATE_DELIVERY_UNCONFIRMED");
+    return { ok: false, error: "Template gönderiminin sonucu doğrulanamadı." };
   }
 }
 
@@ -603,10 +588,9 @@ async function downloadAttachmentBytes(
       configuredInboxMediaHosts(["apply.findandstudy.com"]),
     );
     if (filePath) {
-      console.log("[ZERNIO] resolving attachment storage key:", { filePath });
       const file = await getStorage().searchPublicObject(filePath);
       if (!file) {
-        console.warn("[ZERNIO] attachment object not found in storage:", filePath);
+        console.warn("[ZERNIO] ATTACHMENT_OBJECT_MISSING");
         return null;
       }
       const [buf] = await file.download();
@@ -634,7 +618,7 @@ async function downloadAttachmentBytes(
     }
     return { buf: resp.body, contentType: resp.headers["content-type"] || "application/octet-stream" };
   } catch (err: any) {
-    console.warn("[ZERNIO] attachment byte load error:", err?.message || err);
+    console.warn("[ZERNIO] ATTACHMENT_READ_FAILED");
     return null;
   }
 }
@@ -669,7 +653,7 @@ async function sendZernioAttachment(
   const bytes = await downloadAttachmentBytes(att.url, apiKey);
 
   if (!bytes) {
-    const error = `Zernio attachment bytes unavailable for "${name}" (source url: ${att.url})`;
+    const error = "Zernio attachment bytes unavailable";
     console.error("[ZERNIO] " + error);
     return { ok: false, error };
   }
@@ -684,25 +668,14 @@ async function sendZernioAttachment(
     );
     voiceForm.append("voiceNote", "true");
 
-    console.log("[ZERNIO] send-voice-note request:", JSON.stringify({
-      messagesUrl,
-      fileName: name,
-      fileSize: bytes.buf.length,
-      contentType: bytes.contentType,
-      voiceNote: true,
-      auth: `Bearer ${maskApiKey(apiKey)}`,
-    }));
-
     const voiceResp = await fetch(messagesUrl, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}` },
       body: voiceForm,
     });
     const voiceBodyText = await voiceResp.text().catch(() => "");
-    console.log(`[ZERNIO] send-voice-note response (${voiceResp.status}):`, voiceBodyText);
-
     if (!voiceResp.ok) {
-      const error = `Zernio send-voice-note failed (${voiceResp.status}): ${voiceBodyText}`;
+      const error = `Zernio send-voice-note failed (${voiceResp.status})`;
       console.error("[ZERNIO] " + error);
       return { ok: false, error };
     }
@@ -718,7 +691,7 @@ async function sendZernioAttachment(
       return { ok: true, externalMessageId: voiceMessageId };
     }
 
-    const error = `Zernio send-voice-note returned ${voiceResp.status} but no messageId in response: ${voiceBodyText}`;
+    const error = `Zernio send-voice-note returned ${voiceResp.status} without a message ID`;
     console.error("[ZERNIO] " + error);
     return { ok: false, error };
   }
@@ -729,24 +702,14 @@ async function sendZernioAttachment(
   form.append("file", new Blob([new Uint8Array(bytes.buf)], { type: bytes.contentType }), name);
   form.append("contentType", bytes.contentType);
 
-  console.log("[ZERNIO] upload-direct request:", JSON.stringify({
-    uploadUrl,
-    fileName: name,
-    fileSize: bytes.buf.length,
-    contentType: bytes.contentType,
-    auth: `Bearer ${maskApiKey(apiKey)}`,
-  }));
-
   const uploadResp = await fetch(uploadUrl, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` }, // no Content-Type — fetch sets the boundary
     body: form,
   });
   const uploadBodyText = await uploadResp.text().catch(() => "");
-  console.log(`[ZERNIO] upload-direct response (${uploadResp.status}):`, uploadBodyText);
-
   if (!uploadResp.ok) {
-    const error = `Zernio upload-direct failed (${uploadResp.status}): ${uploadBodyText}`;
+    const error = `Zernio upload-direct failed (${uploadResp.status})`;
     console.error("[ZERNIO] " + error);
     return { ok: false, error };
   }
@@ -755,7 +718,7 @@ async function sendZernioAttachment(
   try { uploadData = JSON.parse(uploadBodyText); } catch { /* non-JSON */ }
   const publicUrl: string | undefined = uploadData?.url;
   if (!publicUrl) {
-    const error = `Zernio upload-direct returned ${uploadResp.status} but no url in response: ${uploadBodyText}`;
+    const error = `Zernio upload-direct returned ${uploadResp.status} without a URL`;
     console.error("[ZERNIO] " + error);
     return { ok: false, error };
   }
@@ -770,24 +733,14 @@ async function sendZernioAttachment(
   if (attachmentType === "file" && name) {
     sendBody.attachmentName = name;
   }
-  console.log("[ZERNIO] send-attachment request:", JSON.stringify({
-    messagesUrl,
-    attachmentUrl: publicUrl,
-    attachmentType,
-    attachmentName: sendBody.attachmentName,
-    auth: `Bearer ${maskApiKey(apiKey)}`,
-  }));
-
   const sendResp = await fetch(messagesUrl, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify(sendBody),
   });
   const sendBodyText = await sendResp.text().catch(() => "");
-  console.log(`[ZERNIO] send-attachment response (${sendResp.status}):`, sendBodyText);
-
   if (!sendResp.ok) {
-    const error = `Zernio send-attachment failed (${sendResp.status}): ${sendBodyText}`;
+    const error = `Zernio send-attachment failed (${sendResp.status})`;
     console.error("[ZERNIO] " + error);
     return { ok: false, error };
   }
@@ -803,7 +756,7 @@ async function sendZernioAttachment(
     return { ok: true, externalMessageId: messageId };
   }
 
-  const error = `Zernio send-attachment returned ${sendResp.status} but no messageId in response: ${sendBodyText}`;
+  const error = `Zernio send-attachment returned ${sendResp.status} without a message ID`;
   console.error("[ZERNIO] " + error);
   return { ok: false, error };
 }

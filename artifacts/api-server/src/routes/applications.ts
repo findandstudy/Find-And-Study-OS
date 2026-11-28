@@ -1,11 +1,12 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { db, applicationsTable, notesTable, usersTable, studentsTable, leadsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentsTable, settingsTable, lifecycleCascadeStateTable, auditLogsTable, softDelete } from "@workspace/db";
-import { eq, sql, and, inArray, asc, desc, ilike, isNull, isNotNull, ne, lt, gte } from "drizzle-orm";
+import { eq, sql, and, inArray, asc, desc, ilike, isNull, isNotNull, ne, lt, gte, getTableColumns } from "drizzle-orm";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import type { SessionUser } from "../lib/replitAuth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { assertCanAccessStudent } from "../lib/studentAccess";
+import { exportApplications } from "../lib/crmExcelExport";
 import { getAgentVisibleIds, getAgentRecord, getAgentNotificationRecipientIds } from "../lib/agentVisibility";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
@@ -163,16 +164,19 @@ function applicationInStaffBranchScope(visibleBranchIds: number[]) {
   return orFn(
     isNull(applicationsTable.branchId),
     inArray(applicationsTable.branchId, branchIds),
-    inArray(studentsTable.branchId, branchIds),
     sql`EXISTS (
       SELECT 1 FROM users application_assignee
       WHERE application_assignee.id = ${applicationsTable.assignedToId}
         AND application_assignee.branch_id IN (${sql.join(branchIds.map(id => sql`${id}`), sql`, `)})
     )`,
     sql`EXISTS (
-      SELECT 1 FROM users student_assignee
-      WHERE student_assignee.id = ${studentsTable.assignedToId}
-        AND student_assignee.branch_id IN (${sql.join(branchIds.map(id => sql`${id}`), sql`, `)})
+      SELECT 1 FROM students scoped_student
+      LEFT JOIN users student_assignee ON student_assignee.id = scoped_student.assigned_to_id
+      WHERE scoped_student.id = ${applicationsTable.studentId}
+        AND (
+          scoped_student.branch_id IN (${sql.join(branchIds.map(id => sql`${id}`), sql`, `)})
+          OR student_assignee.branch_id IN (${sql.join(branchIds.map(id => sql`${id}`), sql`, `)})
+        )
     )`,
     sql`(
       ${applicationsTable.branchId} IS NOT NULL
@@ -523,16 +527,18 @@ async function restoreApplicationLostCascade(opts: {
   if (lead) await restoreEntity("lead", lead.id, lead.status, targets.leadStage);
 }
 
-router.get("/applications", requireAuth, requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
+router.get("/applications", requireAuth, requireAgentStaffPermission("applications"), (req, res) => listApplications(req, res));
+
+export async function listApplications(req: Request, res: Response, exportIds?: number[]): Promise<void> {
   const query = req.query as Record<string, string>;
   const {
     studentId, agentId, stage, season, originType: originFilter, search,
     country, universityId, universityType, createdSource, assignment,
     dateRange, name, program, level, intake, sortKey = "date", sortDir = "desc",
   } = query;
-  const includeFacets = query.includeFacets !== "0";
+  const includeFacets = !exportIds && query.includeFacets !== "0";
   const includeTotals = query.includeTotals !== "0";
-  const pipelineSummaryOnly = query.pipelineSummary === "1";
+  const pipelineSummaryOnly = !exportIds && query.pipelineSummary === "1";
   const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 5000 });
   const pageNum = pageParams.page;
   const limitNum = pageParams.limit;
@@ -543,6 +549,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
   const canExposeCommission = await canViewApplicationCommission(user);
 
   const conditions = [isNull(applicationsTable.deletedAt)];
+  if (exportIds?.length) conditions.push(inArray(applicationsTable.id, exportIds));
   const scopeResolveStartedAt = process.hrtime.bigint();
   let permissionKeys: string[] | null = null;
   let assignmentVisibility: string | null = null;
@@ -814,6 +821,8 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       ]
     : [order];
 
+  if (exportIds) return exportApplications(req, res, whereClause, [...orderBy, desc(applicationsTable.id)], canExposeCommission);
+
   const rowsQuery = db
     .select({
       id: applicationsTable.id,
@@ -957,7 +966,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       } : {}),
     },
   });
-});
+}
 
 router.get("/applications/doc-required-stages", requireAuth, async (_req, res) => {
   const rows = await db.select({ key: pipelineStagesTable.key })
@@ -2192,11 +2201,19 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
   }
   const numericIds = [...new Set(ids.map(Number).filter((n: number) => Number.isInteger(n) && n > 0))];
   if (numericIds.length === 0) { res.status(400).json({ error: "valid ids required" }); return; }
+  const branchIds = GLOBAL_APPLICATION_STAFF_ROLES.has(user.role)
+    ? null : await getVisibleBranchIds(user.id, user.role, user);
+  const selectionScope = and(
+    inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt),
+    branchIds === null ? undefined : applicationInStaffBranchScope(branchIds),
+  );
   let updated = 0;
   if (action === "delete") {
-    const existing = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
-    const liveIds = existing.map(r => r.id);
     updated = await db.transaction(async (tx) => {
+      const existing = await tx.select({ id: applicationsTable.id }).from(applicationsTable)
+        .where(selectionScope).orderBy(asc(applicationsTable.id)).for("update");
+      const liveIds = existing.map(r => r.id);
+      if (!liveIds.length) return 0;
       const count = await softDelete(applicationsTable, liveIds, { actorUserId: user.id, tx });
       if (liveIds.length > 0) {
         // documents lacks deletedBy; cascade soft-delete with deletedAt only.
@@ -2214,26 +2231,12 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
     });
   } else if (action === "assign" && assignedToId !== undefined) {
     const newAssignedToId = assignedToId ? Number(assignedToId) : null;
-    // Non-admin: filter to only records they are the current assignee of
-    let idsToUpdate = numericIds;
-    let skipped = 0;
-    if (!isAdmin) {
-      const ownedRows = await db.select({ id: applicationsTable.id })
-        .from(applicationsTable)
-        .where(and(inArray(applicationsTable.id, numericIds), eq(applicationsTable.assignedToId, user.id), isNull(applicationsTable.deletedAt)));
-      idsToUpdate = ownedRows.map(r => r.id);
-      skipped = numericIds.length - idsToUpdate.length;
-      if (idsToUpdate.length === 0) {
-        res.json({ success: true, updated: 0, skipped }); return;
-      }
-    }
-    const affectedApps = await db.select({ id: applicationsTable.id, studentId: applicationsTable.studentId })
-      .from(applicationsTable)
-      .where(and(inArray(applicationsTable.id, idsToUpdate), isNull(applicationsTable.deletedAt)));
-    const canCascadeApps = await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment");
+    const canCascadeApps = await userHasPermission(user, "records.cascade_assignment");
     updated = await db.transaction(async (tx) => {
-      const result = await tx.update(applicationsTable).set({ assignedToId: newAssignedToId })
-        .where(and(inArray(applicationsTable.id, idsToUpdate), isNull(applicationsTable.deletedAt)));
+      const affectedApps = await tx.update(applicationsTable).set({ assignedToId: newAssignedToId, updatedAt: new Date() })
+        .where(and(selectionScope, isAdmin ? undefined : eq(applicationsTable.assignedToId, user.id)))
+        .returning({ id: applicationsTable.id, studentId: applicationsTable.studentId });
+      if (!affectedApps.length) return 0;
       const firstByStudent = new Map<number, number>();
       for (const app of affectedApps) if (!firstByStudent.has(app.studentId)) firstByStudent.set(app.studentId, app.id);
       for (const [studentId, applicationId] of firstByStudent) {
@@ -2245,6 +2248,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
             actorUserId: user.id,
             ipAddress: req.ip,
             nullFillOnly: !canCascadeApps,
+            visibleBranchIds: branchIds,
             throwOnError: true,
             executor: tx,
           });
@@ -2254,12 +2258,11 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
         userId: user.id,
         action: "bulk_assign_applications",
         resource: "application",
-        changes: JSON.stringify({ ids: idsToUpdate, assignedToId: newAssignedToId }),
+        changes: JSON.stringify({ ids: affectedApps.map(app => app.id), assignedToId: newAssignedToId }),
         ipAddress: req.ip || null,
       });
-      return result.rowCount ?? idsToUpdate.length;
+      return affectedApps.length;
     });
-    res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && stage) {
     if (!(await canTransitionToPipelineStage("application", String(stage), user.role))) {
       res.status(403).json({
@@ -2268,7 +2271,9 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
       });
       return;
     }
-    const allApps = await db.select().from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
+    const allApps = await db.select({
+      ...getTableColumns(applicationsTable), writeVersion: sql<string>`${applicationsTable.updatedAt}::text`,
+    }).from(applicationsTable).where(selectionScope);
     // Task #269 — bulk move cannot prompt a per-application document
     // selection modal, so it instead SKIPS any application that would need
     // one (target stage has a missing_docs action with no requests yet) or
@@ -2295,10 +2300,11 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
     }
     const targetHasMissingDocs = (targetActions as Array<{ type?: string }>).some(a => a && a.type === "missing_docs");
     const tgtOrder = orderOf.get(String(stage));
-    const bulkSkipped: Array<{ id: number; reason: string }> = [];
+    const visibleIds = new Set(allApps.map(app => app.id));
+    const bulkSkipped = numericIds.filter(id => !visibleIds.has(id)).map(id => ({ id, reason: "UNAVAILABLE" }));
     const apps: typeof allApps = [];
     for (const app of allApps) {
-      if (app.stage === stage) { apps.push(app); continue; }
+      if (app.stage === stage) { bulkSkipped.push({ id: app.id, reason: "STAGE_UNCHANGED" }); continue; }
       const curOrder = orderOf.get(app.stage);
       const isForward = curOrder !== undefined && tgtOrder !== undefined && tgtOrder > curOrder;
       if (isForward) {
@@ -2332,8 +2338,11 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
     const lifecycleTargets = lostCascadeTargets ?? await resolveConfiguredLostCascadeTargets();
     const mappedStudentStage = lostCascadeTargets ? null : targetMappedStudentStage;
     for (const app of apps) {
-      await db.transaction(async (tx) => {
-        await tx.update(applicationsTable).set({ stage }).where(eq(applicationsTable.id, app.id));
+      const moved = await db.transaction(async (tx) => {
+        const [saved] = await tx.update(applicationsTable).set({ stage, updatedAt: new Date() })
+          .where(and(selectionScope, eq(applicationsTable.id, app.id), sql`${applicationsTable.updatedAt} = ${app.writeVersion}::timestamp`))
+          .returning({ id: applicationsTable.id });
+        if (!saved) return false;
         if (lifecycleTargets) {
           const lifecycleOpts = {
             applicationId: app.id,
@@ -2367,7 +2376,9 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
         // as the bulk stage mutation and its audit receipt. A reconciliation
         // failure therefore rolls the application stage back as well.
         await syncApplicationFinance(app.id, tx);
+        return true;
       });
+      if (!moved) { bulkSkipped.push({ id: app.id, reason: "APPLICATION_CHANGED" }); continue; }
       const [commStatus, sfStatus] = await Promise.all([
         getCommissionFinanceStatus(stage),
         getServiceFeeFinanceStatus(stage),
@@ -2459,8 +2470,10 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
     // Bulk "Run" — enqueue selected applications into portal automation
     // (mode="real") by reusing the SAME enqueue loop as the admin Manual
     // Submit dialog. Never write new send logic here; only orchestrate it.
+    const allowedRows = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(selectionScope);
+    const allowedIds = allowedRows.map(row => row.id);
     const { queued, skipped } = await enqueuePortalSubmissions({
-      applicationIds: numericIds,
+      applicationIds: allowedIds,
       mode: "real",
       userId: user.id,
     });
@@ -2469,7 +2482,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
       "bulk_run_portal_automation",
       "application",
       undefined,
-      { ids: numericIds, queued: queued.length, skipped: skipped.length },
+      { ids: allowedIds, queued: queued.length, skipped: skipped.length, unavailable: numericIds.length - allowedIds.length },
       req.ip,
     );
     res.json({ success: true, queued, skipped });
@@ -2477,7 +2490,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
   } else {
     res.status(400).json({ error: "Missing required fields for action" }); return;
   }
-  res.json({ success: true, updated });
+  res.json({ success: true, updated, skipped: numericIds.length - updated });
 });
 
 router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {

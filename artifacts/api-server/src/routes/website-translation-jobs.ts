@@ -8,7 +8,7 @@ import {
   universitiesTable,
   websiteTranslationJobsTable,
 } from "@workspace/db";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { getSession, getSessionId } from "../lib/replitAuth";
 import { canonicalCountryName, catalogName, countryMatches } from "../lib/websiteCatalogFilters";
@@ -156,34 +156,44 @@ router.post("/bulk-action", async (req, res) => {
     const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids)] : [];
     const action = req.body?.action;
     if (!ids.length || ids.length > 100 || !ids.every(id => Number.isSafeInteger(id) && Number(id) > 0) || !["approve", "reject", "retry", "cancel", "publish"].includes(action) || Object.keys(req.body).sort().join() !== "action,ids") return void res.status(400).json({ error: "Invalid bulk action" });
-    const jobs = await db.select().from(websiteTranslationJobsTable).where(inArray(websiteTranslationJobsTable.id, ids as number[]));
+    const jobs = await db.select({
+      ...getTableColumns(websiteTranslationJobsTable),
+      writeVersion: sql<string>`${websiteTranslationJobsTable.updatedAt}::text`,
+    }).from(websiteTranslationJobsTable).where(inArray(websiteTranslationJobsTable.id, ids as number[]));
     const results: Array<{ id: number; status: string; error?: string }> = [];
     for (const job of jobs) {
       try {
+        const updateJob = async (values: Partial<typeof websiteTranslationJobsTable.$inferInsert>) => {
+          const [updated] = await db.update(websiteTranslationJobsTable).set({ ...values, updatedAt: new Date() }).where(and(
+            eq(websiteTranslationJobsTable.id, job.id),
+            eq(websiteTranslationJobsTable.status, job.status),
+            sql`${websiteTranslationJobsTable.updatedAt}::text = ${job.writeVersion}`,
+          )).returning({ id: websiteTranslationJobsTable.id, status: websiteTranslationJobsTable.status });
+          if (!updated) throw new Error("JOB_CHANGED");
+          results.push(updated);
+        };
         if (action === "approve") {
           if (job.status !== "review_required" || (req.user!.role !== "super_admin" && job.createdBy === req.user!.id)) throw new Error("REVIEWER_REQUIRED");
           const current = await readDetailContentDraft(job.kind as any, job.entityId, job.locale);
           if (!current.pageId || !current.digest) throw new Error("DRAFT_MISSING");
-          await db.update(websiteTranslationJobsTable).set({ status: "approved", reviewedBy: req.user!.id, reviewedAt: new Date(), generatedPageId: current.pageId, generatedDigest: current.digest, errorCode: null, updatedAt: new Date() }).where(and(eq(websiteTranslationJobsTable.id, job.id), eq(websiteTranslationJobsTable.status, "review_required")));
-          results.push({ id: job.id, status: "approved" });
+          await updateJob({ status: "approved", reviewedBy: req.user!.id, reviewedAt: new Date(), generatedPageId: current.pageId, generatedDigest: current.digest, errorCode: null });
         } else if (action === "reject") {
           if (job.status !== "review_required") throw new Error("INVALID_STATE");
-          await db.update(websiteTranslationJobsTable).set({ status: "rejected", reviewedBy: req.user!.id, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(websiteTranslationJobsTable.id, job.id));
-          results.push({ id: job.id, status: "rejected" });
+          await updateJob({ status: "rejected", reviewedBy: req.user!.id, reviewedAt: new Date() });
         } else if (action === "retry") {
           if (!["failed", "rejected"].includes(job.status)) throw new Error("INVALID_STATE");
-          await db.update(websiteTranslationJobsTable).set({ status: "queued", attempts: 0, errorCode: null, nextAttemptAt: new Date(), reviewedBy: null, reviewedAt: null, updatedAt: new Date() }).where(eq(websiteTranslationJobsTable.id, job.id));
-          results.push({ id: job.id, status: "queued" });
+          await updateJob({ status: "queued", attempts: 0, errorCode: null, nextAttemptAt: new Date(), reviewedBy: null, reviewedAt: null });
         } else if (action === "cancel") {
           if (!["queued", "retrying"].includes(job.status)) throw new Error("INVALID_STATE");
-          await db.update(websiteTranslationJobsTable).set({ status: "cancelled", updatedAt: new Date() }).where(eq(websiteTranslationJobsTable.id, job.id));
-          results.push({ id: job.id, status: "cancelled" });
+          await updateJob({ status: "cancelled" });
         } else {
           if (job.status !== "approved" || !job.generatedPageId || !job.generatedDigest) throw new Error("INVALID_STATE");
-          await db.update(websiteTranslationJobsTable).set({ status: "publish_queued", errorCode: null, nextAttemptAt: new Date(), updatedAt: new Date() }).where(eq(websiteTranslationJobsTable.id, job.id));
-          results.push({ id: job.id, status: "publish_queued" });
+          await updateJob({ status: "publish_queued", errorCode: null, nextAttemptAt: new Date() });
         }
       } catch (error) { results.push({ id: job.id, status: job.status, error: error instanceof Error ? error.message : "UNAVAILABLE" }); }
+    }
+    for (const id of ids) {
+      if (!jobs.some(job => job.id === id)) results.push({ id: Number(id), status: "unavailable", error: "JOB_UNAVAILABLE" });
     }
     await db.insert(auditLogsTable).values({ userId: req.user!.id, action: `website_translation_bulk_${action}`, resource: "website_translation_batch", changes: JSON.stringify({ requested: ids.length, results }) });
     res.json({ requested: ids.length, completed: results.filter(item => !item.error).length, failed: results.filter(item => item.error).length, results });

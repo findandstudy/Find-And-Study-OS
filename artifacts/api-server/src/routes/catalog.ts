@@ -1,4 +1,5 @@
 import { Router, type IRouter, json } from "express";
+import { createHash } from "node:crypto";
 import { db, countriesTable, citiesTable, cityExternalFactsTable, cityWeatherSnapshotsTable, universitiesTable, programsTable, universityApplicationPeriodsTable, catalogOptionsTable, programDocumentRequirementsTable, degreeDocumentRequirementsTable, integrationsTable, auditLogsTable, settingsTable } from "@workspace/db";
 import { eq, ilike, sql, and, or, asc, inArray, notInArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
@@ -1009,27 +1010,37 @@ router.get("/programs/import-template", requireAuth, requireRole(...MANAGER_ROLE
   }
 });
 
-router.post("/programs/bulk/preview", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const inputRows = Array.isArray(req.body) ? req.body : [];
-  if (inputRows.length === 0) {
-    res.status(400).json({ error: "Expected non-empty array" });
-    return;
-  }
+function programImportIdentity(university: number | string, row: { name?: unknown; degree?: unknown; language?: unknown }) {
+  const key = (value: unknown) => String(value ?? "").trim().toLowerCase();
+  return JSON.stringify([university, key(row.name), key(row.degree), key(row.language)]);
+}
 
-  const rows = normalizeProgramImportRows(inputRows) as Record<string, unknown>[];
-  const universities = await db.select({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable);
+function isProgramImportRows(rows: unknown): rows is Record<string, unknown>[] {
+  return Array.isArray(rows) && rows.length > 0 && rows.every(row => row && typeof row === "object" && !Array.isArray(row));
+}
+
+class ProgramImportReviewError extends Error {
+  constructor(readonly status: number, message: string) { super(message); }
+}
+
+async function reviewProgramImport(rows: Record<string, unknown>[], executor: Pick<typeof db, "select">) {
+  const universities = await executor.select({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable);
   const universityById = new Map(universities.map((item) => [item.id, item]));
   const universityByName = new Map(universities.map((item) => [item.name.trim().toLowerCase(), item]));
-  const existingPrograms = await db.select({
+  const relevantUniversities = [...new Set(rows.flatMap(row => {
+    const id = Number(row.universityId) || universityByName.get(String(row.universityName ?? "").trim().toLowerCase())?.id;
+    return id && universityById.has(id) ? [id] : [];
+  }))];
+  const existingPrograms = await executor.select({
     id: programsTable.id,
     universityId: programsTable.universityId,
     name: programsTable.name,
     degree: programsTable.degree,
     language: programsTable.language,
-  }).from(programsTable);
-  const existingKeys = new Set(existingPrograms.map((program) =>
-    `${program.universityId}|${program.name.trim().toLowerCase()}|${(program.degree || "").trim().toLowerCase()}|${(program.language || "").trim().toLowerCase()}`,
-  ));
+    updatedAt: programsTable.updatedAt,
+  }).from(programsTable).where(inArray(programsTable.universityId, relevantUniversities)).orderBy(asc(programsTable.id));
+  const existingByKey = new Map(existingPrograms.map(program => [programImportIdentity(program.universityId, program), program]));
+  const revisions: Array<[number, string] | null> = [];
 
   const seenKeys = new Set<string>();
   const preview = rows.map((row, index) => {
@@ -1042,11 +1053,13 @@ router.post("/programs/bulk/preview", bulkJson, requireAuth, requireRole(...MANA
       : universityByName.get(universityName.toLowerCase());
     const wouldCreateUniversity = !university && !!universityName;
     const syntheticUniversityKey = university?.id ?? `new:${universityName.toLowerCase()}`;
-    const key = `${syntheticUniversityKey}|${name.toLowerCase()}|${String(row.degree || "").trim().toLowerCase()}|${String(row.language || "").trim().toLowerCase()}`;
+    const key = programImportIdentity(syntheticUniversityKey, row);
+    const existing = existingByKey.get(key);
+    revisions.push(existing ? [existing.id, existing.updatedAt.toISOString()] : null);
 
     if (!name) errors.push("Program name is required");
     if (!university && !universityName) errors.push("University or universityId is required");
-    if (rawUniversityId && !university) errors.push(`University id ${rawUniversityId} was not found`);
+    if (rawUniversityId !== null && (!Number.isSafeInteger(rawUniversityId) || !university)) errors.push("University id was not found");
     if (seenKeys.has(key)) errors.push("Duplicate row in this file");
     seenKeys.add(key);
 
@@ -1071,7 +1084,10 @@ router.post("/programs/bulk/preview", bulkJson, requireAuth, requireRole(...MANA
     if (periodName) {
       const year = Number(row.applicationPeriodAcademicYear);
       if (!Number.isInteger(year) || year < 2000 || year > 2200) errors.push("A valid applicationPeriodAcademicYear is required");
-      if (!String(row.applicationPeriodTimezone || "").trim()) errors.push("applicationPeriodTimezone is required");
+      try {
+        if (!row.applicationPeriodTimezone) throw new Error();
+        new Intl.DateTimeFormat("en", { timeZone: String(row.applicationPeriodTimezone) });
+      } catch { errors.push("A valid applicationPeriodTimezone is required"); }
       if (!/^https:\/\//i.test(String(row.applicationPeriodSourceUrl || ""))) errors.push("A public HTTPS applicationPeriodSourceUrl is required");
       const opens = String(row.applicationsOpenAt || "");
       const deadline = String(row.applicationDeadlineAt || "");
@@ -1080,7 +1096,7 @@ router.post("/programs/bulk/preview", bulkJson, requireAuth, requireRole(...MANA
 
     const action = errors.length > 0
       ? "error"
-      : university && existingKeys.has(`${university.id}|${name.toLowerCase()}|${String(row.degree || "").trim().toLowerCase()}|${String(row.language || "").trim().toLowerCase()}`)
+      : existing
         ? "update"
         : "add";
     return {
@@ -1098,7 +1114,13 @@ router.post("/programs/bulk/preview", bulkJson, requireAuth, requireRole(...MANA
     acc[item.action as "add" | "update" | "error"] += 1;
     return acc;
   }, { add: 0, update: 0, error: 0 });
-  res.json({ rows: preview, summary, canImport: summary.error === 0 });
+  const revision = createHash("sha256").update(JSON.stringify({ rows, preview, revisions })).digest("hex");
+  return { rows: preview, summary, canImport: summary.error === 0, revision };
+}
+
+router.post("/programs/bulk/preview", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  if (!isProgramImportRows(req.body)) { res.status(400).json({ error: "Expected non-empty program rows" }); return; }
+  res.json(await reviewProgramImport(normalizeProgramImportRows(req.body), db));
 });
 
 router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
@@ -1117,7 +1139,7 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     applicationsOpenOverrideAt?: string; applicationDeadlineOverrideAt?: string; classesStartOverrideOn?: string; classesEndOverrideOn?: string;
     quota?: number; isActive?: string | boolean; sourceMetadata?: unknown; sourceMetadataJson?: unknown;
   } & Record<string, any>)[] = req.body;
-  if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
+  if (!isProgramImportRows(rows)) { res.status(400).json({ error: "Expected non-empty program rows" }); return; }
 
   // Round-trip guarantee: the importer must accept the system's own export
   // headers (`Program`, `University`, `Fee Type`, …). Remap friendly headers
@@ -1173,319 +1195,321 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     return;
   }
   const docKeyOrder = new Map(docKeys.map((k, i) => [k, i]));
-  const allUnis = await db.select({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable);
-  const uniNameMap = Object.fromEntries(allUnis.map(u => [u.name.trim().toLowerCase(), u.id]));
+  const result = await db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('program-catalog-import'))`);
+    const reviewed = await reviewProgramImport(normalizedRows, tx);
+    const previewRevision = req.get("X-Program-Import-Preview");
+    if (previewRevision && previewRevision !== reviewed.revision) {
+      throw new ProgramImportReviewError(409, "The catalogue changed. Run the import preview again.");
+    }
+    if (!reviewed.canImport) {
+      const first = reviewed.rows.find(row => row.errors.length);
+      throw new ProgramImportReviewError(400, first ? `Row ${first.row}: ${first.errors.join(". ")}` : "Invalid import rows");
+    }
+    const allUnis = await tx.select({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable);
+    const uniNameMap = Object.fromEntries(allUnis.map(u => [u.name.trim().toLowerCase(), u.id]));
 
-  // Auto-create universities that don't exist yet (user-approved decision):
-  // collect unresolved names first (dedup case-insensitive + trim, so 50
-  // programs of one new university create it ONCE), re-check against the DB
-  // map, then insert the truly-new ones and extend the name map.
-  const createdUniversities: string[] = [];
-  {
-    // Only rows that would otherwise be valid program rows (non-empty
-    // program name) contribute — a fully-invalid import must not pollute
-    // the universities catalog with side-effect inserts.
-    const values = collectUniversitiesToCreate(
-      normalizedRows as Record<string, unknown>[],
-      uniNameMap,
-    );
-    const UNI_CHUNK = 500;
-    for (let off = 0; off < values.length; off += UNI_CHUNK) {
-      const inserted = await db.insert(universitiesTable)
-        .values(values.slice(off, off + UNI_CHUNK))
-        .returning({ id: universitiesTable.id, name: universitiesTable.name });
-      for (const u of inserted) {
-        uniNameMap[u.name.trim().toLowerCase()] = u.id;
-        createdUniversities.push(u.name);
+    // Auto-create universities that don't exist yet (user-approved decision):
+    // collect unresolved names first (dedup case-insensitive + trim, so 50
+    // programs of one new university create it ONCE), re-check against the DB
+    // map, then insert the truly-new ones and extend the name map.
+    const createdUniversities: string[] = [];
+    {
+      // Only rows that would otherwise be valid program rows (non-empty
+      // program name) contribute — a fully-invalid import must not pollute
+      // the universities catalog with side-effect inserts.
+      const values = collectUniversitiesToCreate(
+        normalizedRows as Record<string, unknown>[],
+        uniNameMap,
+      );
+      const UNI_CHUNK = 500;
+      for (let off = 0; off < values.length; off += UNI_CHUNK) {
+        const inserted = await tx.insert(universitiesTable)
+          .values(values.slice(off, off + UNI_CHUNK))
+          .returning({ id: universitiesTable.id, name: universitiesTable.name });
+        for (const u of inserted) {
+          uniNameMap[u.name.trim().toLowerCase()] = u.id;
+          createdUniversities.push(u.name);
+        }
       }
     }
-  }
 
-  const periodByIdentity = new Map<string, number>();
-  const existingPeriods = await db.select().from(universityApplicationPeriodsTable);
-  for (const period of existingPeriods) {
-    periodByIdentity.set(`${period.universityId}|${period.termName.trim().toLowerCase()}|${period.academicYear}|${(period.campusName || "").trim().toLowerCase()}`, period.id);
-  }
-  const synchronizedPeriodIdentities = new Set<string>();
-  for (const row of normalizedRows) {
-    if (!row.applicationPeriodTermName) continue;
-    const rawName = typeof row.universityName === "string" ? row.universityName.trim().toLowerCase() : "";
-    const universityId = Number(row.universityId || uniNameMap[rawName]);
-    if (!universityId) continue;
-    const termName = String(row.applicationPeriodTermName).trim();
-    const academicYear = Number(row.applicationPeriodAcademicYear);
-    const campusName = String(row.applicationPeriodCampusName || "").trim() || null;
-    const identity = `${universityId}|${termName.toLowerCase()}|${academicYear}|${(campusName || "").toLowerCase()}`;
-    let periodId = periodByIdentity.get(identity);
-    if (!periodId) {
-      const [created] = await db.insert(universityApplicationPeriodsTable).values({
-        universityId, termName, academicYear, campusName,
-        applicationsOpenAt: row.applicationsOpenAt || null,
-        applicationDeadlineAt: row.applicationDeadlineAt || null,
-        classesStartOn: null,
-        classesEndOn: null,
-        sourceTimezone: String(row.applicationPeriodTimezone),
-        sourceUrl: String(row.applicationPeriodSourceUrl),
-        verifiedAt: new Date(),
-        createdById: req.user!.id,
-        updatedById: req.user!.id,
-      }).returning({ id: universityApplicationPeriodsTable.id });
-      periodId = created.id;
-      periodByIdentity.set(identity, periodId);
-    } else if (!synchronizedPeriodIdentities.has(identity)) {
-      await db.update(universityApplicationPeriodsTable).set({
-        applicationsOpenAt: row.applicationsOpenAt || null,
-        applicationDeadlineAt: row.applicationDeadlineAt || null,
-        sourceTimezone: String(row.applicationPeriodTimezone),
-        sourceUrl: String(row.applicationPeriodSourceUrl),
-        verifiedAt: new Date(),
-        updatedById: req.user!.id,
-        updatedAt: new Date(),
-      }).where(eq(universityApplicationPeriodsTable.id, periodId));
+    const periodByIdentity = new Map<string, number>();
+    const existingPeriods = await tx.select().from(universityApplicationPeriodsTable);
+    for (const period of existingPeriods) {
+      periodByIdentity.set(`${period.universityId}|${period.termName.trim().toLowerCase()}|${period.academicYear}|${(period.campusName || "").trim().toLowerCase()}`, period.id);
     }
-    synchronizedPeriodIdentities.add(identity);
-    row.universityApplicationPeriodId = periodId;
-  }
+    const synchronizedPeriodIdentities = new Set<string>();
+    for (const row of normalizedRows) {
+      if (!row.applicationPeriodTermName) continue;
+      const rawName = typeof row.universityName === "string" ? row.universityName.trim().toLowerCase() : "";
+      const universityId = Number(row.universityId || uniNameMap[rawName]);
+      if (!universityId) continue;
+      const termName = String(row.applicationPeriodTermName).trim();
+      const academicYear = Number(row.applicationPeriodAcademicYear);
+      const campusName = String(row.applicationPeriodCampusName || "").trim() || null;
+      const identity = `${universityId}|${termName.toLowerCase()}|${academicYear}|${(campusName || "").toLowerCase()}`;
+      let periodId = periodByIdentity.get(identity);
+      if (!periodId) {
+        const [created] = await tx.insert(universityApplicationPeriodsTable).values({
+          universityId, termName, academicYear, campusName,
+          applicationsOpenAt: row.applicationsOpenAt || null,
+          applicationDeadlineAt: row.applicationDeadlineAt || null,
+          classesStartOn: null,
+          classesEndOn: null,
+          sourceTimezone: String(row.applicationPeriodTimezone),
+          sourceUrl: String(row.applicationPeriodSourceUrl),
+          verifiedAt: new Date(),
+          createdById: req.user!.id,
+          updatedById: req.user!.id,
+        }).returning({ id: universityApplicationPeriodsTable.id });
+        periodId = created.id;
+        periodByIdentity.set(identity, periodId);
+      } else if (!synchronizedPeriodIdentities.has(identity)) {
+        await tx.update(universityApplicationPeriodsTable).set({
+          applicationsOpenAt: row.applicationsOpenAt || null,
+          applicationDeadlineAt: row.applicationDeadlineAt || null,
+          sourceTimezone: String(row.applicationPeriodTimezone),
+          sourceUrl: String(row.applicationPeriodSourceUrl),
+          verifiedAt: new Date(),
+          updatedById: req.user!.id,
+          updatedAt: new Date(),
+        }).where(eq(universityApplicationPeriodsTable.id, periodId));
+      }
+      synchronizedPeriodIdentities.add(identity);
+      row.universityApplicationPeriodId = periodId;
+    }
 
-  // Set of column header names from the incoming payload that we tried to
-  // match against the catalog but didn't recognise. Reported back so the
-  // admin sees "you imported a column called `xyz_form` that isn't in the
-  // catalog — was it renamed or removed?" instead of it silently dropping.
-  const unknownDocCols = new Set<string>();
-  // Well-known non-document column names from the program payload schema;
-  // anything that's neither a known doc key nor one of these gets flagged
-  // as an unknown doc-column candidate.
-  const NON_DOC_COLUMNS = new Set<string>([
-    "universityId", "universityName", "name", "description", "degree", "field", "language",
-    "duration", "tuitionFee", "currency", "scholarship", "intakes",
-    "requirements", "refundProcess", "commissionRate", "applicationFee", "enrollmentFee", "adaptationFee", "advancedFee",
-    "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
-    "feeType", "priceValidFrom", "priceValidUntil", "financeNotes", "universityApplicationPeriodId",
-    "applicationPeriodTermName", "applicationPeriodAcademicYear", "applicationPeriodCampusName",
-    "applicationsOpenAt", "applicationDeadlineAt", "applicationPeriodTimezone", "applicationPeriodSourceUrl",
-    "applicationsOpenOverrideAt", "applicationDeadlineOverrideAt", "classesStartOverrideOn", "classesEndOverrideOn",
-    "minGpa", "minLanguageScore", "quota", "isActive", "country", "sourceMetadata", "sourceMetadataJson",
-  ]);
+    // Set of column header names from the incoming payload that we tried to
+    // match against the catalog but didn't recognise. Reported back so the
+    // admin sees "you imported a column called `xyz_form` that isn't in the
+    // catalog — was it renamed or removed?" instead of it silently dropping.
+    const unknownDocCols = new Set<string>();
+    // Well-known non-document column names from the program payload schema;
+    // anything that's neither a known doc key nor one of these gets flagged
+    // as an unknown doc-column candidate.
+    const NON_DOC_COLUMNS = new Set<string>([
+      "universityId", "universityName", "name", "description", "degree", "field", "language",
+      "duration", "tuitionFee", "currency", "scholarship", "intakes",
+      "requirements", "refundProcess", "commissionRate", "applicationFee", "enrollmentFee", "adaptationFee", "advancedFee",
+      "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
+      "feeType", "priceValidFrom", "priceValidUntil", "financeNotes", "universityApplicationPeriodId",
+      "applicationPeriodTermName", "applicationPeriodAcademicYear", "applicationPeriodCampusName",
+      "applicationsOpenAt", "applicationDeadlineAt", "applicationPeriodTimezone", "applicationPeriodSourceUrl",
+      "applicationsOpenOverrideAt", "applicationDeadlineOverrideAt", "classesStartOverrideOn", "classesEndOverrideOn",
+      "minGpa", "minLanguageScore", "quota", "isActive", "country", "sourceMetadata", "sourceMetadataJson",
+    ]);
 
-  const docColsByRowIdx = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined>();
-  const rowIdxByParsedIdx: number[] = [];
-  let invalidDocCells = 0;
-  const skipReasons: { row: number; reason: string }[] = [];
-  const parsed = normalizedRows.map((r, rowIdx) => {
-    // Excel parsed via XLSX often gives "" for empty cells, which `??` does
-    // not treat as missing — coerce blanks to undefined first.
-    const rawId = (r.universityId as unknown) === "" || r.universityId === null ? undefined : r.universityId;
-    const rawName = typeof r.universityName === "string" && r.universityName.trim() ? r.universityName.trim() : undefined;
-    const uid = rawId ?? (rawName ? uniNameMap[rawName.toLowerCase()] : undefined);
-    if (!uid) {
-      skipReasons.push({
-        row: rowIdx + 2,
-        reason: rawName
-          ? `university not found in system: "${rawName}"`
-          : "missing university (fill the University / universityName column)",
-      });
-      return null;
+    const docColsByRowIdx = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined>();
+    const rowIdxByParsedIdx: number[] = [];
+    let invalidDocCells = 0;
+    const skipReasons: { row: number; reason: string }[] = [];
+    const parsed = normalizedRows.map((r, rowIdx) => {
+      // Excel parsed via XLSX often gives "" for empty cells, which `??` does
+      // not treat as missing — coerce blanks to undefined first.
+      const rawId = (r.universityId as unknown) === "" || r.universityId === null ? undefined : r.universityId;
+      const rawName = typeof r.universityName === "string" && r.universityName.trim() ? r.universityName.trim() : undefined;
+      const uid = rawId != null ? Number(rawId) : (rawName ? uniNameMap[rawName.toLowerCase()] : undefined);
+      if (!uid) {
+        skipReasons.push({
+          row: rowIdx + 2,
+          reason: rawName
+            ? `university not found in system: "${rawName}"`
+            : "missing university (fill the University / universityName column)",
+        });
+        return null;
+      }
+      if (!r.name) {
+        skipReasons.push({ row: rowIdx + 2, reason: "missing program name" });
+        return null;
+      }
+      let docList: { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined;
+      let sawAnyDocCol = false;
+      // Iterate the row's OWN keys (not the catalog) so we can detect
+      // "this column looks like a doc column but isn't in the catalog
+      // anymore" — that's the case Task #179 is about. We still validate
+      // membership with `docKeySet` so unknown keys never land in the DB.
+      for (const colKey of Object.keys(r)) {
+        if (NON_DOC_COLUMNS.has(colKey)) continue;
+        if (isCatalogSourceMetadataColumn(colKey)) continue;
+        if (docKeySet.has(colKey)) {
+          sawAnyDocCol = true;
+          const { value, invalid } = parseDocCellValue((r as Record<string, unknown>)[colKey]);
+          if (invalid) invalidDocCells++;
+          if (value !== null) {
+            if (!docList) docList = [];
+            docList.push({
+              documentType: colKey,
+              mandatory: value === "mandatory",
+              sortOrder: docKeyOrder.get(colKey) ?? 9999,
+            });
+          }
+        } else {
+          // Looks like a doc-column shape but unknown to the catalog.
+          // Only flag it if the cell value PARSES as a doc marker
+          // (mandatory/optional/yes/no/etc.). Random extra columns that
+          // happen to be in the sheet but contain unrelated text would
+          // otherwise spam the warning list with false positives.
+          const v = (r as Record<string, unknown>)[colKey];
+          const parsed = parseDocCellValue(v);
+          if (parsed.value !== null || parsed.invalid) {
+            unknownDocCols.add(colKey);
+          }
+        }
+      }
+      if (sawAnyDocCol) docColsByRowIdx.set(rowIdx, docList ?? []);
+      const numeric = (value: unknown) => value === undefined || value === null || value === "" ? null : Number(value);
+      const currency = typeof r.currency === "string" ? r.currency.trim().toUpperCase() : "";
+      const hasAnyFee = ([r.tuitionFee, r.scholarship, r.applicationFee, r.enrollmentFee, r.adaptationFee, r.advancedFee, r.depositFee, r.serviceFeeAmount, r.discountedFee, r.languageFee] as unknown[])
+        .some(value => value !== undefined && value !== null && value !== "");
+      if (hasAnyFee && !/^[A-Z]{3}$/.test(currency)) {
+        skipReasons.push({ row: rowIdx + 2, reason: "currency is required for fee rows and must be a three-letter ISO code (for example PLN)" });
+        return null;
+      }
+      rowIdxByParsedIdx.push(rowIdx);
+      return {
+        universityId: uid, name: String(r.name).trim(), description: r.description ?? null, degree: r.degree ?? null,
+        field: r.field ?? null, language: r.language ?? null,
+        duration: r.duration ?? null,
+        tuitionFee: numeric(r.tuitionFee),
+        currency: currency || null,
+        scholarship: numeric(r.scholarship),
+        intakes: r.intakes ?? null, requirements: r.requirements ?? null, refundProcess: r.refundProcess ?? null,
+        commissionRate: numeric(r.commissionRate),
+        applicationFee: numeric(r.applicationFee),
+        enrollmentFee: numeric(r.enrollmentFee),
+        adaptationFee: numeric(r.adaptationFee),
+        advancedFee: numeric(r.advancedFee),
+        depositFee: numeric(r.depositFee),
+        serviceFeeAmount: numeric(r.serviceFeeAmount),
+        discountedFee: numeric(r.discountedFee),
+        languageFee: numeric(r.languageFee),
+        feeType: r.feeType ?? null,
+        priceValidFrom: r.priceValidFrom || null,
+        priceValidUntil: r.priceValidUntil || null,
+        financeNotes: r.financeNotes || null,
+        universityApplicationPeriodId: numeric(r.universityApplicationPeriodId),
+        applicationsOpenOverrideAt: r.applicationsOpenOverrideAt || null,
+        applicationDeadlineOverrideAt: r.applicationDeadlineOverrideAt || null,
+        classesStartOverrideOn: r.classesStartOverrideOn || null,
+        classesEndOverrideOn: r.classesEndOverrideOn || null,
+        minGpa: r.minGpa ? Number(r.minGpa) : null,
+        minLanguageScore: r.minLanguageScore ? Number(r.minLanguageScore) : null,
+        quota: r.quota ? (isNaN(Number(r.quota)) || Math.round(Number(r.quota)) < 1 ? null : Math.round(Number(r.quota))) : null,
+        isActive: r.isActive === false || (typeof r.isActive === "string" && ["no", "false", "0"].includes(r.isActive.toLowerCase().trim())) ? false : true,
+        sourceMetadata: normalizeCatalogSourceMetadataFromRow("program", r),
+      };
+    }).filter(Boolean) as (typeof programsTable.$inferInsert)[];
+
+    if (parsed.length === 0) {
+      const sample = skipReasons.slice(0, 5).map(s => `row ${s.row}: ${s.reason}`).join("; ");
+      const more = skipReasons.length > 5 ? ` (+${skipReasons.length - 5} more)` : "";
+      throw new ProgramImportReviewError(400, `No valid rows imported. ${sample}${more}`);
     }
-    if (!r.name) {
-      skipReasons.push({ row: rowIdx + 2, reason: "missing program name" });
-      return null;
+
+    const universityIds = [...new Set(parsed.map(row => row.universityId))];
+    const existingPrograms = await tx.select({ id: programsTable.id, universityId: programsTable.universityId,
+      name: programsTable.name, degree: programsTable.degree, language: programsTable.language,
+    }).from(programsTable).where(inArray(programsTable.universityId, universityIds)).orderBy(asc(programsTable.id));
+    const existingMap = new Map<string, number>();
+    for (const p of existingPrograms) {
+      const key = programImportIdentity(p.universityId, p);
+      existingMap.set(key, p.id);
     }
-    let docList: { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined;
-    let sawAnyDocCol = false;
-    // Iterate the row's OWN keys (not the catalog) so we can detect
-    // "this column looks like a doc column but isn't in the catalog
-    // anymore" — that's the case Task #179 is about. We still validate
-    // membership with `docKeySet` so unknown keys never land in the DB.
-    for (const colKey of Object.keys(r)) {
-      if (NON_DOC_COLUMNS.has(colKey)) continue;
-      if (isCatalogSourceMetadataColumn(colKey)) continue;
-      if (docKeySet.has(colKey)) {
-        sawAnyDocCol = true;
-        const { value, invalid } = parseDocCellValue((r as Record<string, unknown>)[colKey]);
-        if (invalid) invalidDocCells++;
-        if (value !== null) {
-          if (!docList) docList = [];
-          docList.push({
-            documentType: colKey,
-            mandatory: value === "mandatory",
-            sortOrder: docKeyOrder.get(colKey) ?? 9999,
-          });
+
+    let insertedCount = 0;
+    let updatedCount = 0;
+    const toInsert: typeof parsed = [];
+    const insertRowIdxs: number[] = [];
+    const docsToReplace = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[]>();
+
+    const seenKeys = new Set<string>();
+    for (let i = 0; i < parsed.length; i++) {
+      const val = parsed[i];
+      const origRowIdx = rowIdxByParsedIdx[i] ?? i;
+      const key = programImportIdentity(val.universityId, val);
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      const existingId = existingMap.get(key);
+      if (existingId) {
+        const { universityId: _uid, ...updates } = val;
+        await tx.update(programsTable).set({ ...updates, updatedAt: new Date() }).where(eq(programsTable.id, existingId));
+        updatedCount++;
+        if (docColsByRowIdx.has(origRowIdx)) {
+          docsToReplace.set(existingId, docColsByRowIdx.get(origRowIdx) || []);
         }
       } else {
-        // Looks like a doc-column shape but unknown to the catalog.
-        // Only flag it if the cell value PARSES as a doc marker
-        // (mandatory/optional/yes/no/etc.). Random extra columns that
-        // happen to be in the sheet but contain unrelated text would
-        // otherwise spam the warning list with false positives.
-        const v = (r as Record<string, unknown>)[colKey];
-        const parsed = parseDocCellValue(v);
-        if (parsed.value !== null || parsed.invalid) {
-          unknownDocCols.add(colKey);
+        toInsert.push(val);
+        insertRowIdxs.push(origRowIdx);
+      }
+    }
+
+    // Postgres bind-parameter limit is 32767 (16-bit). For 7000+ row imports,
+    // a single INSERT...VALUES blows past this, so we chunk all bulk writes.
+    // ~22 cols × 500 rows = 11000 params, well under the limit.
+    const INSERT_CHUNK = 500;
+
+    if (toInsert.length > 0) {
+      const allInserted: { id: number }[] = [];
+      for (let off = 0; off < toInsert.length; off += INSERT_CHUNK) {
+        const slice = toInsert.slice(off, off + INSERT_CHUNK);
+        const inserted = await tx.insert(programsTable).values(slice).returning({ id: programsTable.id });
+        allInserted.push(...inserted);
+      }
+      insertedCount = allInserted.length;
+      allInserted.forEach((p, idx) => {
+        const origRowIdx = insertRowIdxs[idx];
+        if (docColsByRowIdx.has(origRowIdx)) {
+          docsToReplace.set(p.id, docColsByRowIdx.get(origRowIdx) || []);
+        }
+      });
+    }
+
+    if (docsToReplace.size > 0) {
+      const ids = [...docsToReplace.keys()];
+      // Chunk DELETE too — inArray with 7000 ids = 7000 bind params, still fine,
+      // but be safe for future growth.
+      const ID_CHUNK = 5000;
+      for (let off = 0; off < ids.length; off += ID_CHUNK) {
+        await tx.delete(programDocumentRequirementsTable)
+          .where(inArray(programDocumentRequirementsTable.programId, ids.slice(off, off + ID_CHUNK)));
+      }
+      const allDocRows: { programId: number; documentType: string; mandatory: boolean; sortOrder: number }[] = [];
+      for (const [pid, docs] of docsToReplace.entries()) {
+        for (const d of docs) allDocRows.push({ programId: pid, ...d });
+      }
+      if (allDocRows.length > 0) {
+        // 4 cols × 1000 rows = 4000 params per chunk.
+        const DOC_CHUNK = 1000;
+        for (let off = 0; off < allDocRows.length; off += DOC_CHUNK) {
+          await tx.insert(programDocumentRequirementsTable)
+            .values(allDocRows.slice(off, off + DOC_CHUNK));
         }
       }
     }
-    if (sawAnyDocCol) docColsByRowIdx.set(rowIdx, docList ?? []);
-    rowIdxByParsedIdx.push(rowIdx);
-    const numeric = (value: unknown) => value === undefined || value === null || value === "" ? null : Number(value);
-    const currency = typeof r.currency === "string" ? r.currency.trim().toUpperCase() : "";
-    const hasAnyFee = ([r.tuitionFee, r.scholarship, r.applicationFee, r.enrollmentFee, r.adaptationFee, r.advancedFee, r.depositFee, r.serviceFeeAmount, r.discountedFee, r.languageFee] as unknown[])
-      .some(value => value !== undefined && value !== null && value !== "");
-    if (hasAnyFee && !/^[A-Z]{3}$/.test(currency)) {
-      skipReasons.push({ row: rowIdx + 2, reason: "currency is required for fee rows and must be a three-letter ISO code (for example PLN)" });
-      return null;
-    }
+
+    const unknownDocColumns = [...unknownDocCols].sort();
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id, action: "bulk_import_programs", resource: "program",
+      changes: JSON.stringify({ inserted: insertedCount, updated: updatedCount, docsTouched: docsToReplace.size, invalidDocCells }),
+      ipAddress: req.ip ?? null,
+    });
     return {
-      universityId: uid, name: r.name, description: r.description ?? null, degree: r.degree ?? null,
-      field: r.field ?? null, language: r.language ?? null,
-      duration: r.duration ?? null,
-      tuitionFee: numeric(r.tuitionFee),
-      currency: currency || null,
-      scholarship: numeric(r.scholarship),
-      intakes: r.intakes ?? null, requirements: r.requirements ?? null, refundProcess: r.refundProcess ?? null,
-      commissionRate: numeric(r.commissionRate),
-      applicationFee: numeric(r.applicationFee),
-      enrollmentFee: numeric(r.enrollmentFee),
-      adaptationFee: numeric(r.adaptationFee),
-      advancedFee: numeric(r.advancedFee),
-      depositFee: numeric(r.depositFee),
-      serviceFeeAmount: numeric(r.serviceFeeAmount),
-      discountedFee: numeric(r.discountedFee),
-      languageFee: numeric(r.languageFee),
-      feeType: r.feeType ?? null,
-      priceValidFrom: r.priceValidFrom || null,
-      priceValidUntil: r.priceValidUntil || null,
-      financeNotes: r.financeNotes || null,
-      universityApplicationPeriodId: numeric(r.universityApplicationPeriodId),
-      applicationsOpenOverrideAt: r.applicationsOpenOverrideAt || null,
-      applicationDeadlineOverrideAt: r.applicationDeadlineOverrideAt || null,
-      classesStartOverrideOn: r.classesStartOverrideOn || null,
-      classesEndOverrideOn: r.classesEndOverrideOn || null,
-      minGpa: r.minGpa ? Number(r.minGpa) : null,
-      minLanguageScore: r.minLanguageScore ? Number(r.minLanguageScore) : null,
-      quota: r.quota ? (isNaN(Number(r.quota)) || Math.round(Number(r.quota)) < 1 ? null : Math.round(Number(r.quota))) : null,
-      isActive: r.isActive === false || (typeof r.isActive === "string" && ["no", "false", "0"].includes(r.isActive.toLowerCase().trim())) ? false : true,
-      sourceMetadata: normalizeCatalogSourceMetadataFromRow("program", r),
+      inserted: insertedCount, updated: updatedCount,
+      skipped: rows.length - parsed.length, docsTouched: docsToReplace.size, invalidDocCells,
+      unknownDocColumns, createdUniversities,
+      ...(unknownDocColumns.length > 0
+        ? { unknownDocColumnsMessage: `Tanımsız belge sütunları (katalogda yok, atlandı): ${unknownDocColumns.join(", ")}` }
+        : {}),
     };
-  }).filter(Boolean) as (typeof programsTable.$inferInsert)[];
-
-  if (parsed.length === 0) {
-    const sample = skipReasons.slice(0, 5).map(s => `row ${s.row}: ${s.reason}`).join("; ");
-    const more = skipReasons.length > 5 ? ` (+${skipReasons.length - 5} more)` : "";
-    res.status(400).json({
-      error: `No valid rows imported. ${sample}${more}`,
-      skipReasons,
-    });
-    return;
-  }
-
-  const existingPrograms = await db.select().from(programsTable);
-  const existingMap = new Map<string, number>();
-  for (const p of existingPrograms) {
-    const key = `${p.universityId}|${(p.name || "").toLowerCase()}|${(p.degree || "").toLowerCase()}|${(p.language || "").toLowerCase()}`;
-    existingMap.set(key, p.id);
-  }
-
-  let insertedCount = 0;
-  let updatedCount = 0;
-  const toInsert: typeof parsed = [];
-  const insertRowIdxs: number[] = [];
-  const docsToReplace = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[]>();
-
-  const seenKeys = new Set<string>();
-  for (let i = 0; i < parsed.length; i++) {
-    const val = parsed[i];
-    const origRowIdx = rowIdxByParsedIdx[i] ?? i;
-    const key = `${val.universityId}|${(val.name || "").toLowerCase()}|${(val.degree || "").toLowerCase()}|${(val.language || "").toLowerCase()}`;
-    if (seenKeys.has(key)) continue;
-    seenKeys.add(key);
-    const existingId = existingMap.get(key);
-    if (existingId) {
-      const { universityId: _uid, ...updates } = val;
-      await db.update(programsTable).set({ ...updates, updatedAt: new Date() }).where(eq(programsTable.id, existingId));
-      updatedCount++;
-      if (docColsByRowIdx.has(origRowIdx)) {
-        docsToReplace.set(existingId, docColsByRowIdx.get(origRowIdx) || []);
-      }
-    } else {
-      toInsert.push(val);
-      insertRowIdxs.push(origRowIdx);
-    }
-  }
-
-  // Postgres bind-parameter limit is 32767 (16-bit). For 7000+ row imports,
-  // a single INSERT...VALUES blows past this, so we chunk all bulk writes.
-  // ~22 cols × 500 rows = 11000 params, well under the limit.
-  const INSERT_CHUNK = 500;
-
-  if (toInsert.length > 0) {
-    const allInserted: { id: number }[] = [];
-    for (let off = 0; off < toInsert.length; off += INSERT_CHUNK) {
-      const slice = toInsert.slice(off, off + INSERT_CHUNK);
-      const inserted = await db.insert(programsTable).values(slice).returning({ id: programsTable.id });
-      allInserted.push(...inserted);
-    }
-    insertedCount = allInserted.length;
-    allInserted.forEach((p, idx) => {
-      const origRowIdx = insertRowIdxs[idx];
-      if (docColsByRowIdx.has(origRowIdx)) {
-        docsToReplace.set(p.id, docColsByRowIdx.get(origRowIdx) || []);
-      }
-    });
-  }
-
-  if (docsToReplace.size > 0) {
-    const ids = [...docsToReplace.keys()];
-    // Chunk DELETE too — inArray with 7000 ids = 7000 bind params, still fine,
-    // but be safe for future growth.
-    const ID_CHUNK = 5000;
-    for (let off = 0; off < ids.length; off += ID_CHUNK) {
-      await db.delete(programDocumentRequirementsTable)
-        .where(inArray(programDocumentRequirementsTable.programId, ids.slice(off, off + ID_CHUNK)));
-    }
-    const allDocRows: { programId: number; documentType: string; mandatory: boolean; sortOrder: number }[] = [];
-    for (const [pid, docs] of docsToReplace.entries()) {
-      for (const d of docs) allDocRows.push({ programId: pid, ...d });
-    }
-    if (allDocRows.length > 0) {
-      // 4 cols × 1000 rows = 4000 params per chunk.
-      const DOC_CHUNK = 1000;
-      for (let off = 0; off < allDocRows.length; off += DOC_CHUNK) {
-        await db.insert(programDocumentRequirementsTable)
-          .values(allDocRows.slice(off, off + DOC_CHUNK));
-      }
-    }
-  }
-
-  // Public detail pages and CMS catalogue blocks read these rows directly.
-  // Invalidate only catalogue-derived render entries after the complete
-  // import (rather than once per row) so bulk imports stay cheap and never
-  // serve a stale snapshot beyond the current request.
+  });
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
   invalidatePublicWebDiscoveryCache();
-
-  const unknownDocColumns = [...unknownDocCols].sort();
-  await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, {
-    inserted: insertedCount, updated: updatedCount, docsTouched: docsToReplace.size,
-    invalidDocCells, unknownDocColumns, createdUniversities,
-  }, req.ip);
-  res.json({
-    inserted: insertedCount, updated: updatedCount,
-    skipped: rows.length - parsed.length,
-    docsTouched: docsToReplace.size, invalidDocCells,
-    unknownDocColumns,
-    createdUniversities,
-    ...(unknownDocColumns.length > 0
-      ? { unknownDocColumnsMessage: `Tanımsız belge sütunları (katalogda yok, atlandı): ${unknownDocColumns.join(", ")}` }
-      : {}),
-  });
-  } catch (err: any) {
-    console.error("[programs/bulk] failed:", err?.message || err, err?.code, err?.detail, err?.stack?.split("\n").slice(0, 4).join(" | "));
-    res.status(500).json({
-      error: err?.message || "Bulk import failed",
-      code: err?.code,
-      detail: err?.detail,
-      hint: err?.hint,
-    });
+  res.json(result);
+  } catch (error) {
+    if (error instanceof ProgramImportReviewError) { res.status(error.status).json({ error: error.message }); return; }
+    console.error("[programs/bulk] database write failed");
+    res.status(500).json({ error: "Bulk import failed" });
   }
 });
 

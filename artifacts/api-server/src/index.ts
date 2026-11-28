@@ -3439,6 +3439,10 @@ async function seedClaudeIntegration() {
       const { startMessageCampaignWorker } = await import("./lib/inbox/messageCampaignWorker");
       return startMessageCampaignWorker();
     } },
+    { name: "pipelineNoticeWorker", offsetMs: 46_500, start: async () => {
+      const { startPipelineNoticeWorker } = await import("./lib/notifications/pipelineNotices");
+      return startPipelineNoticeWorker();
+    } },
     { name: "programTranslationWorker", offsetMs: 48_000, start: async () => {
       const { startProgramTranslationWorker } = await import("./lib/programTranslationWorker");
       return startProgramTranslationWorker();

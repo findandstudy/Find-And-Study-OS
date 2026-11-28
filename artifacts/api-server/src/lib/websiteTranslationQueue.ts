@@ -99,6 +99,12 @@ export async function claimWebsiteTranslation(workerId: string): Promise<Claimed
      WHERE (status='publish_queued' OR (status='publishing' AND lease_expires_at <= now()) OR (attempts < 8 AND ((status IN ('queued','retrying') AND next_attempt_at <= now()) OR (status='processing' AND lease_expires_at <= now()))))
      ORDER BY CASE WHEN status IN ('processing','publishing') THEN 0 WHEN status='publish_queued' THEN 1 ELSE 2 END, next_attempt_at, id
      FOR UPDATE SKIP LOCKED LIMIT 1
+  ), expired AS (
+    SELECT id FROM website_translation_jobs WHERE status='processing' AND attempts >= 8 AND lease_expires_at <= now()
+    ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 100
+  ), recovered AS (
+    UPDATE website_translation_jobs job SET status='failed',error_code='WORKER_LEASE_EXPIRED',leased_at=NULL,lease_expires_at=NULL,worker_id=NULL,updated_at=now()
+    FROM expired WHERE job.id=expired.id RETURNING job.id
   ) UPDATE website_translation_jobs job SET status=CASE WHEN candidate.original_status IN ('publish_queued','publishing') THEN 'publishing' ELSE 'processing' END, attempts=CASE WHEN candidate.original_status IN ('publish_queued','publishing') THEN job.attempts ELSE job.attempts+1 END, leased_at=now(), lease_expires_at=now()+interval '3 minutes', worker_id=$1, error_code=NULL, updated_at=now()
     FROM candidate WHERE job.id=candidate.id RETURNING job.id, job.kind, job.entity_id, job.locale, job.attempts, job.created_by, job.provider, job.model, CASE WHEN candidate.original_status IN ('publish_queued','publishing') THEN 'publish' ELSE 'translate' END AS phase, job.reviewed_by, job.generated_page_id, job.generated_digest`, [workerId]);
   const row = result.rows[0];
@@ -161,18 +167,27 @@ export function startWebsiteTranslationQueueWorker() {
   let inFlight = 0;
   let concurrency = 2;
   let refreshAfter = 0;
-  const workerId = `website-translation-${process.pid}-${crypto.randomUUID()}`;
+  let claiming = false;
   const tick = async () => {
-    if (Date.now() >= refreshAfter) {
-      const [row] = await db.select({ featureFlags: settingsTable.featureFlags }).from(settingsTable).limit(1);
-      concurrency = readWebsiteAiSettings(row?.featureFlags).workerConcurrency;
-      refreshAfter = Date.now() + 30_000;
-    }
-    while (inFlight < concurrency) {
-      const job = await claimWebsiteTranslation(workerId);
-      if (!job) break;
-      inFlight += 1;
-      void processWebsiteTranslation(job, workerId).finally(() => { inFlight -= 1; });
+    if (claiming) return;
+    claiming = true;
+    try {
+      if (Date.now() >= refreshAfter) {
+        const [row] = await db.select({ featureFlags: settingsTable.featureFlags }).from(settingsTable).limit(1);
+        concurrency = readWebsiteAiSettings(row?.featureFlags).workerConcurrency;
+        refreshAfter = Date.now() + 30_000;
+      }
+      while (inFlight < concurrency) {
+        const workerId = `website-translation-${process.pid}-${crypto.randomUUID()}`;
+        const job = await claimWebsiteTranslation(workerId);
+        if (!job) break;
+        inFlight += 1;
+        void processWebsiteTranslation(job, workerId)
+          .catch(() => console.warn("[website-translation] Job attempt could not be recorded", { jobId: job.id }))
+          .finally(() => { inFlight -= 1; });
+      }
+    } finally {
+      claiming = false;
     }
   };
   timer = setInterval(() => void tick().catch(error => console.warn("[website-translation] queue tick failed", error)), 1_000); timer.unref?.(); void tick().catch(error => console.warn("[website-translation] initial queue tick failed", error));

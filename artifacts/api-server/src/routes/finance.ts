@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { createHash } from "node:crypto";
-import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable, financeMutationRequestsTable, agentsTable, programsTable, universitiesTable, usersTable, studentsTable, applicationsTable, settingsTable, staffCommissionsTable, staffCommissionPayoutsTable } from "@workspace/db";
+import { db, auditLogsTable, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable, financeMutationRequestsTable, agentsTable, programsTable, universitiesTable, usersTable, studentsTable, applicationsTable, settingsTable, staffCommissionsTable, staffCommissionPayoutsTable } from "@workspace/db";
 import { eq, sql, and, desc, asc, inArray, isNull, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { FINANCE_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
@@ -1588,17 +1588,23 @@ router.delete("/financial-transactions/:id", requireAuth, requireRole(...FINANCE
       if (financialTransaction.commissionId) {
         await databaseTx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`finance:commission:${financialTransaction.commissionId}`}, 0))`);
       }
-      await databaseTx.delete(financialTransactionsTable).where(eq(financialTransactionsTable.id, id));
+      const [deleted] = await databaseTx.delete(financialTransactionsTable)
+        .where(eq(financialTransactionsTable.id, id)).returning({ id: financialTransactionsTable.id });
+      if (!deleted) throw new FinanceMutationError(404, "Transaction not found");
       if (financialTransaction.commissionId) {
         await recalculateCommissionFinancials(financialTransaction.commissionId, databaseTx);
       }
+      await databaseTx.insert(auditLogsTable).values({
+        userId: req.user!.id, action: "delete_financial_transaction", resource: "financial_transaction",
+        resourceId: id, changes: JSON.stringify({ commissionId: financialTransaction.commissionId }),
+        ipAddress: req.ip ?? null,
+      });
     });
   } catch (error) {
     if (sendFinanceMutationError(res, error)) return;
     throw error;
   }
 
-  await logAudit(req.user!.id, "delete_financial_transaction", "financial_transaction", id, {}, req.ip);
   res.sendStatus(204);
 });
 

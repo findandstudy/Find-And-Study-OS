@@ -492,10 +492,9 @@ test("contract HTML and rendered placeholders cannot persist executable markup",
 });
 
 test("legacy public program routes strip commercial fields for anonymous callers", () => {
-  assert.match(universitiesRouteSource, /const visibility = programResponseVisibility\(req\.user\)/);
-  assert.match(universitiesRouteSource, /const visibleRows: any\[\] = rows\.map/);
-  assert.match(universitiesRouteSource, /sanitizeCourseFinderProgram\(row/);
-  assert.match(universitiesRouteSource, /const visibleProgram = sanitizeCourseFinderProgram\(/);
+  assert.match(universitiesRouteSource, /sanitizeCourseFinderProgram\(row, programResponseVisibility\(user\)\)/);
+  assert.match(universitiesRouteSource, /rows\.map\([^\n]+programForViewer\(row, req\.user\)/);
+  assert.match(universitiesRouteSource, /programForViewer\(prog, req\.user\)/);
 });
 
 test("widget-specific CORS clears permissive headers before applying its allow-list", () => {
@@ -623,7 +622,6 @@ test("authentication audit attempts finish inside the request lifecycle", () => 
   const lifecycleActions = [
     "auth.login.failure",
     "auth.login.success",
-    "auth.email_verify",
     "auth.password_reset.request",
     "auth.logout",
   ];
@@ -651,6 +649,12 @@ test("password-reset token claim, password mutation and audit are atomic", () =>
   assert.match(authRouteSource, /action: "auth\.password_reset\.complete"/);
   assert.match(authRouteSource, /if \(!passwordResetCommitted\)/);
   assert.doesNotMatch(authRouteSource, /logAudit\(user\.id, "auth\.(?:set_password|password_reset\.complete)"/);
+});
+
+test("manual and link verification record success in the same transaction as token consumption", () => {
+  assert.match(authRouteSource, /await consumeEmailVerificationToken\(rawToken, verifiedEmail, tx\)/);
+  assert.match(authRouteSource, /await tx\.insert\(auditLogsTable\)\.values\(\{\s*userId: account\.id, action: "auth\.email_verify"/);
+  assert.match(authRouteSource, /await tx\.insert\(auditLogsTable\)\.values\(\{\s*userId: user\.id, action: "auth\.email_verify"/);
 });
 
 test("contract PDF rendering is network-isolated and does not log signer PII", () => {

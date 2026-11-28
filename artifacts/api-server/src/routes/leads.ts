@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete, externalContactsTable, channelAccountsTable, lifecycleCascadeStateTable, auditLogsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, lt, lte, gte, asc, desc, inArray, isNull, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -8,7 +8,7 @@ import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { getAssignmentVisibility, getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
-import { getVisibleBranchIds, resolveCreateBranchId, isInBranchScope } from "../lib/branchScope";
+import { getVisibleBranchIds, resolveCreateBranchId, isInBranchScope, visibleRecordBranches } from "../lib/branchScope";
 import { normalizeAndValidateNames, normalizePhoneField, toLatinUpper } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginMeta } from "../lib/originHelper";
@@ -19,6 +19,7 @@ import { enqueueOnStageChange, maybeEnqueuePortalSubmission } from "../lib/porta
 import { applyLeadAssignmentRules, cascadeLeadAssignment } from "../lib/leadAssignment";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
 import { captureWorkSource } from "../lib/workPipelines";
+import { exportLeads } from "../lib/crmExcelExport";
 import { upcomingWorkFollowUps, mergeUpcomingFollowUps } from "../lib/workPipelineUpcoming";
 import { recomputeStudentPhoto, studentHasServablePhotoSql } from "../lib/studentPhoto";
 import { maybeTriggerAutoEducationExtractForStudent } from "../lib/educationAutoExtract";
@@ -343,7 +344,9 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
   }
 });
 
-router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
+router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), (req, res) => listLeads(req, res));
+
+export async function listLeads(req: Request, res: Response, exportIds?: number[]): Promise<void> {
   const user = req.user!;
   const query = req.query as Record<string, string>;
   const includeFacets = query.includeFacets !== "0";
@@ -358,6 +361,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   const offset = pageParams.offset;
 
   const conditions = [isNull(leadsTable.deletedAt)];
+  if (exportIds?.length) conditions.push(inArray(leadsTable.id, exportIds));
   const scopeResolveStartedAt = process.hrtime.bigint();
   if (season) conditions.push(eq(leadsTable.season, season));
 
@@ -390,13 +394,8 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   // branch-scoped staff. Treat null-branch as "global / unassigned to a
   // branch — visible to any branch's staff so they can pick it up".
   const visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
-  if (visibleBranchIds !== null) {
-    if (visibleBranchIds.length === 0) {
-      conditions.push(isNull(leadsTable.branchId));
-    } else {
-      conditions.push(or(inArray(leadsTable.branchId, visibleBranchIds), isNull(leadsTable.branchId))!);
-    }
-  }
+  const branchFilter = visibleRecordBranches(leadsTable.branchId, visibleBranchIds);
+  if (branchFilter) conditions.push(branchFilter);
   const staffAssignmentVisibility = staffPerms
     ? getAssignmentVisibility(staffPerms)
     : null;
@@ -562,6 +561,8 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   const orderColumn = sortColumns[sortKey] || leadsTable.createdAt;
   const order = sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
 
+  if (exportIds) return exportLeads(req, res, whereClause, [order, desc(leadsTable.id)]);
+
   const facetRowsPromise = includeFacets
     ? loadFacetValue({
         namespace: "leads-list",
@@ -652,7 +653,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
       } : {}),
     },
   });
-});
+}
 
 router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const user = req.user!;
@@ -1469,55 +1470,44 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
   }
   const numericIds = [...new Set(ids.map(Number).filter((n: number) => Number.isSafeInteger(n) && n > 0))];
   if (numericIds.length === 0) { res.status(400).json({ error: "valid ids required" }); return; }
+  const branchIds = await getVisibleBranchIds(user.id, user.role, user);
+  const scope = and(
+    inArray(leadsTable.id, numericIds), isNull(leadsTable.deletedAt),
+    visibleRecordBranches(leadsTable.branchId, branchIds),
+    isAdmin ? undefined : eq(leadsTable.assignedToId, user.id),
+  );
   let updated = 0;
   if (action === "delete") {
-    const converted = await db.select({ id: leadsTable.id, studentId: leadsTable.convertedStudentId })
-      .from(leadsTable)
-      .where(and(
-        inArray(leadsTable.id, numericIds),
-        isNotNull(leadsTable.convertedStudentId),
-        isNull(leadsTable.deletedAt),
-      ));
-    if (converted.length > 0) {
+    const result = await db.transaction(async tx => {
+      const eligible = await tx.select({ id: leadsTable.id, studentId: leadsTable.convertedStudentId })
+        .from(leadsTable).where(scope).orderBy(asc(leadsTable.id)).for("update");
+      const blockedIds = eligible.filter(row => row.studentId !== null).map(row => row.id);
+      if (blockedIds.length) return { count: 0, blockedIds };
+      const liveIds = eligible.map(row => row.id);
+      if (!liveIds.length) return { count: 0, blockedIds };
+      const count = await softDelete(leadsTable, liveIds, { actorUserId: user.id, tx });
+      await tx.insert(auditLogsTable).values(liveIds.map(leadId => ({
+        userId: user.id, action: "delete_lead", resource: "lead", resourceId: leadId,
+        changes: JSON.stringify({ soft: true, bulk: true }), ipAddress: req.ip ?? null,
+      })));
+      return { count, blockedIds };
+    });
+    if (result.blockedIds.length) {
       res.status(409).json({
         error: "Converted leads must be archived from their student journey",
         code: "BULK_DELETE_CONVERTED_LEADS",
-        blockedLeadIds: converted.map((row) => row.id),
+        blockedLeadIds: result.blockedIds,
       });
       return;
     }
-    updated = await db.transaction(async tx => {
-      const count = await softDelete(leadsTable, numericIds, { actorUserId: user.id, tx });
-      await tx.insert(auditLogsTable).values(numericIds.map(leadId => ({
-        userId: user.id,
-        action: "delete_lead",
-        resource: "lead",
-        resourceId: leadId,
-        changes: JSON.stringify({ soft: true, bulk: true }),
-        ipAddress: req.ip || null,
-      })));
-      return count;
-    });
+    updated = result.count;
   } else if (action === "assign" && assignedToId !== undefined) {
     const newAssignedToId = assignedToId ? Number(assignedToId) : null;
-    // Non-admin: filter to only records they are the current assignee of
-    let idsToUpdate = numericIds;
-    let skipped = 0;
-    if (!isAdmin) {
-      const ownedRows = await db.select({ id: leadsTable.id })
-        .from(leadsTable)
-        .where(and(inArray(leadsTable.id, numericIds), eq(leadsTable.assignedToId, user.id), isNull(leadsTable.deletedAt)));
-      idsToUpdate = ownedRows.map(r => r.id);
-      skipped = numericIds.length - idsToUpdate.length;
-      if (idsToUpdate.length === 0) {
-        res.json({ success: true, updated: 0, skipped }); return;
-      }
-    }
-    const affectedLeads = await db.select({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId })
-      .from(leadsTable).where(and(inArray(leadsTable.id, idsToUpdate), isNull(leadsTable.deletedAt)));
-    const canCascadeLeads = await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment");
+    const canCascadeLeads = await userHasPermission(user, "records.cascade_assignment");
     updated = await db.transaction(async (tx) => {
-      const result = await tx.update(leadsTable).set({ assignedToId: newAssignedToId }).where(inArray(leadsTable.id, idsToUpdate));
+      const affectedLeads = await tx.update(leadsTable).set({ assignedToId: newAssignedToId, updatedAt: new Date() })
+        .where(scope).returning({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId });
+      if (!affectedLeads.length) return 0;
       const firstByStudent = new Map<number, number>();
       for (const lead of affectedLeads) {
         if (lead.convertedStudentId && !firstByStudent.has(lead.convertedStudentId)) {
@@ -1533,6 +1523,7 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
             actorUserId: user.id,
             ipAddress: req.ip,
             nullFillOnly: !canCascadeLeads,
+            visibleBranchIds: branchIds,
             throwOnError: true,
             executor: tx,
           });
@@ -1542,12 +1533,11 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
         userId: user.id,
         action: "bulk_assign_leads",
         resource: "lead",
-        changes: JSON.stringify({ ids: idsToUpdate, assignedToId: newAssignedToId }),
+        changes: JSON.stringify({ ids: affectedLeads.map(lead => lead.id), assignedToId: newAssignedToId }),
         ipAddress: req.ip || null,
       });
-      return result.rowCount ?? idsToUpdate.length;
+      return affectedLeads.length;
     });
-    res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && status) {
     if (!(await canTransitionToPipelineStage("lead", String(status), user.role))) {
       res.status(403).json({
@@ -1556,31 +1546,33 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
       });
       return;
     }
-    const affectedLeads = await db.select().from(leadsTable)
-      .where(and(inArray(leadsTable.id, numericIds), isNull(leadsTable.deletedAt)));
-    updated = await db.transaction(async (tx) => {
-      const result = await tx.update(leadsTable).set({ status })
-        .where(and(inArray(leadsTable.id, numericIds), isNull(leadsTable.deletedAt)));
+    const affectedLeads = await db.transaction(async (tx) => {
+      const previous = await tx.select().from(leadsTable)
+        .where(and(scope, ne(leadsTable.status, status))).orderBy(asc(leadsTable.id)).for("update");
+      const movedIds = previous.map(row => row.id);
+      if (!movedIds.length) return previous;
+      await tx.update(leadsTable).set({ status, updatedAt: new Date() }).where(inArray(leadsTable.id, movedIds));
       await tx.delete(lifecycleCascadeStateTable).where(and(
         eq(lifecycleCascadeStateTable.entityType, "lead"),
-        inArray(lifecycleCascadeStateTable.entityId, numericIds),
+        inArray(lifecycleCascadeStateTable.entityId, movedIds),
       ));
       await tx.insert(auditLogsTable).values({
         userId: user.id,
         action: "bulk_move_leads",
         resource: "lead",
-        changes: JSON.stringify({ ids: numericIds, status }),
+        changes: JSON.stringify({ ids: movedIds, status }),
         ipAddress: req.ip || null,
       });
-      return result.rowCount ?? affectedLeads.length;
+      return previous;
     });
+    updated = affectedLeads.length;
     for (const affectedLead of affectedLeads) {
       enqueueFtcLeadStageAnalytics(affectedLead, affectedLead.status, String(status));
     }
   } else {
     res.status(400).json({ error: "Missing required fields for action" }); return;
   }
-  res.json({ success: true, updated });
+  res.json({ success: true, updated, skipped: numericIds.length - updated });
 });
 
 router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {

@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, pipelineStagesTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete, studentEducationRecordsTable, educationRecordsTable, lifecycleCascadeStateTable } from "@workspace/db";
+import { db, auditLogsTable, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, pipelineStagesTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete, studentEducationRecordsTable, educationRecordsTable, lifecycleCascadeStateTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, lt, lte, gte, desc, asc, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -8,8 +8,9 @@ import { getAssignmentVisibility, getEffectivePermissionSet, canAccessAssignedRe
 import { cascadeStudentAssignment } from "../lib/leadAssignment";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { getAgencyMemberAgentIds, resolveAgencyPlatformAssignee } from "../lib/agencyStaff";
-import { getVisibleBranchIds, isInBranchScope, resolveCreateBranchId } from "../lib/branchScope";
+import { getVisibleBranchIds, isInBranchScope, resolveCreateBranchId, visibleRecordBranches } from "../lib/branchScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
+import { exportStudents } from "../lib/crmExcelExport";
 import { streamDocumentToResponse } from "../lib/documentBytes";
 import { normalizeAndValidateNames, normalizePhoneField, EXTENDED_NAME_FIELDS, toLatinUpper } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
@@ -440,7 +441,9 @@ router.get("/students/:id/photo/thumbnail", photoAccessGuard, async (req, res): 
   }
 });
 
-router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
+router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...AGENT_ROLES), requireAgentStaffPermission("students"), (req, res) => listStudents(req, res));
+
+export async function listStudents(req: Request, res: Response, exportIds?: number[]): Promise<void> {
   const user = req.user!;
   const query = req.query as Record<string, string>;
   const includeFacets = query.includeFacets !== "0";
@@ -455,6 +458,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   const offset = pageParams.offset;
 
   const conditions = [isNull(studentsTable.deletedAt)];
+  if (exportIds?.length) conditions.push(inArray(studentsTable.id, exportIds));
   const scopeResolveStartedAt = process.hrtime.bigint();
   let agentVisibleIds: number[] | null = null;
   let permissionKeys: string[] | null = null;
@@ -499,13 +503,8 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   // visible to any branch-scoped user so they can be claimed and assigned.
   if (user.role !== "student") {
     visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
-    if (visibleBranchIds !== null) {
-      if (visibleBranchIds.length === 0) {
-        conditions.push(isNull(studentsTable.branchId));
-      } else {
-        conditions.push(or(inArray(studentsTable.branchId, visibleBranchIds), isNull(studentsTable.branchId))!);
-      }
-    }
+    const branchFilter = visibleRecordBranches(studentsTable.branchId, visibleBranchIds);
+    if (branchFilter) conditions.push(branchFilter);
   }
   recordRequestSpan("scopeResolve", Number(process.hrtime.bigint() - scopeResolveStartedAt) / 1_000_000);
   const facetScope = {
@@ -611,6 +610,8 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   const orderColumn = sortColumns[sortKey] || studentsTable.createdAt;
   const order = sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
 
+  if (exportIds) return exportStudents(req, res, whereClause, [order, desc(studentsTable.id)]);
+
   const facetRowsPromise = includeFacets
     ? loadFacetValue({
         namespace: "students-list",
@@ -677,7 +678,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
       } : {}),
     },
   });
-});
+}
 
 router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const {
@@ -1664,43 +1665,40 @@ router.post("/students/bulk-action", requireAuth, requireRole(...STAFF_ROLES), a
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const { ids, action, assignedToId, status } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: "ids required" }); return; }
+  if (ids.length > 500) { res.status(413).json({ error: "A maximum of 500 students can be changed at once" }); return; }
   if (!["delete", "assign", "move"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
   // Task #494: non-admin may only bulk-assign their own records; delete/move remain admin-only
   if (!isAdmin && action !== "assign") {
     res.status(403).json({ error: "Only admins can bulk delete or move students" }); return;
   }
-  const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
+  const numericIds = [...new Set(ids.map(Number).filter((n: number) => Number.isSafeInteger(n) && n > 0))];
+  if (!numericIds.length) { res.status(400).json({ error: "valid ids required" }); return; }
+  const branchIds = await getVisibleBranchIds(user.id, user.role, user);
+  const scope = and(
+    inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt),
+    visibleRecordBranches(studentsTable.branchId, branchIds),
+    isAdmin ? undefined : eq(studentsTable.assignedToId, user.id),
+  );
   let updated = 0;
   if (action === "delete") {
-    const studentsToDelete = await db.select({ id: studentsTable.id, userId: studentsTable.userId }).from(studentsTable).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
-    const deleteIds = studentsToDelete.map(s => s.id);
-    if (deleteIds.length > 0) {
-      const userIds = studentsToDelete.filter(s => s.userId).map(s => s.userId!);
-      await softDeleteStudents(deleteIds, userIds, user.id);
-      updated = deleteIds.length;
-    }
-    for (const id of deleteIds) await logAudit(user.id, "delete_student", "student", id, { soft: true }, req.ip);
+    updated = await db.transaction(async tx => {
+      const eligible = await tx.select({ id: studentsTable.id, userId: studentsTable.userId })
+        .from(studentsTable).where(scope).orderBy(asc(studentsTable.id)).for("update");
+      if (!eligible.length) return 0;
+      await archiveStudentJourneys(tx, eligible.map(row => row.id), eligible.flatMap(row => row.userId ? [row.userId] : []), user.id);
+      await tx.insert(auditLogsTable).values(eligible.map(row => ({
+        userId: user.id, action: "delete_student", resource: "student", resourceId: row.id,
+        changes: JSON.stringify({ soft: true, bulk: true }), ipAddress: req.ip ?? null,
+      })));
+      return eligible.length;
+    });
   } else if (action === "assign" && assignedToId !== undefined) {
     const newAssignedToId = assignedToId ? Number(assignedToId) : null;
-    // Non-admin: filter to only records they are the current assignee of
-    let idsToUpdate = numericIds;
-    let skipped = 0;
-    if (!isAdmin) {
-      const ownedRows = await db.select({ id: studentsTable.id })
-        .from(studentsTable)
-        .where(and(inArray(studentsTable.id, numericIds), eq(studentsTable.assignedToId, user.id), isNull(studentsTable.deletedAt)));
-      idsToUpdate = ownedRows.map(r => r.id);
-      skipped = numericIds.length - idsToUpdate.length;
-      if (idsToUpdate.length === 0) {
-        res.json({ success: true, updated: 0, skipped }); return;
-      }
-    }
-    const affected = await db.select({ id: studentsTable.id }).from(studentsTable)
-      .where(and(inArray(studentsTable.id, idsToUpdate), isNull(studentsTable.deletedAt)));
-    const canCascade = await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment");
+    const canCascade = await userHasPermission(user, "records.cascade_assignment");
     updated = await db.transaction(async (tx) => {
-      const result = await tx.update(studentsTable).set({ assignedToId: newAssignedToId })
-        .where(and(inArray(studentsTable.id, idsToUpdate), isNull(studentsTable.deletedAt)));
+      const affected = await tx.update(studentsTable).set({ assignedToId: newAssignedToId, updatedAt: new Date() })
+        .where(scope).returning({ id: studentsTable.id });
+      if (!affected.length) return 0;
       for (const studentRow of affected) {
         if (canCascade || newAssignedToId !== null) {
           await cascadeStudentAssignment({
@@ -1709,15 +1707,19 @@ router.post("/students/bulk-action", requireAuth, requireRole(...STAFF_ROLES), a
             actorUserId: user.id,
             ipAddress: req.ip,
             nullFillOnly: !canCascade,
+            visibleBranchIds: branchIds,
             throwOnError: true,
             executor: tx,
           });
         }
       }
-      return result.rowCount ?? idsToUpdate.length;
+      await tx.insert(auditLogsTable).values({
+        userId: user.id, action: "bulk_assign_students", resource: "student",
+        changes: JSON.stringify({ ids: affected.map(row => row.id), assignedToId: newAssignedToId }),
+        ipAddress: req.ip ?? null,
+      });
+      return affected.length;
     });
-    await logAudit(user.id, "bulk_assign_students", "student", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
-    res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && status) {
     if (!(await canTransitionToPipelineStage("student", String(status), user.role))) {
       res.status(403).json({
@@ -1727,19 +1729,23 @@ router.post("/students/bulk-action", requireAuth, requireRole(...STAFF_ROLES), a
       return;
     }
     updated = await db.transaction(async (tx) => {
-      const result = await tx.update(studentsTable).set({ status })
-        .where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
+      const moved = await tx.update(studentsTable).set({ status, updatedAt: new Date() })
+        .where(and(scope, ne(studentsTable.status, status))).returning({ id: studentsTable.id });
+      if (!moved.length) return 0;
       await tx.delete(lifecycleCascadeStateTable).where(and(
         eq(lifecycleCascadeStateTable.entityType, "student"),
-        inArray(lifecycleCascadeStateTable.entityId, numericIds),
+        inArray(lifecycleCascadeStateTable.entityId, moved.map(row => row.id)),
       ));
-      return result.rowCount ?? numericIds.length;
+      await tx.insert(auditLogsTable).values({
+        userId: user.id, action: "bulk_move_students", resource: "student",
+        changes: JSON.stringify({ ids: moved.map(row => row.id), status }), ipAddress: req.ip ?? null,
+      });
+      return moved.length;
     });
-    await logAudit(user.id, "bulk_move_students", "student", undefined, { ids: numericIds, status }, req.ip);
   } else {
     res.status(400).json({ error: "Missing required fields for action" }); return;
   }
-  res.json({ success: true, updated });
+  res.json({ success: true, updated, skipped: numericIds.length - updated });
 });
 
 router.delete("/students/:id", requireAuth, requireRole(...STAFF_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
@@ -1761,7 +1767,15 @@ router.delete("/students/:id", requireAuth, requireRole(...STAFF_ROLES), require
 // filter on listing endpoints.
 async function softDeleteStudents(studentIds: number[], userIds: number[], actorUserId: number): Promise<void> {
   if (studentIds.length === 0) return;
-  await db.transaction(async (tx) => {
+  await db.transaction(tx => archiveStudentJourneys(tx, studentIds, userIds, actorUserId));
+}
+
+async function archiveStudentJourneys(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  studentIds: number[],
+  userIds: number[],
+  actorUserId: number,
+): Promise<void> {
     const apps = await tx.select({ id: applicationsTable.id })
       .from(applicationsTable)
       .where(and(inArray(applicationsTable.studentId, studentIds), isNull(applicationsTable.deletedAt)));
@@ -1786,9 +1800,11 @@ async function softDeleteStudents(studentIds: number[], userIds: number[], actor
     }
     await softDelete(studentsTable, studentIds, { actorUserId, tx });
     if (userIds.length > 0) {
-      await tx.update(usersTable).set({ isActive: false }).where(inArray(usersTable.id, userIds));
+      await tx.update(usersTable).set({
+        isActive: false, activationPending: false, passwordResetToken: null,
+        passwordResetExpires: null, emailVerificationToken: null,
+      }).where(inArray(usersTable.id, userIds));
     }
-  });
 }
 
 // Restore only rows archived by the same student-archive transaction. Because

@@ -1,10 +1,10 @@
 import { Router, type IRouter } from "express";
 import { db, blogPostsTable, announcementsTable } from "@workspace/db";
-import { eq, sql, and, desc } from "drizzle-orm";
+import { eq, sql, and, desc, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../lib/auth";
 import { validate, getValidated } from "../middlewares/validate";
-import { CONTENT_ROLES, MANAGER_ROLES } from "../lib/roles";
+import { AGENT_ROLES, CONTENT_ROLES, MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
 
 const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -60,13 +60,16 @@ const ANN_PATCH_FIELDS = ["title", "content", "audience", "isActive", "expiresAt
 
 router.get("/blog", async (req, res): Promise<void> => {
   const { locale, published, page = "1", limit = "20" } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10)));
+  const pageNum = Math.max(1, Math.min(100_000, parseInt(page, 10) || 1));
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [];
-  if (published === "true") conditions.push(eq(blogPostsTable.published, true));
-  if (locale) conditions.push(eq(blogPostsTable.locale, locale));
+  const canEdit = req.user && CONTENT_ROLES.includes(req.user.role);
+  if (!canEdit || published === "true") conditions.push(eq(blogPostsTable.published, true));
+  else if (published === "false") conditions.push(eq(blogPostsTable.published, false));
+  if (typeof locale === "string" && locale) conditions.push(eq(blogPostsTable.locale, locale));
+  res.setHeader("Cache-Control", "private, no-store");
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [{ count }] = await db
@@ -140,12 +143,20 @@ router.delete("/blog/:slug", requireAuth, requireRole(...CONTENT_ROLES), async (
 });
 
 router.get("/announcements", async (req, res): Promise<void> => {
+  const audiences = ["all"];
+  const role = req.user?.role;
+  if (role) audiences.push(role);
+  if (role && STAFF_ROLES.includes(role)) audiences.push("staff", "all_staff");
+  if (role && AGENT_ROLES.includes(role)) audiences.push("agents", "all_agents");
+  if (role === "student") audiences.push("students", "all_students");
+  const now = Date.now();
   const data = await db
     .select()
     .from(announcementsTable)
-    .where(eq(announcementsTable.isActive, true))
+    .where(and(eq(announcementsTable.isActive, true), inArray(announcementsTable.audience, audiences)))
     .orderBy(desc(announcementsTable.createdAt));
-  res.json(data);
+  res.setHeader("Cache-Control", "private, no-store");
+  res.json(data.filter((entry) => entry.expiresAt === null || Date.parse(entry.expiresAt) > now));
 });
 
 router.post("/announcements", requireAuth, requireRole(...MANAGER_ROLES), validate({ body: createAnnouncementBodySchema }), async (req, res): Promise<void> => {

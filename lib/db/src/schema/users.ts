@@ -15,6 +15,7 @@ export const usersTable = pgTable("users", {
   passwordHash: text("password_hash"),
   language: text("language").notNull().default("en"),
   isActive: boolean("is_active").notNull().default(true),
+  activationPending: boolean("activation_pending").notNull().default(false),
   emailVerified: boolean("email_verified").notNull().default(false),
   notificationPreferences: jsonb("notification_preferences").$type<Record<string, boolean>>().notNull().default({}),
   startDate: text("start_date"),

@@ -739,7 +739,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
         // existing account. We only create new student accounts here; account
         // holders must use the authenticated portal for subsequent applications.
         if (!_testModeBypassAccountConflict) {
-          console.warn(`[PUBLIC-APPLY] Blocked unauthenticated attempt to create application on existing student #${existingStudent.id} (${normalizedEmail})`);
+          console.warn("[PUBLIC-APPLY] EXISTING_STUDENT_AUTH_REQUIRED", { studentId: existingStudent.id });
           res.status(409).json({
             error: `We couldn't process this application with the information provided. If you already have an account with us, please log in to continue: ${loginUrl}`,
             code: "ACCOUNT_CONFLICT",
@@ -768,7 +768,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           return;
         }
         resultAppId = reApplyResult.appId;
-        console.log(`[PUBLIC-APPLY] [TEST] Re-apply for existing student #${existingStudent.id} (${normalizedEmail}) → new app #${resultAppId}`);
+        console.log("[PUBLIC-APPLY] EXISTING_STUDENT_APPLICATION_CREATED", { studentId: existingStudent.id, applicationId: resultAppId });
       } else {
         res.status(409).json({
           error: `We couldn't process this application with the information provided. Please log in or contact support: ${loginUrl}`,
@@ -789,6 +789,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
         role: "student",
         isActive: false,
         emailVerified: false,
+        activationPending: true,
         language: "en",
         passwordResetToken: crypto.createHash("sha256").update(passwordToken).digest("hex"),
         passwordResetExpires: new Date(Date.now() + 48 * 60 * 60 * 1000),
@@ -850,7 +851,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
       });
       await sendEmail(normalizedEmail, emailContent);
 
-      console.log(`[PUBLIC-APPLY] Created student account for ${normalizedEmail} (user #${newUser.id}, student #${newStudent.id})`);
+      console.log("[PUBLIC-APPLY] STUDENT_ACCOUNT_CREATED", { userId: newUser.id, studentId: newStudent.id });
     }
 
     // FAZ 2 — persist SIT toggles + education records (all optional fields;

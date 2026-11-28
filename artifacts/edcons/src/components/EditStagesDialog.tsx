@@ -867,7 +867,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
       setError(`Select at least one record origin for ${automaticMessageWithoutOrigin.label}.`);
       return;
     }
-    const invalidEmail = localStages.find(stage => stage.automaticEmail?.enabled && (stage.entityType !== "application" || !emailStageValid(stage.automaticEmail)));
+    const invalidEmail = localStages.find(stage => stage.automaticEmail?.enabled && !emailStageValid(stage.automaticEmail));
     if (invalidEmail) {
       setError(`${invalidEmail.label}: ${emailAutomationCopy(lang).required}`);
       return;

@@ -519,6 +519,19 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
+  if (updates.isActive !== undefined) {
+    if (typeof updates.isActive !== "boolean") {
+      res.status(400).json({ error: "isActive must be a boolean" });
+      return;
+    }
+    updates.activationPending = false;
+    if (!updates.isActive) {
+      updates.passwordResetToken = null;
+      updates.passwordResetExpires = null;
+      updates.emailVerificationToken = null;
+    }
+  }
+
   const preparedFiles: Array<Awaited<ReturnType<typeof prepareUserUpload>> & { field: UserUploadField }> = [];
   for (const field of ["avatarUrl", "contractUrl", "passportUrl"] as const) {
     if (updates[field] === undefined) continue;

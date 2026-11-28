@@ -40,17 +40,35 @@ export async function issueEmailVerificationToken(emailInput: string): Promise<s
 }
 
 /** Atomically consumes a valid link token and returns its bound email. */
-export async function consumeEmailVerificationToken(rawToken: string): Promise<string | null> {
+export async function findEmailVerificationRecipient(rawToken: string): Promise<string | null> {
   if (!rawToken || rawToken.length < 32 || rawToken.length > 200) return null;
 
-  const [consumed] = await db.update(emailVerificationCodesTable)
+  const [match] = await db.select({ email: emailVerificationCodesTable.email })
+    .from(emailVerificationCodesTable)
+    .where(and(
+      eq(emailVerificationCodesTable.token, hashVerificationToken(rawToken)),
+      eq(emailVerificationCodesTable.used, false),
+      gt(emailVerificationCodesTable.expiresAt, new Date()),
+    )).limit(1);
+  return match?.email ?? null;
+}
+
+export async function consumeEmailVerificationToken(
+  rawToken: string,
+  email: string,
+  executor: Pick<typeof db, "update">,
+): Promise<boolean> {
+  if (!rawToken || rawToken.length < 32 || rawToken.length > 200) return false;
+
+  const [consumed] = await executor.update(emailVerificationCodesTable)
     .set({ used: true })
     .where(and(
       eq(emailVerificationCodesTable.token, hashVerificationToken(rawToken)),
+      eq(emailVerificationCodesTable.email, email),
       eq(emailVerificationCodesTable.used, false),
       gt(emailVerificationCodesTable.expiresAt, new Date()),
     ))
     .returning({ email: emailVerificationCodesTable.email });
 
-  return consumed?.email || null;
+  return !!consumed;
 }

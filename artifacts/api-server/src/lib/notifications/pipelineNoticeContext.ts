@@ -48,8 +48,12 @@ export const NOTICE_VARIABLES = {
   work: [...COMMON_NOTICE_VARIABLES],
 };
 type Client = Pick<PoolClient, "query">;
+function configuredWorkTenant(): string | null {
+  try { return workPipelineTenant(); } catch { return null; }
+}
+
 export async function setNoticeScope(c: Client) {
-  const tenant = workPipelineTenant();
+  const tenant = configuredWorkTenant();
   await c.query("SELECT set_config('app.work_pipeline_tenant',$1,true)", [
     tenant ?? "",
   ]);
@@ -78,7 +82,7 @@ export async function noticeContext(
     subject: any,
     agentId: number | null = null;
   if (n.entity_kind === "work") {
-    if (!n.tenant_id || n.tenant_id !== workPipelineTenant() || !n.board_id)
+    if (!n.tenant_id || n.tenant_id !== configuredWorkTenant() || !n.board_id)
       return { code: "NOTICE_SCOPE_CHANGED" };
     const { rows } = await c.query(
       `SELECT k.document,b.document board FROM local_work_pipelines.cards k JOIN local_work_pipelines.boards b ON b.tenant_id=k.tenant_id AND b.id=k.board_id

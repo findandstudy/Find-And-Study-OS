@@ -1,4 +1,5 @@
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { downloadCrmExcel } from "@/lib/crmExcel";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import { Link, useLocation } from "wouter";
@@ -1788,7 +1789,7 @@ export default function LeadsPage() {
             />
 
             {isAdmin && (
-              <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => { const a = document.createElement("a"); const idsParam = selectedIds.size > 0 ? `&ids=${Array.from(selectedIds).join(",")}` : ""; a.href = `${BASE_URL}/api/export/leads?season=${encodeURIComponent(season || "")}${idsParam}`; a.click(); }}>
+              <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => downloadCrmExcel(BASE_URL, "leads", leadListParams, selectedIds)}>
                 <Download className="w-3.5 h-3.5" /> {t("leadsPage.excel")}
               </Button>
             )}
