@@ -1118,12 +1118,12 @@ async function reviewProgramImport(rows: Record<string, unknown>[], executor: Pi
   return { rows: preview, summary, canImport: summary.error === 0, revision };
 }
 
-router.post("/programs/bulk/preview", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+router.post("/programs/bulk/preview", requireAuth, requireRole(...MANAGER_ROLES), bulkJson, async (req, res): Promise<void> => {
   if (!isProgramImportRows(req.body)) { res.status(400).json({ error: "Expected non-empty program rows" }); return; }
   res.json(await reviewProgramImport(normalizeProgramImportRows(req.body), db));
 });
 
-router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), bulkJson, async (req, res): Promise<void> => {
   try {
   const rows: ({
     universityId?: number; universityName?: string; name: string; description?: string;
@@ -1300,7 +1300,8 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
       "minGpa", "minLanguageScore", "quota", "isActive", "country", "sourceMetadata", "sourceMetadataJson",
     ]);
 
-    const docColsByRowIdx = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined>();
+    type DocumentCell = { documentType: string; mandatory: boolean | null; sortOrder: number };
+    const docColsByRowIdx = new Map<number, DocumentCell[]>();
     const rowIdxByParsedIdx: number[] = [];
     let invalidDocCells = 0;
     const skipReasons: { row: number; reason: string }[] = [];
@@ -1323,8 +1324,7 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
         skipReasons.push({ row: rowIdx + 2, reason: "missing program name" });
         return null;
       }
-      let docList: { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined;
-      let sawAnyDocCol = false;
+      const documentCells: DocumentCell[] = [];
       // Iterate the row's OWN keys (not the catalog) so we can detect
       // "this column looks like a doc column but isn't in the catalog
       // anymore" — that's the case Task #179 is about. We still validate
@@ -1333,17 +1333,13 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
         if (NON_DOC_COLUMNS.has(colKey)) continue;
         if (isCatalogSourceMetadataColumn(colKey)) continue;
         if (docKeySet.has(colKey)) {
-          sawAnyDocCol = true;
           const { value, invalid } = parseDocCellValue((r as Record<string, unknown>)[colKey]);
-          if (invalid) invalidDocCells++;
-          if (value !== null) {
-            if (!docList) docList = [];
-            docList.push({
-              documentType: colKey,
-              mandatory: value === "mandatory",
-              sortOrder: docKeyOrder.get(colKey) ?? 9999,
-            });
-          }
+          if (invalid) { invalidDocCells++; continue; }
+          documentCells.push({
+            documentType: colKey,
+            mandatory: value === null ? null : value === "mandatory",
+            sortOrder: docKeyOrder.get(colKey) ?? 9999,
+          });
         } else {
           // Looks like a doc-column shape but unknown to the catalog.
           // Only flag it if the cell value PARSES as a doc marker
@@ -1357,7 +1353,7 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
           }
         }
       }
-      if (sawAnyDocCol) docColsByRowIdx.set(rowIdx, docList ?? []);
+      if (documentCells.length > 0) docColsByRowIdx.set(rowIdx, documentCells);
       const numeric = (value: unknown) => value === undefined || value === null || value === "" ? null : Number(value);
       const currency = typeof r.currency === "string" ? r.currency.trim().toUpperCase() : "";
       const hasAnyFee = ([r.tuitionFee, r.scholarship, r.applicationFee, r.enrollmentFee, r.adaptationFee, r.advancedFee, r.depositFee, r.serviceFeeAmount, r.discountedFee, r.languageFee] as unknown[])
@@ -1421,7 +1417,8 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     let updatedCount = 0;
     const toInsert: typeof parsed = [];
     const insertRowIdxs: number[] = [];
-    const docsToReplace = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[]>();
+    const docsToReplace = new Map<number, DocumentCell[]>();
+    const docKeysToDelete: { program_id: number; document_type: string }[] = [];
 
     const seenKeys = new Set<string>();
     for (let i = 0; i < parsed.length; i++) {
@@ -1432,11 +1429,21 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
       seenKeys.add(key);
       const existingId = existingMap.get(key);
       if (existingId) {
-        const { universityId: _uid, ...updates } = val;
-        await tx.update(programsTable).set({ ...updates, updatedAt: new Date() }).where(eq(programsTable.id, existingId));
+        const { universityId: _uid, sourceMetadata, ...fields } = val;
+        const input = normalizedRows[origRowIdx];
+        const updates = Object.fromEntries(Object.entries(fields).filter(([key]) => Object.hasOwn(input, key)));
+        await tx.update(programsTable).set({
+          ...updates,
+          ...(sourceMetadata && Object.keys(sourceMetadata).length > 0
+            ? { sourceMetadata: sql`${programsTable.sourceMetadata} || ${JSON.stringify(sourceMetadata)}::jsonb` }
+            : {}),
+          updatedAt: new Date(),
+        }).where(eq(programsTable.id, existingId));
         updatedCount++;
-        if (docColsByRowIdx.has(origRowIdx)) {
-          docsToReplace.set(existingId, docColsByRowIdx.get(origRowIdx) || []);
+        const documentCells = docColsByRowIdx.get(origRowIdx);
+        if (documentCells) {
+          docsToReplace.set(existingId, documentCells);
+          for (const cell of documentCells) docKeysToDelete.push({ program_id: existingId, document_type: cell.documentType });
         }
       } else {
         toInsert.push(val);
@@ -1459,24 +1466,28 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
       insertedCount = allInserted.length;
       allInserted.forEach((p, idx) => {
         const origRowIdx = insertRowIdxs[idx];
-        if (docColsByRowIdx.has(origRowIdx)) {
-          docsToReplace.set(p.id, docColsByRowIdx.get(origRowIdx) || []);
-        }
+        const documentCells = docColsByRowIdx.get(origRowIdx);
+        if (documentCells) docsToReplace.set(p.id, documentCells);
       });
     }
 
     if (docsToReplace.size > 0) {
-      const ids = [...docsToReplace.keys()];
-      // Chunk DELETE too — inArray with 7000 ids = 7000 bind params, still fine,
-      // but be safe for future growth.
-      const ID_CHUNK = 5000;
-      for (let off = 0; off < ids.length; off += ID_CHUNK) {
-        await tx.delete(programDocumentRequirementsTable)
-          .where(inArray(programDocumentRequirementsTable.programId, ids.slice(off, off + ID_CHUNK)));
+      const deleteChunkSize = 5000;
+      for (let offset = 0; offset < docKeysToDelete.length; offset += deleteChunkSize) {
+        const providedCells = JSON.stringify(docKeysToDelete.slice(offset, offset + deleteChunkSize));
+        await tx.execute(sql`
+          DELETE FROM ${programDocumentRequirementsTable} AS requirement
+          USING jsonb_to_recordset(${providedCells}::jsonb) AS provided(program_id integer, document_type text)
+          WHERE requirement.program_id = provided.program_id AND requirement.document_type = provided.document_type
+        `);
       }
       const allDocRows: { programId: number; documentType: string; mandatory: boolean; sortOrder: number }[] = [];
       for (const [pid, docs] of docsToReplace.entries()) {
-        for (const d of docs) allDocRows.push({ programId: pid, ...d });
+        for (const d of docs) {
+          if (d.mandatory !== null) {
+            allDocRows.push({ programId: pid, documentType: d.documentType, mandatory: d.mandatory, sortOrder: d.sortOrder });
+          }
+        }
       }
       if (allDocRows.length > 0) {
         // 4 cols × 1000 rows = 4000 params per chunk.

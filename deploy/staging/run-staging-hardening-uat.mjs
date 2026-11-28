@@ -75,6 +75,23 @@ for (const role of ["super_admin", "staff", "agent", "student"]) {
       await request(jar, "/api/portal-automation/settings", 200);
       const system = await (await request(jar, "/api/admin/system-health", 200)).json();
       assert.equal(system.metrics.queues.signedPdfs.enabled, true);
+      const template = await request(jar, "/api/programs/import-template", 200);
+      assert.match(template.headers.get("content-type") ?? "", /spreadsheetml\.sheet/);
+      assert.equal(Buffer.from(await template.arrayBuffer()).subarray(0, 2).toString(), "PK");
+      const programs = Array.from({ length: 13 }, (_, index) => ({
+        universityName: "Synthetic staging catalogue preview 2026-11-28",
+        name: "Synthetic programme " + (index + 1),
+        currency: index === 12 ? "" : "PLN",
+        applicationFee: 85,
+        adaptationFee: 400,
+      }));
+      const preview = await (await request(jar, "/api/programs/bulk/preview", 200, {
+        method: "POST",
+        body: JSON.stringify(programs),
+      })).json();
+      assert.deepEqual(preview.summary, { add: 12, update: 0, error: 1 });
+      assert.equal(preview.canImport, false);
+      assert.equal(preview.rows[0]?.currency, "PLN");
     } else {
       const denied = await request(jar, "/api/export/leads", 403);
       assert.doesNotMatch(denied.headers.get("content-type") ?? "", /spreadsheetml/);
