@@ -2,9 +2,10 @@ import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle
 import {WorkStageNotifications} from "@/components/notifications/WorkStageNotifications";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { WorkPipelineActivity } from "./WorkPipelineActivity";
+import { WorkPipelineBoardViewport } from "./WorkPipelineBoardViewport";
 import { WorkPipelineExcel } from "./WorkPipelineExcel";
 import { WorkPipelinePicker } from "./WorkPipelinePicker";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
@@ -20,7 +21,7 @@ import {
   useSensor,
   useSensors,
   useDroppable,
-  closestCorners,
+  closestCenter,
   pointerWithin,
   type DragEndEvent,
 } from "@dnd-kit/core";
@@ -28,7 +29,6 @@ import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
-  sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
@@ -121,8 +121,9 @@ function ContactCard({
 }) {
   const c = row.document;
   const selectable = !m.b?.archived;
+  const moveable = selectable && !m.busy;
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
-    useSortable({ id: c.id, disabled: m.busy || !selectable });
+    useSortable({ id: c.id, data: { stageId: stage.id }, disabled: !moveable });
   const people =
     m.options.data?.people.filter(
       (p) => m.b?.memberIds.includes(p.id) || m.b?.createdBy === p.id,
@@ -139,7 +140,15 @@ function ContactCard({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`rounded-xl border overflow-hidden mb-3 transition-shadow duration-200 ${selected ? "ring-2 ring-inset ring-primary " : ""}${isDragging ? "border-primary shadow-xl opacity-50 relative z-50" : color + " hover:shadow-md"}`}
     >
-      <div className="p-3 pb-2">
+      <div
+        className={`p-3 pb-2 ${isDragging ? "cursor-grabbing" : moveable ? "cursor-grab" : ""}`}
+        onPointerDown={(event) => {
+          const target = event.target;
+          if (moveable && event.pointerType === "mouse" && target instanceof Element && !target.closest("button")) {
+            listeners?.onPointerDown?.(event);
+          }
+        }}
+      >
         <div className="flex items-start gap-2 mb-2">
           {selectable && (
             <Checkbox
@@ -281,6 +290,7 @@ function StageColumn({
     lost = stage.result === "closed";
   return (
     <div
+      ref={setNodeRef}
       className={`flex h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden rounded-2xl border sm:w-72 ${won ? "bg-emerald-50/60 border-emerald-200/50 dark:bg-emerald-900/20 dark:border-emerald-700/30" : lost ? "bg-rose-50/60 border-rose-200/50 dark:bg-rose-900/20 dark:border-rose-700/30" : "bg-secondary/50 border-border/50"}`}
     >
       <div
@@ -301,7 +311,7 @@ function StageColumn({
         </div>
       </div>
       <div
-        ref={setNodeRef}
+        data-work-pipeline-stage-scroll=""
         tabIndex={0}
         role="region"
         aria-label={stage.name}
@@ -337,13 +347,14 @@ export default function WorkPipelines() {
   const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const m = useWorkPipelines(),
-    { l, b } = m;
+    { l, b, firstActiveBoardId } = m;
   const [settings, setSettings] = useState<
     "create" | "rename" | "stages" | "sources" | "team"
   >("create");
   const [assignment, setAssignment] = useState("all"),
     [stageFilter, setStageFilter] = useState("all"),
     [active, setActive] = useState<string | null>(null);
+  const keyboardStage = useRef<string | null>(null);
   const people =
     m.options.data?.people.filter(
       (p) => b?.memberIds.includes(p.id) || b?.createdBy === p.id,
@@ -384,10 +395,34 @@ export default function WorkPipelines() {
     boardId: m.selected,
     cards: selectedRows.map((r) => ({ id: r.document.id, revision: r.revision })),
   });
+  const visibleStages = b?.stages.filter((stage) => stageFilter === "all" || stageFilter === stage.id) ?? [];
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
+      scrollBehavior: "auto",
+      coordinateGetter(event, { context }) {
+        const key = event.code;
+        if (key !== "ArrowLeft" && key !== "ArrowRight") return;
+        event.preventDefault();
+
+        const currentStageId = keyboardStage.current ?? context.over?.id ?? context.active?.data.current?.stageId;
+        const currentIndex = visibleStages.findIndex((stage) => stage.id === currentStageId);
+        if (currentIndex < 0 || !context.collisionRect) return;
+        const nextKey = m.isRTL ? "ArrowLeft" : "ArrowRight";
+        const step = key === nextKey ? 1 : -1;
+        const destination = visibleStages[currentIndex + step];
+        if (!destination) return;
+        const column = context.droppableContainers.get(destination.id)?.node.current;
+        if (!column) return;
+
+        keyboardStage.current = destination.id;
+        column.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+        const rect = column.getBoundingClientRect();
+        return {
+          x: rect.left + (rect.width - context.collisionRect.width) / 2,
+          y: rect.top + (rect.height - context.collisionRect.height) / 2,
+        };
+      },
     }),
   );
   const selectBoard = (id: string) => {
@@ -404,15 +439,17 @@ export default function WorkPipelines() {
     else if (m.current) m.setBoardDraft(structuredClone(m.current));
   };
   const dragEnd = (e: DragEndEvent) => {
+    const overId = keyboardStage.current ?? e.over?.id;
+    keyboardStage.current = null;
     setActive(null);
-    if (!e.over || m.busy || b?.archived) return;
+    if (!overId || m.busy || b?.archived) return;
     const row = m.rows.find((r) => r.document.id === String(e.active.id));
     const target =
-      b?.stages.find((s) => s.id === String(e.over!.id)) ||
+      b?.stages.find((s) => s.id === String(overId)) ||
       b?.stages.find(
         (s) =>
           s.id ===
-          m.rows.find((r) => r.document.id === String(e.over!.id))?.document
+          m.rows.find((r) => r.document.id === String(overId))?.document
             .stageId,
       );
     if (row && target && row.document.stageId !== target.id)
@@ -464,14 +501,14 @@ export default function WorkPipelines() {
       className="flex h-[calc(100dvh-8rem)] min-h-0 w-full min-w-0 flex-col"
       dir={m.isRTL ? "rtl" : "ltr"}
     >
-      <AdminPageHeader className="mb-6 shrink-0 min-w-0">
+      <AdminPageHeader className="mb-4 shrink-0 min-w-0">
         <div>
           <AdminPageTitle>
             {l.title}
           </AdminPageTitle>
           <AdminPageDescription>{l.simpleIntro}</AdminPageDescription>
         </div>
-        <AdminPageActions className="sm:justify-end">
+        <AdminPageActions className="w-full xl:w-auto xl:justify-end">
           <div className="relative w-full sm:w-56 lg:w-64">
             <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -647,7 +684,14 @@ export default function WorkPipelines() {
       )}
       {error && !m.boardDraft && !m.cardDraft && !deleteDraft && notice(error)}
       {b?.archived && (
-        <p className="text-sm text-muted-foreground mb-3">{l.archivedHelp}</p>
+        <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <p>{l.archivedHelp}</p>
+          {firstActiveBoardId && (
+            <Button variant="link" size="sm" className="h-auto min-h-0 p-0" onClick={() => selectBoard(firstActiveBoardId)}>
+              {m.t("workPipelines.openActivePipeline")}
+            </Button>
+          )}
+        </div>
       )}
       {m.boards.isPending || (Boolean(m.selected) && m.cards.isPending) ? (
         <p role="status">{l.loading}</p>
@@ -664,46 +708,59 @@ export default function WorkPipelines() {
           )}
         </div>
       ) : m.view === "board" ? (
-        <div role="region" aria-label={l.board} tabIndex={0} className="min-h-52 min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-3 custom-scrollbar">
-          <div className="flex gap-5 h-full min-w-max px-1">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={(args) => {
-                if (!args.pointerCoordinates) return closestCorners(args);
-                const hits = pointerWithin(args);
-                const column = hits.find((hit) => b.stages.some((s) => s.id === hit.id));
-                return column ? [column] : hits;
-              }}
-              onDragStart={(e) => setActive(String(e.active.id))}
-              onDragEnd={dragEnd}
-              onDragCancel={() => setActive(null)}
-            >
-              {b.stages
-                .filter((s) => stageFilter === "all" || stageFilter === s.id)
-                .map((s) => (
-                  <StageColumn
-                    key={s.id}
-                    stage={s}
-                    rows={rows.filter((r) => r.document.stageId === s.id)}
-                    m={m}
-                    selectedIds={selectedIds}
-                    selectionDisabled={atLimit}
-                    onSelect={toggleSelection}
-                  />
-                ))}
-              <DragOverlay>
-                {active && (
-                  <div className="w-72 bg-card border border-primary rounded-xl shadow-2xl p-4 font-bold text-sm rotate-1">
-                    {
-                      m.rows.find((r) => r.document.id === active)?.document
-                        .title
-                    }
-                  </div>
-                )}
-              </DragOverlay>
-            </DndContext>
-          </div>
-        </div>
+        <WorkPipelineBoardViewport
+          key={b.id}
+          label={l.board}
+          previousLabel={m.t("common.previous")}
+          nextLabel={m.t("common.next")}
+          isRTL={m.isRTL}
+        >
+          <DndContext
+            sensors={sensors}
+            collisionDetection={(args) => {
+              if (!args.pointerCoordinates) {
+                if (keyboardStage.current) return [{ id: keyboardStage.current }];
+                return closestCenter({
+                  ...args,
+                  droppableContainers: args.droppableContainers.filter(({ id }) =>
+                    visibleStages.some((stage) => stage.id === id),
+                  ),
+                });
+              }
+              const hits = pointerWithin(args);
+              const column = hits.find((hit) => b.stages.some((s) => s.id === hit.id));
+              return column ? [column] : hits;
+            }}
+            onDragStart={(e) => {
+              keyboardStage.current = null;
+              setActive(String(e.active.id));
+            }}
+            onDragEnd={dragEnd}
+            onDragCancel={() => {
+              keyboardStage.current = null;
+              setActive(null);
+            }}
+          >
+            {visibleStages.map((s) => (
+              <StageColumn
+                key={s.id}
+                stage={s}
+                rows={rows.filter((r) => r.document.stageId === s.id)}
+                m={m}
+                selectedIds={selectedIds}
+                selectionDisabled={atLimit}
+                onSelect={toggleSelection}
+              />
+            ))}
+            <DragOverlay>
+              {active && (
+                <div className="w-72 bg-card border border-primary rounded-xl shadow-2xl p-4 font-bold text-sm rotate-1">
+                  {m.rows.find((r) => r.document.id === active)?.document.title}
+                </div>
+              )}
+            </DragOverlay>
+          </DndContext>
+        </WorkPipelineBoardViewport>
       ) : (
         <div className="flex min-h-52 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
           <div className="min-h-0 min-w-0 flex-1 overflow-auto">

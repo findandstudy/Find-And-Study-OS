@@ -7187,6 +7187,7 @@
     "retry": "重试",
     "more": "Load More",
     "archivedHelp": "已归档流程 — 只读",
+    "openActivePipeline": "打开活跃流程",
     "open": "开放",
     "closed": "已关闭",
     "noPipelines": "没有可访问的工作流程",

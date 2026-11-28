@@ -158,7 +158,13 @@ router.get(
         const pageSize = ids ? 100 : 50;
         // Access is evaluated before search/ID filtering and pagination.
         const r = await c.query(
-          "SELECT document,revision FROM local_work_pipelines.boards WHERE tenant_id=$1 AND ($2::boolean OR document->>'createdBy'=$3 OR document->'memberIds' @> $4::jsonb) AND ($6='' OR document->>'name' ILIKE $7) AND ($8::uuid[] IS NULL OR id=ANY($8::uuid[])) ORDER BY document->>'createdAt',id LIMIT $9 OFFSET $5",
+          `SELECT document,revision FROM local_work_pipelines.boards
+           WHERE tenant_id=$1
+             AND ($2::boolean OR document->>'createdBy'=$3 OR document->'memberIds' @> $4::jsonb)
+             AND ($6='' OR document->>'name' ILIKE $7)
+             AND ($8::uuid[] IS NULL OR id=ANY($8::uuid[]))
+           ORDER BY (document->>'archived' IS NOT DISTINCT FROM 'true'), document->>'createdAt', id
+           LIMIT $9 OFFSET $5`,
           [
             t,
             isWorkAdmin(req.user),

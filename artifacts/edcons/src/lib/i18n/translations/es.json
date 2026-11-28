@@ -7187,6 +7187,7 @@
     "retry": "Reintentar",
     "more": "Load More",
     "archivedHelp": "Pipeline archivado — solo lectura",
+    "openActivePipeline": "Abrir un pipeline activo",
     "open": "Abierto",
     "closed": "Cerrado",
     "noPipelines": "No hay pipelines accesibles",

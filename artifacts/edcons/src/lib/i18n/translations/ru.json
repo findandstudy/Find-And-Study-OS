@@ -7187,6 +7187,7 @@
     "retry": "Повторить",
     "more": "Load More",
     "archivedHelp": "Процесс в архиве — только чтение",
+    "openActivePipeline": "Открыть активный процесс",
     "open": "Открыт",
     "closed": "Закрыт",
     "noPipelines": "Нет доступных процессов",

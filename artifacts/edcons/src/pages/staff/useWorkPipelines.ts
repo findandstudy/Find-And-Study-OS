@@ -180,6 +180,8 @@ export function useWorkPipelines() {
     enabled: feature.data?.enabled === true,
   });
   const allBoards = boards.data?.pages.flatMap((p) => p.items) || [];
+  const firstActiveBoardId = allBoards.find(({ document }) => !document.archived)?.document.id;
+  const defaultBoardId = firstActiveBoardId ?? allBoards[0]?.document.id;
   const cards = useInfiniteQuery({
     queryKey: ["work-pipeline-cards", user?.id, selected, query],
     refetchInterval: 3000,
@@ -204,8 +206,8 @@ export function useWorkPipelines() {
     b = current?.document,
     rows = cards.data?.pages.flatMap((p) => p.items) || [];
   useEffect(() => {
-    if (!selected && allBoards[0]) setSelected(allBoards[0].document.id);
-  }, [allBoards.length, selected]);
+    if (!selected && defaultBoardId) setSelected(defaultBoardId);
+  }, [defaultBoardId, selected]);
   useEffect(() => {
     localStorage.setItem("work-pipeline-view", view);
   }, [view]);
@@ -410,6 +412,7 @@ export function useWorkPipelines() {
     options,
     boards,
     allBoards,
+    firstActiveBoardId,
     cards,
     current,
     b,

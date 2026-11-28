@@ -7187,6 +7187,7 @@
     "retry": "다시 시도",
     "more": "더 보기",
     "archivedHelp": "보관된 워크플로 — 읽기 전용",
+    "openActivePipeline": "활성 워크플로 열기",
     "open": "모집 중",
     "closed": "종료",
     "noPipelines": "접근 가능한 워크플로가 없습니다",

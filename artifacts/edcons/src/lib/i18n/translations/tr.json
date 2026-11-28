@@ -7187,6 +7187,7 @@
     "retry": "Tekrar dene",
     "more": "Daha fazla yükle",
     "archivedHelp": "Arşivlenmiş pipeline — salt okunur",
+    "openActivePipeline": "Aktif pipeline’ı aç",
     "open": "Açık",
     "closed": "Kapandı",
     "noPipelines": "Erişilebilir pipeline yok",

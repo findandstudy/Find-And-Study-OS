@@ -7187,6 +7187,7 @@
     "retry": "पुनः प्रयास करें",
     "more": "Load More",
     "archivedHelp": "संग्रहीत पाइपलाइन — केवल पढ़ने के लिए",
+    "openActivePipeline": "सक्रिय पाइपलाइन खोलें",
     "open": "खुला",
     "closed": "बंद",
     "noPipelines": "कोई उपलब्ध पाइपलाइन नहीं",
