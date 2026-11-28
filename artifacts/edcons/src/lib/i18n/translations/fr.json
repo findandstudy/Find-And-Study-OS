@@ -3044,7 +3044,7 @@
     "copyCode": "Copier le code",
     "personalGroup": "Personnel",
     "organizationGroup": "Organisation",
-    "rtlNote": "Le sens RTL (de droite à gauche) est appliqué automatiquement pour l'arabe.",
+    "rtlNote": "La disposition de droite à gauche s’applique automatiquement à l’arabe, au persan et à l’ourdou.",
     "invalidValue": "Valeur non valide",
     "invalidThresholdsDesc": "Saisissez uniquement des entiers positifs séparés par des virgules (par ex. 30,14,7,1).",
     "thresholdsSaved": "Seuils enregistrés",

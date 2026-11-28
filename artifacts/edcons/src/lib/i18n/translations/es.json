@@ -2993,7 +2993,7 @@
     "copyCode": "Copiar código",
     "personalGroup": "Personal",
     "organizationGroup": "Organización",
-    "rtlNote": "El modo RTL (de derecha a izquierda) se aplica automáticamente para el árabe.",
+    "rtlNote": "El diseño de derecha a izquierda se aplica automáticamente al árabe, persa y urdu.",
     "invalidValue": "Valor no válido",
     "invalidThresholdsDesc": "Introduce solo números enteros positivos separados por comas (p. ej. 30,14,7,1).",
     "thresholdsSaved": "Umbrales guardados",

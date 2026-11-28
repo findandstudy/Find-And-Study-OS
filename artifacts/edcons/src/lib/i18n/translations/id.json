@@ -2994,7 +2994,7 @@
     "copyCode": "Salin Kode",
     "personalGroup": "Pribadi",
     "organizationGroup": "Organisasi",
-    "rtlNote": "RTL (kanan-ke-kiri) diterapkan otomatis untuk bahasa Arab.",
+    "rtlNote": "Tata letak kanan ke kiri diterapkan otomatis untuk bahasa Arab, Persia, dan Urdu.",
     "invalidValue": "Nilai tidak valid",
     "invalidThresholdsDesc": "Masukkan hanya bilangan bulat positif yang dipisahkan koma (mis. 30,14,7,1).",
     "thresholdsSaved": "Ambang tersimpan",

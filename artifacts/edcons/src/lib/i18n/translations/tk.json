@@ -3326,7 +3326,7 @@
     "invalidDaysDesc": "1 bilen 365 aralygyndaky bitin sany giriziň.",
     "personalGroup": "Şahsy",
     "organizationGroup": "Gurama",
-    "rtlNote": "Arap dili üçin RTL (sagdan çepe) awtomatik ulanylýar.",
+    "rtlNote": "Arap, pars we urdu dilleri üçin sagdan çepe ýerleşiş awtomatik ulanylýar.",
     "autoAssignStuckConvTitle": "Seredilmän galan söhbetdeşlikleri awtomatik belle",
     "autoAssignStuckConvDesc": "Gelen gutusyndaky seredilmän galan söhbetdeşlikleri elýeterli işgärlere awtomatik belläň (ilki iş wagtynyň gabat gelmegi, soň ýurduň gabat gelmegi, soň bolsa nobat boýunça).",
     "autoAssignStuckConvSaved": "Awtomatik bellemek sazlamasy ýatda saklandy",

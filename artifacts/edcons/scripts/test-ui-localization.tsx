@@ -39,3 +39,11 @@ test('stable public dictionary URLs revalidate across deployments', () => {
   const source=readFileSync(new URL('../src/lib/i18n/context.tsx',import.meta.url),'utf8');
   assert.match(source,/i18n-critical\/\$\{lang\}\.json`[^\n]+cache: "no-cache"/);
 });
+
+test('language confirmation waits for the dictionary and uses the target locale', () => {
+  const source=readFileSync(new URL('../src/pages/staff/Settings.tsx',import.meta.url),'utf8');
+  const handler=source.slice(source.indexOf('async function handleSaveLang'),source.indexOf('async function handleSaveLang')+700);
+  assert.match(handler,/await setLang\(code as any\)/);
+  assert.match(handler,/if \(!switched\) return/);
+  assert.match(handler,/translateUi\(code, "Language updated"\)/);
+});

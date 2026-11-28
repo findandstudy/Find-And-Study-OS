@@ -424,13 +424,14 @@ export default function SettingsPage() {
 
   async function handleSaveLang(code: string) {
     if (!user) return;
-    setLang(code as any);
+    const switched = await setLang(code as any);
+    if (!switched) return;
     try {
       await customFetch(`/api/users/${user.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ language: code }),
       });
-      toast({ title: translateUi(uiLanguage, "Language updated") });
+      toast({ title: translateUi(code, "Language updated") });
     } catch {}
   }
 

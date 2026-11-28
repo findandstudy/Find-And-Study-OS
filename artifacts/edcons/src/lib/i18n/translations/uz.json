@@ -3326,7 +3326,7 @@
     "invalidDaysDesc": "1 dan 365 gacha bo‘lgan butun sonni kiriting.",
     "personalGroup": "Shaxsiy",
     "organizationGroup": "Tashkilot",
-    "rtlNote": "Arab tili uchun RTL (o‘ngdan chapga) yo‘nalishi avtomatik qo‘llanadi.",
+    "rtlNote": "Arab, fors va urdu tillari uchun o‘ngdan chapga joylashuv avtomatik qo‘llanadi.",
     "autoAssignStuckConvTitle": "Qarovsiz qolgan suhbatlarni avtomatik biriktirish",
     "autoAssignStuckConvDesc": "Kiruvchi xabarlardagi qarovsiz qolgan suhbatlarni mavjud xodimlarga avtomatik biriktirish (avval ish vaqti, so‘ng mamlakat mosligi, keyin navbat asosida).",
     "autoAssignStuckConvSaved": "Avtomatik biriktirish sozlamasi saqlandi",

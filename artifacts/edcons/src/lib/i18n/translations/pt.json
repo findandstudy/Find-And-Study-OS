@@ -3326,7 +3326,7 @@
     "invalidDaysDesc": "Insira um número inteiro entre 1 e 365.",
     "personalGroup": "Pessoal",
     "organizationGroup": "Organização",
-    "rtlNote": "RTL (da direita para a esquerda) é aplicado automaticamente para árabe.",
+    "rtlNote": "O layout da direita para a esquerda é aplicado automaticamente ao árabe, persa e urdu.",
     "autoAssignStuckConvTitle": "Atribuir automaticamente conversas travadas",
     "autoAssignStuckConvDesc": "Atribuir automaticamente conversas de caixa de entrada autônomas à equipe disponível (correspondência de horário de trabalho, correspondência de país e round-robin).",
     "autoAssignStuckConvSaved": "Configuração de atribuição automática salva",

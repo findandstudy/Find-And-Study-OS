@@ -3326,7 +3326,7 @@
     "invalidDaysDesc": "Inserisci un numero intero compreso tra 1 e 365.",
     "personalGroup": "Personale",
     "organizationGroup": "Organizzazione",
-    "rtlNote": "RTL (da destra a sinistra) viene applicato automaticamente per l'arabo.",
+    "rtlNote": "La disposizione da destra a sinistra si applica automaticamente ad arabo, persiano e urdu.",
     "autoAssignStuckConvTitle": "Assegna automaticamente le conversazioni bloccate",
     "autoAssignStuckConvDesc": "Assegna automaticamente le conversazioni di posta in arrivo non presidiate al personale disponibile (corrispondenza dell'orario di lavoro, poi corrispondenza del paese, quindi round robin).",
     "autoAssignStuckConvSaved": "Impostazione di assegnazione automatica salvata",

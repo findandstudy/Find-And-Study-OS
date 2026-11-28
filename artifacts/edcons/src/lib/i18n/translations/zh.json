@@ -2993,7 +2993,7 @@
     "copyCode": "复制代码",
     "personalGroup": "个人",
     "organizationGroup": "组织",
-    "rtlNote": "阿拉伯语会自动应用 RTL（从右到左）布局。",
+    "rtlNote": "阿拉伯语、波斯语和乌尔都语会自动使用从右到左的布局。",
     "invalidValue": "无效值",
     "invalidThresholdsDesc": "请仅输入以逗号分隔的正整数（例如 30,14,7,1）。",
     "thresholdsSaved": "阈值已保存",

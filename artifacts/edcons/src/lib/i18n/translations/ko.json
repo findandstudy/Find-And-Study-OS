@@ -3326,7 +3326,7 @@
     "invalidDaysDesc": "1~365 사이의 정수를 입력하세요.",
     "personalGroup": "개인",
     "organizationGroup": "조직",
-    "rtlNote": "RTL(오른쪽에서 왼쪽)이 자동으로 적용됩니다. 아랍어.",
+    "rtlNote": "아랍어, 페르시아어, 우르두어에는 오른쪽에서 왼쪽으로 읽는 레이아웃이 자동 적용됩니다.",
     "autoAssignStuckConvTitle": "멈춘 대화 자동 할당",
     "autoAssignStuckConvDesc": "사용 가능한 직원에게 무인 받은 편지함 대화를 자동으로 할당합니다(근무 시간 일치, 국가 일치, 라운드 로빈).",
     "autoAssignStuckConvSaved": "자동 할당 설정 저장됨",

@@ -3326,7 +3326,7 @@
     "invalidDaysDesc": "Enter an integer between 1 and 365.",
     "personalGroup": "Personal",
     "organizationGroup": "Organization",
-    "rtlNote": "RTL (right-to-left) is automatically applied for Arabic.",
+    "rtlNote": "Right-to-left layout is applied automatically for Arabic, Persian and Urdu.",
     "autoAssignStuckConvTitle": "Auto-Assign Stuck Conversations",
     "autoAssignStuckConvDesc": "Automatically assign unattended inbox conversations to available staff (working hours match, then country match, then round-robin).",
     "autoAssignStuckConvSaved": "Auto-assign setting saved",

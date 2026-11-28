@@ -3326,7 +3326,7 @@
     "invalidDaysDesc": "Nhập số nguyên từ 1 đến 365.",
     "personalGroup": "Cá nhân",
     "organizationGroup": "Tổ chức",
-    "rtlNote": "RTL (từ phải sang trái) được tự động áp dụng cho tiếng Ả Rập.",
+    "rtlNote": "Bố cục từ phải sang trái được áp dụng tự động cho tiếng Ả Rập, Ba Tư và Urdu.",
     "autoAssignStuckConvTitle": "Tự động chỉ định các cuộc trò chuyện bị mắc kẹt",
     "autoAssignStuckConvDesc": "Tự động chỉ định các cuộc trò chuyện trong hộp thư đến không được giám sát cho nhân viên có sẵn (giờ làm việc khớp, sau đó khớp theo quốc gia, sau đó luân chuyển vòng tròn).",
     "autoAssignStuckConvSaved": "Đã lưu cài đặt tự động chỉ định",
