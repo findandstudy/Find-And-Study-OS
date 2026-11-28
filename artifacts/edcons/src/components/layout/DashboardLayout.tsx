@@ -455,7 +455,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     e.preventDefault();
     navigate(url);
   };
-  const { t, localePath, lang } = useI18n();
+  const { t, localePath, lang, isRTL } = useI18n();
   const { season, setSeason, availableYears } = useSeason();
   const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
   const isAgentRole = !!user && (user.role === "agent" || user.role === "sub_agent" || user.role === "agent_staff");
@@ -737,7 +737,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       style={{ "--sidebar-width": panelDensity === "compact" ? "15rem" : "16rem" } as React.CSSProperties}
     >
       <div className="flex min-h-screen w-full bg-secondary/20">
-        <Sidebar collapsible="icon" className="border-r border-border/60 shadow-sm">
+        <Sidebar side={isRTL ? "right" : "left"} collapsible="icon" className="border-e border-border/60 shadow-sm">
           <SidebarContent className="bg-sidebar text-sidebar-foreground">
             {/* Logo */}
             <div className="px-5 py-4 border-b border-border/40 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-3 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">

@@ -7260,6 +7260,10 @@
     "forbidden": "Bu pipeline’a erişiminiz yok.",
     "invalidRow": "Hatalı satır. Kayıt alanlarını ve bu pipeline’ın aşama ve ekip üyelerini kontrol edin.",
     "phoneSearch": "Ülke veya kod ara…",
-    "notes": "Notlar"
+    "notes": "Notlar",
+    "assign": "Ata",
+    "searchTeam": "Ekip üyesi ara…",
+    "noTeamResults": "Ekip üyesi bulunamadı.",
+    "me": "Ben"
   }
 }

@@ -7269,6 +7269,10 @@
     "forbidden": "Bạn không có quyền truy cập quy trình này.",
     "invalidRow": "Dòng không hợp lệ. Kiểm tra các trường, giai đoạn và thành viên của quy trình này.",
     "phoneSearch": "Tìm quốc gia hoặc mã điện thoại…",
-    "notes": "Ghi chú"
+    "notes": "Ghi chú",
+    "assign": "Phân công",
+    "searchTeam": "Tìm thành viên…",
+    "noTeamResults": "Không tìm thấy thành viên.",
+    "me": "Tôi"
   }
 }

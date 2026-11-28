@@ -169,6 +169,7 @@ function ContactCard({
             </span>
           ) : (
             <AssignPopover
+              copy={{ assign: m.t("workPipelines.assign"), search: m.t("workPipelines.searchTeam"), empty: m.t("workPipelines.noTeamResults"), me: m.t("workPipelines.me") }}
               assignedUserName={people.find((p) => p.id === c.assigneeId)?.name}
               staffUsers={people}
               currentUserId={m.user?.id}

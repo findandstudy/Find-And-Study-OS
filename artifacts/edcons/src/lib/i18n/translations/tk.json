@@ -7269,6 +7269,10 @@
     "forbidden": "Bu iş akymyna girmäge rugsadyňyz ýok.",
     "invalidRow": "Nädogry setir. Ýazgy meýdanlaryny, şu iş akymynyň tapgyrlaryny we agzalaryny barlaň.",
     "phoneSearch": "Ýurt ýa-da telefon koduny gözle…",
-    "notes": "Bellikler"
+    "notes": "Bellikler",
+    "assign": "Bellemek",
+    "searchTeam": "Topar agzasyny gözlemek…",
+    "noTeamResults": "Topar agzasy tapylmady.",
+    "me": "Men"
   }
 }

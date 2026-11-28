@@ -7260,6 +7260,10 @@
     "forbidden": "You do not have access to this pipeline.",
     "invalidRow": "Invalid row. Check the record fields and this pipeline’s stages and team members.",
     "phoneSearch": "Search country or code…",
-    "notes": "Notes"
+    "notes": "Notes",
+    "assign": "Assign",
+    "searchTeam": "Search team members…",
+    "noTeamResults": "No team members found.",
+    "me": "Me"
   }
 }

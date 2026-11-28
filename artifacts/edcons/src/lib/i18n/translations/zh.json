@@ -7269,6 +7269,10 @@
     "forbidden": "您无权访问此工作流程。",
     "invalidRow": "无效行。请检查记录字段以及此流程的阶段和团队成员。",
     "phoneSearch": "搜索国家或区号…",
-    "notes": "备注"
+    "notes": "备注",
+    "assign": "分配",
+    "searchTeam": "搜索团队成员…",
+    "noTeamResults": "未找到团队成员。",
+    "me": "我"
   }
 }

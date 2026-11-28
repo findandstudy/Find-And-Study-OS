@@ -7245,6 +7245,10 @@
     "forbidden": "Anda tidak memiliki akses ke alur kerja ini.",
     "invalidRow": "Baris tidak valid. Periksa kolom catatan, tahapan, dan anggota alur ini.",
     "phoneSearch": "Cari negara atau kode telepon…",
-    "notes": "Catatan"
+    "notes": "Catatan",
+    "assign": "Tugaskan",
+    "searchTeam": "Cari anggota tim…",
+    "noTeamResults": "Anggota tim tidak ditemukan.",
+    "me": "Saya"
   }
 }

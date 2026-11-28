@@ -7269,6 +7269,10 @@
     "forbidden": "No tienes acceso a este pipeline.",
     "invalidRow": "Fila no válida. Revisa los campos, las etapas y los miembros de este pipeline.",
     "phoneSearch": "Buscar país o prefijo…",
-    "notes": "Notas"
+    "notes": "Notas",
+    "assign": "Asignar",
+    "searchTeam": "Buscar miembros…",
+    "noTeamResults": "No se encontraron miembros.",
+    "me": "Yo"
   }
 }

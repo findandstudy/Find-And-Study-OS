@@ -7269,6 +7269,10 @@
     "forbidden": "이 워크플로에 접근할 권한이 없습니다.",
     "invalidRow": "유효하지 않은 행입니다. 기록 항목, 이 워크플로의 단계 및 팀원을 확인하세요.",
     "phoneSearch": "국가 또는 전화 코드 검색…",
-    "notes": "메모"
+    "notes": "메모",
+    "assign": "배정",
+    "searchTeam": "팀원 검색…",
+    "noTeamResults": "팀원을 찾을 수 없습니다.",
+    "me": "나"
   }
 }

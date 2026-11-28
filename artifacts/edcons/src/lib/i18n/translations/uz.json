@@ -7269,6 +7269,10 @@
     "forbidden": "Bu ish jarayoniga kirish huquqingiz yo‘q.",
     "invalidRow": "Noto‘g‘ri qator. Maydonlar, jarayon bosqichlari va a’zolarini tekshiring.",
     "phoneSearch": "Mamlakat yoki telefon kodini qidirish…",
-    "notes": "Izohlar"
+    "notes": "Izohlar",
+    "assign": "Biriktirish",
+    "searchTeam": "Jamoa a’zosini qidirish…",
+    "noTeamResults": "Jamoa a’zolari topilmadi.",
+    "me": "Men"
   }
 }

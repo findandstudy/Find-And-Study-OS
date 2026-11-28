@@ -15,10 +15,14 @@ const notes = {en:'Notes',tr:'Notlar',ar:'الملاحظات',fr:'Notes',ru:'З�
 const extra={
  pt:{assignee:'Responsável',assignedTo:'Responsável'},vi:{assignee:'Người phụ trách',assignedTo:'Người phụ trách'},uk:{assignee:'Відповідальний',assignedTo:'Відповідальний'},ko:{stage:'단계',source:'출처'},
 };
+const assignCopy={
+ en:'Assign|Search team members…|No team members found.|Me',tr:'Ata|Ekip üyesi ara…|Ekip üyesi bulunamadı.|Ben',ar:'تعيين|البحث عن أعضاء الفريق…|لم يتم العثور على أعضاء.|أنا',fr:'Attribuer|Rechercher un membre…|Aucun membre trouvé.|Moi',ru:'Назначить|Поиск участников…|Участники не найдены.|Я',fa:'تخصیص|جستجوی اعضای تیم…|عضوی یافت نشد.|من',zh:'分配|搜索团队成员…|未找到团队成员。|我',hi:'असाइन करें|टीम सदस्य खोजें…|कोई टीम सदस्य नहीं मिला।|मैं',es:'Asignar|Buscar miembros…|No se encontraron miembros.|Yo',id:'Tugaskan|Cari anggota tim…|Anggota tim tidak ditemukan.|Saya',ur:'تفویض کریں|ٹیم کے ارکان تلاش کریں…|ٹیم کا کوئی رکن نہیں ملا۔|میں',tk:'Bellemek|Topar agzasyny gözlemek…|Topar agzasy tapylmady.|Men',ky:'Дайындоо|Топ мүчөсүн издөө…|Топ мүчөлөрү табылган жок.|Мен',kk:'Тағайындау|Топ мүшесін іздеу…|Топ мүшелері табылмады.|Мен',uz:'Biriktirish|Jamoa a’zosini qidirish…|Jamoa a’zolari topilmadi.|Men',tg:'Таъин кардан|Ҷустуҷӯи аъзои гурӯҳ…|Аъзои гурӯҳ ёфт нашуданд.|Ман',bn:'দায়িত্ব দিন|দলের সদস্য খুঁজুন…|দলের কোনো সদস্য পাওয়া যায়নি।|আমি',pt:'Atribuir|Buscar membros…|Nenhum membro encontrado.|Eu',ne:'जिम्मेवारी दिनुहोस्|टोलीका सदस्य खोज्नुहोस्…|टोलीका सदस्य भेटिएनन्।|म',vi:'Phân công|Tìm thành viên…|Không tìm thấy thành viên.|Tôi',ko:'배정|팀원 검색…|팀원을 찾을 수 없습니다.|나',uk:'Призначити|Пошук учасників…|Учасників не знайдено.|Я',it:'Assegna|Cerca membri…|Nessun membro trovato.|Io'
+};
 for(const [lang,note] of Object.entries(notes)){
  const file=path.join(root,lang+'.json');const json=JSON.parse(fs.readFileSync(file,'utf8'));
  if(fixes[lang]){const values=fixes[lang].split('|');if(values.length!==keys.length)throw Error(lang+' key count');keys.forEach((key,i)=>json.workPipelines[key]=values[i]);}
  json.workPipelines.notes=note;
+ const labels=assignCopy[lang].split('|');['assign','searchTeam','noTeamResults','me'].forEach((k,i)=>json.workPipelines[k]=labels[i]);
  Object.assign(json.workPipelines,extra[lang]||{});
  // Preserve every byte outside this namespace, including legacy duplicate keys.
  // Parsing/stringifying the whole legacy dictionary can change unrelated copy.

@@ -9,13 +9,15 @@ interface AssignPopoverProps {
   currentUserId?: number;
   onAssign: (userId: number) => void;
   size?: "card" | "list";
+  copy?: { assign: string; search: string; empty: string; me: string };
 }
 
 const MENU_WIDTH = 224; // w-56
 const MENU_MAX_HEIGHT = 290; // search box + scrollable list, used for flip decision
 
-export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onAssign }: AssignPopoverProps) {
+export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onAssign, copy }: AssignPopoverProps) {
   const { t, isRTL } = useI18n();
+  const labels = copy ?? { assign: t("messagesPage.assignOwner"), search: t("messagesPage.searchStaff"), empty: t("messagesPage.noStaffFound"), me: t("studentsPage.me") };
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -94,12 +96,12 @@ export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onA
             ? `text-[10px] text-muted-foreground hover:text-primary transition-colors`
             : `text-[10px] text-primary hover:underline font-medium`
         }`}
-        title={assignedUserName || t("messagesPage.assignOwner")}
+        title={assignedUserName || labels.assign}
       >
         {assignedUserName ? (
           <><UserCheck className="w-3 h-3 shrink-0" />{assignedUserName}</>
         ) : (
-          <><UserPlus className="w-3 h-3 shrink-0" />{t("messagesPage.assignOwner")}</>
+          <><UserPlus className="w-3 h-3 shrink-0" />{labels.assign}</>
         )}
       </button>
       {open && coords && createPortal(
@@ -122,7 +124,7 @@ export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onA
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder={t("messagesPage.searchStaff")}
+                placeholder={labels.search}
                 className="w-full h-8 ps-7 pe-2 text-xs rounded-lg border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                 autoFocus
               />
@@ -130,7 +132,7 @@ export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onA
           </div>
           <div className="max-h-48 overflow-y-auto py-1">
             {meFirst.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-3">{t("messagesPage.noStaffFound")}</p>
+              <p className="text-xs text-muted-foreground text-center py-3">{labels.empty}</p>
             ) : (
               meFirst.map(u => (
                 <button
@@ -143,7 +145,7 @@ export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onA
                   </div>
                   <span className="truncate">{u.name}</span>
                   {u.id === currentUserId && (
-                    <span className="text-[9px] text-muted-foreground ms-auto shrink-0">({t("studentsPage.me")})</span>
+                    <span className="text-[9px] text-muted-foreground ms-auto shrink-0">({labels.me})</span>
                   )}
                 </button>
               ))
