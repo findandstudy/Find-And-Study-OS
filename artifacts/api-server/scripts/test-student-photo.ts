@@ -20,8 +20,8 @@ import { PDFDocument, rgb } from "pdf-lib";
 import sharp from "sharp";
 import { buildSignedStudentPhotoPath } from "@workspace/portal-adapters";
 import express, { type Express } from "express";
-import { eq } from "drizzle-orm";
-import { db, studentsTable, documentsTable } from "@workspace/db";
+import { eq, inArray } from "drizzle-orm";
+import { agentsTable, db, documentsTable, studentsTable, usersTable } from "@workspace/db";
 
 import studentsRouter from "../src/routes/students.js";
 import { recomputeStudentPhoto } from "../src/lib/studentPhoto.js";
@@ -32,7 +32,7 @@ after(() => {
 
 const RUN_ID = `sp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 
-let currentUser: { id: number; role: string; isActive: boolean } = {
+let currentUser: { id: number; role: string; isActive: boolean } | undefined = {
   id: 1,
   role: "super_admin",
   isActive: true,
@@ -384,5 +384,54 @@ test("SP-13: a fileKey photo uses object storage and stays on the guarded route"
     else process.env.STORAGE_LOCAL_DIR = previous.directory;
     await rm(directory, { recursive: true, force: true });
     await teardown();
+  }
+});
+
+test("SP-14: a photo source is available to its agency and denied to unrelated agencies and anonymous users", async () => {
+  const previousUser = currentUser;
+  let agencyIds: number[] = [];
+  let userIds: number[] = [];
+  await setup();
+  try {
+    const [owner, unrelated] = await db.insert(usersTable).values([
+      { email: `photo-owner-${RUN_ID}@test.invalid`, role: "agent" },
+      { email: `photo-unrelated-${RUN_ID}@test.invalid`, role: "agent" },
+    ]).returning({ id: usersTable.id, role: usersTable.role, isActive: usersTable.isActive });
+    userIds = [owner.id, unrelated.id];
+    const [ownerAgency, unrelatedAgency] = await db.insert(agentsTable).values([
+      { userId: owner.id, firstName: "Photo", lastName: "Owner agency" },
+      { userId: unrelated.id, firstName: "Photo", lastName: "Unrelated agency" },
+    ]).returning({ id: agentsTable.id });
+    agencyIds = [ownerAgency.id, unrelatedAgency.id];
+    await db.update(studentsTable).set({ agentId: ownerAgency.id }).where(eq(studentsTable.id, studentId));
+    await insertDoc({ fileUrl: "https://example.invalid/agency-photo.jpg", mimeType: "image/jpeg" });
+
+    const original = "/api/students/" + studentId + "/photo";
+    const thumbnail = original + "/thumbnail?fallback=source";
+    currentUser = owner;
+    const allowed = await apiReq("GET", thumbnail);
+    assert.equal(allowed.status, 302);
+    assert.equal(allowed.headers.location, original);
+    assert.equal(allowed.headers["cache-control"], "private, no-store");
+    assert.equal((await apiReq("GET", original)).status, 302);
+
+    currentUser = unrelated;
+    for (const path of [thumbnail, original]) {
+      const denied = await apiReq("GET", path);
+      assert.equal(denied.status, 403);
+      assert.equal(denied.headers.location, undefined);
+    }
+
+    currentUser = undefined;
+    for (const path of [thumbnail, original]) {
+      const denied = await apiReq("GET", path);
+      assert.equal(denied.status, 401);
+      assert.equal(denied.headers.location, undefined);
+    }
+  } finally {
+    currentUser = previousUser;
+    await teardown();
+    if (agencyIds.length) await db.delete(agentsTable).where(inArray(agentsTable.id, agencyIds));
+    if (userIds.length) await db.delete(usersTable).where(inArray(usersTable.id, userIds));
   }
 });
