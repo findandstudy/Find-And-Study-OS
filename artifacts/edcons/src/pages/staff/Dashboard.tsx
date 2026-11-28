@@ -1,3 +1,4 @@
+import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
 import { AdminPageDescription, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { DashboardSkeleton } from "@/components/ui/page-skeleton";
@@ -29,10 +30,6 @@ const AVATAR_COLORS = [
   "bg-rose-500/15 text-rose-600",
   "bg-cyan-500/15 text-cyan-600",
 ];
-
-function getInitials(firstName?: string, lastName?: string) {
-  return `${(firstName || "?")[0]}${(lastName || "?")[0]}`.toUpperCase();
-}
 
 const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
   "lead.created": UserPlus,
@@ -275,20 +272,14 @@ export default function StaffDashboard() {
                 latestStudents.map((s: any, i: number) => (
                   <Link key={s.id} href={`/staff/students/${s.id}`}>
                     <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer group">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
-                        <img
-                          src={s.photoUrl || `${BASE}/api/students/${s.id}/photo/thumbnail`}
-                          alt={`${s.firstName} ${s.lastName}`}
-                          loading="lazy"
-                          decoding="async"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            const el = e.target as HTMLImageElement;
-                            el.style.display = "none";
-                            el.parentElement!.textContent = getInitials(s.firstName, s.lastName);
-                          }}
-                        />
-                      </div>
+                      <StudentPhotoAvatar
+                        studentId={s.id}
+                        firstName={s.firstName}
+                        lastName={s.lastName}
+                        photoUrl={s.photoUrl}
+                        hasPhoto={s.hasPhoto}
+                        className="size-9 rounded-full text-xs"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-foreground truncate uppercase">
                           {s.firstName} {s.lastName}

@@ -1,3 +1,4 @@
+import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
 import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useMemo } from "react";
@@ -556,18 +557,14 @@ export default function AdminDashboard() {
               latestStudents.map((st: any, i: number) => (
                 <Link key={st.id} href={`/staff/students/${st.id}`}>
                   <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer group">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
-                      <img
-                        src={st.photoUrl || `${BASE}/api/students/${st.id}/photo/thumbnail`}
-                        alt={`${st.firstName} ${st.lastName}`}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          const el = e.target as HTMLImageElement;
-                          el.style.display = "none";
-                          el.parentElement!.textContent = getInitials(st.firstName, st.lastName);
-                        }}
-                      />
-                    </div>
+                    <StudentPhotoAvatar
+                      studentId={st.id}
+                      firstName={st.firstName}
+                      lastName={st.lastName}
+                      photoUrl={st.photoUrl}
+                      hasPhoto={st.hasPhoto}
+                      className="size-9 rounded-full text-xs"
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-foreground truncate uppercase">
                         {st.firstName} {st.lastName}

@@ -1,3 +1,4 @@
+import { StudentListPhotoAvatar } from "@/components/StudentListPhotoAvatar";
 import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
@@ -130,28 +131,15 @@ function useInView(rootMargin = "200px") {
 
 /* ── LeadAvatar ────────────────────────────────────────────── */
 function LeadAvatar({ lead, size = "sm" }: { lead: any; size?: "sm" | "md" }) {
-  const dim = size === "md" ? "w-10 h-10" : "w-8 h-8";
-  const textSize = size === "md" ? "text-sm" : "text-xs";
-  const [imgError, setImgError] = useState(false);
-  const { ref, inView } = useInView();
-
-  const showPhoto = !!(lead.convertedStudentId && lead.convertedStudentHasPhoto && !imgError && inView);
-
   return (
-    <div ref={ref} className={`${dim} rounded-full shrink-0 overflow-hidden`}>
-      {showPhoto ? (
-        <img
-          src={lead.convertedStudentPhotoUrl || `${BASE_URL}/api/students/${lead.convertedStudentId}/photo/thumbnail`}
-          alt={`${lead.firstName} ${lead.lastName}`}
-          className={`${dim} rounded-full object-cover border border-primary/20`}
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        <div className={`${dim} rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center`}>
-          <span className={`${textSize} font-bold text-primary`}>{lead.firstName?.[0]}{lead.lastName?.[0]}</span>
-        </div>
-      )}
-    </div>
+    <StudentListPhotoAvatar
+      studentId={lead.convertedStudentId}
+      firstName={lead.firstName}
+      lastName={lead.lastName}
+      photoUrl={lead.convertedStudentPhotoUrl}
+      hasPhoto={lead.convertedStudentHasPhoto}
+      size={size}
+    />
   );
 }
 

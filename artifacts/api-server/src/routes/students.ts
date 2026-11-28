@@ -372,6 +372,7 @@ router.get("/students/:id/photo", photoAccessGuard, async (req, res): Promise<vo
     if (!/^https?:\/\//i.test(url)) {
       res.status(422).json({ error: "Invalid photo URL" }); return;
     }
+    res.set("Cache-Control", "private, no-store");
     res.redirect(302, url);
     return;
   }
@@ -386,6 +387,20 @@ router.get("/students/:id/photo", photoAccessGuard, async (req, res): Promise<vo
     if (!res.headersSent) res.status(500).json({ error: "Failed to load photo" });
   }
 });
+
+function redirectToStudentPhotoSource(req: Request, res: Response, studentId: number): void {
+  const query = new URLSearchParams();
+  if ((req as Request & { __photoSignedAccess?: boolean }).__photoSignedAccess) {
+    query.set("exp", String(req.query.exp));
+    query.set("sig", String(req.query.sig));
+  }
+  if (typeof req.query.v === "string" && /^\d{1,12}$/.test(req.query.v)) {
+    query.set("v", req.query.v);
+  }
+  res.setHeader("Cache-Control", "private, no-store");
+  res.removeHeader("ETag");
+  res.redirect(302, req.baseUrl + "/students/" + studentId + "/photo" + (query.size ? "?" + query.toString() : ""));
+}
 
 router.get("/students/:id/photo/thumbnail", photoAccessGuard, async (req, res): Promise<void> => {
   const studentId = parseInt(String(req.params.id), 10);
@@ -422,6 +437,12 @@ router.get("/students/:id/photo/thumbnail", photoAccessGuard, async (req, res): 
       photoDoc,
       `${photoDoc.firstName} ${photoDoc.lastName}`,
     );
+    // The legacy endpoint keeps its JPEG contract. Avatar clients can request
+    // the protected source when the result is a transient initials image.
+    if (!thumbnail.cacheable && req.query.fallback === "source") {
+      redirectToStudentPhotoSource(req, res, studentId);
+      return;
+    }
     const policy = studentPhotoThumbnailResponsePolicy(thumbnail, req.headers["if-none-match"]);
     res.setHeader("Cache-Control", policy.cacheControl);
     if (policy.etag) res.setHeader("ETag", policy.etag);
@@ -437,6 +458,10 @@ router.get("/students/:id/photo/thumbnail", photoAccessGuard, async (req, res): 
     res.end(thumbnail.buffer);
   } catch (err) {
     console.error(`[STUDENTS] photo thumbnail for #${studentId} failed:`, err);
+    if (!res.headersSent && req.query.fallback === "source") {
+      redirectToStudentPhotoSource(req, res, studentId);
+      return;
+    }
     if (!res.headersSent) res.status(500).json({ error: "Failed to create photo thumbnail" });
   }
 });

@@ -29,22 +29,35 @@ export default function PdfPhotoAvatar({ src, className, alt, fallback }: PdfPho
       try {
         await runBoundedPdfPreview(null, controller.signal, async (signal) => {
           const data = await fetchBoundedPdf(src, signal);
+          const signature = new TextDecoder().decode(new Uint8Array(data, 0, Math.min(data.byteLength, 1024)));
+          if (!signature.includes("%PDF-")) return;
           const loadingTask = pdfjsLib.getDocument({ data });
-          signal.addEventListener("abort", () => loadingTask.destroy(), { once: true });
-          const pdf = await loadingTask.promise;
-          const page = await pdf.getPage(1);
-          if (cancelled) return;
-          const canvas = canvasRef.current;
-          if (!canvas) return;
-          const unscaled = page.getViewport({ scale: 1 });
-          const viewport = page.getViewport({ scale: 160 / Math.max(unscaled.width, unscaled.height) });
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          const ctx = canvas.getContext("2d")!;
-          const renderTask = page.render({ canvas, canvasContext: ctx, viewport });
-          signal.addEventListener("abort", () => renderTask.cancel(), { once: true });
-          await renderTask.promise;
-          if (!cancelled) setRendered(true);
+          const destroy = () => { void loadingTask.destroy().catch(() => undefined); };
+          signal.addEventListener("abort", destroy, { once: true });
+          try {
+            const pdf = await loadingTask.promise;
+            const page = await pdf.getPage(1);
+            if (cancelled) return;
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const unscaled = page.getViewport({ scale: 1 });
+            const viewport = page.getViewport({ scale: 160 / Math.max(unscaled.width, unscaled.height) });
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext("2d")!;
+            const renderTask = page.render({ canvas, canvasContext: ctx, viewport });
+            const abortRender = () => renderTask.cancel();
+            signal.addEventListener("abort", abortRender, { once: true });
+            try {
+              await renderTask.promise;
+            } finally {
+              signal.removeEventListener("abort", abortRender);
+            }
+            if (!cancelled) setRendered(true);
+          } finally {
+            signal.removeEventListener("abort", destroy);
+            await loadingTask.destroy().catch(() => undefined);
+          }
         });
       } catch {
         if (!cancelled) setFailed(true);
@@ -63,6 +76,7 @@ export default function PdfPhotoAvatar({ src, className, alt, fallback }: PdfPho
       <canvas
         ref={canvasRef}
         className={className}
+        role="img"
         aria-label={alt}
         style={{ display: rendered ? undefined : "none" }}
       />

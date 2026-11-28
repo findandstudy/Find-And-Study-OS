@@ -577,6 +577,7 @@ function StudentAvatar({ student, size = "sm" }: { student: any; size?: "sm" | "
       firstName={student.firstName}
       lastName={student.lastName}
       photoUrl={student.photoUrl}
+      hasPhoto={student.hasPhoto}
       size={size}
     />
   );

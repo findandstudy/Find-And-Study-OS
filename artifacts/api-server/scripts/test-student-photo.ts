@@ -13,6 +13,12 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "http";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { PDFDocument, rgb } from "pdf-lib";
+import sharp from "sharp";
+import { buildSignedStudentPhotoPath } from "@workspace/portal-adapters";
 import express, { type Express } from "express";
 import { eq } from "drizzle-orm";
 import { db, studentsTable, documentsTable } from "@workspace/db";
@@ -255,6 +261,128 @@ test("SP-9: recompute follows LATEST doc — newer unservable data: hides older 
     assert.equal(f.hasPhoto, false);
     assert.equal(f.photoUrl, null);
   } finally {
+    await teardown();
+  }
+});
+
+test("SP-10: valid inline PDF uses the protected source if both server renderers are unavailable", async () => {
+  await setup();
+  const realPath = process.env.PATH;
+  const noRenderers = await mkdtemp(join(tmpdir(), "photo-no-renderers-"));
+  try {
+    const pdf = await PDFDocument.create();
+    pdf.addPage([140, 180]).drawRectangle({ x: 0, y: 0, width: 140, height: 180, color: rgb(0.7, 0.2, 0.1) });
+    await insertDoc({ mimeType: "application/pdf", fileData: Buffer.from(await pdf.save()).toString("base64") });
+    const base = "/api/students/" + studentId + "/photo";
+    process.env.PATH = noRenderers;
+    const legacy = await apiReq("GET", base + "/thumbnail");
+    assert.equal(legacy.status, 200);
+    assert.equal(legacy.headers["content-type"], "image/jpeg");
+    assert.equal(legacy.headers["cache-control"], "private, no-store");
+    const optIn = await apiReq("GET", base + "/thumbnail?v=12&fallback=source");
+    assert.equal(optIn.status, 302);
+    assert.equal(optIn.headers.location, base + "?v=12");
+    assert.equal(optIn.headers["cache-control"], "private, no-store");
+    assert.equal(optIn.headers.etag, undefined);
+    const raw = await apiReq("GET", optIn.headers.location!);
+    assert.equal(raw.status, 200);
+    assert.equal(raw.headers["content-type"], "application/pdf");
+    assert.ok(String(raw.body).startsWith("%PDF-"));
+
+    const previousUser = currentUser;
+    const previousSigningSecret = process.env.ASSET_URL_SIGNING_SECRET;
+    try {
+      currentUser = { id: 987654, role: "student", isActive: true };
+      for (const path of [base, base + "/thumbnail?fallback=source"]) {
+        const denied = await apiReq("GET", path);
+        assert.equal(denied.status, 403);
+        assert.equal(denied.headers.location, undefined);
+      }
+      process.env.ASSET_URL_SIGNING_SECRET = "synthetic-photo-test-key-only";
+      const signed = buildSignedStudentPhotoPath(studentId);
+      assert.ok(signed);
+      const signedThumbnail = signed.replace("/photo?", "/photo/thumbnail?") + "&fallback=source";
+      const signedRedirect = await apiReq("GET", signedThumbnail);
+      assert.equal(signedRedirect.status, 302);
+      assert.equal(signedRedirect.headers.location, signed);
+      const wrongStudent = signedThumbnail.replace("/" + studentId + "/photo", "/" + (studentId + 100000) + "/photo");
+      assert.ok([403, 404].includes((await apiReq("GET", wrongStudent)).status));
+    } finally {
+      currentUser = previousUser;
+      if (previousSigningSecret === undefined) delete process.env.ASSET_URL_SIGNING_SECRET;
+      else process.env.ASSET_URL_SIGNING_SECRET = previousSigningSecret;
+    }
+  } finally {
+    if (realPath === undefined) delete process.env.PATH;
+    else process.env.PATH = realPath;
+    await rm(noRenderers, { recursive: true, force: true });
+    await teardown();
+  }
+});
+
+test("SP-11: the opt-in URL still returns a cacheable JPEG for a PNG or JPEG photograph", async () => {
+  await setup();
+  try {
+    for (const format of ["png", "jpeg"] as const) {
+      const image = await sharp({
+        create: { width: 48, height: 52, channels: 3, background: "#ff3300" },
+      }).toFormat(format).toBuffer();
+      await insertDoc({ mimeType: "image/" + format, fileData: image.toString("base64") });
+      const r = await apiReq("GET", "/api/students/" + studentId + "/photo/thumbnail?fallback=source");
+      assert.equal(r.status, 200);
+      assert.equal(r.headers["content-type"], "image/jpeg");
+      assert.equal(r.headers["cache-control"], "private, max-age=300");
+      assert.ok(r.headers.etag);
+      assert.equal(r.headers.location, undefined);
+    }
+  } finally {
+    await teardown();
+  }
+});
+
+test("SP-12: an absent or deleted photo cannot redirect to a source", async () => {
+  await setup();
+  const base = "/api/students/" + studentId + "/photo/thumbnail?fallback=source";
+  try {
+    assert.equal((await apiReq("GET", base)).status, 404);
+    await insertDoc({ fileUrl: "https://example.invalid/deleted-photo.jpg", deletedAt: new Date() });
+    assert.equal((await apiReq("GET", base)).status, 404);
+    await insertDoc({ fileUrl: "https://example.invalid/official-photo.jpg", mimeType: "image/jpeg" });
+    const result = await apiReq("GET", base);
+    assert.equal(result.status, 302);
+    assert.equal(result.headers.location, "/api/students/" + studentId + "/photo");
+    const external = await apiReq("GET", result.headers.location!);
+    assert.equal(external.headers.location, "https://example.invalid/official-photo.jpg");
+  } finally {
+    await teardown();
+  }
+});
+
+test("SP-13: a fileKey photo uses object storage and stays on the guarded route", async () => {
+  await setup();
+  const directory = await mkdtemp(join(tmpdir(), "student-photo-object-test-"));
+  const previous = { driver: process.env.STORAGE_DRIVER, directory: process.env.STORAGE_LOCAL_DIR };
+  try {
+    process.env.STORAGE_DRIVER = "local";
+    process.env.STORAGE_LOCAL_DIR = directory;
+    const key = "student-photo-fixture.jpg";
+    await writeFile(join(directory, key), await sharp({
+      create: { width: 32, height: 32, channels: 3, background: "#338844" },
+    }).jpeg().toBuffer());
+    await insertDoc({ fileKey: "/objects/" + key, mimeType: "image/jpeg" });
+    const base = "/api/students/" + studentId + "/photo";
+    for (const endpoint of [base, base + "/thumbnail?fallback=source"]) {
+      const response = await apiReq("GET", endpoint);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers["content-type"], "image/jpeg");
+      assert.equal(response.headers.location, undefined);
+    }
+  } finally {
+    if (previous.driver === undefined) delete process.env.STORAGE_DRIVER;
+    else process.env.STORAGE_DRIVER = previous.driver;
+    if (previous.directory === undefined) delete process.env.STORAGE_LOCAL_DIR;
+    else process.env.STORAGE_LOCAL_DIR = previous.directory;
+    await rm(directory, { recursive: true, force: true });
     await teardown();
   }
 });

@@ -154,6 +154,7 @@ function AppStudentAvatar({ app, size = "sm" }: { app: any; size?: "sm" | "md" }
       firstName={app.studentFirstName}
       lastName={app.studentLastName}
       photoUrl={app.studentPhotoUrl}
+      hasPhoto={app.studentHasPhoto}
       size={size}
     />
   );

@@ -1,7 +1,8 @@
+import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
 import { Table } from "@/components/ui/table";
 import { AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
-import { useState, useRef, useMemo, useEffect, lazy, Suspense } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
 import {
@@ -50,8 +51,6 @@ import { invalidateAssignmentWorkspaceQueries, invalidateFollowUpWorkspaceQuerie
 import { applicationCreationErrorToast } from "@/components/ApplicationCreationErrorToast";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
-
-const LazyPdfPhotoAvatar = lazy(() => import("@/components/PdfPhotoAvatar"));
 
 const FALLBACK_DOC_TYPES = [
   { key: "passport", label: "Passport", accept: ".pdf,.jpg,.jpeg,.png" },
@@ -412,10 +411,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     if (photoDocs.length === 0) return null;
     return photoDocs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   }, [documents, hasPhotoResolved, photoMime, student?.hasPhoto]);
-  const currentPhotoUrl = `${BASE_URL}/api/students/${id}/photo?v=${photoRevision}`;
-
-  // Reset load-error state whenever the photo source changes (e.g. new upload, different student).
-  useEffect(() => { setPhotoLoadError(false); }, [photoDoc]);
 
   const { toast } = useToast();
   const { user, hasPermission } = useAuth();
@@ -466,7 +461,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     return options.length > 0 ? options : FALLBACK_DOC_TYPES;
   }, [catalogResp]);
   const [assigning, setAssigning] = useState(false);
-  const [photoLoadError, setPhotoLoadError] = useState(false);
 
   const { data: staffUsersData } = useQuery<any>({
     queryKey: ["/api/users"],
@@ -917,7 +911,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
       await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && (k.includes("document") || k.includes("student") || k.includes(`/api/students`))) });
       setPhotoRevision(value => value + 1);
-      setPhotoLoadError(false);
       toast({ title: translateUi(uiLanguage, "Photo updated") });
     } catch (err: any) {
       toast({
@@ -950,36 +943,15 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           <div className="relative group shrink-0">
             {isLoading ? (
               <Skeleton className="w-20 h-20 rounded-full" />
-            ) : photoDoc && !photoLoadError ? (
-              photoDoc.mimeType === "application/pdf" ? (
-                <Suspense fallback={
-                  <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold border-2 border-primary/20">
-                    {(student?.firstName?.[0] ?? "").toUpperCase()}{(student?.lastName?.[0] ?? "").toUpperCase()}
-                  </div>
-                }>
-                  <LazyPdfPhotoAvatar
-                    src={currentPhotoUrl}
-                    alt={`${student?.firstName} ${student?.lastName}`}
-                    className="w-20 h-20 rounded-full object-cover border-2 border-primary/20"
-                    fallback={
-                      <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold border-2 border-primary/20">
-                        {(student?.firstName?.[0] ?? "").toUpperCase()}{(student?.lastName?.[0] ?? "").toUpperCase()}
-                      </div>
-                    }
-                  />
-                </Suspense>
-              ) : (
-                <img
-                  src={currentPhotoUrl}
-                  alt={`${student?.firstName} ${student?.lastName}`}
-                  className="w-20 h-20 rounded-full object-cover border-2 border-primary/20"
-                  onError={() => setPhotoLoadError(true)}
-                />
-              )
             ) : (
-              <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold border-2 border-primary/20">
-                {(student?.firstName?.[0] ?? "").toUpperCase()}{(student?.lastName?.[0] ?? "").toUpperCase()}
-              </div>
+              <StudentPhotoAvatar
+                studentId={id}
+                firstName={student?.firstName}
+                lastName={student?.lastName}
+                photoUrl={student?.photoUrl}
+                revision={photoRevision}
+                className="size-20 rounded-full text-2xl"
+              />
             )}
             <button
               type="button"

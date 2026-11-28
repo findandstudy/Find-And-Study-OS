@@ -1,3 +1,4 @@
+import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -201,18 +202,14 @@ export default function AgentDashboard() {
                 latestStudents.map((st2: any, i: number) => (
                   <Link key={st2.id} href="/agent/students">
                     <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
-                        <img
-                          src={st2.photoUrl || `${BASE}/api/students/${st2.id}/photo/thumbnail`}
-                          alt={`${st2.firstName} ${st2.lastName}`}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            const el = e.target as HTMLImageElement;
-                            el.style.display = "none";
-                            el.parentElement!.textContent = getInitials(st2.firstName, st2.lastName);
-                          }}
-                        />
-                      </div>
+                      <StudentPhotoAvatar
+                        studentId={st2.id}
+                        firstName={st2.firstName}
+                        lastName={st2.lastName}
+                        photoUrl={st2.photoUrl}
+                        hasPhoto={st2.hasPhoto}
+                        className="size-9 rounded-full text-xs"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-foreground truncate uppercase">
                           {st2.firstName} {st2.lastName}
