@@ -830,3 +830,14 @@ iletişim ve Apply production kapalı/değişmedi. Test board'lar arşivlidir.
 Oturum içi browser görsel kontrolü login gerektirdiği için tamamlanmadı.
 Staging integration remote push mevcut sunucu GitHub auth yokluğu nedeniyle
 bekler; committed source + bundle korunur. Detay: STAGING_WORK_PIPELINES_2026-11-28.md.
+
+### 28 Kasım — staging pipeline gerçek UI/UX kontrolü
+İç tarayıcıyla 23 dil ana ekranı, kayıt/telefon, drag/drop, not/takip,
+bildirim/dashboard, XLSX indirme/aynı dosya önizlemesi, favori/kaynak seçimi
+incelendi. Admin/staff dashboard çift mount düzeltildi; boş aktivite kutusu
+gizlenir. Pipeline sözlük hataları ve atama menüsü copy'si düzeltildi; RTL'de
+sidebar doğru tarafa alındı, iletişim alanları LTR isolate edildi. Local
+ac850912, staging a6ecdc5706c608576e9153a7df701577abf53b27; frontend overlay
+yayında, health PASS. TypeScript/i18n/render/build PASS. Aktif kanal yokluğu
+nedeniyle Inbox UI ve uygulanmayan viewport nedeniyle mobil görsel kanıt yok.
+Detay STAGING_PIPELINE_UI_REVIEW_2026-11-28.md; Apply production değişmedi.
