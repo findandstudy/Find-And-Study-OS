@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { ADMIN_FORM_WIDTH } from "@/components/layout/adminFormWidth";
 import { useState, useEffect, useRef } from "react";
@@ -201,23 +202,23 @@ export default function WebsiteThemeBuilder() {
 
   return (
       <div className="min-w-0 w-full space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <AdminPageHeader>
           <div className="flex items-center gap-3">
             <Palette className="w-6 h-6 text-primary" />
             <div>
-              <h1 className="text-2xl font-bold">{translateUi(uiLanguage, "Theme Builder")}</h1>
-              <p className="text-sm text-muted-foreground"> {translateUi(uiLanguage, "Customize your website appearance. Inherits from Settings > Branding as defaults.")} </p>
+              <AdminPageTitle>{translateUi(uiLanguage, "Theme Builder")}</AdminPageTitle>
+              <AdminPageDescription> {translateUi(uiLanguage, "Customize your website appearance. Inherits from Settings > Branding as defaults.")} </AdminPageDescription>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <AdminPageActions>
             <Button variant="outline" size="sm" onClick={handleReset} disabled={resetMutation.isPending}>
               <RotateCcw className="w-4 h-4 mr-1" /> {resetMutation.isPending ? translateUi(uiLanguage, "Resetting...") : translateUi(uiLanguage, "Reset to Defaults")}
             </Button>
             <Button size="sm" onClick={handleSave} disabled={!dirty || saveMutation.isPending}>
               <Save className="w-4 h-4 mr-1" /> {saveMutation.isPending ? translateUi(uiLanguage, "Saving...") : translateUi(uiLanguage, "Save Theme")}
             </Button>
-          </div>
-        </div>
+          </AdminPageActions>
+        </AdminPageHeader>
 
         {dirty && (
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-2 text-sm text-amber-700 dark:text-amber-300"> {translateUi(uiLanguage, "You have unsaved changes.")} </div>

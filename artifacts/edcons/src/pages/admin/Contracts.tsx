@@ -1,3 +1,5 @@
+import { Table } from "@/components/ui/table";
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
@@ -356,14 +358,14 @@ export default function ContractsPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <AdminPageHeader>
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><FileSignature className="w-6 h-6" /> {t("contracts.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t("contracts.subtitle")}</p>
+          <AdminPageTitle className="flex items-center gap-2"><FileSignature className="w-6 h-6" /> {t("contracts.title")}</AdminPageTitle>
+          <AdminPageDescription>{t("contracts.subtitle")}</AdminPageDescription>
         </div>
         <Button onClick={() => setShowSendDialog(true)}><Send className="w-4 h-4 mr-2" /> {t("contracts.sendSigningRequest")}</Button>
-      </div>
+      </AdminPageHeader>
 
       <div className="flex gap-2 border-b">
         <button onClick={() => { setTab("sessions"); setSelected(new Set()); }} className={`px-4 py-2 text-sm font-medium ${tab === "sessions" ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
@@ -391,7 +393,7 @@ export default function ContractsPage() {
           sessions.length === 0 ? (
             <div className="p-12 text-center text-muted-foreground">{t("contracts.noSessions")}</div>
           ) : (
-            <table className="w-full text-sm">
+            <Table>
               <thead className="bg-muted/40">
                 <tr>
                   <th className="px-4 py-3 w-10">
@@ -453,12 +455,12 @@ export default function ContractsPage() {
                   );
                 })}
               </tbody>
-            </table>
+            </Table>
           )
         ) : signed.length === 0 ? (
           <div className="p-12 text-center text-muted-foreground">{t("contracts.noSigned")}</div>
         ) : (
-          <table className="w-full text-sm">
+          <Table>
             <thead className="bg-muted/40">
               <tr>
                 {sortTh(t("contracts.colSigner"), "signer", signedSort, setSignedSort)}
@@ -511,7 +513,7 @@ export default function ContractsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
       </Card>
 

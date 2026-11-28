@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -951,18 +952,18 @@ export default function SocialOperations() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <AdminPageHeader>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <AdminPageTitle>
             {tr ? translateUi(uiLanguage, "Sosyal Medya Operasyonları") : translateUi(uiLanguage, "Social Media Operations")}
-          </h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          </AdminPageTitle>
+          <AdminPageDescription>
             {tr
               ? translateUi(uiLanguage, "Çoklu hesap, içerik brief'i, maker-checker onayı, yayın takvimi, UTM ve performans kanıtını tek alanda yönetir.")
               : translateUi(uiLanguage, "Manages multi-account registry, content briefs, maker-checker approval, publishing calendar, UTM and performance evidence in one place.")}
-          </p>
+          </AdminPageDescription>
         </div>
-        <div className="flex gap-2">
+        <AdminPageActions>
           <Button variant="outline" asChild>
             <a href="/admin/settings">
               <Settings className="mr-2 size-4" />
@@ -973,8 +974,8 @@ export default function SocialOperations() {
             <Plus className="mr-2 size-4" />
             {tr ? translateUi(uiLanguage, "Yeni brief") : translateUi(uiLanguage, "New brief")}
           </Button>
-        </div>
-      </div>
+        </AdminPageActions>
+      </AdminPageHeader>
 
       {!enabled && (
         <Card className="border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30">

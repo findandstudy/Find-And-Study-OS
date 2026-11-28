@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { downloadCrmExcel } from "@/lib/crmExcel";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
@@ -1730,21 +1731,21 @@ export default function LeadsPage() {
     <>
       <div className="h-[calc(100vh-8rem)] flex flex-col">
         {/* ── Header ─────────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
+        <AdminPageHeader className="mb-6 shrink-0">
           <div className="flex items-center gap-3">
             <div>
-              <h1 className="text-3xl font-display font-bold text-foreground">{t("staffLeads.title")}</h1>
-              <p className="text-muted-foreground text-sm mt-1">{t("staffLeads.subtitle")}</p>
+              <AdminPageTitle>{t("staffLeads.title")}</AdminPageTitle>
+              <AdminPageDescription>{t("staffLeads.subtitle")}</AdminPageDescription>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <AdminPageActions className="sm:justify-end">
+            <div className="relative w-full sm:w-56 lg:w-64">
+              <Search className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder={t("leadsPage.searchLeads")}
+                aria-label={t("leadsPage.searchLeads")} placeholder={t("leadsPage.searchLeads")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 bg-white dark:bg-black/20 border-border rounded-full"
+                className="ps-9"
               />
             </div>
             <FilterPopover
@@ -1798,11 +1799,11 @@ export default function LeadsPage() {
                 <FileUp className="w-4 h-4" /> {t("leadsPage.bulkImport")}
               </Button>
             )}
-            <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setCreateOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" /> {t("leadsPage.addLead")}
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="w-4 h-4" /> {t("leadsPage.addLead")}
             </Button>
-          </div>
-        </div>
+          </AdminPageActions>
+        </AdminPageHeader>
 
         {/* ── Pipeline board ─────────────────────────────────── */}
         {viewMode === "pipeline" && (

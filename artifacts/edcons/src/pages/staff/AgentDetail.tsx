@@ -1,3 +1,4 @@
+import { AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { useState } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -5,7 +6,7 @@ import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   ArrowLeft, Building2, Mail, Phone, Globe, MapPin, Users, GraduationCap, FileText, ExternalLink, MessageSquare
@@ -70,7 +71,7 @@ export default function AgentDetailPage() {
   if (!agentId) return null;
 
   return (
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="min-w-0 w-full space-y-6">
         <Button variant="ghost" size="sm" onClick={() => setLocation("/staff/agents")} className="gap-1.5 text-muted-foreground hover:text-foreground">
           <ArrowLeft className="w-4 h-4" /> {t("staffAgentDetail.backToAgents")}
         </Button>
@@ -87,8 +88,8 @@ export default function AgentDetailPage() {
                   <Building2 className="w-8 h-8 text-primary" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h1 className="text-2xl font-bold">{agent.companyName}</h1>
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <AdminPageTitle>{agent.companyName}</AdminPageTitle>
                     {agent.status && (
                       <Badge variant={agent.status === "active" ? "default" : "secondary"}>
                         {agent.status}
@@ -137,7 +138,7 @@ export default function AgentDetailPage() {
             )}
 
             <Tabs value={tab} onValueChange={setTab}>
-              <TabsList className="grid w-full grid-cols-4">
+              <AdminTabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
                 <TabsTrigger value="leads" className="gap-1.5">
                   <Users className="w-4 h-4" /> {t("staffAgentDetail.leadsTab")} {Array.isArray(leads) && leads.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{leads.length}</Badge>}
                 </TabsTrigger>
@@ -150,7 +151,7 @@ export default function AgentDetailPage() {
                 <TabsTrigger value="messaging" className="gap-1.5">
                   <MessageSquare className="w-4 h-4" /> {t("staffAgentDetail.messagingTab")}
                 </TabsTrigger>
-              </TabsList>
+              </AdminTabsList>
 
               <TabsContent value="leads" className="mt-4">
                 {Array.isArray(leads) && leads.length > 0 ? (

@@ -1,3 +1,4 @@
+import { AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -123,13 +124,13 @@ export default function WebsitePublishHistory() {
 
   return (
     <div className="min-w-0 w-full space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <AdminPageHeader>
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="flex items-center gap-2 text-2xl font-bold">
+            <AdminPageTitle className="flex items-center gap-2">
               <History className="h-6 w-6 text-primary" />
               {tr ? translateUi(uiLanguage, "Yayın ve İçerik Merkezi") : translateUi(uiLanguage, "Publication & Content Center")}
-            </h1>
+            </AdminPageTitle>
             <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">
               {tr ? translateUi(uiLanguage, "Kontrollü pilot kapalı") : translateUi(uiLanguage, "Governed pilot off")}
             </Badge>
@@ -144,7 +145,7 @@ export default function WebsitePublishHistory() {
           <RefreshCw className={`mr-2 h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`} />
           {tr ? translateUi(uiLanguage, "Yenile") : translateUi(uiLanguage, "Refresh")}
         </Button>
-      </div>
+      </AdminPageHeader>
 
       <Card className="border-blue-200 bg-blue-50/70 dark:border-blue-900 dark:bg-blue-950/20">
         <CardContent className="flex items-start gap-3 p-4">

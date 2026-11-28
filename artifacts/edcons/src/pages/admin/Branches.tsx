@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
@@ -306,17 +307,17 @@ export default function BranchesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <AdminPageHeader>
         <div>
-          <h1 className="text-2xl font-display font-bold text-foreground">{t("branches.title")}</h1>
-          <p className="text-muted-foreground text-sm mt-1">{t("branches.subtitle")}</p>
+          <AdminPageTitle>{t("branches.title")}</AdminPageTitle>
+          <AdminPageDescription>{t("branches.subtitle")}</AdminPageDescription>
         </div>
         {isSuperAdmin && (
           <Button onClick={openCreate} className="rounded-xl gap-2">
             <Plus className="w-4 h-4" /> {t("branches.newBranch")}
           </Button>
         )}
-      </div>
+      </AdminPageHeader>
 
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <div className="flex items-center justify-between mb-5 flex-wrap gap-3">

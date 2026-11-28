@@ -5,6 +5,7 @@
  * Şifre asla geri gösterilmez (sadece "••••• kayıtlı" placeholder).
  */
 
+import { AdminPageDescription, AdminPageTitle } from "@/components/layout/AdminPage";
 import { useState } from "react";
 import { ADMIN_FORM_WIDTH } from "@/components/layout/adminFormWidth";
 import {
@@ -55,12 +56,12 @@ export default function PortalCredentials() {
     <div className="min-w-0 w-full space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <AdminPageTitle>
           {t("portalAutomation.credentials.pageTitle")}
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
+        </AdminPageTitle>
+        <AdminPageDescription>
           {t("portalAutomation.credentials.description")}
-        </p>
+        </AdminPageDescription>
       </div>
 
       {/* Content */}

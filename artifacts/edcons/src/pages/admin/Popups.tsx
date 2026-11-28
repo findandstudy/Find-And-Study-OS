@@ -1,3 +1,5 @@
+import { Table } from "@/components/ui/table";
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -134,15 +136,15 @@ export default function PopupsPage() {
 
   return (
     <div className="min-w-0 w-full" data-testid="page-popups">
-      <div className="flex items-start justify-between gap-4 mb-5 flex-wrap">
+      <AdminPageHeader className="mb-5">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+          <AdminPageTitle className="flex items-center gap-2">
             <Bell className="w-6 h-6 text-primary" />
             {t("popups.title")}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">{t("popups.subtitle")}</p>
+          </AdminPageTitle>
+          <AdminPageDescription>{t("popups.subtitle")}</AdminPageDescription>
         </div>
-        <div className="flex items-center gap-2">
+        <AdminPageActions>
           <Button variant="outline" size="icon" onClick={() => refetch()} title={translateUi(uiLanguage, "Refresh")}>
             <RefreshCw className="w-4 h-4" />
           </Button>
@@ -150,8 +152,8 @@ export default function PopupsPage() {
             <Plus className="w-4 h-4 mr-1.5" />
             {t("popups.newPopup")}
           </Button>
-        </div>
-      </div>
+        </AdminPageActions>
+      </AdminPageHeader>
 
       <div className="mb-4 relative max-w-md">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -180,7 +182,7 @@ export default function PopupsPage() {
         </Card>
       ) : (
         <div className="rounded-lg border overflow-hidden bg-card">
-          <table className="w-full text-sm">
+          <Table>
             <thead>
               <tr className="border-b bg-muted/40">
                 <th className="px-4 py-3 text-left font-semibold text-muted-foreground">{translateUi(uiLanguage, "Title / Content")}</th>
@@ -265,7 +267,7 @@ export default function PopupsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         </div>
       )}
 

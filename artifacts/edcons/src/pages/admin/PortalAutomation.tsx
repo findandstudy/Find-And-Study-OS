@@ -1,3 +1,4 @@
+import { AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 /**
  * PortalAutomation.tsx — Admin: Portal Otomasyonu sekmeli yönetim sayfası
@@ -883,9 +884,9 @@ export default function PortalAutomation() {
           <Bot className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-display font-bold text-foreground">
+          <AdminPageTitle>
             {t("portalAutomation.pageTitle")}
-          </h1>
+          </AdminPageTitle>
         </div>
       </div>
 

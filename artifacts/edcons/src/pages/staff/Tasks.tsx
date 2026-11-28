@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLocation } from "wouter";
@@ -1710,10 +1711,10 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-tasks-title">{t("tasks.title")}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">{t("tasks.subtitle")}</p>
+        <AdminPageTitle data-testid="text-tasks-title">{t("tasks.title")}</AdminPageTitle>
+        <AdminPageDescription>{t("tasks.subtitle")}</AdminPageDescription>
       </div>
       <div className="inline-flex items-center rounded-lg border bg-muted/40 p-1" role="tablist" aria-label={t("tasks.subtitle")}>
         <button

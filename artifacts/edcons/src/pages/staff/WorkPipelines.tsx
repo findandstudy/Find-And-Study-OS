@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import {WorkStageNotifications} from "@/components/notifications/WorkStageNotifications";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { WorkPipelineActivity } from "./WorkPipelineActivity";
@@ -352,14 +353,14 @@ export default function WorkPipelines() {
       className="h-[calc(100vh-8rem)] w-full min-w-0 max-w-full flex flex-col"
       dir={m.isRTL ? "rtl" : "ltr"}
     >
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6 shrink-0 min-w-0">
+      <AdminPageHeader className="mb-6 shrink-0 min-w-0">
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">
+          <AdminPageTitle>
             {l.title}
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">{l.simpleIntro}</p>
+          </AdminPageTitle>
+          <AdminPageDescription>{l.simpleIntro}</AdminPageDescription>
         </div>
-        <div className="flex items-center gap-3 flex-wrap min-w-0 max-w-full">
+        <AdminPageActions className="min-w-0 max-w-full">
           <div className="relative w-64 max-w-full">
             <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -451,8 +452,8 @@ export default function WorkPipelines() {
             <Plus className="w-4 h-4 me-2" />
             {l.addRecord}
           </Button>
-        </div>
-      </div>
+        </AdminPageActions>
+      </AdminPageHeader>
       <div className="flex items-center gap-2 mb-4 shrink-0">
         <WorkPipelinePicker
           key={m.user?.id ?? "anonymous"}

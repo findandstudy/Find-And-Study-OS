@@ -1,3 +1,5 @@
+import { Table } from "@/components/ui/table";
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -11,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -97,23 +99,23 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
   const fullName = [data.user.firstName, data.user.lastName].filter(Boolean).join(" ") || data.user.email || `#${data.user.id}`;
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <AdminPageHeader>
         <div className="flex items-center gap-3">
           <Link href="/admin/staff-cards"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("common.back")}</Button></Link>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">{fullName} <Badge variant="secondary">{data.user.role}</Badge></h1>
-            <p className="text-sm text-muted-foreground">{data.user.email}</p>
+            <AdminPageTitle className="flex items-center gap-2">{fullName} <Badge variant="secondary">{data.user.role}</Badge></AdminPageTitle>
+            <AdminPageDescription>{data.user.email}</AdminPageDescription>
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <Badge variant={data.presence.status === "online" ? "default" : "outline"}>{data.presence.status}</Badge>
           {data.presence.lastActiveAt && <span>{t("staffCards.lastActive")}: {new Date(data.presence.lastActiveAt).toLocaleString()}</span>}
         </div>
-      </div>
+      </AdminPageHeader>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex flex-wrap h-auto">
+        <AdminTabsList>
           <TabsTrigger value="general">{t("staffCards.tab.general")}</TabsTrigger>
           <TabsTrigger value="agents">{t("staffCards.tab.agents")}</TabsTrigger>
           <TabsTrigger value="students">{t("staffCards.tab.students")}</TabsTrigger>
@@ -121,7 +123,7 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
           <TabsTrigger value="salary">{t("staffCards.tab.salary")}</TabsTrigger>
           <TabsTrigger value="commissions">{t("staffCards.tab.commissions")}</TabsTrigger>
           <TabsTrigger value="quality">{t("staffCards.tab.quality")}</TabsTrigger>
-        </TabsList>
+        </AdminTabsList>
 
         <TabsContent value="general" className="mt-4">
           <Accordion type="multiple" defaultValue={["profile"]} className="space-y-3">
@@ -588,7 +590,7 @@ function AgentsTab({ assignedAgents, userId, onSaved }: { assignedAgents: any[];
       </div>
 
       <div className="overflow-hidden border rounded-md">
-        <table className="w-full text-sm">
+        <Table>
           <thead className="bg-muted/40 text-left text-xs uppercase">
             <tr>
               <SortHeader label={t("staffCards.col.name")} active={sort.key === "name"} dir={sort.dir} onClick={() => sortBy("name")} />
@@ -614,7 +616,7 @@ function AgentsTab({ assignedAgents, userId, onSaved }: { assignedAgents: any[];
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       </div>
     </Card>
   );
@@ -702,7 +704,7 @@ function StudentsTab({ assignedStudents, userId, onSaved }: { assignedStudents: 
       </div>
 
       <div className="overflow-hidden border rounded-md">
-        <table className="w-full text-sm">
+        <Table>
           <thead className="bg-muted/40 text-left text-xs uppercase">
             <tr>
               <SortHeader label={t("staffCards.col.name")} active={sort.key === "name"} dir={sort.dir} onClick={() => sortBy("name")} />
@@ -730,7 +732,7 @@ function StudentsTab({ assignedStudents, userId, onSaved }: { assignedStudents: 
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       </div>
     </Card>
   );
@@ -1053,7 +1055,7 @@ function SalaryTab({ payments, totals, userId, onSaved }: { payments: any[]; tot
         </div>
       </Card>
       <Card className="overflow-hidden">
-        <table className="w-full text-sm">
+        <Table>
           <thead className="bg-muted/40 text-left text-xs uppercase">
             <tr><th className="p-3">{t("staffCards.salary.payDate")}</th><th className="p-3">{t("staffCards.salary.amount")}</th><th className="p-3">{t("staffCards.salary.period")}</th><th className="p-3">{t("staffCards.salary.status")}</th><th className="p-3">{t("staffCards.salary.notes")}</th><th className="p-3 text-right">{t("staffCards.col.actions")}</th></tr>
           </thead>
@@ -1079,7 +1081,7 @@ function SalaryTab({ payments, totals, userId, onSaved }: { payments: any[]; tot
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       </Card>
     </div>
   );
@@ -1161,7 +1163,7 @@ function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions:
         <div className="flex gap-2"><Input className="flex-1" placeholder={t("staffCards.salary.notes")} value={form.notes} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))} /><Button onClick={add}><Plus className="h-4 w-4" /></Button></div>
       </Card>
       <Card className="overflow-hidden">
-        <table className="w-full text-sm">
+        <Table>
           <thead className="bg-muted/40 text-left text-xs uppercase">
             <tr><th className="p-3">{t("staffCards.salary.payDate")}</th><th className="p-3">{t("staffCards.salary.amount")}</th><th className="p-3">{t("staffCards.commissions.refs")}</th><th className="p-3">{t("staffCards.salary.status")}</th><th className="p-3">{t("staffCards.salary.notes")}</th><th className="p-3 text-right">{t("staffCards.col.actions")}</th></tr>
           </thead>
@@ -1191,7 +1193,7 @@ function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions:
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       </Card>
     </div>
   );

@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { downloadCrmExcel } from "@/lib/crmExcel";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
@@ -1608,15 +1609,15 @@ export default function StudentsPage() {
   return (
     <>
       <div className="h-[calc(100vh-8rem)] flex flex-col">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
+        <AdminPageHeader className="mb-6 shrink-0">
           <div>
-            <h1 className="text-3xl font-display font-bold text-foreground">{t("staffStudents.title")}</h1>
-            <p className="text-muted-foreground text-sm mt-1">{data?.meta?.total ?? 0} {translateUi(uiLanguage, "total students")}</p>
+            <AdminPageTitle>{t("staffStudents.title")}</AdminPageTitle>
+            <AdminPageDescription>{data?.meta?.total ?? 0} {translateUi(uiLanguage, "total students")}</AdminPageDescription>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder={t("studentsPage.searchStudents")} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
+          <AdminPageActions className="sm:justify-end">
+            <div className="relative w-full sm:w-56 lg:w-64">
+              <Search className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input aria-label={t("studentsPage.searchStudents")} placeholder={t("studentsPage.searchStudents")} value={search} onChange={e => setSearch(e.target.value)} className="ps-9" />
             </div>
             <StuFilterPopover
               filters={filters}
@@ -1653,10 +1654,10 @@ export default function StudentsPage() {
               <Button variant="outline" className="rounded-full gap-2 border-primary/30 text-primary hover:bg-primary/5" onClick={() => setBulkOpen(true)}>
                 <FileUp className="w-4 h-4" /> {translateUi(uiLanguage, "Bulk Import")} </Button>
             )}
-            <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Add Student")} </Button>
-          </div>
-        </div>
+            <Button onClick={() => setAddOpen(true)}>
+              <Plus className="w-4 h-4" /> {translateUi(uiLanguage, "Add Student")} </Button>
+          </AdminPageActions>
+        </AdminPageHeader>
 
         {viewMode === "pipeline" && (
           <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">

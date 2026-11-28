@@ -1,3 +1,5 @@
+import { Table } from "@/components/ui/table";
+import { AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useRef, useMemo, useEffect, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
@@ -16,7 +18,7 @@ import { useDateFormat } from "@/hooks/use-date-format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PhoneField, isPhoneFieldValid, toPhoneFieldValue } from "@/components/ui/phone-field";
@@ -1021,9 +1023,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             {isLoading ? (
               <Skeleton className="h-8 w-48" />
             ) : (
-              <h1 className="text-2xl font-display font-bold text-foreground">
+              <AdminPageTitle>
                 {student?.firstName} {student?.lastName}
-              </h1>
+              </AdminPageTitle>
             )}
             <p className="text-sm text-muted-foreground mt-0.5">{t("studentDetailPage.studentProfile")}</p>
           </div>
@@ -1075,7 +1077,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
         </div>
 
         <Tabs defaultValue="profile">
-          <TabsList className="rounded-xl bg-secondary/60">
+          <AdminTabsList>
             <TabsTrigger value="profile">{t("studentDetailPage.profile")}</TabsTrigger>
             <TabsTrigger value="documents">
               {t("studentDetailPage.documents")} {documents.length > 0 && `(${documents.length})`}
@@ -1092,7 +1094,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               </TabsTrigger>
             )}
             <TabsTrigger value="messaging">{t("studentDetailPage.allMessaging")}</TabsTrigger>
-          </TabsList>
+          </AdminTabsList>
 
           <TabsContent value="profile" className="mt-4">
             <div className="flex justify-end mb-2">
@@ -2397,7 +2399,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
             {canUpload && <p className="text-xs mt-1">{t("studentDetailPage.clickToUpload")}</p>}
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <Table>
             <thead className="bg-secondary/50">
               <tr>
                 {pdfDocs.length >= 2 && (
@@ -2485,7 +2487,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
       </div>
 

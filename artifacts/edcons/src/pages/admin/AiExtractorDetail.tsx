@@ -1,3 +1,4 @@
+import { AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { ADMIN_FORM_WIDTH } from "@/components/layout/adminFormWidth";
 import { useEffect, useState } from "react";
@@ -10,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
@@ -191,12 +192,12 @@ export default function AiExtractorDetail() {
         </div>
       </div>
 
-      <h1 className="text-xl font-semibold">
+      <AdminPageTitle>
         {isNew ? t("aiExtractor.newExtractor") : data.name || t("aiExtractor.extractorNum", { id: data.id ?? "" })}
-      </h1>
+      </AdminPageTitle>
 
       <Tabs defaultValue="general">
-        <TabsList className="h-auto max-w-full flex-wrap justify-start gap-1">
+        <AdminTabsList>
           <TabsTrigger value="general">{t("aiExtractor.tabGeneral")}</TabsTrigger>
           <TabsTrigger value="prompt">{t("aiExtractor.tabPrompt")}</TabsTrigger>
           <TabsTrigger value="model">{t("aiExtractor.tabModel")}</TabsTrigger>
@@ -204,7 +205,7 @@ export default function AiExtractorDetail() {
           <TabsTrigger value="rules">{t("aiExtractor.tabRules")}</TabsTrigger>
           <TabsTrigger value="scope">{t("aiExtractor.tabScope")}</TabsTrigger>
           <TabsTrigger value="test">{t("aiExtractor.tabTest")}</TabsTrigger>
-        </TabsList>
+        </AdminTabsList>
 
         <TabsContent value="general" className="space-y-3">
           <Card>

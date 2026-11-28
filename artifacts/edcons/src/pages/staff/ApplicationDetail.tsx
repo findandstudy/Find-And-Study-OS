@@ -1,3 +1,4 @@
+import { AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
@@ -301,19 +302,19 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
             {isLoading ? (
               <Skeleton className="h-8 w-48" />
             ) : app?.studentId ? (
-              <h1
+              <AdminPageTitle
                 role="link"
                 tabIndex={0}
                 onClick={() => setLocation(`${basePath}/students/${app.studentId}`)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLocation(`${basePath}/students/${app.studentId}`); } }}
-                className="text-2xl font-display font-bold text-foreground truncate cursor-pointer hover:text-primary hover:underline transition-colors"
+                className="truncate cursor-pointer hover:text-primary hover:underline transition-colors"
               >
                 {app?.studentFirstName} {app?.studentLastName}
-              </h1>
+              </AdminPageTitle>
             ) : (
-              <h1 className="text-2xl font-display font-bold text-foreground truncate">
+              <AdminPageTitle className="truncate">
                 {app?.studentFirstName} {app?.studentLastName}
-              </h1>
+              </AdminPageTitle>
             )}
             <p className="text-sm text-muted-foreground mt-0.5">{t("applicationDetailPage.applicationHash", { id })}</p>
           </div>

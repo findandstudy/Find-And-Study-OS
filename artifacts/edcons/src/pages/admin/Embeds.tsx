@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useState, useEffect, useRef, useDeferredValue } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -164,12 +165,12 @@ export default function Embeds() {
 
   return (
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <AdminPageHeader>
           <div>
-            <h1 className="text-2xl font-bold">{t("adminEmbeds.title")}</h1>
-            <p className="text-muted-foreground text-sm mt-1">{t("adminEmbeds.subtitle")}</p>
+            <AdminPageTitle>{t("adminEmbeds.title")}</AdminPageTitle>
+            <AdminPageDescription>{t("adminEmbeds.subtitle")}</AdminPageDescription>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <AdminPageActions>
             <ExportImportToolbar
               exportPath="/api/embed/widgets/export"
               importPath="/api/embed/widgets/import"
@@ -181,8 +182,8 @@ export default function Embeds() {
             <Button onClick={() => { setEditWidget(null); setDialogInitialMode("combined"); setDialogOpen(true); }}>
               <Plus className="w-4 h-4 mr-2" /> {t("adminEmbeds.newWidget")}
             </Button>
-          </div>
-        </div>
+          </AdminPageActions>
+        </AdminPageHeader>
 
         {viewWidget ? (
           <WidgetDetail

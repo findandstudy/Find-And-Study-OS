@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { ADMIN_FORM_WIDTH } from "@/components/layout/adminFormWidth";
 import { useState, useEffect, useCallback } from "react";
@@ -536,10 +537,10 @@ export default function AiAgent() {
             <Bot className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">{t("aiAgentAdmin.botManagement.emptyTitle")}</h1>
-            <p className="text-sm text-muted-foreground">
+            <AdminPageTitle>{t("aiAgentAdmin.botManagement.emptyTitle")}</AdminPageTitle>
+            <AdminPageDescription>
               {t("aiAgentAdmin.botManagement.emptySubtitle")}
-            </p>
+            </AdminPageDescription>
           </div>
         </div>
         <Card>
@@ -599,23 +600,23 @@ export default function AiAgent() {
   return (
     <div className="min-w-0 w-full space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <AdminPageHeader>
         <div className="flex min-w-0 items-center gap-3">
           <div className="shrink-0 rounded-xl bg-primary/10 p-2.5">
             <MessageSquare className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">{t("aiAgentAdmin.title")}</h1>
-            <p className="text-sm text-muted-foreground">
+            <AdminPageTitle>{t("aiAgentAdmin.title")}</AdminPageTitle>
+            <AdminPageDescription>
               {t("aiAgentAdmin.subtitle")}
-            </p>
+            </AdminPageDescription>
           </div>
         </div>
         <Button onClick={save} disabled={saving} className="shrink-0">
           <Save className="h-4 w-4 mr-2" />
           {saving ? t("aiAgentAdmin.saving") : t("aiAgentAdmin.save")}
         </Button>
-      </div>
+      </AdminPageHeader>
 
       <Card>
         <CardHeader className="pb-3">

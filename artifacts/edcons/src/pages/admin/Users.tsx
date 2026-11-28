@@ -1,3 +1,4 @@
+import { AdminPageHeader, AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { customFetch, useListUsers, type UserDirectoryEntry } from "@workspace/api-client-react";
@@ -10,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -1335,17 +1336,17 @@ export default function AdminUsers() {
   const { t } = useI18n();
   return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-display font-bold text-foreground">{t("adminUsers.title")}</h1>
-        </div>
+        <AdminPageHeader>
+          <AdminPageTitle>{t("adminUsers.title")}</AdminPageTitle>
+        </AdminPageHeader>
 
         <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="h-10">
+          <AdminTabsList>
             <TabsTrigger value="users" className="gap-2 px-4">
               <Users className="w-4 h-4" /> {translateUi(uiLanguage, "Users")} </TabsTrigger>
             <TabsTrigger value="roles" className="gap-2 px-4">
               <Shield className="w-4 h-4" /> {translateUi(uiLanguage, "Roles & Permissions")} </TabsTrigger>
-          </TabsList>
+          </AdminTabsList>
 
           <TabsContent value="users">
             <UsersTab />

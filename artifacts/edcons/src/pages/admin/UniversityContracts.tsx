@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
@@ -477,18 +478,18 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
 
   return (
     <TooltipProvider>
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <AdminPageHeader>
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <AdminPageTitle className="flex items-center gap-2">
             <GraduationCap className="w-6 h-6" /> {t("universityContracts.title")}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          </AdminPageTitle>
+          <AdminPageDescription>
             {t("universityContracts.subtitle")}
-          </p>
+          </AdminPageDescription>
         </div>
         <Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" /> {t("universityContracts.newContract")}</Button>
-      </div>
+      </AdminPageHeader>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card className="p-4"><div className="text-xs text-muted-foreground">{t("universityContracts.statTotal")}</div><div className="text-2xl font-bold mt-1">{stats.total}</div></Card>

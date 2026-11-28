@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -8,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1011,17 +1012,17 @@ export default function AgentsPage() {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <AdminPageHeader>
           <div>
-            <h1 className="text-2xl font-display font-bold text-foreground">{t("staffAgents.title")}</h1>
-            <p className="text-muted-foreground text-sm mt-1">{t("staffAgents.subtitle")}</p>
+            <AdminPageTitle>{t("staffAgents.title")}</AdminPageTitle>
+            <AdminPageDescription>{t("staffAgents.subtitle")}</AdminPageDescription>
           </div>
           {isManager && (
             <Button variant="outline" className="rounded-xl gap-2" onClick={() => setLocation("/staff/agency-applications")}>
               <ClipboardCheck className="w-4 h-4" /> {t("staffAgents.agencyApplications") === "staffAgents.agencyApplications" ? translateUi(uiLanguage, "Agency Applications") : t("staffAgents.agencyApplications")}
             </Button>
           )}
-        </div>
+        </AdminPageHeader>
 
         {(() => {
           const allAgentsList = [...agents, ...subAgents];
@@ -1065,10 +1066,10 @@ export default function AgentsPage() {
         })()}
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="rounded-xl bg-secondary/50 p-1">
+          <AdminTabsList>
             <TabsTrigger value="agents" className="rounded-lg gap-2"><Users className="w-4 h-4" /> {translateUi(uiLanguage, "Agent List (")}{total})</TabsTrigger>
             <TabsTrigger value="sub-agents" className="rounded-lg gap-2"><Network className="w-4 h-4" /> {translateUi(uiLanguage, "Sub Agents (")}{subTotal})</TabsTrigger>
-          </TabsList>
+          </AdminTabsList>
 
           {/* ── Agent List ── */}
           <TabsContent value="agents" className="mt-6">

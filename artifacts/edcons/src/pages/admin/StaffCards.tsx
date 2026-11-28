@@ -1,3 +1,5 @@
+import { Table } from "@/components/ui/table";
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
@@ -41,16 +43,16 @@ export default function StaffCardsPage() {
   }, [search]);
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <AdminPageHeader>
         <div className="flex items-center gap-3">
           <IdCard className="h-7 w-7 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">{t("staffCards.title")}</h1>
-            <p className="text-sm text-muted-foreground">{t("staffCards.subtitle")}</p>
+            <AdminPageTitle>{t("staffCards.title")}</AdminPageTitle>
+            <AdminPageDescription>{t("staffCards.subtitle")}</AdminPageDescription>
           </div>
         </div>
-      </div>
+      </AdminPageHeader>
 
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -72,7 +74,7 @@ export default function StaffCardsPage() {
         ) : rows.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">{t("staffCards.empty")}</div>
         ) : (
-          <table className="w-full text-sm">
+          <Table>
             <thead className="bg-muted/40 text-left text-xs uppercase tracking-wider">
               <tr>
                 <th className="p-3">{t("staffCards.col.name")}</th>
@@ -109,7 +111,7 @@ export default function StaffCardsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
       </Card>
     </div>

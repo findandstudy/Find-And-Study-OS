@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useMemo } from "react";
 import { customFetch, useGetOverviewStats, useGetActivitySummary, useGetKommoSummary, useListUsers } from "@workspace/api-client-react";
@@ -429,15 +430,15 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <AdminPageHeader>
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">{t("adminDash.title")}</h1>
-          <p className="text-muted-foreground mt-1">{t("adminDash.subtitle")}</p>
+          <AdminPageTitle>{t("adminDash.title")}</AdminPageTitle>
+          <AdminPageDescription>{t("adminDash.subtitle")}</AdminPageDescription>
         </div>
         <Badge className="bg-primary/10 text-primary border-primary/20 px-4 py-2 text-sm font-semibold">
           <Shield className="w-4 h-4 mr-2" /> {t("adminDash.adminAccess")}
         </Badge>
-      </div>
+      </AdminPageHeader>
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

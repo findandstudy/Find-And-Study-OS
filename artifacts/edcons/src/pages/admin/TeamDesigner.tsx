@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import {
   useCallback,
@@ -808,15 +809,15 @@ export default function TeamDesigner({
     return (
       <Card data-testid="persona-team-preview-error" className="p-8 space-y-3">
         <ShieldCheck className="text-muted-foreground" />
-        <h1 className="text-lg font-semibold">
+        <AdminPageTitle>
           {copy("Önizleme kullanılamıyor", "Preview unavailable")}
-        </h1>
-        <p className="text-sm text-muted-foreground">
+        </AdminPageTitle>
+        <AdminPageDescription>
           {copy(
             "Bu ekran yalnız staging ortamında, geçerli yönetici oturumuyla açılabilir. Yetki veya çalışma izni verilmez.",
             "This preview requires an active administrator session on staging. No access or execution permissions are granted.",
           )}
-        </p>
+        </AdminPageDescription>
       </Card>
     );
   if (loadState !== "ready" || !snapshot)
@@ -877,12 +878,12 @@ export default function TeamDesigner({
         }
       }}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <AdminPageHeader>
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">
+            <AdminPageTitle>
               {copy("Takım Tasarımcısı", "Team Designer")}
-            </h1>
+            </AdminPageTitle>
             <Badge variant="secondary" className="font-normal">
               {durable
                 ? copy("Yerel taslak", "Local draft")
@@ -896,7 +897,7 @@ export default function TeamDesigner({
             )}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <AdminPageActions>
           <Button
             size="sm"
             variant="outline"
@@ -915,8 +916,8 @@ export default function TeamDesigner({
             <Plus />
             {copy("Yeni uzman", "Add specialist")}
           </Button>
-        </div>
-      </div>
+        </AdminPageActions>
+      </AdminPageHeader>
       <div className="flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
         <span>

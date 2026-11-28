@@ -1,3 +1,4 @@
+import { AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -59,7 +60,7 @@ export default function TeamWorkspaceEntry() {
 
   return <section className="min-w-0 w-full space-y-5">
     <div className="space-y-2">
-      <h1 className="text-2xl font-semibold">{copy("Takım çalışma alanı", "Team workspace")}</h1>
+      <AdminPageTitle>{copy("Takım çalışma alanı", "Team workspace")}</AdminPageTitle>
       {phase === "ready" && projects.length > 1 && <p className="text-muted-foreground">{copy(
         "Takımınızı düzenlemek, görev hazırlamak ve sonuçları takip etmek için projenizi seçin.",
         "Select your project to organize its team, prepare tasks and follow results.",

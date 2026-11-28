@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -11,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import {
@@ -310,12 +311,12 @@ export default function WebsiteForms() {
   return (
     <>
       <div className="min-w-0 w-full space-y-6">
-        <div className="flex items-center justify-between">
+        <AdminPageHeader>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2"><ClipboardList className="w-6 h-6 text-primary" /> {t("websiteForms.title")}</h1>
-            <p className="text-sm text-muted-foreground mt-1">{t("websiteForms.subtitle")}</p>
+            <AdminPageTitle className="flex items-center gap-2"><ClipboardList className="w-6 h-6 text-primary" /> {t("websiteForms.title")}</AdminPageTitle>
+            <AdminPageDescription>{t("websiteForms.subtitle")}</AdminPageDescription>
           </div>
-          <div className="flex items-center gap-2">
+          <AdminPageActions>
             <ExportImportToolbar
               exportPath="/api/website/forms/export"
               importPath="/api/website/forms/import"
@@ -327,8 +328,8 @@ export default function WebsiteForms() {
             <Button onClick={() => openFormDialog()} className="gap-2">
               <Plus className="w-4 h-4" /> {t("websiteForms.newForm")}
             </Button>
-          </div>
-        </div>
+          </AdminPageActions>
+        </AdminPageHeader>
 
         {!selectedForm ? (
           <>
@@ -393,11 +394,11 @@ export default function WebsiteForms() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList>
+              <AdminTabsList>
                 <TabsTrigger value="fields" className="gap-1"><GripVertical className="w-3 h-3" /> {t("websiteForms.fieldsTab", { n: fields.length })}</TabsTrigger>
                 <TabsTrigger value="submissions" className="gap-1"><Inbox className="w-3 h-3" /> {t("websiteForms.submissionsTab", { n: totalSubmissions })}</TabsTrigger>
                 <TabsTrigger value="embed" className="gap-1"><ExternalLink className="w-3 h-3" /> {t("websiteForms.embedTab")}</TabsTrigger>
-              </TabsList>
+              </AdminTabsList>
 
               <TabsContent value="fields" className="space-y-4 mt-4">
                 <div className="flex justify-end">

@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -9,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -403,18 +404,18 @@ export default function WebsiteCollections() {
         <div className="flex items-center gap-3">
           <Layers className="w-6 h-6 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">{translateUi(uiLanguage, "Collections")}</h1>
-            <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "Manage structured content displayed on your website.")}</p>
+            <AdminPageTitle>{translateUi(uiLanguage, "Collections")}</AdminPageTitle>
+            <AdminPageDescription>{translateUi(uiLanguage, "Manage structured content displayed on your website.")}</AdminPageDescription>
           </div>
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="rounded-xl bg-secondary/50 p-1">
+          <AdminTabsList>
             <TabsTrigger value="offices" className="rounded-lg gap-2"><Building2 className="w-4 h-4" /> {translateUi(uiLanguage, "Offices")}</TabsTrigger>
             <TabsTrigger value="team" className="rounded-lg gap-2"><Users className="w-4 h-4" /> {translateUi(uiLanguage, "Team")}</TabsTrigger>
             <TabsTrigger value="faqs" className="rounded-lg gap-2"><HelpCircle className="w-4 h-4" /> {translateUi(uiLanguage, "FAQs")}</TabsTrigger>
             <TabsTrigger value="testimonials" className="rounded-lg gap-2"><MessageSquareQuote className="w-4 h-4" /> {translateUi(uiLanguage, "Testimonials")}</TabsTrigger>
-          </TabsList>
+          </AdminTabsList>
 
           <TabsContent value="offices" className="mt-6"><OfficesTab /></TabsContent>
           <TabsContent value="team" className="mt-6"><TeamTab /></TabsContent>

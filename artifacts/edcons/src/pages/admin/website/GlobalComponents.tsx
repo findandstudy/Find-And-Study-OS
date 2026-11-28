@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -423,17 +424,17 @@ export default function WebsiteGlobalComponents() {
   return (
     <>
       <div className="min-w-0 w-full space-y-6">
-        <div className="flex items-center justify-between">
+        <AdminPageHeader>
           <div className="flex items-center gap-3">
             <Component className="w-6 h-6 text-primary" />
             <div>
-              <h1 className="text-2xl font-bold">{translateUi(uiLanguage, "Global Components")}</h1>
-              <p className="text-sm text-muted-foreground"> {translateUi(uiLanguage, "Reusable blocks that can be embedded in any page via the Page Builder.")} </p>
+              <AdminPageTitle>{translateUi(uiLanguage, "Global Components")}</AdminPageTitle>
+              <AdminPageDescription> {translateUi(uiLanguage, "Reusable blocks that can be embedded in any page via the Page Builder.")} </AdminPageDescription>
             </div>
           </div>
           <Button size="sm" onClick={openNew}>
             <Plus className="w-4 h-4 mr-1" /> {translateUi(uiLanguage, "New Component")} </Button>
-        </div>
+        </AdminPageHeader>
 
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

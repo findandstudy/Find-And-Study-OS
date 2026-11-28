@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
@@ -52,9 +53,9 @@ export default function TeamWorkspace({ project }: { project?: string }) {
   if (!path || !project) {
     return (
       <Card className="p-6 space-y-4">
-        <h1 className="text-xl font-semibold">
+        <AdminPageTitle>
           {copy("Takım çalışma alanı", "Team workspace")}
-        </h1>
+        </AdminPageTitle>
         <p>
           {copy(
             "Geçerli bir proje seçmek için çalışma alanları listesine dönün.",
@@ -325,18 +326,18 @@ function LoadedWorkspace({ project, path }: { project: string; path: string }) {
     value &&
     JSON.stringify(proposal.before) !== JSON.stringify(value.document);
   return (
-    <div data-testid="team-workspace" className="space-y-4 p-3 md:p-6">
+    <div data-testid="team-workspace" className="space-y-4">
       <Card className="p-4 space-y-3">
-        <h1 className="text-lg font-semibold">
+        <AdminPageTitle>
           {copy("Takım çalışma alanı", "Team workspace")}
           {projectLabel ? ` · ${projectLabel}` : ""}
-        </h1>
-        <p className="text-sm text-muted-foreground">
+        </AdminPageTitle>
+        <AdminPageDescription>
           {copy(
             "Takım yapısını bu projeye kaydedebilir, görevleri hazırlayıp ayrı bir yöneticinin onayına sunabilirsiniz. Görevler deneme verileriyle çalışır; dışarıya mesaj veya yayın gönderilmez.",
             "Save your team in this project, prepare tasks and submit them for another administrator's approval. Tasks use test data; no external messages or publications are sent.",
           )}
-        </p>
+        </AdminPageDescription>
         <div className="flex flex-wrap gap-2">
           <Button
             data-testid="workspace-save"

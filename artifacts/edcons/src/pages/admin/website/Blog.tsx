@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -8,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -211,7 +212,7 @@ const EMPTY_AI_BRIEF: AiBlogBrief = {
   length: "standard",
 };
 
-export default function WebsiteBlog() {
+export default function WebsiteBlog({ embedded = false }: { embedded?: boolean } = {}) {
   const { lang: uiLanguage } = useUiLanguage();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -560,21 +561,21 @@ export default function WebsiteBlog() {
   return (
     <>
       <div className="min-w-0 w-full space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <AdminPageHeader>
           <div className="flex items-center gap-3">
             <BookOpen className="w-6 h-6 text-primary" />
             <div>
-            <h1 className="text-2xl font-bold">{translateUi(uiLanguage, "Blog")}</h1>
-              <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "Create articles, translations and article SEO. The managed Blog page controls the listing layout.")}</p>
+              <AdminPageTitle as={embedded ? "h2" : "h1"}>{translateUi(uiLanguage, "Blog")}</AdminPageTitle>
+              <AdminPageDescription>{translateUi(uiLanguage, "Create articles, translations and article SEO. The managed Blog page controls the listing layout.")}</AdminPageDescription>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <AdminPageActions>
             {blogLanding && <Button asChild variant="outline"><a href={`/admin/website/pages/${blogLanding.id}/edit`}><LayoutTemplate className="me-2 h-4 w-4" />{translateUi(uiLanguage, "Edit blog page")}</a></Button>}
             <Button asChild variant="outline"><a href="/en/blog" target="_blank" rel="noopener noreferrer"><ExternalLink className="me-2 h-4 w-4" />{translateUi(uiLanguage, "Open public blog")}</a></Button>
             <Button variant="outline" onClick={() => setShowAiGenerator(true)}><Sparkles className="me-2 h-4 w-4 text-violet-600" />{translateUi(uiLanguage, "Create with AI")}</Button>
             <Button onClick={openNewPost}><Plus className="me-2 h-4 w-4" />{translateUi(uiLanguage, "New post")}</Button>
-          </div>
-        </div>
+          </AdminPageActions>
+        </AdminPageHeader>
 
         <div className="grid gap-3 md:grid-cols-2">
           <Card className="border-primary/15 bg-primary/[0.035] p-4">
@@ -588,11 +589,11 @@ export default function WebsiteBlog() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="rounded-xl bg-secondary/50 p-1">
+          <AdminTabsList>
             <TabsTrigger value="posts" className="rounded-lg gap-2"><BookOpen className="w-4 h-4" /> {translateUi(uiLanguage, "Posts (")}{posts.length})</TabsTrigger>
             <TabsTrigger value="categories" className="rounded-lg gap-2"><FolderOpen className="w-4 h-4" /> {translateUi(uiLanguage, "Categories (")}{categories.length})</TabsTrigger>
             <TabsTrigger value="tags" className="rounded-lg gap-2"><Tag className="w-4 h-4" /> {translateUi(uiLanguage, "Tags (")}{tags.length})</TabsTrigger>
-          </TabsList>
+          </AdminTabsList>
 
           <TabsContent value="posts" className="mt-6 space-y-4">
             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">

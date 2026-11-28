@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -184,12 +185,12 @@ export default function WebsiteSeoOverrides() {
   return (
     <>
       <div className="min-w-0 w-full space-y-6">
-        <div className="flex items-center justify-between">
+        <AdminPageHeader>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2"><Search className="w-6 h-6 text-primary" /> {translateUi(uiLanguage, "SEO & AI Discovery")}</h1>
-            <p className="text-sm text-muted-foreground mt-1">{translateUi(uiLanguage, "Manage page metadata and review technical search, schema and answer-engine readiness.")}</p>
+            <AdminPageTitle className="flex items-center gap-2"><Search className="w-6 h-6 text-primary" /> {translateUi(uiLanguage, "SEO & AI Discovery")}</AdminPageTitle>
+            <AdminPageDescription>{translateUi(uiLanguage, "Manage page metadata and review technical search, schema and answer-engine readiness.")}</AdminPageDescription>
           </div>
-        </div>
+        </AdminPageHeader>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Card className="p-4">

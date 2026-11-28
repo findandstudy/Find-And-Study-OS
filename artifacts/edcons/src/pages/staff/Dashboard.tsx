@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { DashboardSkeleton } from "@/components/ui/page-skeleton";
 import { useGetOverviewStats } from "@workspace/api-client-react";
@@ -183,8 +184,8 @@ export default function StaffDashboard() {
   return (
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">{t("staffDash.welcomeBack")}</h1>
-          <p className="text-muted-foreground mt-1">{t("staffDash.welcomeSubtitle")}</p>
+          <AdminPageTitle>{t("staffDash.welcomeBack")}</AdminPageTitle>
+          <AdminPageDescription>{t("staffDash.welcomeSubtitle")}</AdminPageDescription>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

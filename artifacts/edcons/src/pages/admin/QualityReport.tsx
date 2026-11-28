@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 // Sohbet Kalite Raporu — ranking, team trend, dimension breakdown,
 // coaching queue, topic analysis, Excel export, settings (Faz 1).
@@ -147,13 +148,13 @@ export default function QualityReportPage() {
   const isAdminScope = user && ["super_admin", "admin", "manager"].includes(user.role);
 
   return (
-      <div className="p-6 space-y-6" data-testid="page-quality-report">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="space-y-6" data-testid="page-quality-report">
+        <AdminPageHeader>
           <div>
-            <h1 className="text-2xl font-bold">{t("quality.title")}</h1>
-            <p className="text-sm text-muted-foreground">{t("quality.subtitle")}</p>
+            <AdminPageTitle>{t("quality.title")}</AdminPageTitle>
+            <AdminPageDescription>{t("quality.subtitle")}</AdminPageDescription>
           </div>
-          <div className="flex items-center gap-2">
+          <AdminPageActions>
             <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
               <SelectTrigger className="w-32" data-testid="select-quality-days"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -172,8 +173,8 @@ export default function QualityReportPage() {
                 </Button>
               </>
             )}
-          </div>
-        </div>
+          </AdminPageActions>
+        </AdminPageHeader>
 
         {isAdminScope && settings && "enabled" in settings && (
           <Card>

@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageTitle } from "@/components/layout/AdminPage";
 import { ApplicationCalendarInfo } from "@/components/ApplicationCalendarInfo";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from "react";
@@ -800,8 +801,8 @@ export default function CourseFinder() {
     <>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-display font-bold tracking-tight">{t("staffCourseFinder.title")}</h1>
-          <p className="text-muted-foreground mt-1">{t("staffCourseFinder.subtitle")}</p>
+          <AdminPageTitle>{t("staffCourseFinder.title")}</AdminPageTitle>
+          <AdminPageDescription>{t("staffCourseFinder.subtitle")}</AdminPageDescription>
         </div>
 
         <div className="bg-card rounded-2xl border p-4 space-y-4">

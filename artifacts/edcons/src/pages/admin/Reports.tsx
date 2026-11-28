@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -51,7 +52,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 
 type ReportMeta = {
   schemaVersion: number;
@@ -1103,18 +1104,18 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6" data-testid="page-reporting-center">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <AdminPageHeader>
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <BarChart3 className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-display font-bold text-foreground">
+            <AdminPageTitle>
               {copy.title}
-            </h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">
+            </AdminPageTitle>
+            <AdminPageDescription>
               {copy.description}
-            </p>
+            </AdminPageDescription>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -1140,7 +1141,7 @@ export default function ReportsPage() {
             </span>
           </div>
         </div>
-      </div>
+      </AdminPageHeader>
 
       <Card>
         <CardContent className="p-4">
@@ -1222,7 +1223,7 @@ export default function ReportsPage() {
       </Card>
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-5">
-        <TabsList className="h-auto flex-wrap justify-start gap-1 bg-muted/60 p-1">
+        <AdminTabsList>
           <TabsTrigger value="overview">{copy.overview}</TabsTrigger>
           {canOperations && (
             <TabsTrigger value="funnel">{copy.funnel}</TabsTrigger>
@@ -1236,7 +1237,7 @@ export default function ReportsPage() {
           {canOperations && (
             <TabsTrigger value="quality">{copy.quality}</TabsTrigger>
           )}
-        </TabsList>
+        </AdminTabsList>
         <TabsContent value="overview">
           {overview.isLoading ? (
             <ReportLoading />

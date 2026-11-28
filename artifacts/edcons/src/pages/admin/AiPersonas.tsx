@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -112,15 +113,15 @@ export default function AiPersonas() {
   const empty = useMemo(() => !loading && personas.length === 0, [loading, personas.length]);
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <AdminPageHeader>
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <AdminPageTitle className="flex items-center gap-2">
             <Sparkles className="h-6 w-6 text-indigo-500" /> {t("aiPersona.title")}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          </AdminPageTitle>
+          <AdminPageDescription>
             {t("aiPersona.subtitle")}
-          </p>
+          </AdminPageDescription>
         </div>
         {capability?.available && capability.canMutate && <div className="flex gap-2">
           <Button variant="outline" onClick={() => setLocation("/admin/ai-action-queue")}>
@@ -130,7 +131,7 @@ export default function AiPersonas() {
             <Plus className="h-4 w-4 mr-2" /> {t("aiPersona.newPersona")}
           </Button>
         </div>}
-      </div>
+      </AdminPageHeader>
 
       {loading && <div className="text-sm text-muted-foreground">{t("aiPersona.loading")}</div>}
 

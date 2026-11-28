@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { downloadCrmExcel } from "@/lib/crmExcel";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
@@ -2224,15 +2225,15 @@ export default function ApplicationsPage() {
   return (
     <>
       <div className="h-[calc(100vh-8rem)] flex flex-col">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
+        <AdminPageHeader className="mb-6 shrink-0">
           <div>
-            <h1 className="text-3xl font-display font-bold text-foreground">{t("staffApplications.title")}</h1>
-            <p className="text-muted-foreground text-sm mt-1">{t("staffApplications.subtitle")}</p>
+            <AdminPageTitle>{t("staffApplications.title")}</AdminPageTitle>
+            <AdminPageDescription>{t("staffApplications.subtitle")}</AdminPageDescription>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <AdminPageActions className="sm:justify-end">
             <div className="relative w-full sm:w-56 lg:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder={t("applicationsPage.searchApplications")} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
+              <Search className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input aria-label={t("applicationsPage.searchApplications")} placeholder={t("applicationsPage.searchApplications")} value={search} onChange={e => setSearch(e.target.value)} className="ps-9" />
             </div>
             <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} apps={allApps} facets={applicationFacets} staffUsersList={staffUsersList} canViewOthers={canViewOthers} canViewUnassigned={canViewUnassigned} currentUserId={user?.id} clearAssignedTo={roleBasedAssignedDefault} />
             <div className="flex items-center border rounded-full overflow-hidden">
@@ -2275,10 +2276,10 @@ export default function ApplicationsPage() {
               <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => downloadCrmExcel(BASE_URL, "applications", applicationListParams, selectedIds)}>
                 <Download className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Excel")} </Button>
             )}
-            <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "New Application")} </Button>
-          </div>
-        </div>
+            <Button onClick={() => setAddOpen(true)}>
+              <Plus className="w-4 h-4" /> {translateUi(uiLanguage, "New Application")} </Button>
+          </AdminPageActions>
+        </AdminPageHeader>
 
         {viewMode === "pipeline" && (
           <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">

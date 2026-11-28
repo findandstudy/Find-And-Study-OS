@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageTitle } from "@/components/layout/AdminPage";
 import { DeadlineReminderSettings, DeadlineReminderPreview } from "@/components/DeadlineReminderSettings";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
@@ -5257,8 +5258,8 @@ export default function AdminCatalog() {
   return (
     <>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">{t("adminCatalog.title")}</h1>
-        <p className="text-muted-foreground text-sm mt-1">{t("adminCatalog.subtitle")}</p>
+        <AdminPageTitle>{t("adminCatalog.title")}</AdminPageTitle>
+        <AdminPageDescription>{t("adminCatalog.subtitle")}</AdminPageDescription>
       </div>
       <Tabs defaultValue={parseCatalogEntryNavigation(window.location.search).tab} className="space-y-4">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-5">

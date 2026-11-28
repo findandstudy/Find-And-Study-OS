@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -181,16 +182,16 @@ export default function WebsitePages() {
 
   return (
       <div className="min-w-0 w-full space-y-5 overflow-x-clip">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <AdminPageHeader>
           <div className="flex items-center gap-3">
             <FileText className="w-6 h-6 text-primary" />
             <div>
-              <h1 className="text-2xl font-bold">{copy("Pages", "Sayfalar")}</h1>
-              <p className="text-sm text-muted-foreground">{copy("Manage your website pages and their content.", "Web sitesi sayfalarını ve içeriklerini yönetin.")}</p>
+              <AdminPageTitle>{copy("Pages", "Sayfalar")}</AdminPageTitle>
+              <AdminPageDescription>{copy("Manage your website pages and their content.", "Web sitesi sayfalarını ve içeriklerini yönetin.")}</AdminPageDescription>
             </div>
           </div>
           {area === "managed" && <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={servicePagesMutation.isPending||isLoading} onClick={()=>servicePagesMutation.mutate()}>{servicePagesMutation.isPending?copy("Creating service drafts…","Hizmet taslakları oluşturuluyor…"):copy("Create service pages","Hizmet sayfalarını oluştur")}</Button><Button onClick={() => requestLeave(() => { createMutation.reset(); setCreateOpen(true); })}><Plus className="w-4 h-4 me-2" />{copy("New page", "Yeni sayfa")}</Button></div>}
-        </div>
+        </AdminPageHeader>
 
         {servicePagesMutation.isSuccess&&<p role="status" className="text-sm text-muted-foreground">{copy(`${servicePagesMutation.data} service drafts created. Existing pages were preserved. Review each draft before publishing.`,`${servicePagesMutation.data} hizmet taslağı oluşturuldu. Mevcut sayfalar korundu. Yayınlamadan önce taslakları inceleyin.`)}</p>}
         {servicePagesMutation.isError&&<p role="alert" className="text-sm text-destructive">{copy("Service drafts could not all be created. You may retry; existing addresses will be skipped.","Hizmet taslaklarının tamamı oluşturulamadı. Tekrar deneyebilirsiniz; mevcut adresler atlanır.")}</p>}
@@ -231,7 +232,7 @@ export default function WebsitePages() {
         {area === "dynamic" && <CatalogPagesInventory />}
         {area === "blog" && (
           <Suspense fallback={<div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground" role="status">{copy("Loading blog workspace…", "Blog çalışma alanı yükleniyor…")}</div>}>
-            <WebsiteBlog />
+            <WebsiteBlog embedded />
           </Suspense>
         )}
         {area === "templates" && <DetailTemplates ref={templates} />}

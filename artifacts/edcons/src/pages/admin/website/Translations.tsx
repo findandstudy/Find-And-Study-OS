@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
@@ -160,8 +161,8 @@ export default function WebsiteTranslations() {
     <>
       <div className="min-w-0 w-full space-y-6">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><Languages className="w-6 h-6 text-primary" /> {t("websiteTranslations.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t("websiteTranslations.subtitle")}</p>
+          <AdminPageTitle className="flex items-center gap-2"><Languages className="w-6 h-6 text-primary" /> {t("websiteTranslations.title")}</AdminPageTitle>
+          <AdminPageDescription>{t("websiteTranslations.subtitle")}</AdminPageDescription>
         </div>
 
         <Card className="p-4 bg-blue-50 border-blue-200">
@@ -178,10 +179,10 @@ export default function WebsiteTranslations() {
           <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
         ) : (
           <Tabs defaultValue="pages">
-            <TabsList>
+            <AdminTabsList>
               <TabsTrigger value="pages" className="gap-1"><FileText className="w-3 h-3" /> {t("websiteTranslations.pagesTab", { n: pages.length })}</TabsTrigger>
               <TabsTrigger value="posts" className="gap-1"><BookOpen className="w-3 h-3" /> {t("websiteTranslations.postsTab", { n: posts.length })}</TabsTrigger>
-            </TabsList>
+            </AdminTabsList>
 
             <TabsContent value="pages" className="mt-4 space-y-3">
               {pages.length === 0 ? (

@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { useEffect, useMemo, useState } from "react";
 import { customFetch, ApiError } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { Megaphone, Plus, Pencil, Archive, RotateCcw, Building2, Globe2, Loader2, Search, Calendar as CalendarIcon, Percent, ChevronDown } from "lucide-react";
@@ -152,27 +153,27 @@ export default function CampaignsPage() {
 
   return (
     <div className="min-w-0 w-full" data-testid="page-campaigns">
-      <div className="flex items-start justify-between gap-4 mb-5 flex-wrap">
+      <AdminPageHeader className="mb-5">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+          <AdminPageTitle className="flex items-center gap-2">
             <Megaphone className="w-6 h-6 text-primary" />
             {t("campaigns.title")}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">{t("campaigns.subtitle")}</p>
+          </AdminPageTitle>
+          <AdminPageDescription>{t("campaigns.subtitle")}</AdminPageDescription>
         </div>
-        <div className="flex items-center gap-2">
+        <AdminPageActions>
           <Tabs value={showArchived ? "archived" : "active"} onValueChange={(v) => setShowArchived(v === "archived")}>
-            <TabsList>
+            <AdminTabsList>
               <TabsTrigger value="active" data-testid="tab-active">{t("campaigns.tabs.active")}</TabsTrigger>
               <TabsTrigger value="archived" data-testid="tab-archived">{t("campaigns.tabs.archived")}</TabsTrigger>
-            </TabsList>
+            </AdminTabsList>
           </Tabs>
           <Button onClick={openCreate} disabled={showArchived} data-testid="button-new-campaign">
             <Plus className="w-4 h-4 mr-1.5" />
             {t("campaigns.newCampaign")}
           </Button>
-        </div>
-      </div>
+        </AdminPageActions>
+      </AdminPageHeader>
 
       <div className="mb-4 relative max-w-md">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />

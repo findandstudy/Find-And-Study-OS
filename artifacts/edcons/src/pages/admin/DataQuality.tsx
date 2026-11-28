@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
@@ -101,15 +102,15 @@ export default function DataQualityPage() {
   useEffect(() => { void load(); }, []);
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4">
+    <div className="space-y-6">
+      <AdminPageHeader>
         <div>
-          <h1 className="text-2xl font-bold">{translateUi(uiLanguage, "Data Quality")}</h1>
-          <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "Read-only duplicate candidates based on normalized email and phone.")}</p>
+          <AdminPageTitle>{translateUi(uiLanguage, "Data Quality")}</AdminPageTitle>
+          <AdminPageDescription>{translateUi(uiLanguage, "Read-only duplicate candidates based on normalized email and phone.")}</AdminPageDescription>
         </div>
         <Button variant="outline" onClick={() => void load()} disabled={loading}>
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} /> {translateUi(uiLanguage, "Refresh")} </Button>
-      </div>
+      </AdminPageHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "Candidate groups")}</p><p className="text-3xl font-bold">{result?.summary.groups ?? "—"}</p></CardContent></Card>

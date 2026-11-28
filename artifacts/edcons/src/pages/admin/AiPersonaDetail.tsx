@@ -1,3 +1,4 @@
+import { AdminPageHeader, AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { ADMIN_FORM_WIDTH } from "@/components/layout/adminFormWidth";
 import { useEffect, useState } from "react";
@@ -17,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { Play, Save, ArrowLeft } from "lucide-react";
@@ -228,14 +229,14 @@ export default function AiPersonaDetail() {
 
   return (
     <div className="min-w-0 w-full space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <AdminPageHeader>
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => setLocation("/admin/ai-personas")}>
             <ArrowLeft className="h-4 w-4 mr-1" /> {t("aiPersona.back")}
           </Button>
-          <h1 className="text-xl font-semibold">
+          <AdminPageTitle>
             {id ? t("aiPersona.personaNum", { id }) : t("aiPersona.newPersona")}
-          </h1>
+          </AdminPageTitle>
           {form.personaType && (
             <Badge variant={form.personaType === "operator" ? "destructive" : "secondary"}>
               {form.personaType}
@@ -245,10 +246,10 @@ export default function AiPersonaDetail() {
         <Button onClick={save} disabled={saving || loading}>
           <Save className="h-4 w-4 mr-2" /> {saving ? t("aiPersona.saving") : t("aiPersona.save")}
         </Button>
-      </div>
+      </AdminPageHeader>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="h-auto max-w-full flex-wrap justify-start gap-1">
+        <AdminTabsList>
           <TabsTrigger value="general">{t("aiPersona.tabGeneral")}</TabsTrigger>
           <TabsTrigger value="prompt">{t("aiPersona.tabPrompt")}</TabsTrigger>
           <TabsTrigger value="model">{t("aiPersona.tabModel")}</TabsTrigger>
@@ -257,7 +258,7 @@ export default function AiPersonaDetail() {
           <TabsTrigger value="output">{t("aiPersona.tabOutput")}</TabsTrigger>
           <TabsTrigger value="budget">{t("aiPersona.tabBudget")}</TabsTrigger>
           <TabsTrigger value="history" disabled={!id}>{t("aiPersona.tabHistory")}</TabsTrigger>
-        </TabsList>
+        </AdminTabsList>
 
         <TabsContent value="general" className="space-y-4 mt-4">
           <Card>

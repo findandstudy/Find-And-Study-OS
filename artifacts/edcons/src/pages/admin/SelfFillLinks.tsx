@@ -1,3 +1,5 @@
+import { Table } from "@/components/ui/table";
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
@@ -232,14 +234,14 @@ export default function SelfFillLinksPage() {
   const allDeletableSelected = deletable.length > 0 && deletable.every(r => selected.has(r.id));
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <AdminPageHeader>
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><Link2 className="w-6 h-6" /> {t("selfFill.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t("selfFill.subtitle")}</p>
+          <AdminPageTitle className="flex items-center gap-2"><Link2 className="w-6 h-6" /> {t("selfFill.title")}</AdminPageTitle>
+          <AdminPageDescription>{t("selfFill.subtitle")}</AdminPageDescription>
         </div>
         <Button onClick={() => setShowDialog(true)}><Plus className="w-4 h-4 mr-2" /> {t("selfFill.newLink")}</Button>
-      </div>
+      </AdminPageHeader>
 
       {selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2 bg-muted/60 rounded-lg border">
@@ -257,7 +259,7 @@ export default function SelfFillLinksPage() {
         ) : rows.length === 0 ? (
           <div className="p-12 text-center text-muted-foreground">{t("selfFill.empty")}</div>
         ) : (
-          <table className="w-full text-sm">
+          <Table>
             <thead className="bg-muted/40">
               <tr>
                 <th className="px-4 py-3 w-10">
@@ -310,7 +312,7 @@ export default function SelfFillLinksPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
       </Card>
 

@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
@@ -87,16 +88,16 @@ export default function SystemHealthPage() {
   const performanceCheck = data?.checks.find(check => check.key === "requestPerformance");
   const measured = data?.checks.filter(check => check.state !== "unknown" && check.state !== "disabled").length ?? 0;
 
-  return <div className="space-y-6 p-4 md:p-6" dir={dir} data-testid="page-system-health" aria-busy={loading}>
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div className="max-w-3xl"><h1 className="text-2xl font-bold">{copy.title}</h1><p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
+  return <div className="space-y-6" dir={dir} data-testid="page-system-health" aria-busy={loading}>
+    <AdminPageHeader>
+      <div className="max-w-3xl"><AdminPageTitle>{copy.title}</AdminPageTitle><AdminPageDescription>{copy.subtitle}</AdminPageDescription>
         {lang !== "en" && lang !== "tr" && <p className="mt-1 text-xs text-muted-foreground" lang="en">{copy.fallback}</p>}
       </div>
-      <div className="flex flex-col items-start gap-2">
+      <AdminPageActions className="flex-col items-start">
         <Button data-testid="health-refresh" variant="outline" onClick={() => void readerRef.current?.refresh()} disabled={loading}><RefreshCw aria-hidden="true" className={`me-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />{copy.refresh}</Button>
         <label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={auto} onChange={event => { autoRef.current = event.target.checked; setAuto(event.target.checked); }} />{copy.auto}</label>
-      </div>
-    </div>
+      </AdminPageActions>
+    </AdminPageHeader>
     <p className="text-xs text-muted-foreground">{copy.autoNote}</p>
     <div role="status" aria-live="polite" className="sr-only">{loading ? copy.loading : copy.states[summary]}</div>
     {loading && !data && <p className="text-sm text-muted-foreground">{copy.loading}</p>}

@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -159,17 +160,17 @@ export function ApiTokensManager({ embedded = false }: { embedded?: boolean } = 
   const scopes = scopesQuery.data ?? [];
 
   return (
-    <div className={embedded ? "space-y-6" : "p-4 md:p-6 space-y-6"}>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="space-y-6">
+      <AdminPageHeader>
         {!embedded ? (
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+            <AdminPageTitle className="flex items-center gap-2">
               <KeyRound className="h-6 w-6 text-primary" />
               {t("apiTokens.title")}
-            </h1>
-            <p className="text-sm text-muted-foreground max-w-2xl">
+            </AdminPageTitle>
+            <AdminPageDescription>
               {t("apiTokens.description")}
-            </p>
+            </AdminPageDescription>
           </div>
         ) : (
           <div />
@@ -178,7 +179,7 @@ export function ApiTokensManager({ embedded = false }: { embedded?: boolean } = 
           <Plus className="h-4 w-4 me-2" />
           {t("apiTokens.createButton")}
         </Button>
-      </div>
+      </AdminPageHeader>
 
       <Card className="rounded-xl border-border/50">
         <CardHeader>

@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
@@ -95,19 +96,19 @@ export default function AiExtractors() {
 
   return (
     <div className="min-w-0 w-full space-y-6">
-      <div className="flex items-start justify-between flex-wrap gap-3">
+      <AdminPageHeader>
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <AdminPageTitle className="flex items-center gap-2">
             <FileSearch className="h-6 w-6 text-indigo-500" /> {t("aiExtractor.title")}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+          </AdminPageTitle>
+          <AdminPageDescription>
             {t("aiExtractor.subtitle")}
-          </p>
+          </AdminPageDescription>
         </div>
         <Button onClick={() => setLocation("/admin/ai-extractors/new")}>
           <Plus className="h-4 w-4 mr-2" /> {t("aiExtractor.newExtractor")}
         </Button>
-      </div>
+      </AdminPageHeader>
 
       {loading && <div className="text-sm text-muted-foreground">{t("aiExtractor.loading")}</div>}
 

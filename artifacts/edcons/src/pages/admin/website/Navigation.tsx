@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageTitle, AdminTabsList } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -8,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -267,8 +268,8 @@ export default function WebsiteNavigation() {
         <div className="flex items-center gap-3">
           <Menu className="w-6 h-6 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">{translateUi(uiLanguage, "Navigation")}</h1>
-            <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "Manage website navigation menus and their items.")}</p>
+            <AdminPageTitle>{translateUi(uiLanguage, "Navigation")}</AdminPageTitle>
+            <AdminPageDescription>{translateUi(uiLanguage, "Manage website navigation menus and their items.")}</AdminPageDescription>
           </div>
         </div>
 
@@ -285,14 +286,14 @@ export default function WebsiteNavigation() {
         {menus.length > 0 && (
           <Tabs value={activeMenuId} onValueChange={setActiveMenuId}>
             <div className="flex items-center justify-between">
-              <TabsList className="rounded-xl bg-secondary/50 p-1">
+              <AdminTabsList>
                 {menus.map(m => (
                   <TabsTrigger key={m.id} value={String(m.id)} className="rounded-lg gap-2">
                     <Menu className="w-4 h-4" />
                     {m.name}
                   </TabsTrigger>
                 ))}
-              </TabsList>
+              </AdminTabsList>
             </div>
 
             {menus.map(m => (

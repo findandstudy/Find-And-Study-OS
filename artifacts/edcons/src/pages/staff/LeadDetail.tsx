@@ -1,3 +1,5 @@
+import { Table } from "@/components/ui/table";
+import { AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, Link } from "wouter";
@@ -483,9 +485,9 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
             {isLoading ? (
               <Skeleton className="h-8 w-48" />
             ) : (
-              <h1 className="text-2xl font-display font-bold text-foreground">
+              <AdminPageTitle>
                 {lead?.firstName} {lead?.lastName}
-              </h1>
+              </AdminPageTitle>
             )}
             <p className="text-sm text-muted-foreground mt-0.5">{t("leadDetailPage.leadDetail")}</p>
           </div>
@@ -1471,7 +1473,7 @@ function LeadDocumentsTab({ docs, firstName, lastName }: {
   return (
     <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
       {dialog}
-      <table className="w-full text-sm">
+      <Table>
         <thead className="bg-secondary/50">
           <tr>
             <th className="text-left px-4 py-3 font-semibold text-foreground">{t("leadDetailPage.tableFile")}</th>
@@ -1517,7 +1519,7 @@ function LeadDocumentsTab({ docs, firstName, lastName }: {
             );
           })}
         </tbody>
-      </table>
+      </Table>
     </div>
   );
 }

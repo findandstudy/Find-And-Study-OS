@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
@@ -162,12 +163,12 @@ export default function AiActionQueue() {
   return (
     <div className="min-w-0 w-full space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
+        <AdminPageTitle className="flex items-center gap-2">
           <ListChecks className="h-6 w-6 text-indigo-500" /> {t("aiActionQueue.title")}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        </AdminPageTitle>
+        <AdminPageDescription>
           {t("aiActionQueue.subtitle")}
-        </p>
+        </AdminPageDescription>
       </div>
 
       {!loading && loadError && (

@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { formatTimeAgo } from "@/lib/i18n/index";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useMemo } from "react";
@@ -249,7 +250,7 @@ function PanelPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
       {/* Control bar */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-xl border border-border bg-secondary/30 p-1 gap-1">
+          <div className="inline-flex min-w-0 max-w-full flex-wrap gap-1 rounded-lg border border-border bg-secondary/30 p-1">
             {PANEL_PRESETS.map(({ key, i18nKey }) => (
               <Button
                 key={key}
@@ -263,7 +264,7 @@ function PanelPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
             ))}
           </div>
           {preset === "custom" && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">{t("adminActivity.customFrom")}</span>
                 <input
@@ -788,7 +789,7 @@ function OverviewPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
       <Card className="border-none shadow-lg shadow-black/5 overflow-hidden">
         <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-foreground">{t("adminActivity.userActivitySummary")}</h3>
-          <div className="relative w-64">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("adminActivity.searchUsers")} className="pl-9 h-9 rounded-xl text-sm" />
           </div>
@@ -915,9 +916,9 @@ function UserDetailPage({ userId }: { userId: number }) {
           <ArrowLeft className="w-4 h-4" /> {t("adminActivity.back")}
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-display font-bold text-foreground">
+          <AdminPageTitle>
             {loading ? "..." : `${user?.firstName || ""} ${user?.lastName || ""}`}
-          </h1>
+          </AdminPageTitle>
           <div className="flex items-center gap-3 mt-1">
             {user && <Badge variant="outline" className="text-xs capitalize">{user.role}</Badge>}
             {presence && <StatusBadge status={presence.status || "offline"} />}
@@ -1127,12 +1128,12 @@ export default function AdminActivity({ userId }: { userId?: number }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <AdminPageHeader>
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">{t("adminActivity.title")}</h1>
-          <p className="text-muted-foreground text-sm mt-1">{t("adminActivity.subtitle")}</p>
+          <AdminPageTitle>{t("adminActivity.title")}</AdminPageTitle>
+          <AdminPageDescription>{t("adminActivity.subtitle")}</AdminPageDescription>
         </div>
-        <div className="inline-flex rounded-xl border border-border bg-secondary/30 p-1 gap-1">
+        <AdminPageActions className="inline-flex rounded-xl border border-border bg-secondary/30 p-1">
           <Button
             size="sm"
             variant={activeTab === "panel" ? "default" : "ghost"}
@@ -1149,8 +1150,8 @@ export default function AdminActivity({ userId }: { userId?: number }) {
           >
             {t("adminActivity.overviewTab")}
           </Button>
-        </div>
-      </div>
+        </AdminPageActions>
+      </AdminPageHeader>
 
       {activeTab === "panel"
         ? <PanelPage staffId={staffId} setStaffId={setStaffId} staffList={staffList} />

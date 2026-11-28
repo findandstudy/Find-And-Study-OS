@@ -1,3 +1,5 @@
+import { Table } from "@/components/ui/table";
+import { AdminPageDescription, AdminPageTitle } from "@/components/layout/AdminPage";
 import { DeadlineReminderSettings } from "@/components/DeadlineReminderSettings";
 import { ADMIN_FORM_WIDTH } from "@/components/layout/adminFormWidth";
 import { translateUi, UiText, useUiLanguage } from "@/lib/ui-localization";
@@ -1294,8 +1296,8 @@ export default function SettingsPage() {
   return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-display font-bold text-foreground">{t("settingsPage.settings")}</h1>
-          <p className="text-muted-foreground text-sm mt-1">{t("settingsHeader.subtitle")}</p>
+          <AdminPageTitle>{t("settingsPage.settings")}</AdminPageTitle>
+          <AdminPageDescription>{t("settingsHeader.subtitle")}</AdminPageDescription>
         </div>
 
         <div className="lg:hidden mb-4">
@@ -2133,7 +2135,7 @@ function WebToLeadTab() {
           </div>
         ) : (
           <div className="border rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
+            <Table>
               <thead className="bg-secondary/50">
                 <tr className="text-left">
                   <th className="px-4 py-2.5 font-semibold">{t("common.name")}</th>
@@ -2179,7 +2181,7 @@ function WebToLeadTab() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
           </div>
         )}
       </Card>

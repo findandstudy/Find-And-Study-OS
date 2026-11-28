@@ -1,3 +1,4 @@
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { Fragment, useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -2249,20 +2250,20 @@ export default function FinancePage() {
   return (
     <>
       <div className="min-w-0 w-full space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <AdminPageHeader>
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">{t("staffFinance.title")}</h1>
-            <p className="text-slate-500 text-sm mt-0.5">{t("staffFinance.subtitle")}</p>
+            <AdminPageTitle>{t("staffFinance.title")}</AdminPageTitle>
+            <AdminPageDescription>{t("staffFinance.subtitle")}</AdminPageDescription>
           </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <AdminPageActions className="min-w-0">
             <CurrencySelector value={currency} onChange={setCurrency} />
             <div className="text-sm text-muted-foreground font-medium bg-primary/8 border border-primary/20 px-3 py-1.5 rounded-lg"> {translateUi(uiLanguage, "Season:")} <span className="font-bold text-primary">{season}</span>
             </div>
             <Button variant="outline" size="icon" onClick={() => { refetchComm(); refetchFees(); }}>
               <RefreshCw className="w-4 h-4" />
             </Button>
-          </div>
-        </div>
+          </AdminPageActions>
+        </AdminPageHeader>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <FinanceStatCard

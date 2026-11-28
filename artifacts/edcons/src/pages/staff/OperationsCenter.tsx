@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -554,16 +555,16 @@ export default function OperationsCenter() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <AdminPageHeader>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <AdminPageTitle>
             {tr ? translateUi(uiLanguage, "İş & İstisna Merkezi") : translateUi(uiLanguage, "Work & Exception Center")}
-          </h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          </AdminPageTitle>
+          <AdminPageDescription>
             {tr
               ? translateUi(uiLanguage, "Görev, başvuru, belge, offer ve portal sinyallerini mevcut yetki sınırları içinde tek öncelikli iş kuyruğunda birleştirir.")
               : translateUi(uiLanguage, "Combines tasks, applications, evidence, offers and portal signals into one prioritized queue within existing access boundaries.")}
-          </p>
+          </AdminPageDescription>
         </div>
         <Button
           variant="outline"
@@ -574,7 +575,7 @@ export default function OperationsCenter() {
           <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
           {tr ? translateUi(uiLanguage, "Yenile") : translateUi(uiLanguage, "Refresh")}
         </Button>
-      </div>
+      </AdminPageHeader>
 
       {partialErrors > 0 && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">

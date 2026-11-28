@@ -1,3 +1,5 @@
+import { Table } from "@/components/ui/table";
+import { AdminPageActions, AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useState, useMemo } from "react";
 import { customFetch } from "@workspace/api-client-react";
@@ -373,17 +375,17 @@ export default function ContractTemplatesPage() {
   }, [form.intakeSchema]);
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <AdminPageHeader>
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="w-6 h-6" /> {t("contractTemplates.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t("contractTemplates.subtitle")} <code className="text-xs">{`{{agent.field}}, {{intake.field}}, {{contract.date}}, {{contract.signerName}}`}</code></p>
+          <AdminPageTitle className="flex items-center gap-2"><FileText className="w-6 h-6" /> {t("contractTemplates.title")}</AdminPageTitle>
+          <AdminPageDescription>{t("contractTemplates.subtitle")} <code className="text-xs">{`{{agent.field}}, {{intake.field}}, {{contract.date}}, {{contract.signerName}}`}</code></AdminPageDescription>
         </div>
-        <div className="flex items-center gap-2">
+        <AdminPageActions>
           <Button variant="outline" onClick={() => setBrandDialogOpen(true)}><Palette className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Brand profiles")}</Button>
           <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> {t("contractTemplates.newTemplate")}</Button>
-        </div>
-      </div>
+        </AdminPageActions>
+      </AdminPageHeader>
 
       {selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2 bg-muted/60 rounded-lg border">
@@ -401,7 +403,7 @@ export default function ContractTemplatesPage() {
         ) : rows.length === 0 ? (
           <div className="p-12 text-center text-muted-foreground">{t("contractTemplates.empty")}</div>
         ) : (
-          <table className="w-full text-sm">
+          <Table>
             <thead className="bg-muted/40">
               <tr>
                 <th className="px-4 py-3 w-10">
@@ -455,7 +457,7 @@ export default function ContractTemplatesPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
       </Card>
 

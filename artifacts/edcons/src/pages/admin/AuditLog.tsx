@@ -1,3 +1,4 @@
+import { AdminPageDescription, AdminPageHeader, AdminPageTitle } from "@/components/layout/AdminPage";
 import { useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
@@ -74,17 +75,17 @@ export default function AdminAuditLog() {
 
   return (
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <AdminPageHeader>
           <div>
-            <h1 className="text-2xl font-display font-bold text-foreground flex items-center gap-2">
+            <AdminPageTitle className="flex items-center gap-2">
               <Activity className="w-6 h-6 text-primary" /> {t("adminAudit.title")}
-            </h1>
-            <p className="text-muted-foreground text-sm mt-1">{t("adminAudit.subtitle")}</p>
+            </AdminPageTitle>
+            <AdminPageDescription>{t("adminAudit.subtitle")}</AdminPageDescription>
           </div>
           <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1.5 text-sm font-semibold self-start sm:self-auto">
             {t("adminAudit.entries", { count: total.toLocaleString() })}
           </Badge>
-        </div>
+        </AdminPageHeader>
 
         {/* Search */}
         <Card className="border-none shadow-md shadow-black/5 p-4">
