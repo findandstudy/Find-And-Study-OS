@@ -176,7 +176,7 @@ export default function WebsitePublishHistory() {
         </Card>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
             {cards.map(({ label, value, icon: Icon, tone }) => (
               <Card key={label}>
                 <CardContent className="p-4">
@@ -188,7 +188,7 @@ export default function WebsitePublishHistory() {
             ))}
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
             <Card>
               <CardHeader className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
@@ -196,9 +196,9 @@ export default function WebsitePublishHistory() {
                   <Badge variant="secondary">{visibleQueue.length}</Badge>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={tr ? "Sayfa veya slug ara" : "Search page or slug"} />
+                  <div className="relative min-w-0 flex-1">
+                    <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input className="ps-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={tr ? "Sayfa veya slug ara" : "Search page or slug"} />
                   </div>
                   <Select value={filter} onValueChange={setFilter}>
                     <SelectTrigger className="sm:w-44"><SelectValue /></SelectTrigger>
@@ -217,27 +217,27 @@ export default function WebsitePublishHistory() {
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <a href={`/admin/website/pages/${item.id}/edit`} className="truncate font-semibold hover:text-primary hover:underline">{item.title}</a>
+                          <a href={`/admin/website/pages/${item.id}/edit`} className="max-w-full truncate font-semibold hover:text-primary hover:underline">{item.title}</a>
                           <Badge variant={item.priority === "CRITICAL" ? "destructive" : item.priority === "HIGH" ? "default" : "secondary"}>{item.priority}</Badge>
                           <Badge variant="outline">{item.locale.toUpperCase()}</Badge>
                           <Badge variant="outline">{item.status}</Badge>
                         </div>
                         <p className="mt-1 truncate text-xs text-muted-foreground">/{item.slug} · {formatDate(item.updatedAt, tr)}</p>
                       </div>
-                      <div className="grid min-w-52 grid-cols-2 gap-3 text-xs">
+                      <div className="grid min-w-0 grid-cols-2 gap-3 text-xs md:w-52 md:shrink-0">
                         <div>
-                          <div className="mb-1 flex justify-between"><span>{translateUi(uiLanguage, "SEO")}</span><b>{item.seoScore}%</b></div>
+                          <div className="mb-1 flex flex-wrap justify-between gap-x-2"><span>{translateUi(uiLanguage, "SEO")}</span><b>{item.seoScore}%</b></div>
                           <Progress value={item.seoScore} />
                         </div>
                         <div>
-                          <div className="mb-1 flex justify-between"><span>{tr ? translateUi(uiLanguage, "Dil") : translateUi(uiLanguage, "Locales")}</span><b>{item.translatedLocaleCount}/{item.totalLocaleCount}</b></div>
+                          <div className="mb-1 flex flex-wrap justify-between gap-x-2"><span>{tr ? translateUi(uiLanguage, "Dil") : translateUi(uiLanguage, "Locales")}</span><b>{item.translatedLocaleCount}/{item.totalLocaleCount}</b></div>
                           <Progress value={item.translationCoveragePercent} />
                         </div>
                       </div>
                     </div>
                     {item.blockers.length > 0 ? (
                       <div className="mt-3 flex flex-wrap gap-1.5">
-                        {item.blockers.map((blocker) => <Badge key={blocker} variant="outline" className="text-[11px]">{BLOCKER_LABELS[blocker]?.[tr ? "tr" : "en"] ?? blocker}</Badge>)}
+                        {item.blockers.map((blocker) => <Badge key={blocker} variant="outline" className="max-w-full break-words text-[11px]">{BLOCKER_LABELS[blocker]?.[tr ? "tr" : "en"] ?? blocker}</Badge>)}
                       </div>
                     ) : (
                       <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" />{tr ? translateUi(uiLanguage, "Görünür kalite engeli yok") : translateUi(uiLanguage, "No visible quality blocker")}</p>
@@ -265,7 +265,7 @@ export default function WebsitePublishHistory() {
                 <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Clock3 className="h-4 w-4 text-primary" />{tr ? translateUi(uiLanguage, "Son sürümler") : translateUi(uiLanguage, "Recent versions")}</CardTitle></CardHeader>
                 <CardContent className="space-y-2">
                   {(query.data?.recentVersions ?? []).slice(0, 8).map((version) => (
-                    <a key={version.id} href={`/admin/website/pages/${version.pageId}/edit`} className="flex items-center justify-between rounded-lg border p-3 text-sm transition-colors hover:bg-muted/50">
+                    <a key={version.id} href={`/admin/website/pages/${version.pageId}/edit`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm transition-colors hover:bg-muted/50">
                       <span className="font-medium">#{version.pageId} · v{version.versionNumber}</span>
                       <span className="text-xs text-muted-foreground">{formatDate(version.createdAt, tr)}</span>
                     </a>
