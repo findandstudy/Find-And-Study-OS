@@ -15,3 +15,12 @@ Gerçek disposable local PostgreSQL'de 11 kontrol PASS: yeni agent/sub_agent, pr
 
 ## Yayın sınırı
 Yalnız staging hedeflenir. Production Apply değişmez. Staging'de Academy menüsü/yetki eşliği test edilebilir; production Academy'ye gerçek SSO geçişi mevcut ortam politikası gereği kapalı kalır. Eski hesaplarda explicit kullanıcı reddi otomatik kaldırılmaz.
+
+## Staging teslim kanıtı
+- Local code `d2e0fad9`; staging integration `59a28b040637`.
+- Release `staging-20261128T090314Z-59a28b040637`; image `findandstudy-staging-app:academy-initial-access`.
+- API/DB/frontend typecheck, 27 provisioning/application/SSO safety ve 190 mevcut frontend build testi PASS. 23 locale eşliği PASS. Public health HTTP200/dbConnected=true/exact release ve Docker healthy PASS.
+- Salt-okunur başlangıç denetiminde iki aktif/full agent/sub_agent paketinde Academy açık, kişisel override eksik ve rol paketinde academy.access yoktu. Explicit deny sayısı0 idi.
+- Bu iki mevcut hesaba yalnız eksik academy.access=true eşlemesi eklendi. İşlem fas_app yetkisiyle bounded transaction, row lock, exact2 kapsam guard'ı ve gerçek staging admin actor'u üzerinden iki audit kaydıyla yapıldı. Başka acente profili/kullanıcı alanı, rol paketi veya açık ret değiştirilmedi. İlk TEMP tablo denemesi izin kapısında reddedildi; hak genişletilmeden DO/row-lock transaction ile tamamlandı.
+- Son aggregate: eşleme eksiği0; repair audit2. Migration yok; ledger146 olarak korundu. Her iki kaynak worktree temiz; app env'de yalnız image/release seçimi değişti, önceki image/env geri dönüş için durur.
+- İlk login HTTP kanıtı yerel sentetik kullanıcı ve gerçek auth/login route'u üzerindedir. Staging'de gerçek acente kimliğiyle login veya production Academy SSO yönlendirmesi denenmedi. Staging dış entegrasyon kapıları korunur. Production Apply'a deploy/yazı yoktur.

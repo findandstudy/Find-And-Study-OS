@@ -912,3 +912,18 @@ devralmaya dönme ve TR/AR RTL PASS. Ayarlar30/7 ve override yok durumuna dönd�
 Gerçek takvim verisi girilmemiştir; legacy intake metni deadline sayılmaz.
 Sentetik preview ve gerçek gönderim kapalı kalır; tarih uydurma/production yok.
 Ayrıntı: DEADLINE_REMINDERS_IMPLEMENTATION_2026-11-28.md.
+
+### 28 Kasım — yeni acente Academy ilk yetki eşlemesi
+Yeni agent/sub_agent ve application activation yollarında academy feature ile
+academy.access eşlemesi eksikti; admin tick toggle sonraki sync ile düzeltiyordu.
+Ortak agentAcademyAccess helper'ı yaratma/aktivasyon transaction'ına alındı;
+admin edit yalnız Academy özelliği gerçekten değiştiğinde explicit override
+edebilir. Initial modda mevcut true/false ret/grant korunur; provisional/staff
+kendiliğinden grant alamaz. Agent/sub_agent auth ve user-scoped sidebar profili
+30 sn yenilenir; agent_staff5 sn korunur. Yeni UI metni veya migration yok.
+Local d2e0fad9; staging59a28b040637; release
+staging-20261128T090314Z-59a28b040637. API/UI/DB typecheck,11 local DB+ilk login,
+27 safety/provisioning ve190 build testi/i18n PASS. Staging'de mevcut2 enabled
+plan/eksik yetki kaydı exact-scope auditli işlemle onarıldı; eksik0/audit2,
+ledger146, apphealthy. Dış Academy handoff staging'de kapalı; production yok.
+Ayrıntı AGENT_ACADEMY_INITIAL_ACCESS_2026-11-28.md.
