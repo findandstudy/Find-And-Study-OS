@@ -338,6 +338,7 @@ export function useWorkPipelines() {
       });
       await refresh();
       await qc.invalidateQueries({ queryKey: ["work-pipeline-dashboard"] });
+      await qc.invalidateQueries({ queryKey: ["/api/follow-ups/upcoming"] });
       await qc.invalidateQueries({ queryKey: ["notification-section-counts"] });
       return true;
     } catch (e: any) {

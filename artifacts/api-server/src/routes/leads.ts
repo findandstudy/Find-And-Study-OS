@@ -19,6 +19,7 @@ import { enqueueOnStageChange, maybeEnqueuePortalSubmission } from "../lib/porta
 import { applyLeadAssignmentRules, cascadeLeadAssignment } from "../lib/leadAssignment";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
 import { captureWorkSource } from "../lib/workPipelines";
+import { upcomingWorkFollowUps, mergeUpcomingFollowUps } from "../lib/workPipelineUpcoming";
 import { recomputeStudentPhoto, studentHasServablePhotoSql } from "../lib/studentPhoto";
 import { maybeTriggerAutoEducationExtractForStudent } from "../lib/educationAutoExtract";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
@@ -2353,6 +2354,7 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES, "agent_
 });
 
 router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "private, no-store");
   const userId = req.user!.id;
   const userRole = req.user!.role;
   const isAdmin = ADMIN_ROLES.includes(userRole);
@@ -2371,9 +2373,11 @@ router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES, ...A
     )`,
   ];
 
+  let creatorFilter: number | null = null;
   if (isAdmin && req.query.createdById) {
     const filterUserId = parseInt(String(req.query.createdById), 10);
     if (!isNaN(filterUserId)) {
+      creatorFilter = filterUserId;
       baseConditions.push(eq(followUpsTable.createdById, filterUserId));
     }
   }
@@ -2446,7 +2450,8 @@ router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES, ...A
     .where(and(...baseConditions))
     .orderBy(asc(followUpsTable.scheduledAt))
     .limit(20);
-  res.json(data);
+  const pipelineFollowUps = await upcomingWorkFollowUps({ id: userId, role: userRole }, nextWeek, creatorFilter);
+  res.json(mergeUpcomingFollowUps([...data, ...pipelineFollowUps]));
 });
 
 router.patch("/leads/:id/origin", requireAuth, requireRole("super_admin", "admin"), async (req, res): Promise<void> => {

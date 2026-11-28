@@ -379,6 +379,7 @@ export default function AdminDashboard() {
       if (followUpCreatedById != null) url.searchParams.set("createdById", String(followUpCreatedById));
       return customFetch(`${url.pathname}${url.search}`);
     },
+    refetchInterval: 30_000,
   });
   const upcomingFollowUps: any[] = toArray(upcomingQuery.data);
 
@@ -768,7 +769,7 @@ export default function AdminDashboard() {
               <p className="text-sm text-muted-foreground">{t("adminDash.noFollowUps")}</p>
             ) : (
               upcomingFollowUps.slice(0, 5).map((fu: any) => (
-                <Link key={fu.id} href={fu.leadId ? `/staff/leads/${fu.leadId}` : fu.studentId ? `/staff/students/${fu.studentId}` : "#"}>
+                <Link key={fu.id} href={fu.resourceType === "work_pipeline" ? `/staff/pipelines?pipeline=${encodeURIComponent(fu.boardId)}&card=${encodeURIComponent(fu.cardId)}` : fu.leadId ? `/staff/leads/${fu.leadId}` : fu.studentId ? `/staff/students/${fu.studentId}` : "#"}>
                   <div className={`p-3 rounded-xl border cursor-pointer hover:scale-[1.02] transition-transform ${
                     isOverdue(fu.scheduledAt) ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800" : "bg-secondary/30 border-border"
                   }`}>
@@ -777,6 +778,7 @@ export default function AdminDashboard() {
                       <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
                     </div>
                     {fu.leadName && <p className="text-xs text-primary mt-0.5">{fu.leadName}</p>}
+                    {fu.resourceType === "work_pipeline" && <p className="text-xs text-primary mt-0.5">{fu.pipelineName} · {fu.cardTitle}</p>}
                     <p className={`text-xs mt-1 ${isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
                       {formatDate(fu.scheduledAt, lang)}
                       {" "}

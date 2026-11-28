@@ -98,6 +98,7 @@ export default function StaffDashboard() {
     },
     staleTime: 0,
     refetchOnMount: "always",
+    refetchInterval: 30_000,
   });
 
   const staffDashboardRecentLimit = 20;
@@ -506,7 +507,7 @@ export default function StaffDashboard() {
                 <p className="text-sm text-muted-foreground">{t("staffDash.noFollowUps")}</p>
               ) : (
                 (upcomingFollowUps as any[]).slice(0, 6).map((fu: any) => (
-                  <Link key={fu.id} href={fu.leadId ? `/staff/leads/${fu.leadId}` : fu.studentId ? `/staff/students/${fu.studentId}` : "#"}>
+                  <Link key={fu.id} href={fu.resourceType === "work_pipeline" ? `/staff/pipelines?pipeline=${encodeURIComponent(fu.boardId)}&card=${encodeURIComponent(fu.cardId)}` : fu.leadId ? `/staff/leads/${fu.leadId}` : fu.studentId ? `/staff/students/${fu.studentId}` : "#"}>
                     <div className={`p-3 rounded-xl border cursor-pointer hover:scale-[1.02] transition-transform ${
                       isOverdue(fu.scheduledAt) ? "bg-red-50 border-red-200" : "bg-secondary/30 border-border"
                     }`}>
@@ -517,6 +518,7 @@ export default function StaffDashboard() {
                       {fu.leadName && (
                         <p className="text-xs text-primary mt-0.5">{fu.leadName}</p>
                       )}
+                      {fu.resourceType === "work_pipeline" && <p className="text-xs text-primary mt-0.5">{fu.pipelineName} · {fu.cardTitle}</p>}
                       <p className={`text-xs mt-1 ${isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
                         {new Date(fu.scheduledAt).toLocaleDateString(dateLoc, { day: "2-digit", month: "2-digit", year: "numeric" })}
                         {" "}
