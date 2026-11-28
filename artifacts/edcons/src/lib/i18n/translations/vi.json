@@ -11618,5 +11618,15 @@
     "manageTemplates": "Quản lý mẫu trong Tin nhắn",
     "reuseSmtp": "Sử dụng tích hợp SMTP hiện có",
     "configureSmtp": "Cấu hình tích hợp SMTP"
+  },
+  "pipelineNotice": {
+    "title": "Thông báo giai đoạn",
+    "recipient": "Người nhận",
+    "auto": "Theo nguồn (liên hệ hoặc đại lý)",
+    "contact": "Liên hệ",
+    "agent": "Đại lý",
+    "assignee": "Người phụ trách",
+    "hint": "Một lần cho mỗi bản ghi, giai đoạn và kênh. Cần email đã xác minh và mẫu đã duyệt.",
+    "location": "Mẫu email: Tin nhắn. Tài khoản gửi: Tích hợp."
   }
 }

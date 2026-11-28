@@ -11,7 +11,7 @@ import type { PipelineStage, StageAction, StageActionType } from "@/hooks/use-pi
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { preventPipelineDialogOutsideDismiss } from "@/lib/pipelineDialogDismiss";
-import { StageAutomaticEmailFields } from "@/components/notifications/EmailAutomationFields";
+import { StageAutomaticEmailFields, PipelineNoticeRecipient } from "@/components/notifications/EmailAutomationFields";
 import { emailStageValid, emailAutomationCopy } from "@/components/notifications/emailAutomationModel";
 
 type ActionTypeOrNone = StageActionType | "none";
@@ -447,7 +447,7 @@ function StageEditForm({
           onChange={v => onChange({ ...stage, canAttachFile: v, ...(v ? {} : { isFileUploadMandatory: false }) })}
         />
         {stage.canAttachFile && (
-          <div className="ml-2 border-l-2 border-primary/30 pl-4 space-y-4">
+          <div className="ms-2 border-s-2 border-primary/30 ps-4 space-y-4">
             <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">
@@ -488,7 +488,7 @@ function StageEditForm({
           onChange={(enabled) => onChange({
             ...stage,
             automaticMessage: enabled ? {
-              enabled: true,
+              enabled: true, policyVersion:2, recipientType:stage.automaticMessage?.recipientType??"auto",
               templateId: stage.automaticMessage?.templateId
                 ?? approvedTemplates[0]?.id
                 ?? null,
@@ -501,7 +501,8 @@ function StageEditForm({
           })}
         />
         {stage.automaticMessage?.enabled && (
-          <div className="ml-2 border-l-2 border-primary/30 pl-4 space-y-4">
+          <div className="ms-2 border-s-2 border-primary/30 ps-4 space-y-4">
+            <PipelineNoticeRecipient value={stage.automaticMessage.recipientType??"auto"} onChange={recipientType=>onChange({...stage,automaticMessage:{...stage.automaticMessage!,policyVersion:2,recipientType}})} />
             {automaticMessageOptionsLoading && (
               <p className="text-xs text-muted-foreground">{t("editStages.automaticMessageLoading")}</p>
             )}
@@ -581,9 +582,9 @@ function StageEditForm({
         )}
       </FormSection>
 
+      <StageAutomaticEmailFields kind={stage.entityType as "lead"|"student"|"application"} value={stage.automaticEmail} onChange={automaticEmail=>onChange({...stage,automaticEmail})}/>
       {isApplicationStage && (
         <>
-          <StageAutomaticEmailFields value={stage.automaticEmail} onChange={automaticEmail => onChange({ ...stage, automaticEmail })} />
           <FormSection title={t("editStages.sectionApplicationSettings")}>
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">{t("editStages.uploadPermissionLabel")}</Label>

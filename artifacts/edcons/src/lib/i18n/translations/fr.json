@@ -11618,5 +11618,15 @@
     "manageTemplates": "Gérer les modèles dans Messages",
     "reuseSmtp": "Utiliser l’intégration SMTP existante",
     "configureSmtp": "Configurer l’intégration SMTP"
+  },
+  "pipelineNotice": {
+    "title": "Notifications par étape",
+    "recipient": "Destinataire",
+    "auto": "Selon la source (contact ou agent)",
+    "contact": "Contact",
+    "agent": "Agent",
+    "assignee": "Responsable",
+    "hint": "Une fois par fiche, étape et canal. Adresse vérifiée et modèle approuvé requis.",
+    "location": "Modèles : Messages. Comptes expéditeurs : Intégrations."
   }
 }

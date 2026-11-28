@@ -30,7 +30,7 @@ export function EmailAutomationManager({ view = "all" }: { view?: "all" | "sende
   const client = useQueryClient();
   const library = useEmailLibrary();
   const [tab, setTab] = useState<"templates" | "senders" | "history">(view === "senders" ? "senders" : view === "history" ? "history" : "templates");
-  const [historySource, setHistorySource] = useState<"stage" | "system">("stage");
+  const [historySource, setHistorySource] = useState<"stage" | "system" | "pipeline">("pipeline");
   const [historyCursors, setHistoryCursors] = useState<Array<number | undefined>>([undefined]);
   const historyCursor = historyCursors.at(-1);
   const [draft, setDraft] = useState<TemplateDraft | null>(null);
@@ -135,11 +135,11 @@ export function EmailAutomationManager({ view = "all" }: { view?: "all" | "sende
     </div>}
     {tab === "history" && <div className="space-y-3" data-testid="email-delivery-history">
       <p className="text-xs text-muted-foreground">{copy.historyNote}</p>
-      <label className="block space-y-1 text-sm"><span>{copy.copy("Source", "Kaynak")}</span><select aria-label={copy.copy("Source", "Kaynak")} className="w-full sm:w-auto h-10 rounded-md border bg-background px-2" value={historySource} onChange={e => { setHistorySource(e.target.value as "stage" | "system"); setHistoryCursors([undefined]); }}><option value="stage">{copy.copy("Application stages", "Başvuru aşamaları")}</option><option value="system">{copy.copy("System notification rules", "Sistem bildirim kuralları")}</option></select></label>
+      <label className="block space-y-1 text-sm"><span>{copy.copy("Source", "Kaynak")}</span><select aria-label={copy.copy("Source", "Kaynak")} className="w-full sm:w-auto h-10 rounded-md border bg-background px-2" value={historySource} onChange={e => { setHistorySource(e.target.value as "stage" | "system" | "pipeline"); setHistoryCursors([undefined]); }}><option value="pipeline">{t("pipelineNotice.title")}</option><option value="stage">{copy.copy("Application stages", "Başvuru aşamaları")}</option><option value="system">{copy.copy("System notification rules", "Sistem bildirim kuralları")}</option></select></label>
       {!history.isLoading && !history.isError && !history.data?.items.length && <p className="text-sm text-muted-foreground">{copy.empty}</p>}
       {history.data?.items.map(item => <article key={item.id} className="rounded-lg border p-3 grid sm:grid-cols-2 gap-2 text-sm">
-        {historySource === "stage" ? <><div>{copy.application}: {Number.isSafeInteger(item.applicationId) && Number(item.applicationId) > 0 ? <a className="text-primary underline" href={`/admin/applications/${item.applicationId}`}>#{item.applicationId}</a> : "—"}</div><div>{copy.stage}: <span className="break-all">{item.stageKey}</span></div></> : <><div>{copy.version}: #{item.templateVersionId}</div><div>{copy.sender}: #{item.senderAccountId}</div></>}
-        <div>{copy.status}: {statusLabel(item.status)}{item.queueStatus && item.queueStatus !== item.status ? ` · ${statusLabel(item.queueStatus)}` : ""}</div>
+        {historySource === "pipeline" ? <><div>{t("pipelineNotice.title")}: {item.entityKind==='lead'?t('common.lead'):item.entityKind==='student'?t('common.student'):item.entityKind==='application'?t('inbox.sidebar.tabs.application'):t('pipelineNotice.title')} #{item.entityId}</div><div>{copy.stage}: {item.stageKey} · {t(item.channel==='email'?'inbox.channels.email':'inbox.channels.whatsapp')}</div></> : historySource === "stage" ? <><div>{copy.application}: {Number.isSafeInteger(item.applicationId) && Number(item.applicationId) > 0 ? <a className="text-primary underline" href={`/admin/applications/${item.applicationId}`}>#{item.applicationId}</a> : "—"}</div><div>{copy.stage}: <span className="break-all">{item.stageKey}</span></div></> : <><div>{copy.version}: #{item.templateVersionId}</div><div>{copy.sender}: #{item.senderAccountId}</div></>}
+        <div>{copy.status}: {item.channel==='whatsapp'&&item.status==='sent'?t('inbox.sent'):statusLabel(item.status)}{item.queueStatus && item.queueStatus !== item.status ? ` · ${statusLabel(item.queueStatus)}` : ""}</div>
         <div>{copy.date}: {Number.isFinite(Date.parse(item.createdAt)) ? new Date(item.createdAt).toLocaleString(lang) : "—"}</div>
         {(item.deliveryErrorCode || item.errorCode) && <div className="sm:col-span-2 break-all text-muted-foreground">{copy.reason}: {[item.errorCode, item.deliveryErrorCode].filter((code, index, all) => code && all.indexOf(code) === index).join(" · ")}</div>}
       </article>)}

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import {
-  db,
+  db, usersTable,
   notificationsTable,
   notificationRulesTable,
   applicationsTable,
@@ -32,6 +32,10 @@ import {
 } from "../lib/notificationPriority";
 
 const router: IRouter = Router();
+const preferenceKeys=['newLeads','applicationUpdates','documentAlerts','financeAlerts'];
+router.get('/notification-preferences',requireAuth,async(req,res)=>{const [row]=await db.select({preferences:usersTable.notificationPreferences}).from(usersTable).where(eq(usersTable.id,req.user!.id));res.setHeader('Cache-Control','private, no-store');res.json({preferences:Object.fromEntries(preferenceKeys.map(k=>[k,row?.preferences?.[k]!==false]))});});
+router.patch('/notification-preferences',requireAuth,async(req,res)=>{const v=req.body?.preferences;if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).length!==4||preferenceKeys.some(k=>typeof v[k]!=='boolean')||Object.keys(v).some(k=>!preferenceKeys.includes(k))){res.status(400).json({error:'Invalid preferences'});return;}await db.update(usersTable).set({notificationPreferences:v}).where(eq(usersTable.id,req.user!.id));res.json({preferences:v});});
+
 
 /**
  * SQL fragment that excludes notifications whose target resource has been

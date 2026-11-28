@@ -427,6 +427,25 @@ export async function sendWhatsAppTemplateToEntity(params: {
   requestIp?: string;
 }): Promise<WhatsAppTemplateSendResult> {
   const target = await loadEntityTarget(params.actor, params.entityType, params.entityId);
+  const context = await loadEntityTemplateVariableContext(params.entityType, params.entityId);
+  return sendResolvedWhatsAppTemplate(params,target,context);
+}
+
+/** Internal notification adapter. No HTTP route accepts these resolved targets. */
+export async function sendPipelineWhatsAppSnapshot(params: {
+ actor:AuthUser; noticeId:number; recipientKey:string; phone:string; name:string; templateId:number; channelAccountId:number;
+ context:Record<string,string>; beforeSend:()=>Promise<void>;
+}) {
+ const externalId='stage_notice:'+params.recipientKey;
+ return sendResolvedWhatsAppTemplate({actor:params.actor,entityType:'stage_notice',entityId:params.noticeId,templateId:params.templateId,
+  channelAccountId:params.channelAccountId,expectedPhoneE164:params.phone,beforeSend:params.beforeSend},
+  {entityType:'stage_notice',entityId:params.noticeId,agentId:null,phoneE164:params.phone,displayName:params.name,
+   resolvedStudentId:null,contactExternalId:externalId,contactCondition:and(eq(externalContactsTable.channel,'whatsapp'),eq(externalContactsTable.externalId,externalId))!},params.context);
+}
+async function sendResolvedWhatsAppTemplate(params:{actor:AuthUser;entityType:string;entityId:number;templateId:number;expectedPhoneE164?:string;
+ channelAccountId?:number;parameters?:string[];requestIp?:string;beforeSend?:()=>Promise<void>},
+ target:Omit<EntityTarget,'entityType'>&{entityType:MessageTemplateEntityType|'stage_notice';contactExternalId?:string},
+ context:Awaited<ReturnType<typeof loadEntityTemplateVariableContext>>):Promise<WhatsAppTemplateSendResult> {
   if (params.expectedPhoneE164 && target.phoneE164 !== params.expectedPhoneE164) {
     throw new WhatsAppTemplateSendError(
       409,
@@ -475,7 +494,6 @@ export async function sendWhatsAppTemplateToEntity(params: {
     );
   }
 
-  const context = await loadEntityTemplateVariableContext(params.entityType, params.entityId);
   const resolved = resolveTemplateParameters({
     template: { content: template.content || "", variables: template.variables },
     context,
@@ -486,7 +504,7 @@ export async function sendWhatsAppTemplateToEntity(params: {
   let conversationId = account.conversationId;
   let alreadyExists = Boolean(conversationId);
   if (!conversationId) {
-    const outboundExternalId = `wa_out:${target.phoneE164.replace(/^\+/, "")}`;
+    const outboundExternalId = target.contactExternalId ?? `wa_out:${target.phoneE164.replace(/^\+/, "")}`;
     let [contact] = await db
       .select({ id: externalContactsTable.id })
       .from(externalContactsTable)
@@ -565,6 +583,7 @@ export async function sendWhatsAppTemplateToEntity(params: {
     }
   }
 
+  await params.beforeSend?.();
   const providerResult = await sendZernioTemplate({
     externalAccountId: account.externalAccountId,
     templateName: template.externalTemplateName,

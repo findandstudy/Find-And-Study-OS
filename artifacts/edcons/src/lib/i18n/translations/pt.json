@@ -11618,5 +11618,15 @@
     "manageTemplates": "Gerir modelos em Mensagens",
     "reuseSmtp": "Usar a integração SMTP existente",
     "configureSmtp": "Configurar a integração SMTP"
+  },
+  "pipelineNotice": {
+    "title": "Notificações por etapa",
+    "recipient": "Destinatário",
+    "auto": "Por origem (contato ou agente)",
+    "contact": "Contato",
+    "agent": "Agente",
+    "assignee": "Responsável",
+    "hint": "Uma vez por registro, etapa e canal. Exige e-mail verificado e modelo aprovado.",
+    "location": "Modelos: Mensagens. Contas remetentes: Integrações."
   }
 }

@@ -17,6 +17,8 @@ export const workBoardInput = z
           id: WP_UUID,
           name: text(80).min(1),
           color: z.string().regex(/^#[0-9a-f]{6}$/i),
+          automaticEmail: z.any().optional(),
+          automaticMessage: z.any().optional(),
           result: z.enum(["open", "won", "closed"]).default("open"),
         }),
       )

@@ -5,7 +5,7 @@ import { PROGRAM_SUPPORTED_LOCALES } from "../programTranslationContract";
 
 export const STAGE_EMAIL_TEMPLATE_VARIABLES = ["studentName", "firstName", "lastName", "universityName", "programName", "newStage", "newStageKey", "applicationId"] as const;
 // Existing notification event variables; this catalogue adds no new events or data sources.
-export const EMAIL_TEMPLATE_VARIABLES = [...STAGE_EMAIL_TEMPLATE_VARIABLES, "email", "phone", "oldStage", "validUntil", "daysLeft", "stageLabel",
+export const EMAIL_TEMPLATE_VARIABLES = [...STAGE_EMAIL_TEMPLATE_VARIABLES, "recordName", "recipientName", "stageName", "pipelineName", "recordId", "email", "phone", "oldStage", "validUntil", "daysLeft", "stageLabel",
   "nationality", "documentName", "documentType", "oldStatus", "newStatus", "amount", "dueDate", "agentName", "companyName", "businessName",
   "contractEndDate", "threshold", "message", "title", "senderName", "channel", "signerName", "signerEmail", "contractName", "contractLink",
   "verificationCode", "actorName", "taskTitle", "country", "expiryDate"] as const;

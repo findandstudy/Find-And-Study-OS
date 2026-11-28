@@ -11618,5 +11618,15 @@
     "manageTemplates": "메시지에서 템플릿 관리",
     "reuseSmtp": "기존 SMTP 연동 사용",
     "configureSmtp": "SMTP 연동 설정"
+  },
+  "pipelineNotice": {
+    "title": "단계 알림",
+    "recipient": "수신자",
+    "auto": "출처별 (연락처 또는 에이전트)",
+    "contact": "연락처",
+    "agent": "에이전트",
+    "assignee": "담당자",
+    "hint": "레코드, 단계, 채널별 한 번. 인증된 이메일과 승인된 템플릿이 필요합니다.",
+    "location": "이메일 템플릿: 메시지. 발신 계정: 연동."
   }
 }

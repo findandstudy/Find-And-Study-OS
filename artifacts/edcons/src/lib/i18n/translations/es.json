@@ -11618,5 +11618,15 @@
     "manageTemplates": "Gestionar plantillas en Mensajes",
     "reuseSmtp": "Usar la integración SMTP existente",
     "configureSmtp": "Configurar la integración SMTP"
+  },
+  "pipelineNotice": {
+    "title": "Notificaciones por etapa",
+    "recipient": "Destinatario",
+    "auto": "Según origen (contacto o agente)",
+    "contact": "Contacto",
+    "agent": "Agente",
+    "assignee": "Responsable",
+    "hint": "Una vez por registro, etapa y canal. Se requieren correo verificado y plantilla aprobada.",
+    "location": "Plantillas: Mensajes. Cuentas remitentes: Integraciones."
   }
 }

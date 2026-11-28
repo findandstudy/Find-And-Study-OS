@@ -11618,5 +11618,15 @@
     "manageTemplates": "Şablonlary Habarlar bölüminde dolandyryň",
     "reuseSmtp": "Bar bolan SMTP integrasiýasyny ulanyň",
     "configureSmtp": "SMTP integrasiýasyny sazlaň"
+  },
+  "pipelineNotice": {
+    "title": "Tapgyr habarnamalary",
+    "recipient": "Alyjy",
+    "auto": "Çeşmä görä (aragatnaşyk ýa-da agent)",
+    "contact": "Aragatnaşyk şahsy",
+    "agent": "Agent",
+    "assignee": "Jogapkär şahs",
+    "hint": "Her ýazgy, tapgyr we kanal üçin bir gezek. Tassyklanan e-poçta we şablon gerek.",
+    "location": "E-poçta şablonlary: Habarlar. Iberiji hasaplary: Integrasiýalar."
   }
 }

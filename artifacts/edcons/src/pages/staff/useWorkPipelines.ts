@@ -1,3 +1,4 @@
+import type {StageAutomaticEmail,StageAutomaticMessage} from "@/hooks/use-pipeline-stages";
 import { useLocation } from "wouter";
 import { subscribeToNavigation } from "@/lib/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -12,6 +13,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { workPipelineCopy } from "./workPipelinesCopy";
 import { workPipelineError } from "@/lib/workPipelineI18n";
 export type Stage = {
+  automaticEmail?:StageAutomaticEmail|null;
+  automaticMessage?:StageAutomaticMessage|null;
   id: string;
   name: string;
   color: string;

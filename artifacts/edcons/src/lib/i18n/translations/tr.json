@@ -11618,5 +11618,15 @@
     "manageTemplates": "Şablonları Mesajlar’da yönet",
     "reuseSmtp": "Mevcut SMTP entegrasyonunu kullan",
     "configureSmtp": "SMTP entegrasyonunu düzenle"
+  },
+  "pipelineNotice": {
+    "title": "Aşama bildirimleri",
+    "recipient": "Alıcı",
+    "auto": "Kaynağa göre (kişi veya acente)",
+    "contact": "İlgili kişi",
+    "agent": "Acente",
+    "assignee": "Sorumlu kişi",
+    "hint": "Kayıt, aşama ve kanal başına bir kez. Doğrulanmış e-posta ve onaylı şablon gerekir.",
+    "location": "E-posta şablonları: Mesajlar. Gönderici hesapları: Entegrasyonlar."
   }
 }

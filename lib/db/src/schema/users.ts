@@ -16,6 +16,7 @@ export const usersTable = pgTable("users", {
   language: text("language").notNull().default("en"),
   isActive: boolean("is_active").notNull().default(true),
   emailVerified: boolean("email_verified").notNull().default(false),
+  notificationPreferences: jsonb("notification_preferences").$type<Record<string, boolean>>().notNull().default({}),
   startDate: text("start_date"),
   homeAddress: text("home_address"),
   passportNumber: text("passport_number"),

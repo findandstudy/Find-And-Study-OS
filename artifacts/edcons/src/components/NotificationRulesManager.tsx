@@ -334,6 +334,9 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
     return { previewSubject, previewBody };
   }
 
+  const [prefsReady,setPrefsReady]=useState(false);
+  useEffect(()=>{let cancelled=false;void customFetch('/api/notification-preferences',{cache:'no-store'}).then((r:any)=>{if(!cancelled){setNotifications(r.preferences);setPrefsReady(true);}}).catch(()=>{});return()=>{cancelled=true;};},[setNotifications]);
+  async function savePreference(key:string){if(!prefsReady)return;setPrefsReady(false);const previous=notifications;const next={...notifications,[key]:!notifications[key]};setNotifications(next);try{await customFetch('/api/notification-preferences',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({preferences:next})});}catch{setNotifications(previous);toast({title:t('common.error'),variant:'destructive'});}finally{setPrefsReady(true);}}
   const grouped = rules.reduce<Record<string, NotificationRule[]>>((acc, r) => {
     (acc[r.category] = acc[r.category] || []).push(r);
     return acc;
@@ -514,7 +517,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                 <p className="text-sm text-muted-foreground mt-0.5">{n.desc}</p>
               </div>
               <button
-                onClick={() => setNotifications(prev => ({ ...prev, [n.key]: !prev[n.key as keyof typeof prev] }))}
+                disabled={!prefsReady} onClick={() => void savePreference(n.key)}
                 className={`relative w-12 h-6 rounded-full transition-all ${notifications[n.key as keyof typeof notifications] ? "bg-primary" : "bg-secondary border-2 border-border"}`}>
                 <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${notifications[n.key as keyof typeof notifications] ? "translate-x-6" : ""}`} />
               </button>

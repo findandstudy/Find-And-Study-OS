@@ -15,6 +15,9 @@ export interface StageAction {
 }
 
 export interface StageAutomaticMessage {
+  policyVersion?: 2;
+  recipientType?: "auto" | "contact" | "agent" | "assignee";
+  configuredById?: number;
   enabled: boolean;
   templateId: number | null;
   channelAccountId: number | null;
@@ -22,6 +25,9 @@ export interface StageAutomaticMessage {
 }
 
 export interface StageAutomaticEmail {
+  policyVersion?: 2;
+  recipientType?: "auto" | "contact" | "agent" | "assignee";
+  configuredById?: number;
   enabled: boolean;
   templateVersionId: number | null;
   senderAccountId: number | null;

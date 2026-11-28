@@ -1,3 +1,4 @@
+import {WorkStageNotifications} from "@/components/notifications/WorkStageNotifications";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { WorkPipelineActivity } from "./WorkPipelineActivity";
 import { WorkPipelineExcel } from "./WorkPipelineExcel";
@@ -723,7 +724,7 @@ export default function WorkPipelines() {
                 <>
                   <div className="space-y-3">
                     {m.boardDraft.document.stages.map((s, i) => (
-                      <div className="flex items-center gap-2" key={s.id}>
+                      <div className="space-y-3 rounded-lg border p-3" key={s.id}><div className="flex items-center gap-2">
                         <Input
                           aria-label={`${l.stage} ${i + 1}`}
                           required
@@ -802,7 +803,7 @@ export default function WorkPipelines() {
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
-                      </div>
+                      </div><WorkStageNotifications value={s} onChange={patch=>m.boardEdit({stages:m.boardDraft!.document.stages.map(x=>x.id===s.id?{...x,...patch}:x)})}/></div>
                     ))}
                   </div>
                   <Button

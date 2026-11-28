@@ -11619,5 +11619,15 @@
     "manageTemplates": "Kelola templat di Pesan",
     "reuseSmtp": "Gunakan integrasi SMTP yang ada",
     "configureSmtp": "Konfigurasi integrasi SMTP"
+  },
+  "pipelineNotice": {
+    "title": "Notifikasi tahap",
+    "recipient": "Penerima",
+    "auto": "Menurut sumber (kontak atau agen)",
+    "contact": "Kontak",
+    "agent": "Agen",
+    "assignee": "Penanggung jawab",
+    "hint": "Sekali per catatan, tahap, dan kanal. Perlu email terverifikasi dan templat disetujui.",
+    "location": "Templat email: Pesan. Akun pengirim: Integrasi."
   }
 }

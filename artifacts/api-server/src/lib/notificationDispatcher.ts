@@ -1,3 +1,4 @@
+import {preferenceAllows,stageEvent} from "./notifications/pipelineNoticePolicy";
 import { db, notificationRulesTable, notificationsTable, usersTable, integrationsTable, settingsTable, studentsTable, agentsTable, agentIntegrationsTable } from "@workspace/db";
 import { eq, and, inArray, isNull } from "drizzle-orm";
 import { sendEmail, sendTenantEmail, buildNotificationEmail, type TenantSmtpConfig } from "./email";
@@ -311,6 +312,7 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
       userIds = userIds.filter(id => id !== ctx.actorUserId);
     }
 
+    if(userIds.length){const preferenceRows=await db.select({id:usersTable.id,preferences:usersTable.notificationPreferences}).from(usersTable).where(inArray(usersTable.id,userIds));userIds=userIds.filter(id=>preferenceRows.some(u=>u.id===id&&preferenceAllows(ctx.event,u.preferences)));}
     if (userIds.length === 0 && !ctx.externalEmail) return;
 
     if (channels.includes("in_app")) {
@@ -362,6 +364,8 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
 
           for (const user of users) {
             if (!user.email) continue;
+            if(stageEvent(ctx.event)&&['student','agent','sub_agent','agent_staff'].includes(user.role))continue;
+            if(stageEvent(ctx.event)&&await genericStageOwned(ctx,user.id,'email'))continue;
             try {
               if (ctx.event === "application.stage_changed" && typeof ctx.data?.applicationId === "number" &&
                 typeof ctx.data.stage === "string" && await hasStageEmailForRecipient(ctx.data.applicationId, ctx.data.stage, user.id)) continue;
@@ -423,6 +427,7 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
           const recipients = waUsers.filter(u => u.phoneE164);
           if (recipients.length > 0) {
             for (const user of recipients) {
+              if(stageEvent(ctx.event)&&(["student","agent","sub_agent","agent_staff"].includes(user.role)||await genericStageOwned(ctx,user.id,"whatsapp")))continue;
               try {
                 const tenantConfig = user.role === "student" ? await getStudentTenantWhatsApp(user.id) : null;
                 const config = tenantConfig || await getWhatsAppConfig();
@@ -458,7 +463,7 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
     // (e.g. external signers). Only sent when externalEmail is provided, the rule
     // is active (already guarded above via `if (!rule) return`), and "email" is
     // in the rule's channels. Honors isActive and channels like internal delivery.
-    if (ctx.externalEmail && channels.includes("email")) {
+    if (ctx.externalEmail && channels.includes("email") && !stageEvent(ctx.event)) {
       const externalEmailAddr = ctx.externalEmail;
       (async () => {
         try {
@@ -496,4 +501,12 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
   } catch (err) {
     console.error(`[NOTIFY] Dispatch error for ${ctx.event}:`, err);
   }
+}
+
+async function genericStageOwned(ctx:DispatchContext,userId:number,channel:'email'|'whatsapp'):Promise<boolean>{
+ const kind=stageEvent(ctx.event);if(!kind)return false;
+ const id=ctx.data?.[kind+'Id'];if(typeof id!=='number')return true;
+ const {pool}=await import('@workspace/db');const table={lead:'leads',student:'students',application:'applications'}[kind];const column=kind==='application'?'stage':'status';
+ const r=await pool.query(`SELECT r.assigned_to_id,p.automatic_email,p.automatic_message FROM ${table} r JOIN pipeline_stages p ON p.entity_type=$2 AND p.key=r.${column} WHERE r.id=$1`,[id,kind]);const row=r.rows[0];const policy=channel==='email'?row?.automatic_email:row?.automatic_message;
+ return policy?.policyVersion===2&&policy?.enabled&&policy?.recipientType==='assignee'&&row?.assigned_to_id===userId;
 }

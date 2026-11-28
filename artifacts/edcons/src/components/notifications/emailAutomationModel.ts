@@ -6,8 +6,8 @@ export function canManageNotificationRules(user: { role: string; isActive: boole
 export type EmailSender = { sourceIntegrationKey?: "smtp" | null; id: number; displayName: string; fromEmail: string; fromName: string; replyTo?: string | null; config: { host: string; port: number; username: string; passwordConfigured: boolean }; isActive: boolean; verified: boolean; revision: number; createdById: number; lastChangedById: number };
 export type EmailTemplateVersion = { id: number; templateId: number; version: number; status: string; subject: string; content: string; language: string; variables: string[]; createdById: number; approvedById?: number | null; createdAt: string };
 export type EmailTemplate = { id: number; name: string; category: string; channel: string; language: string; isActive: boolean; versions: EmailTemplateVersion[] };
-export type EmailHistoryItem = { id: number; kind?: "stage" | "system"; applicationId?: number; stageKey?: string; status: string; errorCode?: string | null; deliveryErrorCode?: string | null; createdAt: string; templateVersionId: number; senderAccountId: number; queueStatus?: string | null };
-export type EmailCapabilities = { enabled: boolean; verificationAllowed: boolean; variables: string[]; stageVariables: string[]; languages: string[]; categories: string[]; canManage: boolean };
+export type EmailHistoryItem = { id: number; kind?: "stage" | "system"; entityKind?:string; entityId?:string; channel?:string; applicationId?: number; stageKey?: string; status: string; errorCode?: string | null; deliveryErrorCode?: string | null; createdAt: string; templateVersionId: number; senderAccountId: number; queueStatus?: string | null };
+export type EmailCapabilities = { enabled: boolean; verificationAllowed: boolean; variables: string[]; stageVariables: string[]; variablesByKind?: Record<string,string[]>; languages: string[]; categories: string[]; canManage: boolean };
 export type ApprovedEmailOption = { id: number; label: string; language: string };
 
 export function approvedEmailOptions(templates: EmailTemplate[], allowedVariables?: readonly string[]): ApprovedEmailOption[] {

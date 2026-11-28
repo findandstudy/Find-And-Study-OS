@@ -6,7 +6,7 @@ export type MessageTemplateVariableKey =
   | "universityName"
   | "deadline"
   | "level"
-  | "intake";
+  | "intake" | "recordName" | "recipientName" | "newStage" | "newStageKey" | "stageName" | "pipelineName" | "recordId";
 
 export type MessageTemplateVariableContext = Partial<
   Record<MessageTemplateVariableKey, string | null | undefined>
@@ -52,6 +52,7 @@ const VARIABLE_ALIASES: Record<string, MessageTemplateVariableKey> = {
   level: "level",
   studylevel: "level",
   intake: "intake",
+  recordname:"recordName",recipientname:"recipientName",newstage:"newStage",newstagekey:"newStageKey",stagename:"stageName",pipelinename:"pipelineName",recordid:"recordId",
 };
 
 const NAMED_PLACEHOLDER_RE = /\{\{\s*([A-Za-z][A-Za-z0-9_.-]*)\s*\}\}/g;

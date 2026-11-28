@@ -35,7 +35,7 @@ async function currentBinding(client: Pick<PoolClient, "query">, intent: Dispatc
   let config;
   try { config = parseStageAutomaticEmail(row.automatic_email); } catch { return { code: "STAGE_POLICY_CHANGED" } as const; }
   const origin = stageEmailOrigin(row.agent_id, row.parent_agent_id);
-  if (!config?.enabled || config.templateVersionId !== intent.template_version_id || config.senderAccountId !== intent.sender_account_id ||
+  if (config?.policyVersion === 2 || !config?.enabled || config.templateVersionId !== intent.template_version_id || config.senderAccountId !== intent.sender_account_id ||
     origin !== intent.origin || !config.originTypes.includes(origin)) return { code: "STAGE_POLICY_CHANGED" } as const;
   if (row.version_status !== "approved" || !row.template_active || !["email", "all"].includes(row.template_channel)) return { code: "TEMPLATE_NOT_APPROVED" } as const;
   const sender = row.metadata?.emailSender;

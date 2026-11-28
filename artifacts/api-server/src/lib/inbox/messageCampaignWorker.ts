@@ -216,6 +216,10 @@ async function finishStageDispatch(
 }
 
 async function processStageDispatch(dispatch: ClaimedStageDispatch): Promise<void> {
+  const table={lead:'leads',student:'students',application:'applications'}[dispatch.entity_type];const column=dispatch.entity_type==='application'?'stage':'status';
+  const current=await pool.query(`SELECT r.${column} AS stage,p.automatic_message FROM ${table} r LEFT JOIN pipeline_stages p ON p.entity_type=$2 AND p.key=r.${column} WHERE r.id=$1 AND r.deleted_at IS NULL`,[dispatch.entity_id,dispatch.entity_type]);
+  if(!current.rows[0]||current.rows[0].stage!==dispatch.stage_key||current.rows[0].automatic_message?.policyVersion===2){await finishStageDispatch(dispatch.id,'skipped','stage_policy_changed','The current stage policy changed.');return;}
+
   if (!dispatch.template_id || !dispatch.channel_account_id) {
     await finishStageDispatch(
       dispatch.id,
@@ -397,6 +401,8 @@ async function tick(): Promise<void> {
       lastStaleRecoveryAt = now;
       await recoverStaleProcessing();
     }
+    const {processPipelineNotices}=await import("../notifications/pipelineNotices");
+    await processPipelineNotices();
     const dispatch = await claimStageDispatch();
     if (dispatch) {
       try {

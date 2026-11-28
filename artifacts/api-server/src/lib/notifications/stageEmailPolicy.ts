@@ -20,7 +20,8 @@ export function parseStageAutomaticEmail(raw: unknown): StageAutomaticEmail | nu
   const origins = value.originTypes ?? ["direct"];
   if (!Array.isArray(origins) || !origins.length || origins.length > 3 ||
     origins.some(origin => !["direct", "agent", "sub_agent"].includes(origin))) throw new Error("EMAIL_ORIGIN_INVALID");
-  return { enabled: true, templateVersionId: value.templateVersionId as number,
+  if (value.recipientType !== undefined && !["auto","contact","agent","assignee"].includes(String(value.recipientType))) throw new Error("EMAIL_CONFIGURATION_INVALID");
+  return { ...(value.policyVersion === 2 ? { policyVersion: 2 as const, recipientType: (value.recipientType ?? "auto") as "auto"|"contact"|"agent"|"assignee", ...(Number.isSafeInteger(value.configuredById) ? {configuredById:Number(value.configuredById)} : {}) } : {}), enabled: true, templateVersionId: value.templateVersionId as number,
     senderAccountId: value.senderAccountId as number, originTypes: [...new Set(origins)] };
 }
 

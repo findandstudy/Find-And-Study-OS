@@ -238,6 +238,7 @@ async function sendViaSmtp(item: ClaimedEmail, attachments?: EmailAttachment[]):
         if (!verdict.allowed) return { status: "blocked", code: stageEmailDeliveryErrorCode(verdict.code) };
       } catch { return { status: "blocked", code: "STAGE_EMAIL_POLICY_UNAVAILABLE" }; }
     }
+    if(item.idempotency_key?.startsWith('pipeline-notice:')){try{const {validatePipelineNoticeQueueItem}=await import('./notifications/pipelineNotices');if(!await validatePipelineNoticeQueueItem(item.id))return {status:'blocked',code:'STAGE_EMAIL_POLICY_UNAVAILABLE'};}catch{return {status:'blocked',code:'STAGE_EMAIL_POLICY_UNAVAILABLE'};}}
     // Re-evaluate after resolving credentials and policies, at the last send boundary.
     if (!emailDeliveryAllowed()) return { status: "pending", code: "EMAIL_DELIVERY_DISABLED" };
     const owned = await pool.query("SELECT id FROM email_queue WHERE id=$1 AND status='processing' AND claim_token=$2", [item.id, item.claim_token]);
@@ -1213,11 +1214,13 @@ let emailWorkerInFlight: Promise<void> | null = null;
 function runEmailWorkerSweep(label: "Initial queue" | "Queue processed"): void {
   if (emailWorkerInFlight) return;
   emailWorkerInFlight = (async () => {
-    if (!emailDeliveryAllowed()) return 0;
     try {
       const { processStageEmailOutbox } = await import("./notifications/stageEmailAutomation");
-      await processStageEmailOutbox();
+      if(emailDeliveryAllowed())await processStageEmailOutbox();
+      const {processPipelineNotices}=await import("./notifications/pipelineNotices");
+      await processPipelineNotices();
     } catch { console.warn("[EMAIL] Stage outbox processing deferred"); }
+    if (!emailDeliveryAllowed()) return 0;
     return processEmailQueue();
   })()
     .then((count) => {

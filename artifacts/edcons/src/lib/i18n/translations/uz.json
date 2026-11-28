@@ -11618,5 +11618,15 @@
     "manageTemplates": "Shablonlarni Xabarlarda boshqaring",
     "reuseSmtp": "Mavjud SMTP integratsiyasidan foydalanish",
     "configureSmtp": "SMTP integratsiyasini sozlash"
+  },
+  "pipelineNotice": {
+    "title": "Bosqich bildirishnomalari",
+    "recipient": "Qabul qiluvchi",
+    "auto": "Manbaga ko‘ra (kontakt yoki agent)",
+    "contact": "Kontakt",
+    "agent": "Agent",
+    "assignee": "Mas’ul shaxs",
+    "hint": "Har bir yozuv, bosqich va kanal uchun bir marta. Tasdiqlangan pochta va shablon kerak.",
+    "location": "Pochta shablonlari: Xabarlar. Yuboruvchi hisoblari: Integratsiyalar."
   }
 }

@@ -11618,5 +11618,15 @@
     "manageTemplates": "在消息中管理模板",
     "reuseSmtp": "使用现有 SMTP 集成",
     "configureSmtp": "配置 SMTP 集成"
+  },
+  "pipelineNotice": {
+    "title": "阶段通知",
+    "recipient": "收件人",
+    "auto": "按来源（联系人或代理）",
+    "contact": "联系人",
+    "agent": "代理",
+    "assignee": "负责人",
+    "hint": "每条记录、阶段和渠道仅发送一次。需要已验证的邮箱和已批准的模板。",
+    "location": "邮件模板：消息。发件人账户：集成。"
   }
 }

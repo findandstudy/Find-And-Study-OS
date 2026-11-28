@@ -1,3 +1,5 @@
+import {emailAutomationHumanAllowed} from "../lib/notifications/emailAutomationPolicy";
+import {configurePipelineNotice} from "../lib/notifications/pipelineNoticeConfiguration";
 import { workConversationState, updateWorkCard } from "../lib/workPipelineInbox";
 import {
   changeWorkActivity,
@@ -198,6 +200,7 @@ router.post(
     if (!isWorkAdmin(req.user))
       throw new WorkError(403, "Only admins create pipelines");
     const input = workBoardInput.parse(req.body.data);
+    for(const stage of input.stages)for(const channel of ['email','whatsapp'] as const){const key=channel==='email'?'automaticEmail':'automaticMessage';try{stage[key]=await configurePipelineNotice(req,'work',channel,stage[key],null);}catch{throw new WorkError(400,'Invalid stage notification configuration');}}
     const result = await workTx(async (c, t) => {
       await validateWorkMembers(c, input.memberIds);
       for (const s of input.sources) await sourceExists(c, s);
@@ -233,6 +236,8 @@ router.put(
       await workTx(async (c, t) => {
         const old = await readWorkBoard(c, t, req.params.id, req.user, true);
         assertWorkRevision(old.revision, req.body.revision);
+        for(const stage of input.stages)for(const channel of ['email','whatsapp'] as const){const key=channel==='email'?'automaticEmail':'automaticMessage';try{const previous=old.document.stages.find(x=>x.id===stage.id)?.[key];stage[key]=await configurePipelineNotice(req,'work',channel,stage[key]===undefined?previous:stage[key],previous);}catch{throw new WorkError(400,'Invalid stage notification configuration');}}
+        if(old.document.stages.some(s=>!input.stages.some(x=>x.id===s.id)&&(s.automaticEmail?.enabled||s.automaticMessage?.enabled))&&!await emailAutomationHumanAllowed(req))throw new WorkError(403,'Human administrator required');
         await validateWorkMembers(c, input.memberIds);
         for (const s of input.sources) await sourceExists(c, s);
         const invalid = await c.query(

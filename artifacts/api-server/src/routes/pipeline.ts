@@ -1,3 +1,5 @@
+import {configurePipelineNotice} from "../lib/notifications/pipelineNoticeConfiguration";
+import {NOTICE_VARIABLES} from "../lib/notifications/pipelineNoticeContext";
 import { Router, type IRouter } from "express";
 import {
   channelAccountsTable,
@@ -476,7 +478,7 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
     requestedAutomaticEmails = stages.map((stage: any, i: number) => {
       const raw = stage.automaticEmail === undefined ? emailByKey.get(normalizedKeys[i]) : stage.automaticEmail;
       const parsed = parseStageAutomaticEmail(raw);
-      if (parsed && entityType !== "application") throw new Error("EMAIL_APPLICATION_STAGES_ONLY");
+
       return parsed;
     });
   } catch (error) {
@@ -491,6 +493,7 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
     res.status(403).json({ error: "EMAIL_CONFIGURATION_HUMAN_ADMIN_REQUIRED" });
     return;
   }
+  try { for(let i=0;i<stages.length;i++) requestedAutomaticEmails[i]=await configurePipelineNotice(req,entityType as "lead"|"student"|"application","email",requestedAutomaticEmails[i],emailByKey.get(normalizedKeys[i])); } catch(error){res.status(400).json({error:emailPolicyErrorCode(error)});return;}
   for (const config of requestedAutomaticEmails) {
     if (!config) continue;
     const [approved] = await db.select({ id: emailTemplateVersionsTable.id, variables: emailTemplateVersionsTable.variables }).from(emailTemplateVersionsTable)
@@ -501,7 +504,7 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
       .where(and(eq(channelAccountsTable.id, config.senderAccountId!), eq(channelAccountsTable.channel, "email"),
         eq(channelAccountsTable.provider, "smtp"), eq(channelAccountsTable.isActive, true),
         sql`${channelAccountsTable.metadata}->'emailSender'->'verified' = 'true'::jsonb`));
-    if (!approved || !sender || approved.variables.some(key => !(STAGE_EMAIL_TEMPLATE_VARIABLES as readonly string[]).includes(key))) {
+    if (!approved || !sender || approved.variables.some(key => !(NOTICE_VARIABLES[entityType as "lead"|"student"|"application"] as readonly string[]).includes(key))) {
       res.status(400).json({ error: "EMAIL_APPROVED_TEMPLATE_AND_VERIFIED_SENDER_REQUIRED" });
       return;
     }
@@ -545,7 +548,7 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
     return;
   }
 
-  const requestedAutomaticMessages = stages.map((stage: any): StageAutomaticMessage | null => {
+  let requestedAutomaticMessages = stages.map((stage: any): StageAutomaticMessage | null => {
     const raw = stage?.automaticMessage;
     if (!raw || raw.enabled !== true) return null;
     const templateId = Number(raw.templateId);
@@ -564,6 +567,10 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
       )),
     };
   });
+  try {
+    const existing = await db.select({key:pipelineStagesTable.key,config:pipelineStagesTable.automaticMessage}).from(pipelineStagesTable).where(eq(pipelineStagesTable.entityType,entityType));
+    for(let i=0;i<stages.length;i++)requestedAutomaticMessages[i]=await configurePipelineNotice(req,entityType as "lead"|"student"|"application","whatsapp",stages[i].automaticMessage===undefined?existing.find(x=>x.key===normalizedKeys[i])?.config:stages[i].automaticMessage,existing.find(x=>x.key===normalizedKeys[i])?.config);
+  } catch(error){res.status(400).json({error:emailPolicyErrorCode(error)});return;}
   const invalidAutomaticMessageIndex = requestedAutomaticMessages.findIndex(
     (config) => config !== null
       && (config.templateId == null || config.channelAccountId == null),

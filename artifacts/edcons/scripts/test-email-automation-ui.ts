@@ -74,9 +74,10 @@ test("existing rule legacy editor preserved; binding nullable and explicit", () 
   assert.equal((rules.match(/catch \{[\s\S]{0,160}await fetchRules\(\)/g) ?? []).length, 3,
     "all rule write conflicts refresh authoritative server state");
 });
-test("email controls application only and WhatsApp config preserved", () => {
+test("email controls all CRM kinds and independent stages without changing WhatsApp config", () => {
   const stages = source("components/EditStagesDialog.tsx");
-  assert.match(stages, /isApplicationStage && \(\s*<>\s*<StageAutomaticEmailFields/);
+  assert.match(stages, /<StageAutomaticEmailFields kind=\{stage.entityType/);
+  assert.match(source("pages/staff/WorkPipelines.tsx"), /<WorkStageNotifications/);
   assert.match(stages, /automaticMessage: enabled \? \{/);
   const fields = source("components/notifications/EmailAutomationFields.tsx");
   assert.match(fields, /originTypes: value\?\.originTypes \?\? \["direct"\]/);
@@ -87,7 +88,7 @@ test("TR copy and safe English fallback preserve explicit delivery limits", () =
   assert.equal(emailAutomationCopy("tr").title, "E-posta otomasyonu");
   for (const lang of ["en", "ar", "ru", "hi"]) assert.equal(emailAutomationCopy(lang).title, "Email automation");
   assert.match(emailAutomationCopy("en").historyNote, /not confirmed inbox delivery/);
-  assert.match(source("components/notifications/EmailAutomationFields.tsx"), /stageEmail.limits/);
+  assert.match(source("components/notifications/EmailAutomationFields.tsx"), /pipelineNotice.hint/);
 });
 test("catalogue is bounded and pinned references hydrate through exact lookup", () => {
   const hook = source("components/notifications/useEmailLibrary.ts");

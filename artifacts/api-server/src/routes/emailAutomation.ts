@@ -1,5 +1,6 @@
+import {NOTICE_VARIABLES} from "../lib/notifications/pipelineNoticeContext";
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, channelAccountsTable, messageTemplatesTable, emailTemplateVersionsTable, stageEmailDispatchesTable, emailQueueTable } from "@workspace/db";
+import { db, pool, channelAccountsTable, messageTemplatesTable, emailTemplateVersionsTable, stageEmailDispatchesTable, emailQueueTable } from "@workspace/db";
 import { and, desc, eq, inArray, lt, isNotNull, sql } from "drizzle-orm";
 import { logAudit } from "../lib/auth";
 import { requireEmailAutomationHuman } from "../lib/notifications/emailAutomationPolicy";
@@ -35,7 +36,7 @@ function identity(input: unknown) {
 router.get("/notification-email/capabilities", handle(async (_req, res) => {
   res.json({ enabled: stageEmailRuntime().enabled && emailDeliveryAllowed() && backgroundJobsEnabled(), runtimeConfigured: stageEmailRuntime().enabled,
     deliveryAllowed: emailDeliveryAllowed(), backgroundJobsConfigured: backgroundJobsEnabled(), verificationAllowed: emailDeliveryAllowed(), canManage: true,
-    variables: EMAIL_TEMPLATE_VARIABLES, stageVariables: STAGE_EMAIL_TEMPLATE_VARIABLES, languages: EMAIL_TEMPLATE_LANGUAGES, categories: EMAIL_TEMPLATE_CATEGORIES });
+    variables: EMAIL_TEMPLATE_VARIABLES, stageVariables: STAGE_EMAIL_TEMPLATE_VARIABLES, variablesByKind:NOTICE_VARIABLES, languages: EMAIL_TEMPLATE_LANGUAGES, categories: EMAIL_TEMPLATE_CATEGORIES });
 }));
 
 router.get("/notification-email/readiness", handle(async (_req, res) => {
@@ -223,14 +224,18 @@ router.get("/notification-email/history", handle(async (req, res) => {
   const cursor = req.query.cursor === undefined ? undefined : positiveEmailId(req.query.cursor);
   const source = req.query.source ?? "stage";
   const safeCode = (value: string | null) => value && /^[A-Z0-9_:-]{1,80}$/i.test(value) ? value : value ? "EMAIL_ERROR_REDACTED" : null;
-  if (source !== "stage" && source !== "system") throw new EmailLibraryError("EMAIL_HISTORY_SOURCE_INVALID");
+  if (source !== "pipeline" && source !== "stage" && source !== "system") throw new EmailLibraryError("EMAIL_HISTORY_SOURCE_INVALID");
+  if(source==='pipeline'){
+    const c=await pool.connect();try{await c.query('BEGIN');const {setNoticeScope}=await import('../lib/notifications/pipelineNoticeContext');await setNoticeScope(c);
+    const r=await c.query(`SELECT d.id::int,d.entity_kind AS "entityKind",d.entity_id AS "entityId",d.stage_key AS "stageKey",d.channel,d.status,d.error_code AS "errorCode",d.created_at AS "createdAt",q.status AS "queueStatus",q.delivery_error_code AS "deliveryErrorCode" FROM pipeline_notice_dispatches d LEFT JOIN email_queue q ON q.id=d.email_queue_id WHERE ($1::bigint IS NULL OR d.id<$1) ORDER BY d.id DESC LIMIT 101`,[cursor??null]);await c.query('COMMIT');res.json({items:r.rows.slice(0,100),nextCursor:r.rows.length>100?r.rows[99].id:null});}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}return;
+  }
   if (source === "system") {
     const rows = await db.select({ id: emailQueueTable.id, templateVersionId: emailQueueTable.templateVersionId,
       senderAccountId: emailQueueTable.senderAccountId, senderRevision: emailQueueTable.senderRevision,
       status: emailQueueTable.status, queueStatus: emailQueueTable.status, createdAt: emailQueueTable.createdAt,
       sentAt: emailQueueTable.sentAt, retryCount: emailQueueTable.retryCount, errorCode: emailQueueTable.deliveryErrorCode }).from(emailQueueTable)
       .where(and(isNotNull(emailQueueTable.templateVersionId), cursor ? lt(emailQueueTable.id, cursor) : undefined,
-        sql`NOT EXISTS (SELECT 1 FROM pipeline_stage_email_dispatches d WHERE d.email_queue_id = ${emailQueueTable.id})`))
+        sql`NOT EXISTS (SELECT 1 FROM pipeline_stage_email_dispatches d WHERE d.email_queue_id = ${emailQueueTable.id}) AND NOT EXISTS (SELECT 1 FROM pipeline_notice_dispatches n WHERE n.email_queue_id = ${emailQueueTable.id})`))
       .orderBy(desc(emailQueueTable.id)).limit(101);
     res.json({ items: rows.slice(0, 100).map(row => ({ ...row, kind: "system", errorCode: safeCode(row.errorCode) })), nextCursor: rows.length > 100 ? rows[99].id : null });
     return;

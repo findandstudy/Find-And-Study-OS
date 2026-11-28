@@ -11618,5 +11618,15 @@
     "manageTemplates": "Manage templates in Messages",
     "reuseSmtp": "Use existing SMTP integration",
     "configureSmtp": "Configure SMTP integration"
+  },
+  "pipelineNotice": {
+    "title": "Stage notifications",
+    "recipient": "Recipient",
+    "auto": "By source (contact or agent)",
+    "contact": "Contact",
+    "agent": "Agent",
+    "assignee": "Assignee",
+    "hint": "Once per record, stage and channel. Verified email and an approved template are required.",
+    "location": "Email templates: Messages. Sender accounts: Integrations."
   }
 }

@@ -2,7 +2,7 @@ import { pool } from "@workspace/db";
 import { stageEmailRuntime } from "./stageEmailPolicy";
 import { emailDeliveryAllowed } from "../emailDeliveryPolicy";
 import { backgroundJobsEnabled } from "../backgroundJobs";
-import { STAGE_EMAIL_TEMPLATE_VARIABLES } from "./emailTemplateLibrary";
+import { EMAIL_TEMPLATE_VARIABLES as STAGE_EMAIL_TEMPLATE_VARIABLES } from "./emailTemplateLibrary";
 import { resolveEmailSenderAccount } from "./emailSenderAccounts";
 
 /** Read-only operational checks. No recipient data, SMTP connections or queue writes. */
@@ -35,7 +35,7 @@ export async function stageEmailReadiness() {
         AND jsonb_typeof(automatic_email->'originTypes')='array'
         AND jsonb_array_length(CASE WHEN jsonb_typeof(automatic_email->'originTypes')='array' THEN automatic_email->'originTypes' ELSE '[]'::jsonb END)>0
         AND automatic_email->'originTypes' <@ '["direct","agent","sub_agent"]'::jsonb)::int ready_stages
-    FROM pipeline_stages WHERE entity_type='application'`, [JSON.stringify(STAGE_EMAIL_TEMPLATE_VARIABLES), invalidReferences]);
+    FROM pipeline_stages WHERE entity_type IN ('lead','student','application')`, [JSON.stringify(STAGE_EMAIL_TEMPLATE_VARIABLES), invalidReferences]);
   const counts = rows[0];
   const runtime = stageEmailRuntime().enabled;
   const delivery = emailDeliveryAllowed();

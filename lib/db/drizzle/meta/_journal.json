@@ -1023,6 +1023,13 @@
       "when": 1795881600000,
       "tag": "0145_configurable_deadline_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1795885200000,
+      "tag": "0146_all_pipeline_notifications",
+      "breakpoints": true
     }
   ]
 }
