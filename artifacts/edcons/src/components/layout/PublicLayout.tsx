@@ -57,7 +57,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
 
   const currentMeta = LANGUAGE_META[lang];
 
-  const serviceLocale=translateUi(lang, "en", "tr");
+  const serviceLocale = lang === 'tr' ? 'tr' : 'en';
   const navLinks: {href:string;label:string;children?:{href:string;label:string}[]}[] = [
     { href: localePath("/"), label: t("nav.home") },
     { href: localePath("/about"), label: t("nav.about") },

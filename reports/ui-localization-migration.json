@@ -490,8 +490,10 @@
         "pages/agent/Students.tsx",
         "pages/agent/Students.tsx",
         "pages/staff/StudentDetail.tsx",
-        "pages/staff/Students.tsx"
-      ]
+        "pages/staff/Students.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Eğitim"
     },
     "s3241884": {
       "en": "Interested Level",
@@ -2739,7 +2741,8 @@
     "s764d6e6a": {
       "en": "Transport modes",
       "contexts": [
-        "pages/admin/Catalog.tsx"
+        "pages/admin/Catalog.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "s68e4e03c": {
@@ -2751,7 +2754,8 @@
     "sa6dba672": {
       "en": "Campus geography",
       "contexts": [
-        "pages/admin/Catalog.tsx"
+        "pages/admin/Catalog.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "s172a331c": {
@@ -2799,7 +2803,8 @@
     "s540f5924": {
       "en": "Climate summary",
       "contexts": [
-        "pages/admin/Catalog.tsx"
+        "pages/admin/Catalog.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "s7561bbe1": {
@@ -2829,7 +2834,8 @@
     "sdda0ac5c": {
       "en": "Housing summary",
       "contexts": [
-        "pages/admin/Catalog.tsx"
+        "pages/admin/Catalog.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "s420440d0": {
@@ -2841,7 +2847,8 @@
     "s20523d71": {
       "en": "Stored city weather",
       "contexts": [
-        "pages/admin/Catalog.tsx"
+        "pages/admin/Catalog.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "sd0e1da84": {
@@ -3625,8 +3632,11 @@
         "pages/institution/Workspace.tsx",
         "pages/staff/Applications.tsx",
         "pages/agent/Leads.tsx",
-        "pages/staff/CourseFinder.tsx"
-      ]
+        "pages/staff/CourseFinder.tsx",
+        "lib/website/detailLayoutContract.ts",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Program"
     },
     "sc1522ef1": {
       "en": "Confidence",
@@ -3892,7 +3902,8 @@
         "pages/admin/website/TranslationQueuePanel.tsx",
         "pages/staff/CourseFinder.tsx",
         "pages/admin/website/Pages.tsx",
-        "pages/admin/website/CatalogPagesInventory.tsx"
+        "pages/admin/website/CatalogPagesInventory.tsx",
+        "lib/website/cmsTextVariables.ts"
       ],
       "tr": "Sayfa"
     },
@@ -3928,8 +3939,10 @@
       "contexts": [
         "pages/admin/Embeds.tsx",
         "pages/admin/website/Blog.tsx",
-        "pages/staff/AgencyApplications.tsx"
-      ]
+        "pages/staff/AgencyApplications.tsx",
+        "lib/website/cmsTextVariables.ts"
+      ],
+      "tr": "Tarih"
     },
     "s43352167": {
       "en": "Email",
@@ -4080,7 +4093,8 @@
         "pages/staff/Students.tsx",
         "pages/agent/Leads.tsx",
         "pages/staff/CourseFinder.tsx",
-        "pages/staff/Settings.tsx"
+        "pages/staff/Settings.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "sbbce7e06": {
@@ -4103,7 +4117,9 @@
         "pages/staff/Applications.tsx",
         "pages/admin/website/pageEditorCopy.ts",
         "pages/staff/Settings.tsx",
-        "pages/staff/Students.tsx"
+        "pages/staff/Students.tsx",
+        "lib/website/detailLayoutContract.ts",
+        "pages/admin/website/detailTemplateLabels.ts"
       ],
       "tr": "Şehir"
     },
@@ -4678,7 +4694,8 @@
       "en": "Currency",
       "contexts": [
         "pages/admin/Reports.tsx",
-        "pages/admin/SocialOperations.tsx"
+        "pages/admin/SocialOperations.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "s75811fc0": {
@@ -5216,7 +5233,8 @@
         "pages/admin/Users.tsx",
         "pages/admin/website/Blog.tsx",
         "pages/admin/website/Blog.tsx",
-        "pages/admin/website/pageEditorCopy.ts"
+        "pages/admin/website/pageEditorCopy.ts",
+        "lib/website/detailLayoutContract.ts"
       ],
       "tr": "Açıklama"
     },
@@ -5383,7 +5401,8 @@
         "components/notifications/emailAutomationModel.ts",
         "pages/admin/website/PageEditor.tsx",
         "pages/admin/website/Pages.tsx",
-        "pages/admin/website/PublishHistory.tsx"
+        "pages/admin/website/PublishHistory.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
       ],
       "tr": "Taslak"
     },
@@ -5394,9 +5413,10 @@
         "pages/admin/website/Blog.tsx",
         "pages/admin/website/PageEditor.tsx",
         "pages/admin/website/Pages.tsx",
-        "pages/admin/website/PublishHistory.tsx"
+        "pages/admin/website/PublishHistory.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
       ],
-      "tr": "Yayın tarihi"
+      "tr": "Yayında"
     },
     "saf5c5293": {
       "en": "Archived",
@@ -5404,7 +5424,8 @@
         "pages/admin/website/Blog.tsx",
         "pages/admin/website/Blog.tsx",
         "pages/staff/Messages.tsx",
-        "pages/admin/website/Pages.tsx"
+        "pages/admin/website/Pages.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
       ],
       "tr": "Arşivlendi"
     },
@@ -6145,7 +6166,8 @@
         "components/agent/AddStudentModal.tsx",
         "pages/agent/Students.tsx",
         "pages/staff/Settings.tsx",
-        "pages/staff/StudentDetail.tsx"
+        "pages/staff/StudentDetail.tsx",
+        "lib/website/detailLayoutContract.ts"
       ],
       "tr": "Adres"
     },
@@ -7621,7 +7643,8 @@
       "en": "Programs",
       "contexts": [
         "pages/admin/website/pageEditorCopy.ts",
-        "pages/admin/website/Pages.tsx"
+        "pages/admin/website/Pages.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
       ],
       "tr": "Programlar"
     },
@@ -8934,7 +8957,8 @@
     "sa8bf5b93": {
       "en": "University type",
       "contexts": [
-        "pages/agent/Account.tsx"
+        "pages/agent/Account.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "se29d85c0": {
@@ -9037,8 +9061,11 @@
         "pages/staff/Finance.tsx",
         "pages/staff/StudentDetail.tsx",
         "components/OfferDeadlinesWidget.tsx",
-        "pages/staff/CourseFinder.tsx"
-      ]
+        "pages/staff/CourseFinder.tsx",
+        "lib/website/detailLayoutContract.ts",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Üniversite"
     },
     "s51a35dc0": {
       "en": "Current:",
@@ -9739,7 +9766,8 @@
       "en": "Degree",
       "contexts": [
         "pages/institution/Workspace.tsx",
-        "pages/staff/CourseFinder.tsx"
+        "pages/staff/CourseFinder.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "s31f3d692": {
@@ -9747,13 +9775,17 @@
       "contexts": [
         "pages/institution/Workspace.tsx",
         "pages/staff/Applications.tsx",
-        "pages/staff/CourseFinder.tsx"
-      ]
+        "pages/staff/CourseFinder.tsx",
+        "lib/website/detailLayoutContract.ts",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Başvuru dönemleri"
     },
     "s56be502b": {
       "en": "Quota",
       "contexts": [
-        "pages/institution/Workspace.tsx"
+        "pages/institution/Workspace.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "s249e9d23": {
@@ -10401,7 +10433,8 @@
     "s8dda8566": {
       "en": "Rankings",
       "contexts": [
-        "pages/staff/Applications.tsx"
+        "pages/staff/Applications.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "sfa58f735": {
@@ -10489,7 +10522,8 @@
     "sd4c7492d": {
       "en": "Duration",
       "contexts": [
-        "pages/staff/Applications.tsx"
+        "pages/staff/Applications.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "sfee66f95": {
@@ -10508,8 +10542,11 @@
     "sd83f45a0": {
       "en": "Campus",
       "contexts": [
-        "pages/staff/Applications.tsx"
-      ]
+        "pages/staff/Applications.tsx",
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Kampüs"
     },
     "sc4ff7c58": {
       "en": "Fees & Finance",
@@ -10570,8 +10607,11 @@
       "en": "Requirements",
       "contexts": [
         "pages/staff/Applications.tsx",
-        "pages/staff/CourseFinder.tsx"
-      ]
+        "pages/staff/CourseFinder.tsx",
+        "lib/website/detailLayoutContract.ts",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Gereklilikler"
     },
     "s39904de2": {
       "en": "Refund Process",
@@ -10918,7 +10958,8 @@
     "s2972d4ca": {
       "en": "Program name",
       "contexts": [
-        "pages/staff/Finance.tsx"
+        "pages/staff/Finance.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "s9842be8f": {
@@ -11230,7 +11271,8 @@
       "en": "Universities",
       "contexts": [
         "pages/staff/Finance.tsx",
-        "pages/admin/website/pageEditorCopy.ts"
+        "pages/admin/website/pageEditorCopy.ts",
+        "pages/admin/website/detailTemplateLabels.ts"
       ],
       "tr": "Üniversiteler"
     },
@@ -16373,7 +16415,8 @@
       "en": "Languages",
       "contexts": [
         "pages/admin/website/PageEditor.tsx",
-        "pages/admin/SocialAdvertisingPanel.tsx"
+        "pages/admin/SocialAdvertisingPanel.tsx",
+        "lib/website/detailLayoutContract.ts"
       ],
       "tr": "Diller"
     },
@@ -17073,7 +17116,8 @@
     "s9b67a879": {
       "en": "Hero",
       "contexts": [
-        "pages/admin/website/pageEditorCopy.ts"
+        "pages/admin/website/pageEditorCopy.ts",
+        "pages/admin/website/detailTemplateLabels.ts"
       ],
       "tr": "Üst bölüm"
     },
@@ -17361,7 +17405,8 @@
     "s6d97cff2": {
       "en": "Cities",
       "contexts": [
-        "pages/admin/website/pageEditorCopy.ts"
+        "pages/admin/website/pageEditorCopy.ts",
+        "pages/admin/website/detailTemplateLabels.ts"
       ],
       "tr": "Şehirler"
     },
@@ -22038,7 +22083,8 @@
     "s3b44095f": {
       "en": "Destination",
       "contexts": [
-        "pages/admin/website/CatalogPagesInventory.tsx"
+        "pages/admin/website/CatalogPagesInventory.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "sdc48142": {
@@ -23540,8 +23586,10 @@
     "s27c3ab35": {
       "en": "Signed",
       "contexts": [
-        "pages/agent/MyContract.tsx"
-      ]
+        "pages/agent/MyContract.tsx",
+        "pages/agent/agentContractCopy.ts"
+      ],
+      "tr": "İmzalandı"
     },
     "sc52091ce": {
       "en": "Pending signature",
@@ -27103,7 +27151,8 @@
     "s3013116a": {
       "en": "Website",
       "contexts": [
-        "pages/staff/Settings.tsx"
+        "pages/staff/Settings.tsx",
+        "lib/website/detailLayoutContract.ts"
       ]
     },
     "s477acea0": {
@@ -27773,6 +27822,760 @@
       "contexts": [
         "pages/staff/Tasks.tsx"
       ]
+    },
+    "seed3b091": {
+      "en": "Site name",
+      "contexts": [
+        "lib/website/cmsTextVariables.ts"
+      ],
+      "tr": "Site adı"
+    },
+    "sba38a36e": {
+      "en": "Site",
+      "contexts": [
+        "lib/website/cmsTextVariables.ts"
+      ],
+      "tr": "Site"
+    },
+    "s98bcb747": {
+      "en": "Current page title",
+      "contexts": [
+        "lib/website/cmsTextVariables.ts"
+      ],
+      "tr": "Geçerli sayfa başlığı"
+    },
+    "s5030172d": {
+      "en": "Current page address",
+      "contexts": [
+        "lib/website/cmsTextVariables.ts"
+      ],
+      "tr": "Geçerli sayfa adresi"
+    },
+    "sef0f32f1": {
+      "en": "Current language code",
+      "contexts": [
+        "lib/website/cmsTextVariables.ts"
+      ],
+      "tr": "Geçerli dil kodu"
+    },
+    "s444c9563": {
+      "en": "Current year",
+      "contexts": [
+        "lib/website/cmsTextVariables.ts"
+      ],
+      "tr": "Güncel yıl"
+    },
+    "sc4d1e6ee": {
+      "en": "Destination name",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s18bc1fc8": {
+      "en": "Country name",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sd932d9a3": {
+      "en": "Short description",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s886c3e89": {
+      "en": "Study facts",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sf519fe74": {
+      "en": "Climate",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s4e4d9358": {
+      "en": "Living",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sfd7182d": {
+      "en": "Living cost",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "seb24de56": {
+      "en": "Visa information",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s897120b3": {
+      "en": "Work permit",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s757806fa": {
+      "en": "University count",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s7d154bdd": {
+      "en": "Live counts",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s9617e728": {
+      "en": "Program count",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "se9928b15": {
+      "en": "City count",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sb9f55845": {
+      "en": "City name",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "scc8a6221": {
+      "en": "Teaching languages",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s96866fb5": {
+      "en": "External facts",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s424a8b4a": {
+      "en": "Annual climate average",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sbd232bfc": {
+      "en": "Housing formats",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sa92bfec4": {
+      "en": "Current temperature",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s53d3fd9a": {
+      "en": "Stored weather",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Saklanan hava durumu"
+    },
+    "s2faeff28": {
+      "en": "Feels-like temperature",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "se523578a": {
+      "en": "Weather condition",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sc6ded4c0": {
+      "en": "Humidity",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "se83510c0": {
+      "en": "Wind speed",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s7a68c230": {
+      "en": "University name",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sa06fe71d": {
+      "en": "General ranking",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s10c0ddb": {
+      "en": "QS ranking",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s594af1b3": {
+      "en": "Times ranking",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sbc31746e": {
+      "en": "Shanghai ranking",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s23ccb99d": {
+      "en": "CWTS Leiden ranking",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s51d1718d": {
+      "en": "Campus city temperature",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s34027160": {
+      "en": "Campus city feels-like temperature",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s6a447282": {
+      "en": "Campus city weather condition",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sd97d42a8": {
+      "en": "Campus city humidity",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s337c88b8": {
+      "en": "Campus city wind speed",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sfb83d07": {
+      "en": "Field",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s3af62d88": {
+      "en": "Teaching language",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "saa5d8aff": {
+      "en": "Tuition fee",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s3461c070": {
+      "en": "Fees",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Ücretler"
+    },
+    "s5cef76db": {
+      "en": "Discounted fee",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s8a321b3b": {
+      "en": "Scholarship",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sb01f638d": {
+      "en": "Application fee",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s4555fc8b": {
+      "en": "Enrolment fee",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sae45393d": {
+      "en": "Deposit fee",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sc2969c85": {
+      "en": "Advance fee",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s83af519f": {
+      "en": "Language fee",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sc2cfed31": {
+      "en": "Fee type",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s552e60cf": {
+      "en": "Admissions",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s5f254642": {
+      "en": "Refund process",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "se767f0b3": {
+      "en": "University country",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s8bb6e944": {
+      "en": "University city",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "seb25e618": {
+      "en": "University website",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s332580c9": {
+      "en": "University address",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "sf59e47d6": {
+      "en": "Intake count",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s5224ab63": {
+      "en": "Related program count",
+      "contexts": [
+        "lib/website/detailLayoutContract.ts"
+      ]
+    },
+    "s14967f2": {
+      "en": "intakes",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "intakeGuide"
+    },
+    "s1987941": {
+      "en": "requirements",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "admissionRules"
+    },
+    "sd96a9e35": {
+      "en": "services",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "support"
+    },
+    "s90ab5b95": {
+      "en": "education",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "curriculum"
+    },
+    "s5bfb038": {
+      "en": "living",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "livingCost"
+    },
+    "sd7b54cdd": {
+      "en": "Gallery",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "Galeri"
+    },
+    "s8d6bfa5c": {
+      "en": "Highlights",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Öne çıkanlar"
+    },
+    "sc963c90c": {
+      "en": "Things to consider",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Dikkat edilmesi gerekenler"
+    },
+    "s473480da": {
+      "en": "Curriculum",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Müfredat"
+    },
+    "s79a60c9c": {
+      "en": "Education and faculties",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "Eğitim ve fakülteler"
+    },
+    "s8f44907c": {
+      "en": "Admission guidance",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "Kabul rehberi"
+    },
+    "s140f944b": {
+      "en": "Scholarship guidance",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "Burs rehberi"
+    },
+    "s415279f1": {
+      "en": "Living and local context",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "Yaşam ve yerel bilgiler"
+    },
+    "sb49ea45c": {
+      "en": "Housing",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Konaklama"
+    },
+    "sd04f7bc8": {
+      "en": "Support services",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "Destek hizmetleri"
+    },
+    "s29c9e3e": {
+      "en": "Recognition and outcomes",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "Tanınma ve sonuçlar"
+    },
+    "sc9bb8515": {
+      "en": "Weather and climate",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Hava durumu ve iklim"
+    },
+    "s85b7c6b2": {
+      "en": "Transport",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Ulaşım"
+    },
+    "sdc9622f1": {
+      "en": "Visa and calendar",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Vize ve takvim"
+    },
+    "sf5cea0a7": {
+      "en": "Intakes and calendar",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Başvuru dönemleri ve takvim"
+    },
+    "sf4365da1": {
+      "en": "Free language courses",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Ücretsiz dil kursları"
+    },
+    "s263a0227": {
+      "en": "Student support",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Öğrenci desteği"
+    },
+    "s83dd1445": {
+      "en": "Student reviews",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Öğrenci yorumları"
+    },
+    "sbc4bd53c": {
+      "en": "Student experience",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Öğrenci deneyimi"
+    },
+    "s90519d69": {
+      "en": "Requirements guidance",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Gereklilik rehberi"
+    },
+    "se466bfa9": {
+      "en": "Frequently asked questions",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Sıkça sorulan sorular"
+    },
+    "s3e67a21d": {
+      "en": "Application guide",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx",
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Başvuru rehberi"
+    },
+    "s811c9dc5": {
+      "en": "",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ]
+    },
+    "sb4357450": {
+      "en": "fees",
+      "contexts": [
+        "pages/admin/website/DetailContentEditor.tsx"
+      ],
+      "tr": "intakes"
+    },
+    "sc844487c": {
+      "en": "Country / destination",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Ülke / destinasyon"
+    },
+    "s4af82c4": {
+      "en": "Default layout",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Varsayılan düzen"
+    },
+    "s8662a2eb": {
+      "en": "Not saved yet",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Henüz kaydedilmedi"
+    },
+    "sdea0c208": {
+      "en": "Page navigation",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Bölüm gezinmesi"
+    },
+    "s6a494fba": {
+      "en": "Overview",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Genel bakış"
+    },
+    "seecfbc4b": {
+      "en": "Other options",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Diğer seçenekler"
+    },
+    "s943e41d3": {
+      "en": "Key facts",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Temel bilgiler"
+    },
+    "sab2acdfa": {
+      "en": "Next step",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Sonraki adım"
+    },
+    "s78711b54": {
+      "en": "Mobile actions",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Mobil işlem düğmeleri"
+    },
+    "s954fee60": {
+      "en": "Image gallery",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Görsel galerisi"
+    },
+    "sf9f1da84": {
+      "en": "Admission information",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Kabul bilgileri"
+    },
+    "sd4e0f258": {
+      "en": "Scholarships",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Burslar"
+    },
+    "s4d9b5bfa": {
+      "en": "Living costs",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Yaşam maliyetleri"
+    },
+    "s9cd09ec0": {
+      "en": "Student services",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Öğrenci hizmetleri"
+    },
+    "s83459d47": {
+      "en": "Recognition and accreditation",
+      "contexts": [
+        "pages/admin/website/detailTemplateLabels.ts"
+      ],
+      "tr": "Tanınma ve akreditasyon"
+    },
+    "sc319e083": {
+      "en": "{field} is filled automatically from the page's catalogue record and stays current when that record changes.",
+      "contexts": [
+        "pages/admin/website/detailVariableLabels.ts"
+      ],
+      "tr": "{field} ilgili sayfanın katalog kaydından otomatik alınır ve katalog değiştiğinde güncel kalır."
+    },
+    "sc75de5e9": {
+      "en": "Signed contract",
+      "contexts": [
+        "pages/agent/agentContractCopy.ts"
+      ],
+      "tr": "İmzalı sözleşme"
+    },
+    "saa3e4c10": {
+      "en": "Your signature is saved. The PDF is not ready yet. You can refresh its status; you do not need to sign again.",
+      "contexts": [
+        "pages/agent/agentContractCopy.ts"
+      ],
+      "tr": "İmzanız kaydedildi. PDF henüz hazır değil. Durumu yenileyebilirsiniz; tekrar imzalamanız gerekmez."
+    },
+    "sa88edf95": {
+      "en": "Download signed PDF",
+      "contexts": [
+        "pages/agent/agentContractCopy.ts"
+      ],
+      "tr": "İmzalı PDF’yi indir"
+    },
+    "s79584b06": {
+      "en": "Refresh status",
+      "contexts": [
+        "pages/agent/agentContractCopy.ts"
+      ],
+      "tr": "Durumu yenile"
+    },
+    "sb5b61f6d": {
+      "en": "Could not download the PDF. Please try again.",
+      "contexts": [
+        "pages/agent/agentContractCopy.ts"
+      ],
+      "tr": "PDF indirilemedi. Lütfen tekrar deneyin."
+    },
+    "s6ce7d67e": {
+      "en": "Contract signed — awaiting staff approval",
+      "contexts": [
+        "pages/agent/agentContractCopy.ts"
+      ],
+      "tr": "Sözleşmeniz imzalandı; yönetici onayı bekleniyor"
+    },
+    "sa488d41b": {
+      "en": "Signing is complete. Commission rates and commercial management tools become available after our team's final approval. You do not need to sign again.",
+      "contexts": [
+        "pages/agent/agentContractCopy.ts"
+      ],
+      "tr": "İmza işlemi tamamlandı. Komisyon ve ticari yönetim araçları, ekibimizin son onayından sonra açılacak. Tekrar imza atmanız gerekmez."
     }
   }
 }

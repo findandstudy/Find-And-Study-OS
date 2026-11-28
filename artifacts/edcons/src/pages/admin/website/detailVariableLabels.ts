@@ -1,4 +1,5 @@
 import type { DetailTemplateVariable } from "@/lib/website/detailLayoutContract";
+import { translateUi } from '../../../lib/ui-localization';
 
 const TR: Record<string, string> = {
   "destination.name": "Ülke / destinasyon adı", "destination.country": "Ülke adı", "destination.shortDescription": "Kısa tanıtım", "destination.description": "Detaylı tanıtım", "destination.language": "Konuşulan diller", "destination.currency": "Para birimi", "destination.climate": "İklim", "destination.livingCost": "Yaşam maliyeti", "destination.visaInfo": "Vize bilgisi", "destination.workPermit": "Çalışma izni bilgisi",
@@ -8,8 +9,9 @@ const TR: Record<string, string> = {
   "stats.universityCount": "Toplam üniversite sayısı", "stats.programCount": "Toplam program sayısı", "stats.cityCount": "Toplam şehir sayısı", "stats.intakeCount": "Başlangıç dönemi sayısı", "stats.relatedProgramCount": "Benzer program sayısı",
 };
 export const DETAIL_VARIABLE_GROUP_TR: Record<string, string> = { Destination: "Ülke / destinasyon", City: "Şehir", University: "Üniversite", Program: "Program", "Study facts": "Eğitim bilgileri", Living: "Yaşam", "External facts": "Dış kaynak verileri", Rankings: "Sıralamalar", Fees: "Ücretler", Admissions: "Başvuru", "Live counts": "Canlı sayılar" };
-export const detailVariableLabel = (item: DetailTemplateVariable, language: string) => language === "tr" ? TR[item.key] ?? item.label : item.label;
-export const detailVariableGroup = (item: DetailTemplateVariable, language: string) => language === "tr" ? DETAIL_VARIABLE_GROUP_TR[item.group] ?? item.group : item.group;
-export const detailVariableHelp = (item: DetailTemplateVariable, language: string) => language === "tr"
-  ? `${detailVariableLabel(item, language)} ilgili sayfanın katalog kaydından otomatik alınır ve katalog değiştiğinde güncel kalır.`
-  : `${detailVariableLabel(item, language)} is filled automatically from the page's catalogue record and stays current when that record changes.`;
+export const detailVariableLabel = (item: DetailTemplateVariable, language: string) => translateUi(language, item.label, TR[item.key]);
+export const detailVariableGroup = (item: DetailTemplateVariable, language: string) => translateUi(language, item.group, DETAIL_VARIABLE_GROUP_TR[item.group]);
+export const detailVariableHelp = (item: DetailTemplateVariable, language: string) => translateUi(language,
+  "{field} is filled automatically from the page's catalogue record and stays current when that record changes.",
+  '{field} ilgili sayfanın katalog kaydından otomatik alınır ve katalog değiştiğinde güncel kalır.',
+  {field:detailVariableLabel(item,language)});

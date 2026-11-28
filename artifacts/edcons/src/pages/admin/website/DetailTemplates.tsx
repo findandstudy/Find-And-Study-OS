@@ -164,9 +164,9 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
   const selectedLocked = selectedSection ? ["hero", "navigation", "overview"].includes(selectedSection) : false;
   const availableVariables = editingLayout ? DETAIL_TEMPLATE_VARIABLES[editingLayout.kind] : [];
   const visibleVariables = availableVariables.filter(item => {
-    const query = variableSearch.trim().toLocaleLowerCase(translateUi(lang, "en-US", "tr-TR"));
+    const query = variableSearch.trim().toLocaleLowerCase(lang);
     if (!query) return true;
-    return [detailVariableLabel(item, lang), detailVariableGroup(item, lang), item.key].some(value => value.toLocaleLowerCase(translateUi(lang, "en-US", "tr-TR")).includes(query));
+    return [detailVariableLabel(item, lang), detailVariableGroup(item, lang), item.key].some(value => value.toLocaleLowerCase(lang).includes(query));
   });
   const variableGroups = [...new Set(visibleVariables.map(item => item.group))];
   const selectedVariableMeta = availableVariables.find(item => item.key === selectedVariable) ?? null;
@@ -329,7 +329,7 @@ const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplat
                     <div className="space-y-1.5">
                       <Label>{copy("Information to insert", "Eklenecek bilgi")}</Label>
                       <Select value={selectedVariable} onValueChange={setSelectedVariable}><SelectTrigger aria-label={copy("Information to insert", "Eklenecek bilgi")}><SelectValue /></SelectTrigger><SelectContent>
-                        {variableGroups.map((group, groupIndex) => <SelectGroup key={group}>{groupIndex > 0 && <SelectSeparator />}<SelectLabel>{lang === "tr" ? DETAIL_VARIABLE_GROUP_TR[group] ?? group : group}</SelectLabel>{visibleVariables.filter(item => item.group === group).map(item => <SelectItem key={item.key} value={item.key}>{detailVariableLabel(item, lang)}</SelectItem>)}</SelectGroup>)}
+                        {variableGroups.map((group, groupIndex) => <SelectGroup key={group}>{groupIndex > 0 && <SelectSeparator />}<SelectLabel>{translateUi(lang, group, DETAIL_VARIABLE_GROUP_TR[group])}</SelectLabel>{visibleVariables.filter(item => item.group === group).map(item => <SelectItem key={item.key} value={item.key}>{detailVariableLabel(item, lang)}</SelectItem>)}</SelectGroup>)}
                       </SelectContent></Select>
                       {variableSearch && visibleVariables.length === 0 && <p role="status" className="text-xs text-amber-700">{copy("No field matches this search. Clear the search to see every available field.", "Bu aramayla eşleşen alan yok. Tüm alanları görmek için aramayı temizleyin.")}</p>}
                     </div>

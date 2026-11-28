@@ -1894,7 +1894,7 @@ export default function AgentStudentsPage() {
 
   function formatDate(d: string | null | undefined) {
     if (!d) return "-";
-    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return new Date(d).toLocaleDateString(uiLanguage, { month: "short", day: "numeric", year: "numeric" });
   }
 
   return (

@@ -1,3 +1,4 @@
+import { translateUi } from '../../../lib/ui-localization';
 const labels: Record<string, readonly [string, string]> = {
   program: ["Program", "Program"], university: ["University", "Üniversite"], destination: ["Country / destination", "Ülke / destinasyon"], city: ["City", "Şehir"],
   draft: ["Draft", "Taslak"], published: ["Published", "Yayında"], archived: ["Archived", "Arşivlendi"], default: ["Default layout", "Varsayılan düzen"], absent: ["Not saved yet", "Henüz kaydedilmedi"],
@@ -18,7 +19,8 @@ const labels: Record<string, readonly [string, string]> = {
   "editorial-faq": ["Frequently asked questions", "Sıkça sorulan sorular"], "editorial-applyGuide": ["Application guide", "Başvuru rehberi"],
 };
 
-/** Module-local EN/TR copy follows the existing Pages authoring convention. */
+/** UI metadata follows the same catalogue as the rest of the editor. */
 export function detailTemplateLabel(key: string, lang: string): string {
-  return labels[key]?.[lang === "tr" ? 1 : 0] ?? key;
+  const label = labels[key];
+  return label ? translateUi(lang, label[0], label[1]) : key;
 }

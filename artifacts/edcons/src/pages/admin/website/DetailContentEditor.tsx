@@ -1865,7 +1865,7 @@ export default function DetailContentEditor({
         (section) => !parseDetailContent({ ...next, sections: [section] }),
       );
       setError(
-        `${copy("Complete each section: title, content, an HTTPS source and a real review date (not in the future). Complete every added item/cell, remove empty items, and use plain text without HTML. Maximum total: 100,000 characters.", "Her bölümü tamamlayın: başlık, içerik, HTTPS kaynak ve gerçek inceleme tarihi (gelecekte olamaz). Eklenen her öğeyi/hücreyi doldurun, boş öğeleri kaldırın ve HTML içermeyen düz metin kullanın. Toplam en fazla 100.000 karakter.")} ${invalid.map((section) => section.title || sectionLabels[section.key]?.[lang === "tr" ? 1 : 0] || section.key).join(", ")}`,
+        `${copy("Complete each section: title, content, an HTTPS source and a real review date (not in the future). Complete every added item/cell, remove empty items, and use plain text without HTML. Maximum total: 100,000 characters.", "Her bölümü tamamlayın: başlık, içerik, HTTPS kaynak ve gerçek inceleme tarihi (gelecekte olamaz). Eklenen her öğeyi/hücreyi doldurun, boş öğeleri kaldırın ve HTML içermeyen düz metin kullanın. Toplam en fazla 100.000 karakter.")} ${invalid.map((section) => section.title || (sectionLabels[section.key] ? translateUi(lang, sectionLabels[section.key][0], sectionLabels[section.key][1]) : undefined) || section.key).join(", ")}`,
       );
       return;
     }
@@ -1977,7 +1977,7 @@ export default function DetailContentEditor({
   );
   const keyLabel = (key: string) =>
     key === "__seo__" ? copy("SEO and social sharing", "SEO ve sosyal paylaşım") :
-    sectionLabels[key]?.[lang === "tr" ? 1 : 0] ??
+    (sectionLabels[key] ? translateUi(lang, sectionLabels[key][0], sectionLabels[key][1]) : undefined) ??
     detailTemplateLabel(key, lang);
   const layoutSections =
     content?.sectionOrder ?? DETAIL_CONTENT_LAYOUT_KEYS[target.kind];

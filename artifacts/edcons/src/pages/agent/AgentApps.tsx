@@ -139,9 +139,9 @@ function formatCurrency(value: number | string | null | undefined): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(num);
 }
 
-function formatDate(dateStr: string | null | undefined): string {
+function formatDate(dateStr: string | null | undefined, locale: string): string {
   if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(dateStr).toLocaleDateString(locale, { month: "short", day: "numeric", year: "numeric" });
 }
 
 type Student = { id: number; firstName: string; lastName: string; email?: string | null; nationality?: string | null };
@@ -1080,7 +1080,7 @@ export default function AgentAppsPage() {
                         <TableCell>{levelLabel}</TableCell>
                         <TableCell>{app.intake || "-"}</TableCell>
                         {showCommission && <TableCell>{app.commissionAmount && parseFloat(app.commissionAmount) > 0 ? <span className="text-emerald-600 font-medium">{formatCurrency(parseFloat(app.commissionAmount))}</span> : "-"}</TableCell>}
-                        <TableCell className="text-muted-foreground text-xs">{formatDate(app.createdAt)}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">{formatDate(app.createdAt, uiLanguage)}</TableCell>
                       </TableRow>
                     );
                   })}

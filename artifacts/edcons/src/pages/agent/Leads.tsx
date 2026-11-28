@@ -88,9 +88,9 @@ function formatCurrency(value: number | string | null | undefined): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(num);
 }
 
-function formatDate(dateStr: string | null | undefined): string {
+function formatDate(dateStr: string | null | undefined, locale: string): string {
   if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(dateStr).toLocaleDateString(locale, { month: "short", day: "numeric", year: "numeric" });
 }
 
 const LEAD_STAGE_COLORS = [
@@ -1251,7 +1251,7 @@ export default function AgentLeadsPage() {
                         className="text-muted-foreground text-xs cursor-pointer"
                         onClick={() => setLocation(`/agent/leads/${lead.id}`)}
                       >
-                        {formatDate(lead.createdAt)}
+                        {formatDate(lead.createdAt, uiLanguage)}
                       </TableCell>
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">

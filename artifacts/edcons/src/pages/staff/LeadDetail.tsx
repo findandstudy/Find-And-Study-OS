@@ -752,7 +752,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                           }`}>
                             {formatDate(fu.scheduledAt, lang, { day: "2-digit", month: "2-digit", year: "numeric" }, dateFormat)}
                             {" "}
-                            {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                            {new Date(fu.scheduledAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })}
                             {!fu.completed && isOverdue(fu.scheduledAt) && " — Overdue"}
                           </span>
                         </div>
