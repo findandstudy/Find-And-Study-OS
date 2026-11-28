@@ -33,7 +33,9 @@ export function isCriticalPublicPath(pathname: string): boolean {
 export async function loadCriticalPublicLanguage(lang: Language): Promise<boolean> {
   if (isPartialLanguageLoaded(lang) || isLanguageLoaded(lang)) return true;
   try {
-    const response = await fetch(`/i18n-critical/${lang}.json`, { credentials: "same-origin", cache: "force-cache" });
+    // These public URLs are stable across releases. Revalidate their ETag so a
+    // previous deployment's dictionary cannot flash after a language change.
+    const response = await fetch(`/i18n-critical/${lang}.json`, { credentials: "same-origin", cache: "no-cache" });
     if (!response.ok) return false;
     const length = Number(response.headers.get("content-length") || 0);
     if (length > 128 * 1024) return false;

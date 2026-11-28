@@ -34,3 +34,8 @@ test('sidebar titles use common i18n and the workspace title has every locale', 
   assert.doesNotMatch(source,/title:\s*['"][^'"]*\p{L}[^'"]*['"]/u);
   for(const lang of SUPPORTED_LANGUAGES){const d=JSON.parse(readFileSync(new URL(`../src/lib/i18n/translations/${lang}.json`,import.meta.url),'utf8'));assert.ok(d.dashboard.teamWorkspace);if(lang==='en')assert.equal(d.dashboard.teamWorkspace,'Team workspace');}
 });
+
+test('stable public dictionary URLs revalidate across deployments', () => {
+  const source=readFileSync(new URL('../src/lib/i18n/context.tsx',import.meta.url),'utf8');
+  assert.match(source,/i18n-critical\/\$\{lang\}\.json`[^\n]+cache: "no-cache"/);
+});
