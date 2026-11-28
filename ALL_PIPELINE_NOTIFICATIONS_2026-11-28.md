@@ -37,3 +37,21 @@ Kapsam: yalnız staging; Apply/production değişmez. Önceki bağımsız işler
 4. UID/GID 10042 build/release, yalnız staging app restart; mevcut env/secret ve outbound=false korunur.
 5. Health exact release, admin ekranları, dört aşama kontrolü, Mesajlar şablonları/Entegrasyon hesapları/ortak geçmiş ve TR/RTL kontrolü.
 6. Kod rollback: önceki image + release; migration additive olarak kalır. Veri geri yüklemesi normal rollback yolu değildir.
+
+## Staging teslim kanıtı
+- Kod local/GitHub: `d586f6db95ff77a42f085021fea543f3edd657a5` + `f4be55cb9dce4cde214c30d1b900aa38d59cf8eb`.
+- Staging cherry-pick uçları: `f056dc614b3eebd1b90cc2c21c084c4460f52a96` + `74306a420d8e8d198f3a29880d4563fc4a454dda`; kaynak ağacı temiz.
+- Final release: `staging-20261128T113646Z-74306a420d8e`, 28 Kasım 2026 14:36:46 Türkiye saati.
+- Image: `findandstudy-staging-app:all-pipeline-notices`; healthy; UID/GID `10042:10042`; OCI source etiketi final source ile eşleşiyor.
+- Public health: HTTP 200, `dbConnected=true`, exact release eşleşti.
+- Taze checksum'lı custom-format staging DB yedeği ayrı network-none/tmpfs PostgreSQL 16 üzerinde restore edildi. Ledger/program/başvuru dönemi aggregate eşliği `146|151316|0` PASS; test container'ı kaldırıldı. Kanıt `/tmp/pipeline-notice-backup.json` ve `/tmp/pipeline-notice-restore.pass`; dump yalnız sunucunun staging backup dizinindedir, Git'e alınmadı.
+- Canonical staging migration runner, least-privilege `fas_migrator`, exact source ve exact DB kimliğiyle `147/147` PASS. Yeni outbox boş (0); eski kayıtlar için backfill yapılmadı.
+- Linux API/Edcons typecheck, backend seçili regresyonları ve normal frontend yayın kontrolleri/build/bundle budget PASS.
+- Staging UI: Lead/Student/Application aşama düzenleyicileri, bağımsız pipeline Stages içindeki iki kanal ve alıcı seçenekleri görüldü. Deneme aç/kapatları kaydedilmeden kapatıldı; mevcut aşama politikaları değiştirilmedi.
+- İngilizce + Arapça RTL formu görsel olarak kontrol edildi. Son düzeltme ile iş kartında başvuru ifadesi ve acente/origin seçenekleri kaldırıldı. Yeni toplam 10 UI anahtarı 23 dilde mevcut.
+- Yeni genel WhatsApp alan eşlemeleri merkezi şablon oluşturucuya eklendi: recordName, recipientName, newStage, newStageKey, stageName, pipelineName, recordId.
+- UI ile `Shared pipeline stage update` adlı ortak e-posta kimliğine EN ve TR sürümleri kaydedilip review'a alındı. Üç değişkeni bütün dört türde kullanılabilir. Aynı aktörün Approve version düğmesi disabled; farklı reviewer şartı korunuyor. Önizleme açıldı, gönderim yapılmadı.
+- Settings Notifications ekranındaki ortak geçmiş GET başarılı/boş; readiness endpoint'i başarılı, 0 doğrulanmış sender ve 0 hazır policy. Tarayıcı error log'unda hata yok.
+- Son env kontrolü: `PIPELINE_EMAIL_AUTOMATION_ENABLED=unset`, `EMAIL_DELIVERY_DISABLED=true`, `BACKGROUND_JOBS_ENABLED=false`, `ALLOW_LIVE_INTEGRATIONS=false`. SMTP account 0, aktif WhatsApp account 0. Gerçek provider teslimi bu ortamda test edilmedi ve aktif değildir.
+- Final local API ve Edcons typecheck PASS; lokal yeni PostgreSQL 10, mevcut backend 66, UI 23 test PASS. E-posta / WhatsApp gerçek gönderimleri için hesap, şablon onayı ve kontrollü rollout ayrıca gerekir. Bu teslim bunları taklit etmez.
+- Production Apply, eski sözleşmeler ve önceki bağımsız işler değiştirilmedi. Kod rollback için önceki `unified-email-templates` image ve korunmuş env kopyaları mevcut; additive migration geride bırakılabilir.
