@@ -4,6 +4,7 @@ import { buildSignedContractEmail, sendEmail, getAppBaseUrl } from "./email";
 import { ensureSignedContractPdf } from "./signContract";
 import { dispatchNotification } from "./notificationDispatcher";
 import { EMAIL_ATTACHMENT_LIMITS, deserializeEmailAttachments, isEmailMailbox } from "./emailDeliveryPolicy";
+import { observeQueueCycle } from "./queueObservations";
 
 // These effects are injected only by isolated tests. Production keeps the same
 // renderer, storage and durable email queue; no alternate delivery path exists.
@@ -429,7 +430,9 @@ export async function generatePendingSignedContractPdfs(): Promise<void> {
         }
       }
     }
+    observeQueueCycle("signedPdfs", true);
   } catch (err) {
+    observeQueueCycle("signedPdfs", false);
     console.error("[contract-pdf-local] sweep error:", err);
   }
 }

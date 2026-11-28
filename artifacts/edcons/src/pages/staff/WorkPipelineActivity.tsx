@@ -1,6 +1,7 @@
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { workPipelineHistory } from "@/lib/workPipelineI18n";
 import { useI18n } from "@/hooks/use-i18n";
+import { PipelineDeliveryHistory } from "@/components/notifications/PipelineDeliveryHistory";
 import { useState } from "react";
 import {
   CalendarClock,
@@ -18,6 +19,7 @@ import type { Card, FollowUp, Row } from "./useWorkPipelines";
 
 export function WorkPipelineActivity({
   row,
+  boardId,
   lang,
   people,
   person,
@@ -26,6 +28,7 @@ export function WorkPipelineActivity({
   save,
 }: {
   row: Row<Card>;
+  boardId: string;
   lang: string;
   people: { id: number; name: string }[];
   person: (id: number | null) => string;
@@ -296,6 +299,7 @@ export function WorkPipelineActivity({
         value="history"
         className="max-h-64 overflow-y-auto space-y-3"
       >
+        <PipelineDeliveryHistory endpoint={`/api/work-pipelines/${boardId}/cards/${row.document.id}/delivery-history`} />
         {[...row.document.history].reverse().map((h) => (
           <div key={h.id} className="border-s-2 ps-3 text-xs">
             <p className="text-muted-foreground">

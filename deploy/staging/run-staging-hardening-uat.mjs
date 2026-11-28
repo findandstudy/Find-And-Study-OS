@@ -68,9 +68,13 @@ for (const role of ["super_admin", "staff", "agent", "student"]) {
       for (const kind of ["lead", "student", "application"]) {
         const stages = await (await request(jar, `/api/pipeline-stages/${kind}?includeHidden=1`, 200)).json();
         assert.ok(Array.isArray(stages) && stages.length > 0);
+        const history = await (await request(jar, `/api/pipeline-stages/${kind}/delivery-history`, 200)).json();
+        assert.ok(Array.isArray(history.items));
       }
       await request(jar, "/api/work-pipelines/feature", 200);
       await request(jar, "/api/portal-automation/settings", 200);
+      const system = await (await request(jar, "/api/admin/system-health", 200)).json();
+      assert.equal(system.metrics.queues.signedPdfs.enabled, true);
     } else {
       const denied = await request(jar, "/api/export/leads", 403);
       assert.doesNotMatch(denied.headers.get("content-type") ?? "", /spreadsheetml/);

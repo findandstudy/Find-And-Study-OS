@@ -1516,6 +1516,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
         actionUrl: `/staff/students/${student.id}`,
         icon: "UserCheck",
         recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
+        data: { studentId: student.id, stage: String(updates.status) },
         templateVars: { firstName: student.firstName, lastName: student.lastName, oldStatus: existing.status || "", newStatus: String(updates.status) },
       });
     } catch (err) {

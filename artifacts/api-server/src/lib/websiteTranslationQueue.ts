@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { observeQueueCycle } from "./queueObservations";
 import { auditLogsTable, db, integrationsTable, pool, settingsTable, usersTable, websiteTranslationJobsTable } from "@workspace/db";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { decryptConfig, isEncrypted } from "./encryption";
@@ -186,6 +187,10 @@ export function startWebsiteTranslationQueueWorker() {
           .catch(() => console.warn("[website-translation] Job attempt could not be recorded", { jobId: job.id }))
           .finally(() => { inFlight -= 1; });
       }
+      observeQueueCycle("websiteTranslations", true);
+    } catch (error) {
+      observeQueueCycle("websiteTranslations", false);
+      throw error;
     } finally {
       claiming = false;
     }

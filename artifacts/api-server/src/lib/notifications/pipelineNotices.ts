@@ -10,6 +10,7 @@ import { noticeHash } from "./pipelineNoticePolicy";
 import { stageEmailRuntime, stageWhatsAppRuntime } from "./stageEmailPolicy";
 import { renderApprovedEmailVersion } from "./emailTemplateLibrary";
 import { resolveEmailSenderAccount } from "./emailSenderAccounts";
+import { observeQueueCycle } from "../queueObservations";
 import { sendPipelineWhatsAppSnapshot, WhatsAppTemplateSendError } from "../inbox/startWhatsAppTemplate";
 
 type Intent = Notice & { sender_revision: number | null };
@@ -275,7 +276,11 @@ export function startPipelineNoticeWorker() {
       if (running.has(channel)) continue;
       const attempt = processPipelineNotices(undefined, channel);
       running.set(channel, attempt);
-      void attempt.catch(() => console.error("[pipeline-notices] Worker pass failed", { channel }))
+      const queue = channel === "email" ? "pipelineEmail" : "pipelineWhatsApp";
+      void attempt.then(() => observeQueueCycle(queue, true), () => {
+        observeQueueCycle(queue, false);
+        console.error("[pipeline-notices] Worker pass failed", { channel });
+      })
         .finally(() => running.delete(channel));
     }
   };

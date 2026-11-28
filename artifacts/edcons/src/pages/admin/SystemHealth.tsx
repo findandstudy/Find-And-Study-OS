@@ -12,7 +12,7 @@ import { appendHealthHistory, createHealthReader, healthHref, healthIsStale, hea
 
 export default function SystemHealthPage() {
   const { lang: uiLanguage } = useUiLanguage();
-  const { lang, dir } = useI18n();
+  const { lang, dir, t } = useI18n();
   const copy = healthCopy(lang);
   const [data, setData] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,6 +77,13 @@ export default function SystemHealthPage() {
     }
   };
   const performance = data?.metrics.requestPerformance;
+  const queues = data?.metrics.queues;
+  const queueLabels = {
+    pipelineEmail: `${t("workPipelines.title")} · ${t("common.email")}`,
+    pipelineWhatsApp: `${t("workPipelines.title")} · ${t("messagesPage.whatsapp")}`,
+    websiteTranslations: t("websiteAdmin.translations"),
+    signedPdfs: `${t("contracts.title")} · PDF`,
+  };
   const performanceCheck = data?.checks.find(check => check.key === "requestPerformance");
   const measured = data?.checks.filter(check => check.state !== "unknown" && check.state !== "disabled").length ?? 0;
 
@@ -127,6 +134,28 @@ export default function SystemHealthPage() {
             {healthHref(check.href) && <Link href={check.href!} className="inline-flex items-center gap-1 text-sm text-primary underline underline-offset-4">{copy.inspect}<ArrowUpRight aria-hidden="true" className="h-4 w-4" /></Link>}
           </CardContent></Card>;
       })}</div>
+      {queues && <Card><CardHeader><CardTitle className="text-base">{copy.text("Queued / running", "Kuyrukta / çalışıyor")}</CardTitle></CardHeader><CardContent>
+        <div className="overflow-x-auto"><table className="w-full text-start text-sm"><thead><tr className="border-b">
+          <th scope="col" className="p-2 text-start">{copy.text("Check", "Kontrol")}</th>
+          <th scope="col" className="p-2 text-start">{t("common.status")}</th>
+          <th scope="col" className="p-2 text-start">{copy.text("Queued / running", "Kuyrukta / çalışıyor")}</th>
+          <th scope="col" className="p-2 text-start">{copy.text("Oldest queue wait", "En eski kuyruk beklemesi")}</th>
+          <th scope="col" className="p-2 text-start">{copy.text("Last recorded heartbeat", "Son kayıtlı yaşam sinyali")}</th>
+        </tr></thead><tbody>{(Object.keys(queueLabels) as Array<keyof typeof queueLabels>).map(key => {
+          const queue = queues[key] as MetricRecord | undefined;
+          const observedAt = typeof queue?.observedAt === "string" ? Date.parse(queue.observedAt) : NaN;
+          const oldest = typeof queue?.oldest_wait === "string" ? Date.parse(queue.oldest_wait) : NaN;
+          const state = stale ? "stale" : !queue ? "unknown" : !queue.enabled ? "disabled"
+            : !Number.isFinite(observedAt) || now < observedAt - 60_000 ? "unknown"
+            : now - observedAt > 120_000 ? "stale" : queue.ok === true ? "healthy" : "warning";
+          return <tr className="border-b last:border-0" key={key}>
+            <th scope="row" className="p-2 text-start font-medium">{queueLabels[key]}</th>
+            <td className="p-2">{badge(state)}</td><td className="p-2 tabular-nums">{number(queue?.pending)}</td>
+            <td className="p-2 tabular-nums">{Number.isFinite(oldest) ? number(Math.max(0, (now - oldest) / 1000), " s") : "—"}</td>
+            <td className="p-2">{date(queue?.observedAt)}</td>
+          </tr>;
+        })}</tbody></table></div>
+      </CardContent></Card>}
       <Card data-testid="health-performance"><CardHeader><CardTitle className="text-base">{copy.performance}{stale ? ` · ${copy.historical}` : ""}</CardTitle><div>{badge(stale ? "stale" : performanceCheck?.state ?? "unknown")}</div><p className="text-xs text-muted-foreground">{copy.performanceNote}</p></CardHeader><CardContent>
         {performance?.enabled !== true ? <p className="text-sm text-muted-foreground">{copy.performanceDisabled}</p> : healthNumber(performance.sampleCount) === 0 ? <p className="text-sm text-muted-foreground">{copy.performanceEmpty}</p> : <>
           <dl className="grid grid-cols-2 gap-4 lg:grid-cols-5">{[[copy.sampleCount, number(performance.sampleCount)], ["p95", number(performance.p95Ms, " ms")], ["p99", number(performance.p99Ms, " ms")], [copy.errorRate, number(performance.errorRatePercent, "%")], [copy.dbWait, number(performance.dbAcquireP95Ms, " ms")]].map(([label, value]) => <div key={label}><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{value}</dd></div>)}</dl>

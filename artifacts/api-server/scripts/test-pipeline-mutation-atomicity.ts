@@ -105,3 +105,18 @@ test("more than 100 stages is rejected before any mutation", async () => {
   assert.deepEqual(audits, []);
   assert.equal(rows[0].key, "old");
 });
+
+test("a stale stage editor receives a conflict without replacing stages or audit", async () => {
+  const result = await request({ expectedStageIds: [17], stages: [{ key: "new", label: "New" }] });
+  assert.equal(result.status, 409);
+  assert.equal(result.data.error, "PIPELINE_STAGES_CHANGED");
+  assert.equal(rows[0].key, "old");
+  assert.equal(writes, 0);
+  assert.deepEqual(audits, []);
+});
+
+test("a key over the dispatch schema limit is rejected before any write", async () => {
+  const result = await request({ stages: [{ key: "x".repeat(161), label: "Too long" }] });
+  assert.equal(result.status, 400);
+  assert.equal(writes, 0);
+});

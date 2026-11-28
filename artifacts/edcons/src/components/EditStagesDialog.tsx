@@ -13,6 +13,8 @@ import { useI18n } from "@/hooks/use-i18n";
 import { preventPipelineDialogOutsideDismiss } from "@/lib/pipelineDialogDismiss";
 import { StageAutomaticEmailFields, PipelineNoticeRecipient } from "@/components/notifications/EmailAutomationFields";
 import { emailStageValid, emailAutomationCopy } from "@/components/notifications/emailAutomationModel";
+import { PipelineDeliveryHistory } from "@/components/notifications/PipelineDeliveryHistory";
+import { useAuth } from "@/hooks/use-auth";
 
 type ActionTypeOrNone = StageActionType | "none";
 const ACTION_TYPE_OPTIONS: { value: ActionTypeOrNone; labelKey: string; defaultLabelKey: string; defaultColor: string }[] = [
@@ -740,6 +742,8 @@ function StageEditForm({
 }
 
 export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, entityLabel, studentStages }: EditStagesDialogProps) {
+  const { user } = useAuth();
+  const entityType = stages[0]?.entityType;
   const showStudentMapping = !!studentStages && (stages[0]?.entityType === "application");
   const [localStages, setLocalStages] = useState<PipelineStage[]>([]);
   const [expectedStageIds, setExpectedStageIds] = useState<number[]>([]);
@@ -1033,6 +1037,9 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
         )}
 
         <div className="px-6 pb-5 pt-4 border-t shrink-0 space-y-3 bg-muted/20">
+          {open && !editingStage && ["admin", "super_admin"].includes(user?.role ?? "") &&
+            (entityType === "lead" || entityType === "student" || entityType === "application") &&
+            <PipelineDeliveryHistory endpoint={`/api/pipeline-stages/${entityType}/delivery-history`} recordType={entityType} />}
           {error && (
             <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">
               <AlertCircle className="w-4 h-4 shrink-0" />

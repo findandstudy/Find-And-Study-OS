@@ -188,7 +188,8 @@ function optionalDate(value: unknown, field: string): Date | null {
 function optionalDateOnly(value: unknown, field: string): string | null {
   if (value == null || value === "") return null;
   const raw = String(value).trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || !Number.isFinite(new Date(`${raw}T00:00:00.000Z`).getTime())) {
+  const parsed = new Date(`${raw}T00:00:00.000Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== raw) {
     throw new Error(`${field} must use YYYY-MM-DD`);
   }
   return raw;

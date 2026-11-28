@@ -1,10 +1,12 @@
 import {configurePipelineNotice} from "../lib/notifications/pipelineNoticeConfiguration";
 import {NOTICE_VARIABLES} from "../lib/notifications/pipelineNoticeContext";
+import { readPipelineNoticeHistory } from "../lib/notifications/pipelineNoticeHistory";
 import { Router, type IRouter } from "express";
 import {
   channelAccountsTable,
   auditLogsTable,
   db,
+  pool,
   emailTemplateVersionsTable,
   messageTemplatesTable,
   pipelineStagesTable,
@@ -14,7 +16,7 @@ import {
 import type { StageAction, StageAutomaticMessage, StageAutomaticEmail } from "@workspace/db";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
-import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
+import { ADMIN_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { clearStageFinanceCache } from "../lib/stageFinance";
 import {
   normalizeStageAudienceRoles,
@@ -411,6 +413,16 @@ router.get("/pipeline-stages/:entityType", requireAuth, requireRole(...STAFF_ROL
   }
 
   res.json(stages);
+});
+
+router.get("/pipeline-stages/:entityType/delivery-history", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const kind = String(req.params.entityType);
+  if (kind !== "lead" && kind !== "student" && kind !== "application") {
+    res.status(400).json({ error: "Invalid entity type" });
+    return;
+  }
+  res.set("Cache-Control", "private, no-store");
+  res.json({ items: await readPipelineNoticeHistory(pool, kind) });
 });
 
 router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {

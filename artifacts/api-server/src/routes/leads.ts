@@ -1328,6 +1328,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
       actionUrl: `/staff/leads/${lead.id}`,
       icon: "ArrowRight",
       recipientUserIds: lead.assignedToId ? [lead.assignedToId] : undefined,
+      data: { leadId: lead.id, stage: String(updates.status) },
       templateVars: { firstName: lead.firstName, lastName: lead.lastName, oldStage: existing.status || "", newStage: String(updates.status) },
     }).catch(() => {});
   }

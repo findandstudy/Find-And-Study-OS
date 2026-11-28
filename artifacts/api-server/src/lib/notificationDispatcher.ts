@@ -1,5 +1,5 @@
-import {preferenceAllows,stageEvent} from "./notifications/pipelineNoticePolicy";
-import { db, notificationRulesTable, notificationsTable, usersTable, integrationsTable, settingsTable, studentsTable, agentsTable, agentIntegrationsTable } from "@workspace/db";
+import { preferenceAllows, stageEvent } from "./notifications/pipelineNoticePolicy";
+import { db, pool, notificationRulesTable, notificationsTable, usersTable, integrationsTable, settingsTable, studentsTable, agentsTable, agentIntegrationsTable } from "@workspace/db";
 import { eq, and, inArray, isNull } from "drizzle-orm";
 import { sendEmail, sendTenantEmail, buildNotificationEmail, type TenantSmtpConfig } from "./email";
 import { notificationBus } from "./notificationBus";
@@ -355,18 +355,18 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
     if (channels.includes("email")) {
       (async () => {
         try {
-          const users = await db.select({ id: usersTable.id, email: usersTable.email, language: usersTable.language, role: usersTable.role })
+          const users = await db.select({ id: usersTable.id, email: usersTable.email, language: usersTable.language, role: usersTable.role,
+            emailVerified: usersTable.emailVerified, preferences: usersTable.notificationPreferences })
             .from(usersTable)
             .where(and(
               inArray(usersTable.id, userIds),
-              eq(usersTable.isActive, true)
+              eq(usersTable.isActive, true), isNull(usersTable.deletedAt)
             ));
 
           for (const user of users) {
             if (!user.email) continue;
-            if(stageEvent(ctx.event)&&['student','agent','sub_agent','agent_staff'].includes(user.role))continue;
-            if(stageEvent(ctx.event)&&await genericStageOwned(ctx,user.id,'email'))continue;
             try {
+              if (!await allowGeneralStageDelivery(ctx, user, "email")) continue;
               if (ctx.event === "application.stage_changed" && typeof ctx.data?.applicationId === "number" &&
                 typeof ctx.data.stage === "string" && await hasStageEmailForRecipient(ctx.data.applicationId, ctx.data.stage, user.id)) continue;
               if (!ctx.emailOverride && template?.emailTemplateVersionId) {
@@ -418,17 +418,18 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
       (async () => {
         try {
           const waUsers = await db
-            .select({ id: usersTable.id, phoneE164: usersTable.phoneE164, language: usersTable.language, role: usersTable.role })
+            .select({ id: usersTable.id, phoneE164: usersTable.phoneE164, language: usersTable.language, role: usersTable.role,
+              emailVerified: usersTable.emailVerified, preferences: usersTable.notificationPreferences })
             .from(usersTable)
             .where(and(
               inArray(usersTable.id, userIds),
-              eq(usersTable.isActive, true)
+              eq(usersTable.isActive, true), isNull(usersTable.deletedAt)
             ));
           const recipients = waUsers.filter(u => u.phoneE164);
           if (recipients.length > 0) {
             for (const user of recipients) {
-              if(stageEvent(ctx.event)&&(["student","agent","sub_agent","agent_staff"].includes(user.role)||await genericStageOwned(ctx,user.id,"whatsapp")))continue;
               try {
+                if (!await allowGeneralStageDelivery(ctx, user, "whatsapp")) continue;
                 const tenantConfig = user.role === "student" ? await getStudentTenantWhatsApp(user.id) : null;
                 const config = tenantConfig || await getWhatsAppConfig();
                 if (!config) {
@@ -503,10 +504,49 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
   }
 }
 
-async function genericStageOwned(ctx:DispatchContext,userId:number,channel:'email'|'whatsapp'):Promise<boolean>{
- const kind=stageEvent(ctx.event);if(!kind)return false;
- const id=ctx.data?.[kind+'Id'];if(typeof id!=='number')return true;
- const {pool}=await import('@workspace/db');const table={lead:'leads',student:'students',application:'applications'}[kind];const column=kind==='application'?'stage':'status';
- const r=await pool.query(`SELECT r.assigned_to_id,p.automatic_email,p.automatic_message FROM ${table} r JOIN pipeline_stages p ON p.entity_type=$2 AND p.key=r.${column} WHERE r.id=$1`,[id,kind]);const row=r.rows[0];const policy=channel==='email'?row?.automatic_email:row?.automatic_message;
- return policy?.policyVersion===2&&policy?.enabled&&policy?.recipientType==='assignee'&&row?.assigned_to_id===userId;
+async function allowGeneralStageDelivery(
+  ctx: DispatchContext,
+  user: { id: number; role: string; email?: string | null; emailVerified: boolean | null; preferences: unknown },
+  channel: "email" | "whatsapp",
+): Promise<boolean> {
+  const kind = stageEvent(ctx.event);
+  if (!kind) return true;
+  const id = ctx.data?.[`${kind}Id`];
+  const stage = ctx.data?.stage;
+  if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 1 || typeof stage !== "string") return false;
+  const table = { lead: "leads", student: "students", application: "applications" }[kind];
+  const column = kind === "application" ? "stage" : "status";
+  const studentProjection = kind === "application"
+    ? "LEFT JOIN students s ON s.id=r.student_id AND s.deleted_at IS NULL"
+    : kind === "student" ? "LEFT JOIN students s ON s.id=r.id" : "LEFT JOIN students s ON s.id=r.converted_student_id AND s.deleted_at IS NULL";
+  const { rows: [row] } = await pool.query(
+    `SELECT r.assigned_to_id, s.user_id AS contact_user_id, s.email AS contact_email,
+            a.user_id AS agent_user_id, a.email AS agent_email, p.automatic_email, p.automatic_message
+     FROM ${table} r ${studentProjection}
+     LEFT JOIN agents a ON a.id=COALESCE(r.agent_id,s.agent_id) AND a.status='active' AND a.deleted_at IS NULL
+     LEFT JOIN pipeline_stages p ON p.entity_type=$2 AND p.key=r.${column}
+     WHERE r.id=$1 AND r.deleted_at IS NULL AND r.${column}=$3`,
+    [id, kind, stage],
+  );
+  if (!row) return false;
+  const external = ["student", "agent", "sub_agent", "agent_staff"].includes(user.role);
+  if (external) {
+    const email = user.email?.trim().toLowerCase();
+    const matchingContact = user.role === "student" && row.contact_user_id === user.id && row.agent_user_id == null &&
+      email && email === row.contact_email?.trim().toLowerCase();
+    const matchingAgent = ["agent", "sub_agent"].includes(user.role) && row.agent_user_id === user.id &&
+      email && email === row.agent_email?.trim().toLowerCase();
+    const preferences = user.preferences as Record<string, unknown> | null;
+    const optedIn = preferences?.[kind === "lead" ? "newLeads" : "applicationUpdates"] === true;
+    // General WhatsApp rules do not carry a verified contact/line binding.
+    if (channel !== "email" || !user.emailVerified || !optedIn ||
+        !ctx.recipientUserIds?.includes(user.id) || (!matchingContact && !matchingAgent)) return false;
+  }
+  const policy = channel === "email" ? row.automatic_email : row.automatic_message;
+  if (policy?.enabled !== true) return true;
+  if (policy.recipientType === "assignee") return row.assigned_to_id !== user.id;
+  if (policy.recipientType === "agent") return row.agent_user_id !== user.id;
+  if (policy.recipientType === "contact") return row.contact_user_id !== user.id;
+  if (policy.policyVersion === 2) return (row.agent_user_id ?? row.contact_user_id) !== user.id;
+  return !external;
 }

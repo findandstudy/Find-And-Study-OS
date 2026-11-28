@@ -8,6 +8,9 @@ import { backgroundJobsEnabled } from "../lib/backgroundJobs";
 import { collectSystemHealth, createSystemHealthReader } from "../lib/systemHealth";
 import { readHealthAggregate, readSystemHealthBackups, readSystemHealthStorage, coalesceHealthFileRead } from "../lib/systemHealthReadStore";
 import { getSystemHealthPerformanceSnapshot } from "../lib/systemHealthPerformance";
+import { operationalQueueSummarySql, queueObservation } from "../lib/queueObservations";
+import { stageEmailRuntime, stageWhatsAppRuntime } from "../lib/notifications/stageEmailPolicy";
+import { signedContractPdfWorkerEnabled } from "../lib/signedContractDelivery";
 
 const router: IRouter = Router();
 
@@ -78,6 +81,24 @@ const readOperationalHealth = createSystemHealthReader(() => collectSystemHealth
   releaseId: process.env.RELEASE_ID || "unknown",
 }));
 
+const readOperationalQueues = coalesceHealthFileRead(async () => {
+  const counts = await readHealthAggregate(pool, operationalQueueSummarySql);
+  const jobs = backgroundJobsEnabled();
+  const enabled = {
+    pipelineEmail: jobs && stageEmailRuntime().enabled && process.env.EMAIL_DELIVERY_DISABLED !== "true",
+    pipelineWhatsApp: jobs && stageWhatsAppRuntime().enabled && process.env.ALLOW_LIVE_INTEGRATIONS === "true",
+    websiteTranslations: jobs || process.env.WEBSITE_TRANSLATION_QUEUE_ENABLED === "true",
+    signedPdfs: !jobs && signedContractPdfWorkerEnabled(),
+  } as const;
+  return Object.fromEntries((Object.keys(enabled) as Array<keyof typeof enabled>).map(key => [
+    key, {
+      ...(counts[key] && typeof counts[key] === "object" ? counts[key] : { pending: 0 }),
+      enabled: enabled[key],
+      ...queueObservation(key),
+    },
+  ]));
+});
+
 // Read-only admin projection. No token values, payloads, private paths, raw errors,
 // resource identifiers or student/message content are returned. No repair runs here.
 router.get(
@@ -87,7 +108,9 @@ router.get(
   async (_req, res): Promise<void> => {
     res.setHeader("Cache-Control", "private, no-store");
     try {
-      res.json(await readOperationalHealth());
+      const snapshot = await readOperationalHealth();
+      const queues = await readOperationalQueues().catch(() => null);
+      res.json({ ...snapshot, metrics: { ...snapshot.metrics, queues } });
     } catch {
       // Component errors are isolated by the collector. This unexpected failure
       // boundary also avoids raw errors that may contain connection information.

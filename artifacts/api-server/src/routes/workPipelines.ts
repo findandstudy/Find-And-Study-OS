@@ -1,6 +1,7 @@
 import {emailAutomationHumanAllowed} from "../lib/notifications/emailAutomationPolicy";
 import {configurePipelineNotice} from "../lib/notifications/pipelineNoticeConfiguration";
 import { workConversationState, updateWorkCard } from "../lib/workPipelineInbox";
+import { readPipelineNoticeHistory } from "../lib/notifications/pipelineNoticeHistory";
 import {
   changeWorkActivity,
   workActivityDashboard,
@@ -194,6 +195,21 @@ async function sourceExists(c: any, s: { kind: string; key: string }) {
       "Source is not an active message account or lead form",
     );
 }
+router.get("/work-pipelines/:id/cards/:cardId/delivery-history", wrap(async (req: any, res: any) => {
+  const cardId = WP_UUID.parse(req.params.cardId);
+  const items = await workTx(async (client, tenantId) => {
+    const board = await readWorkBoard(client, tenantId, req.params.id, req.user);
+    const { rowCount } = await client.query(
+      "SELECT 1 FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND id=$3",
+      [tenantId, board.document.id, cardId],
+    );
+    if (!rowCount) throw new WorkError(404, "Record not found");
+    return readPipelineNoticeHistory(client, "work", { tenantId, boardId: board.document.id, cardId });
+  });
+  res.set("Cache-Control", "private, no-store");
+  res.json({ items });
+}));
+
 router.post(
   "/work-pipelines",
   wrap(async (req: any, res: any) => {

@@ -1070,6 +1070,7 @@ export default function WorkPipelines() {
                 <WorkPipelineActivity
                   key={m.cardDraft.document.id}
                   row={m.cardDraft}
+                  boardId={b.id}
                   lang={m.lang}
                   person={m.person}
                   busy={m.busy}
