@@ -2,6 +2,23 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+function TableScrollArea({ label, className, children }: {
+  label: string
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      role="region"
+      aria-label={label}
+      tabIndex={0}
+      className={cn("min-w-0 w-full overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", className)}
+    >
+      {children}
+    </div>
+  )
+}
+
 const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
@@ -110,6 +127,7 @@ TableCaption.displayName = "TableCaption"
 
 export {
   Table,
+  TableScrollArea,
   TableHeader,
   TableBody,
   TableFooter,

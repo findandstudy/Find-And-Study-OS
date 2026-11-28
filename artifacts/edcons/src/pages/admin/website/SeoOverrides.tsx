@@ -183,7 +183,7 @@ export default function WebsiteSeoOverrides() {
 
   return (
     <>
-      <div className="p-6 max-w-6xl mx-auto space-y-6">
+      <div className="min-w-0 w-full space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2"><Search className="w-6 h-6 text-primary" /> {translateUi(uiLanguage, "SEO & AI Discovery")}</h1>

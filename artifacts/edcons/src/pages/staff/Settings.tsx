@@ -1,4 +1,5 @@
 import { DeadlineReminderSettings } from "@/components/DeadlineReminderSettings";
+import { ADMIN_FORM_WIDTH } from "@/components/layout/adminFormWidth";
 import { translateUi, UiText, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
@@ -192,6 +193,7 @@ function SaveButton({ onClick, saving, label }: { onClick: () => void; saving: b
 }
 
 type SettingsTab = "profile" | "language" | "notifications" | "security" | "pipeline" | "seasons" | "branding" | "company" | "seo" | "email" | "documents" | "integrations" | "quicklinks" | "leadAssignment" | "advanced";
+const WIDE_SETTINGS_TABS = new Set<SettingsTab>(["pipeline", "seasons", "quicklinks", "leadAssignment"]);
 
 interface NavItem { id: SettingsTab; label: string; navKey: string; icon: typeof User; group: "personal" | "organization"; managerOnly?: boolean; superAdminOnly?: boolean }
 
@@ -1338,7 +1340,7 @@ export default function SettingsPage() {
             </div>
           </nav>
 
-          <div className="flex-1 min-w-0 max-w-3xl">
+          <div className={WIDE_SETTINGS_TABS.has(activeTab) ? "min-w-0 flex-1" : `flex-1 ${ADMIN_FORM_WIDTH}`}>
             {renderContent()}
           </div>
         </div>

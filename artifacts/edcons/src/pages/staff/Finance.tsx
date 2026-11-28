@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ColumnHeader } from "@/components/ui/column-header";
+import { TableScrollArea } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import {
   DollarSign, TrendingUp, Building2, Users, Plus, Trash2, Pencil,
@@ -36,6 +37,7 @@ import { formatMoney, SUPPORTED_CURRENCIES, listNonZeroCurrencies, type Currency
 import { useCatalogCurrencies } from "@/hooks/use-catalog-currencies";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+const FINANCE_TOOLBAR_ACTIONS = "ms-auto flex min-w-0 max-w-full flex-wrap items-center gap-2 [&>button]:h-auto [&>button]:min-h-9 [&>button]:max-w-full [&>button]:whitespace-normal";
 
 async function downloadExcel(url: string, filename: string): Promise<void> {
   const res = await fetch(url, { credentials: "include" });
@@ -118,19 +120,19 @@ function FinanceStatCard({ icon: Icon, label, rows, color = "text-indigo-600", b
 }) {
   return (
     <>
-    <Card className={`border-t-2 ${borderColor}`}>
+    <Card className={`min-w-0 border-t-2 ${borderColor}`}>
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-3">
-          <div className={`p-1.5 rounded-md bg-slate-50 dark:bg-slate-800/60 ${color}`}>
+          <div className={`shrink-0 p-1.5 rounded-md bg-slate-50 dark:bg-slate-800/60 ${color}`}>
             <Icon className="w-4 h-4" />
           </div>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">{label}</p>
+          <p className="min-w-0 break-words text-[11px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">{label}</p>
         </div>
         <div className="space-y-2">
           {rows.map((row, i) => (
-            <div key={i} className="flex items-center justify-between">
+            <div key={i} className="flex flex-wrap items-baseline justify-between gap-x-2">
               <span className="text-xs text-slate-500 dark:text-slate-400">{row.label}</span>
-              <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{row.value}</span>
+              <span className="min-w-0 break-words text-sm font-bold text-slate-800 dark:text-slate-100">{row.value}</span>
             </div>
           ))}
         </div>
@@ -2246,13 +2248,13 @@ export default function FinancePage() {
 
   return (
     <>
-      <div className="space-y-6 p-6">
-        <div className="flex items-center justify-between">
+      <div className="min-w-0 w-full space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">{t("staffFinance.title")}</h1>
             <p className="text-slate-500 text-sm mt-0.5">{t("staffFinance.subtitle")}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <CurrencySelector value={currency} onChange={setCurrency} />
             <div className="text-sm text-muted-foreground font-medium bg-primary/8 border border-primary/20 px-3 py-1.5 rounded-lg"> {translateUi(uiLanguage, "Season:")} <span className="font-bold text-primary">{season}</span>
             </div>
@@ -2354,14 +2356,14 @@ export default function FinancePage() {
         )}
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
-            <TabsTrigger value="commissions"> {translateUi(uiLanguage, "Commissions")} <Badge className="ml-2 bg-slate-200 text-slate-600 text-xs">{commissions.length}</Badge>
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:inline-flex sm:w-auto sm:max-w-full sm:flex-wrap sm:justify-start">
+            <TabsTrigger value="commissions" className="min-w-0 whitespace-normal"> {translateUi(uiLanguage, "Commissions")} <Badge className="ms-2 shrink-0 bg-slate-200 text-slate-600 text-xs">{commissions.length}</Badge>
             </TabsTrigger>
-            <TabsTrigger value="universities"> {translateUi(uiLanguage, "University Breakdown")} <Badge className="ml-2 bg-slate-200 text-slate-600 text-xs">{uniBreakdown.length}</Badge>
+            <TabsTrigger value="universities" className="min-w-0 whitespace-normal"> {translateUi(uiLanguage, "University Breakdown")} <Badge className="ms-2 shrink-0 bg-slate-200 text-slate-600 text-xs">{uniBreakdown.length}</Badge>
             </TabsTrigger>
-            <TabsTrigger value="fees"> {translateUi(uiLanguage, "Service Fees")} <Badge className="ml-2 bg-slate-200 text-slate-600 text-xs">{fees.length}</Badge>
+            <TabsTrigger value="fees" className="min-w-0 whitespace-normal"> {translateUi(uiLanguage, "Service Fees")} <Badge className="ms-2 shrink-0 bg-slate-200 text-slate-600 text-xs">{fees.length}</Badge>
             </TabsTrigger>
-            <TabsTrigger value="analytics"> {translateUi(uiLanguage, "Analytics")} </TabsTrigger>
+            <TabsTrigger value="analytics" className="min-w-0 whitespace-normal"> {translateUi(uiLanguage, "Analytics")} </TabsTrigger>
           </TabsList>
 
           {/* COMMISSIONS TAB */}
@@ -2369,7 +2371,7 @@ export default function FinancePage() {
             <div className="flex items-center gap-2 flex-wrap">
               <Input
                 placeholder={t("financePage.searchStudentOrUniversity")}
-                className="w-64"
+                className="w-64 max-w-full"
                 value={commSearch}
                 onChange={e => setCommSearch(e.target.value)}
               />
@@ -2395,7 +2397,7 @@ export default function FinancePage() {
                   {filterStaff.map((u: any) => <SelectItem key={u.id} value={String(u.id)}>{[u.firstName, u.lastName].filter(Boolean).join(" ") || translateUi(uiLanguage, "User #{value0}", undefined, { value0: String(u.id) })}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <div className="ml-auto flex items-center gap-2">
+              <div className={FINANCE_TOOLBAR_ACTIONS}>
                 <Button
                   variant="outline"
                   size="sm"
@@ -2433,7 +2435,7 @@ export default function FinancePage() {
             </div>
 
             {commSelected.size > 0 && (
-              <div className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
+              <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
                 <span className="text-sm font-medium text-foreground">
                   {commSelected.size} {translateUi(uiLanguage, "commission")}{commSelected.size > 1 ? "s" : ""} {translateUi(uiLanguage, "selected")} </span>
                 <Button
@@ -2458,7 +2460,8 @@ export default function FinancePage() {
                 <DollarSign className="w-10 h-10 mx-auto mb-2 opacity-30" /> {translateUi(uiLanguage, "No commission records for")} {season}
               </div>
             ) : (
-              <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <>
+              <TableScrollArea label={translateUi(uiLanguage, "Commissions")} className="rounded-xl border border-slate-200">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
@@ -2813,6 +2816,7 @@ export default function FinancePage() {
                     </tr>
                   </tfoot>
                 </table>
+              </TableScrollArea>
                 <TablePagination
                   currentPage={commPg.page}
                   totalItems={totalCommissions}
@@ -2820,7 +2824,7 @@ export default function FinancePage() {
                   onPageChange={commPg.setPage}
                   onPageSizeChange={commPg.setPageSize}
                 />
-              </div>
+              </>
             )}
           </TabsContent>
 
@@ -2849,7 +2853,7 @@ export default function FinancePage() {
               </Button>
             </div>
             {uniSelected.size > 0 && (
-              <div className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
+              <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
                 <span className="text-sm font-medium text-foreground">
                   {uniSelected.size} {translateUi(uiLanguage, "universit")}{uniSelected.size > 1 ? translateUi(uiLanguage, "ies") : "y"} {translateUi(uiLanguage, "selected")} </span>
                 <Button
@@ -2897,7 +2901,7 @@ export default function FinancePage() {
                     </CardContent>
                   </Card>
                 </div>
-                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                <TableScrollArea label={translateUi(uiLanguage, "University Breakdown")} className="rounded-xl border border-slate-200">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
@@ -3125,7 +3129,7 @@ export default function FinancePage() {
                       </tr>
                     </tfoot>
                   </table>
-                </div>
+                </TableScrollArea>
               </>
             )}
           </TabsContent>
@@ -3153,7 +3157,7 @@ export default function FinancePage() {
                   {filterStaff.map((u: any) => <SelectItem key={u.id} value={String(u.id)}>{[u.firstName, u.lastName].filter(Boolean).join(" ") || translateUi(uiLanguage, "User #{value0}", undefined, { value0: String(u.id) })}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <div className="ml-auto flex items-center gap-2">
+              <div className={FINANCE_TOOLBAR_ACTIONS}>
                 <Button
                   variant="outline"
                   size="sm"
@@ -3180,7 +3184,7 @@ export default function FinancePage() {
             </div>
 
             {feeSelected.size > 0 && (
-              <div className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
+              <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
                 <span className="text-sm font-medium text-foreground">
                   {feeSelected.size} {translateUi(uiLanguage, "service fee")}{feeSelected.size > 1 ? "s" : ""} {translateUi(uiLanguage, "selected")} </span>
                 <Button
@@ -3205,7 +3209,8 @@ export default function FinancePage() {
                 <DollarSign className="w-10 h-10 mx-auto mb-2 opacity-30" /> {translateUi(uiLanguage, "No service fees for")} {season}
               </div>
             ) : (
-              <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <>
+              <TableScrollArea label={translateUi(uiLanguage, "Service Fees")} className="rounded-xl border border-slate-200">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
@@ -3512,6 +3517,7 @@ export default function FinancePage() {
                     </tr>
                   </tfoot>
                 </table>
+              </TableScrollArea>
                 <TablePagination
                   currentPage={feePg.page}
                   totalItems={totalFees}
@@ -3519,7 +3525,7 @@ export default function FinancePage() {
                   onPageChange={feePg.setPage}
                   onPageSizeChange={feePg.setPageSize}
                 />
-              </div>
+              </>
             )}
           </TabsContent>
 

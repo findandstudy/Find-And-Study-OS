@@ -158,7 +158,7 @@ export default function WebsiteTranslations() {
 
   return (
     <>
-      <div className="p-6 max-w-6xl mx-auto space-y-6">
+      <div className="min-w-0 w-full space-y-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Languages className="w-6 h-6 text-primary" /> {t("websiteTranslations.title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t("websiteTranslations.subtitle")}</p>

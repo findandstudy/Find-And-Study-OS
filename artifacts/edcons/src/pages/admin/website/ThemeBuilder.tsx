@@ -1,4 +1,5 @@
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { ADMIN_FORM_WIDTH } from "@/components/layout/adminFormWidth";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -199,8 +200,8 @@ export default function WebsiteThemeBuilder() {
   }
 
   return (
-      <div className="max-w-5xl mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className={`${ADMIN_FORM_WIDTH} mx-auto space-y-6`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Palette className="w-6 h-6 text-primary" />
             <div>
@@ -208,7 +209,7 @@ export default function WebsiteThemeBuilder() {
               <p className="text-sm text-muted-foreground"> {translateUi(uiLanguage, "Customize your website appearance. Inherits from Settings > Branding as defaults.")} </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={handleReset} disabled={resetMutation.isPending}>
               <RotateCcw className="w-4 h-4 mr-1" /> {resetMutation.isPending ? translateUi(uiLanguage, "Resetting...") : translateUi(uiLanguage, "Reset to Defaults")}
             </Button>

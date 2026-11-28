@@ -122,7 +122,7 @@ export default function WebsitePublishHistory() {
   ];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-6">
+    <div className="min-w-0 w-full space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">

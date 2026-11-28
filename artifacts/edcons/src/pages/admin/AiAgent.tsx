@@ -1,4 +1,5 @@
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { ADMIN_FORM_WIDTH } from "@/components/layout/adminFormWidth";
 import { useState, useEffect, useCallback } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import type {
@@ -529,7 +530,7 @@ export default function AiAgent() {
 
   if (!selectedBotId) {
     return (
-      <div className="space-y-6 py-2 max-w-4xl">
+      <div className={`${ADMIN_FORM_WIDTH} mx-auto space-y-6`}>
         <div className="flex items-center gap-3">
           <div className="rounded-xl bg-primary/10 p-2.5">
             <Bot className="h-5 w-5 text-primary" />
@@ -596,7 +597,7 @@ export default function AiAgent() {
       ];
 
   return (
-    <div className="space-y-6 py-2 max-w-4xl">
+    <div className={`${ADMIN_FORM_WIDTH} mx-auto space-y-6`}>
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">

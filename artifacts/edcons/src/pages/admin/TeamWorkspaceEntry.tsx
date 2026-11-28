@@ -50,14 +50,14 @@ export default function TeamWorkspaceEntry() {
     return () => { mounted = false; controller.abort(); window.clearTimeout(timeout); };
   }, [attempt, setLocation]);
 
-  if (phase === "loading") return <section className="p-3 md:p-6" role="status" aria-live="polite">
+  if (phase === "loading") return <section role="status" aria-live="polite">
     <div className="flex items-center gap-3 text-muted-foreground">
       <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
       {copy("Çalışma alanı açılıyor…", "Opening workspace…")}
     </div>
   </section>;
 
-  return <section className="space-y-5 p-3 md:p-6 max-w-4xl">
+  return <section className="min-w-0 w-full space-y-5">
     <div className="space-y-2">
       <h1 className="text-2xl font-semibold">{copy("Takım çalışma alanı", "Team workspace")}</h1>
       {phase === "ready" && projects.length > 1 && <p className="text-muted-foreground">{copy(

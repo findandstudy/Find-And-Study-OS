@@ -399,7 +399,7 @@ export default function WebsiteCollections() {
   const [tab, setTab] = useState("offices");
 
   return (
-      <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <div className="min-w-0 w-full space-y-6">
         <div className="flex items-center gap-3">
           <Layers className="w-6 h-6 text-primary" />
           <div>

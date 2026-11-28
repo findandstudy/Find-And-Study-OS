@@ -1,4 +1,5 @@
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { ADMIN_FORM_WIDTH } from "@/components/layout/adminFormWidth";
 import { useEffect, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
@@ -174,7 +175,7 @@ export default function AiExtractorDetail() {
   if (loading) return <div className="p-6 text-sm text-muted-foreground">{t("aiExtractor.loading")}</div>;
 
   return (
-    <div className="p-6 space-y-4 max-w-5xl">
+    <div className={`${ADMIN_FORM_WIDTH} mx-auto space-y-4`}>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <Button variant="ghost" onClick={() => setLocation("/admin/ai-extractors")}>
           <ArrowLeft className="h-4 w-4 mr-2" /> {t("aiExtractor.back")}

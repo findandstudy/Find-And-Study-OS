@@ -53,9 +53,9 @@ export function TablePagination({
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 sm:justify-end">
         {onPageSizeChange && (
-          <div className="flex items-center gap-1.5 mr-4">
+          <div className="flex items-center gap-1.5 sm:me-4">
             <span className="text-sm text-muted-foreground whitespace-nowrap">{translateUi(uiLanguage, "Rows:")}</span>
             <Select value={String(pageSize)} onValueChange={v => onPageSizeChange(Number(v))}>
               <SelectTrigger className="h-8 w-[70px] text-sm">
@@ -70,7 +70,7 @@ export function TablePagination({
           </div>
         )}
 
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 flex-wrap items-center justify-center gap-1">
           <Button
             type="button"
             variant="outline"

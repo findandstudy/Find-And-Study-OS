@@ -151,7 +151,7 @@ export default function CampaignsPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-[1400px] mx-auto" data-testid="page-campaigns">
+    <div className="min-w-0 w-full" data-testid="page-campaigns">
       <div className="flex items-start justify-between gap-4 mb-5 flex-wrap">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">

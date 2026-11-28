@@ -160,7 +160,7 @@ export default function AiActionQueue() {
   const { paged: pagedHistory, total: historyTotal } = historyPagination.paginate(history);
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
+    <div className="min-w-0 w-full space-y-6">
       <div>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
           <ListChecks className="h-6 w-6 text-indigo-500" /> {t("aiActionQueue.title")}

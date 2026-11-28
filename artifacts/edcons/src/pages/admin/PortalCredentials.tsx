@@ -6,6 +6,7 @@
  */
 
 import { useState } from "react";
+import { ADMIN_FORM_WIDTH } from "@/components/layout/adminFormWidth";
 import {
   useGetUniversityPortals,
   useSetPortalCredentials,
@@ -51,7 +52,7 @@ export default function PortalCredentials() {
   const portals: UniversityPortal[] = Array.isArray(portalsRaw) ? portalsRaw : [];
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
+    <div className={`${ADMIN_FORM_WIDTH} mx-auto space-y-6`}>
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">

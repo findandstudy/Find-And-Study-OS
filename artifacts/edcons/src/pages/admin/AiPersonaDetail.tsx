@@ -1,4 +1,5 @@
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { ADMIN_FORM_WIDTH } from "@/components/layout/adminFormWidth";
 import { useEffect, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
@@ -226,7 +227,7 @@ export default function AiPersonaDetail() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
+    <div className={`${ADMIN_FORM_WIDTH} mx-auto space-y-6`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => setLocation("/admin/ai-personas")}>

@@ -211,7 +211,7 @@ const EMPTY_AI_BRIEF: AiBlogBrief = {
   length: "standard",
 };
 
-export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }) {
+export default function WebsiteBlog() {
   const { lang: uiLanguage } = useUiLanguage();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -559,7 +559,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
 
   return (
     <>
-      <div className={embedded ? "space-y-6" : "max-w-6xl mx-auto p-6 space-y-6"}>
+      <div className="min-w-0 w-full space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <BookOpen className="w-6 h-6 text-primary" />

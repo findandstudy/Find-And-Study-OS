@@ -180,7 +180,7 @@ export default function WebsitePages() {
   </div>;
 
   return (
-      <div className="mx-auto w-full min-w-0 max-w-[1680px] space-y-5 overflow-x-clip">
+      <div className="min-w-0 w-full space-y-5 overflow-x-clip">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <FileText className="w-6 h-6 text-primary" />
@@ -231,7 +231,7 @@ export default function WebsitePages() {
         {area === "dynamic" && <CatalogPagesInventory />}
         {area === "blog" && (
           <Suspense fallback={<div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground" role="status">{copy("Loading blog workspace…", "Blog çalışma alanı yükleniyor…")}</div>}>
-            <WebsiteBlog embedded />
+            <WebsiteBlog />
           </Suspense>
         )}
         {area === "templates" && <DetailTemplates ref={templates} />}

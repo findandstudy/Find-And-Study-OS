@@ -19,6 +19,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { CountryFlag, countryNameToIso } from "@/components/CountryFlag";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ColumnHeader } from "@/components/ui/column-header";
+import { TableScrollArea } from "@/components/ui/table";
 import { apiFetch } from "@/lib/apiFetch";
 import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { useDocumentTypeCatalog, useResolveDocMeta } from "@/lib/programDocTypes";
@@ -38,6 +39,9 @@ import {
 } from "@/lib/catalogBulkImport";
 
 /* ─── helpers ──────────────────────────────────────────────── */
+
+const CATALOG_TOOLBAR = "flex min-w-0 flex-wrap items-center gap-2 [&>button]:h-auto [&>button]:min-h-9 [&>button]:max-w-full [&>button]:whitespace-normal";
+const CATALOG_SEARCH = "relative min-w-0 grow basis-full sm:basis-40 sm:max-w-xs";
 
 function catalogEntry(tab: CatalogSourceTab) {
   const entry = parseCatalogEntryNavigation(window.location.search);
@@ -916,10 +920,10 @@ function CountriesTab() {
   return (
     <>
     <div className="space-y-4">
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder={t("catalogPage.searchCountries")} className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
+      <div className={CATALOG_TOOLBAR}>
+        <div className={CATALOG_SEARCH}>
+          <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Input placeholder={t("catalogPage.searchCountries")} className="ps-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
         </div>
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
@@ -936,7 +940,7 @@ function CountriesTab() {
         <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addCountry")}</Button>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      <TableScrollArea label={t("adminCatalog.tabCountries")} className="rounded-lg border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -983,7 +987,7 @@ function CountriesTab() {
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScrollArea>
       {allSelected && total > sorted.length && (
         <SelectAllBanner
           selectedCount={selected.size}
@@ -1309,10 +1313,10 @@ function CitiesTab() {
   return (
     <>
     <div className="space-y-4">
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[160px] max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder={t("catalogPage.searchCities")} className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
+      <div className={CATALOG_TOOLBAR}>
+        <div className={CATALOG_SEARCH}>
+          <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Input placeholder={t("catalogPage.searchCities")} className="ps-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
         </div>
         <SearchableSelect
           value={filterCountry}
@@ -1344,7 +1348,7 @@ function CitiesTab() {
         <Button onClick={() => { setForm({ isActive: true, transportModes: [] }); setExternalForm({}); setWeatherState(null); }}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addCity")}</Button>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      <TableScrollArea label={t("adminCatalog.tabCities")} className="rounded-lg border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -1389,7 +1393,7 @@ function CitiesTab() {
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScrollArea>
       {allSelected && total > sorted.length && (
         <SelectAllBanner
           selectedCount={selected.size}
@@ -1821,10 +1825,10 @@ function UniversitiesTab() {
   return (
     <>
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder={t("catalogPage.searchUniversities")} className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+      <div className={CATALOG_TOOLBAR}>
+        <div className={CATALOG_SEARCH}>
+          <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Input placeholder={t("catalogPage.searchUniversities")} className="ps-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
         {canChangeUniversityStatus && selected.size > 0 && <>
           <Button variant="outline" size="sm" disabled={universityStatusBusy || selected.size > 5000} onClick={() => void changeUniversityStatus(true)} data-testid="university-bulk-activate"><Check className="h-4 w-4 me-2" />{t("common.active")} ({selected.size})</Button>
@@ -1845,7 +1849,7 @@ function UniversitiesTab() {
         <Button onClick={() => { setForm({ isActive: true, status: "open", applicationPeriods: [] }); setSelCountryId(null); }}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addUniversity")}</Button>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      <TableScrollArea label={t("adminCatalog.tabUniversities")} className="rounded-lg border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -1928,7 +1932,7 @@ function UniversitiesTab() {
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScrollArea>
       {allSelected && total > sorted.length && (
         <SelectAllBanner
           selectedCount={selected.size}
@@ -2258,12 +2262,12 @@ function UniversitiesTab() {
             <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Uygun")}</p><p className="text-2xl font-bold text-emerald-700">{reminderPreview?.summary?.eligible ?? 0}</p></div>
             <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Dışlanan")}</p><p className="text-2xl font-bold text-amber-700">{reminderPreview?.summary?.excluded ?? 0}</p></div>
           </div>
-          <div className="rounded-lg border overflow-hidden">
+          <TableScrollArea label={t("deadlineReminders.title")} className="rounded-lg border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50"><tr><th className="px-3 py-2 text-left">{translateUi(uiLanguage, "Sentetik kayıt")}</th><th className="px-3 py-2 text-left">{translateUi(uiLanguage, "Kanal")}</th><th className="px-3 py-2 text-left">{translateUi(uiLanguage, "Sonuç")}</th><th className="px-3 py-2 text-left">{translateUi(uiLanguage, "Neden")}</th></tr></thead>
               <tbody className="divide-y">{(reminderPreview?.data ?? []).map((row: any) => <tr key={row.reference}><td className="px-3 py-2 font-mono text-xs">{row.reference}</td><td className="px-3 py-2">{row.channel ?? "—"}</td><td className="px-3 py-2"><Badge variant="outline" className={row.eligible ? "border-emerald-300 text-emerald-700" : "border-amber-300 text-amber-700"}>{row.eligible ? translateUi(uiLanguage, "Uygun") : translateUi(uiLanguage, "Dışlandı")}</Badge></td><td className="px-3 py-2 text-xs text-muted-foreground">{row.reason}</td></tr>)}</tbody>
             </table>
-          </div>
+          </TableScrollArea>
           {reminderPreview?.timing&&<p className="text-sm"><span>{t('deadlineReminders.scheduledOn')}: </span><bdi dir="ltr">{reminderPreview.timing.scheduledOn} · {reminderPreview.timing.timezone}</bdi></p>}
           <DialogFooter><Button variant="outline" onClick={() => setReminderPreview(null)}>{translateUi(uiLanguage, "Kapat")}</Button></DialogFooter>
         </DialogContent>
@@ -2828,12 +2832,12 @@ function ProgramsTab() {
   return (
     <>
     <div className="space-y-4">
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[160px] max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+      <div className={CATALOG_TOOLBAR}>
+        <div className={CATALOG_SEARCH}>
+          <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <Input
             placeholder={t("catalogPage.searchPrograms")}
-            className="pl-8"
+            className="ps-8"
             value={search}
             onChange={e => {
               setSearch(e.target.value);
@@ -2960,7 +2964,7 @@ function ProgramsTab() {
         <Button onClick={() => setForm({ isActive: true, currency: "USD" })}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addProgram")}</Button>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      <TableScrollArea label={t("adminCatalog.tabPrograms")} className="rounded-lg border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -3054,7 +3058,7 @@ function ProgramsTab() {
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScrollArea>
       {allSelected && total > sorted.length && (
         <SelectAllBanner
           selectedCount={selected.size}
@@ -3383,7 +3387,7 @@ function ProgramsTab() {
               {t("catalogPage.translationStatus")} · {translationProgram?.name}
             </DialogTitle>
           </DialogHeader>
-          <div className="rounded-lg border overflow-hidden">
+          <TableScrollArea label={t("catalogPage.translationStatus")} className="rounded-lg border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
@@ -3425,7 +3429,7 @@ function ProgramsTab() {
                 })}
               </tbody>
             </table>
-          </div>
+          </TableScrollArea>
           <DialogFooter>
             <Button variant="outline" onClick={() => setTranslationProgram(null)}>{t("common.close")}</Button>
             <Button
@@ -5257,11 +5261,11 @@ export default function AdminCatalog() {
         <p className="text-muted-foreground text-sm mt-1">{t("adminCatalog.subtitle")}</p>
       </div>
       <Tabs defaultValue={parseCatalogEntryNavigation(window.location.search).tab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-5">
           {tabs.map(tab => (
-            <TabsTrigger key={tab.value} value={tab.value} className="flex items-center gap-1.5">
-              <tab.icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{tab.label}</span>
+            <TabsTrigger key={tab.value} value={tab.value} className="min-w-0 items-center gap-1.5 whitespace-normal px-2 py-1.5">
+              <tab.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 break-words">{tab.label}</span>
             </TabsTrigger>
           ))}
         </TabsList>
