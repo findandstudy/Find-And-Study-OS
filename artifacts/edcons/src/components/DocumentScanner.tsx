@@ -655,6 +655,7 @@ function CornerEditor({ snap, corners, onChange, hint }: {
   onChange: (c: Corners) => void;
   hint: string;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const wrapRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [imgRect, setImgRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -758,7 +759,7 @@ function CornerEditor({ snap, corners, onChange, hint }: {
           <div
             key={k}
             role="slider"
-            aria-label={`corner-${k}`}
+            aria-label={translateUi(uiLanguage, "corner-{value0}", undefined, { value0: String(k) })}
             onPointerDown={onPointerDown(k)}
             className="absolute w-9 h-9 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/95 border-2 border-emerald-500 shadow-lg cursor-grab active:cursor-grabbing touch-none"
             style={{ left: p.x, top: p.y }}

@@ -2523,7 +2523,7 @@ function InboxTab() {
                         <span
                           className="inline-flex h-4 max-w-[7.5rem] shrink-0 items-center gap-1 rounded-full border px-1.5 text-[9px] font-bold leading-none"
                           style={{ color: lineBrand.color, borderColor: `${lineBrand.color}59`, backgroundColor: `${lineBrand.color}18` }}
-                          title={`Gelen hat: ${lineBrand.label}`}
+                          title={translateUi(uiLanguage, "Gelen hat: {value0}", undefined, { value0: String(lineBrand.label) })}
                           data-testid={`line-badge-${c.id}`}
                         >
                           <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: lineBrand.color }} />
@@ -2632,7 +2632,7 @@ function InboxTab() {
                         variant="outline"
                         className="gap-1 text-[10px]"
                         style={{ color: activeLineBrand.color, borderColor: `${activeLineBrand.color}59`, backgroundColor: `${activeLineBrand.color}18` }}
-                        title={`Gelen hat: ${activeLineBrand.label}`}
+                        title={translateUi(uiLanguage, "Gelen hat: {value0}", undefined, { value0: String(activeLineBrand.label) })}
                         data-testid="active-line-badge"
                       >
                         <span
@@ -2647,7 +2647,7 @@ function InboxTab() {
                         href={linkedHref}
                         target="_blank"
                         rel="noopener noreferrer"
-                        aria-label={`Open ${linkedLabel} #${ext.studentId || ext.leadId || ext.agentId} in a new tab`}
+                        aria-label={translateUi(uiLanguage, "Open {value0} #{value1} in a new tab", undefined, { value0: String(linkedLabel), value1: String(ext.studentId || ext.leadId || ext.agentId) })}
                       >
                         <Badge variant="outline" className="text-[10px] gap-1 cursor-pointer hover:bg-primary/10">
                           <Link2 className="w-3 h-3" /> {linkedLabel} #{ext.studentId || ext.leadId || ext.agentId}
@@ -4670,7 +4670,7 @@ function BroadcastTab() {
           targetRoles: targetAudience === "role" ? targetRoles : [],
         }),
       });
-      toast({ title: `Internal announcement sent to ${(res as any).recipientCount} users` });
+      toast({ title: translateUi(uiLanguage, "Internal announcement sent to {value0} users", undefined, { value0: String((res as any).recipientCount) }) });
       setTitle("");
       setContent("");
       setBroadcasts(prev => [res as any, ...prev]);
@@ -4722,7 +4722,7 @@ function BroadcastTab() {
         method: "POST",
       }) as any;
       toast({
-        title: `${response?.retried || 0} safe failure(s) queued again`,
+        title: translateUi(uiLanguage, "{value0} safe failure(s) queued again", undefined, { value0: String(response?.retried || 0) }),
         description: translateUi(uiLanguage, "Recipients with an unknown provider outcome remain blocked for manual review."),
       });
       setCampaignDetails((current) => {

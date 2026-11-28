@@ -1393,9 +1393,9 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Personal Information")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder={translateUi(uiLanguage, "First name")} latinUppercase />
-              <F required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder={translateUi(uiLanguage, "Last name")} latinUppercase />
-              <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder={translateUi(uiLanguage, "email@example.com")} />
+              <F required label={translateUi(uiLanguage, "First Name")} value={form.firstName} onChange={field("firstName")} placeholder={translateUi(uiLanguage, "First name")} latinUppercase />
+              <F required label={translateUi(uiLanguage, "Last Name")} value={form.lastName} onChange={field("lastName")} placeholder={translateUi(uiLanguage, "Last name")} latinUppercase />
+              <F label={translateUi(uiLanguage, "Email")} value={form.email} onChange={field("email")} type="email" placeholder={translateUi(uiLanguage, "email@example.com")} />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Phone")}</Label>
                 <div className="flex gap-1.5">
@@ -1403,7 +1403,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                   <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 000 0000" className="rounded-xl flex-1 h-9" />
                 </div>
               </div>
-              <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
+              <F label={translateUi(uiLanguage, "Date of Birth")} value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Gender")}</Label>
                 <select
@@ -1420,9 +1420,9 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Nationality")}</Label>
                 <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
               </div>
-              <F label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder={translateUi(uiLanguage, "Mother's name")} latinUppercase />
-              <F label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder={translateUi(uiLanguage, "Father's name")} latinUppercase />
-              <F label="Address" value={form.address} onChange={field("address")} placeholder={translateUi(uiLanguage, "Full home address")} className="col-span-2" />
+              <F label={translateUi(uiLanguage, "Mother's Name")} value={form.motherName} onChange={field("motherName")} placeholder={translateUi(uiLanguage, "Mother's name")} latinUppercase />
+              <F label={translateUi(uiLanguage, "Father's Name")} value={form.fatherName} onChange={field("fatherName")} placeholder={translateUi(uiLanguage, "Father's name")} latinUppercase />
+              <F label={translateUi(uiLanguage, "Address")} value={form.address} onChange={field("address")} placeholder={translateUi(uiLanguage, "Full home address")} className="col-span-2" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Status")}</Label>
                 <Select value={form.status} disabled>
@@ -1440,9 +1440,9 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Passport / Identity")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder={translateUi(uiLanguage, "e.g. AB1234567")} className="col-span-2" />
-              <F label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" />
-              <F label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" />
+              <F label={translateUi(uiLanguage, "Passport Number")} value={form.passportNumber} onChange={field("passportNumber")} placeholder={translateUi(uiLanguage, "e.g. AB1234567")} className="col-span-2" />
+              <F label={translateUi(uiLanguage, "Issue Date")} value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" />
+              <F label={translateUi(uiLanguage, "Expiry Date")} value={form.passportExpiry} onChange={field("passportExpiry")} type="date" />
             </div>
           </section>
 
@@ -1452,10 +1452,10 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Education")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder={translateUi(uiLanguage, "e.g. Ankara Fen Lisesi")} className="col-span-2" />
-              <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder={translateUi(uiLanguage, "e.g. Istanbul University")} className="col-span-2" />
-              <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder={translateUi(uiLanguage, "e.g. Bogazici University")} className="col-span-2" />
-              <F label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
+              <F label={translateUi(uiLanguage, "High School")} value={form.highSchool} onChange={field("highSchool")} placeholder={translateUi(uiLanguage, "e.g. Ankara Fen Lisesi")} className="col-span-2" />
+              <F label={translateUi(uiLanguage, "University (Bachelor)")} value={form.universityBachelor} onChange={field("universityBachelor")} placeholder={translateUi(uiLanguage, "e.g. Istanbul University")} className="col-span-2" />
+              <F label={translateUi(uiLanguage, "University (Master)")} value={form.universityMaster} onChange={field("universityMaster")} placeholder={translateUi(uiLanguage, "e.g. Bogazici University")} className="col-span-2" />
+              <F label={translateUi(uiLanguage, "Graduation Year")} value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "GPA")}</Label>
                 <div className="flex gap-1.5">
@@ -1479,7 +1479,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                   </Select>
                 </div>
               </div>
-              <F label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder={translateUi(uiLanguage, "e.g. IELTS 7.0, TOEFL 100")} className="col-span-2" />
+              <F label={translateUi(uiLanguage, "Language Score")} value={form.languageScore} onChange={field("languageScore")} placeholder={translateUi(uiLanguage, "e.g. IELTS 7.0, TOEFL 100")} className="col-span-2" />
             </div>
           </section>
 
@@ -1518,7 +1518,7 @@ function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: 
         <p className="text-sm text-muted-foreground py-2">{translateUi(uiLanguage, "This action cannot be undone.")}</p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? translateUi(uiLanguage, "Deleting...") : `Delete ${count}`}</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? translateUi(uiLanguage, "Deleting...") : translateUi(uiLanguage, "Delete {value0}", undefined, { value0: String(count) })}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1843,7 +1843,7 @@ export default function AgentStudentsPage() {
     }
     setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
     invalidate();
-    if (failed === 0) toast({ title: `${ids.length} student${ids.length > 1 ? "s" : ""} deleted` });
+    if (failed === 0) toast({ title: translateUi(uiLanguage, "{value0} student{value1} deleted", undefined, { value0: String(ids.length), value1: String(ids.length > 1 ? "s" : "") }) });
     else toast({ title: translateUi(uiLanguage, "Some could not be deleted"), variant: "destructive" });
   }
 
@@ -1884,7 +1884,7 @@ export default function AgentStudentsPage() {
       invalidate();
       queryClient.invalidateQueries({ queryKey: [`/api/students/${studentId}`] });
       const colLabel = pipelineStages.find(s => s.key === targetStatus)?.label ?? targetStatus;
-      toast({ title: `Student moved → ${colLabel}` });
+      toast({ title: translateUi(uiLanguage, "Student moved → {value0}", undefined, { value0: String(colLabel) }) });
     }).catch(() => {
       toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Could not move student"), variant: "destructive" });
       invalidate();
@@ -1958,12 +1958,12 @@ export default function AgentStudentsPage() {
                         aria-label={t("agentStudents.selectAll")}
                       />
                     </TableHead>
-                    <StuSortHeader label="Name" sortKey="name" currentSort={sort} onSort={handleSort} />
-                    <StuSortHeader label="Email" sortKey="email" currentSort={sort} onSort={handleSort} />
-                    <StuSortHeader label="Nationality" sortKey="nationality" currentSort={sort} onSort={handleSort} />
-                    <StuSortHeader label="Passport" sortKey="passport" currentSort={sort} onSort={handleSort} />
-                    <StuSortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
-                    <StuSortHeader label="Joined" sortKey="date" currentSort={sort} onSort={handleSort} />
+                    <StuSortHeader label={translateUi(uiLanguage, "Name")} sortKey="name" currentSort={sort} onSort={handleSort} />
+                    <StuSortHeader label={translateUi(uiLanguage, "Email")} sortKey="email" currentSort={sort} onSort={handleSort} />
+                    <StuSortHeader label={translateUi(uiLanguage, "Nationality")} sortKey="nationality" currentSort={sort} onSort={handleSort} />
+                    <StuSortHeader label={translateUi(uiLanguage, "Passport")} sortKey="passport" currentSort={sort} onSort={handleSort} />
+                    <StuSortHeader label={translateUi(uiLanguage, "Status")} sortKey="status" currentSort={sort} onSort={handleSort} />
+                    <StuSortHeader label={translateUi(uiLanguage, "Joined")} sortKey="date" currentSort={sort} onSort={handleSort} />
                     <TableHead className="w-20 text-right">{translateUi(uiLanguage, "Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>

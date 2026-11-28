@@ -149,7 +149,7 @@ function LogoUploader({ label, description, value, onChange, bgClass, dims }: { 
       if (!putRes.ok) throw new Error("Upload failed");
       const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
       onChange(`${BASE_URL}/api/storage/objects${strippedPath}`);
-      toast({ title: `${label} uploaded` });
+      toast({ title: translateUi(uiLanguage, "{value0} uploaded", undefined, { value0: String(label) }) });
     } catch (err: any) {
       toast({ title: translateUi(uiLanguage, "Upload failed"), description: err.message, variant: "destructive" });
     } finally { setUploading(false); }
@@ -286,7 +286,7 @@ export default function SettingsPage() {
       });
       setSettings(prev => ({ ...prev, ...(res as any) }));
       if (section === "branding") await refreshSettings();
-      toast({ title: `${section.charAt(0).toUpperCase() + section.slice(1)} saved` });
+      toast({ title: translateUi(uiLanguage, "{value0} saved", undefined, { value0: String(section.charAt(0).toUpperCase() + section.slice(1)) }) });
     } catch (err: any) {
       toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
     } finally { setSectionSaving(null); }
@@ -497,12 +497,12 @@ export default function SettingsPage() {
           </div>
         </div>
         <div className="grid sm:grid-cols-2 gap-5">
-          <FieldGroup label="First Name"><Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="rounded-xl" /></FieldGroup>
-          <FieldGroup label="Last Name"><Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="rounded-xl" /></FieldGroup>
-          <FieldGroup label="Email" className="sm:col-span-2">
+          <FieldGroup label={translateUi(uiLanguage, "First Name")}><Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="rounded-xl" /></FieldGroup>
+          <FieldGroup label={translateUi(uiLanguage, "Last Name")}><Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="rounded-xl" /></FieldGroup>
+          <FieldGroup label={translateUi(uiLanguage, "Email")} className="sm:col-span-2">
             <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="rounded-xl" />
           </FieldGroup>
-          <FieldGroup label="Phone" className="sm:col-span-2">
+          <FieldGroup label={translateUi(uiLanguage, "Phone")} className="sm:col-span-2">
             <div className="flex gap-2">
               <PhoneCodePicker value={form.phoneCode} onChange={v => setForm(f => ({ ...f, phoneCode: v }))} triggerClassName="min-w-[100px] h-10 shrink-0" />
               <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 123 4567" className="rounded-xl flex-1" />
@@ -513,16 +513,16 @@ export default function SettingsPage() {
       <Card className="border-none shadow-lg shadow-black/5 p-6 mt-6">
         <SectionHeader title={t("settingsPage.workIdentity")} description={t("settingsPage.workIdentityDesc")} />
         <div className="grid sm:grid-cols-2 gap-5">
-          <FieldGroup label="Start Date">
+          <FieldGroup label={translateUi(uiLanguage, "Start Date")}>
             <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} className="rounded-xl" />
           </FieldGroup>
-          <FieldGroup label="Passport Number">
+          <FieldGroup label={translateUi(uiLanguage, "Passport Number")}>
             <Input value={form.passportNumber} onChange={e => setForm(f => ({ ...f, passportNumber: e.target.value }))} placeholder={translateUi(uiLanguage, "Enter passport number")} className="rounded-xl" />
           </FieldGroup>
-          <FieldGroup label="Home Address" className="sm:col-span-2">
+          <FieldGroup label={translateUi(uiLanguage, "Home Address")} className="sm:col-span-2">
             <Input value={form.homeAddress} onChange={e => setForm(f => ({ ...f, homeAddress: e.target.value }))} placeholder={translateUi(uiLanguage, "Enter your home address")} className="rounded-xl" />
           </FieldGroup>
-          <FieldGroup label="Employment Contract">
+          <FieldGroup label={translateUi(uiLanguage, "Employment Contract")}>
             <div className="flex items-center gap-3">
               {form.contractUrl ? (
                 <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -541,7 +541,7 @@ export default function SettingsPage() {
               <input ref={contractInputRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleContractUpload(f); e.target.value = ""; }} />
             </div>
           </FieldGroup>
-          <FieldGroup label="Passport Document">
+          <FieldGroup label={translateUi(uiLanguage, "Passport Document")}>
             <div className="flex items-center gap-3">
               {form.passportUrl ? (
                 <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -566,10 +566,10 @@ export default function SettingsPage() {
       <Card className="border-none shadow-lg shadow-black/5 p-6 mt-6">
         <SectionHeader title={t("settingsPage.emergencyContact")} description={t("settingsPage.emergencyContactDesc")} />
         <div className="grid sm:grid-cols-3 gap-5">
-          <FieldGroup label="Full Name" className="sm:col-span-2">
+          <FieldGroup label={translateUi(uiLanguage, "Full Name")} className="sm:col-span-2">
             <Input value={form.emergencyContactName} onChange={e => setForm(f => ({ ...f, emergencyContactName: e.target.value }))} placeholder={translateUi(uiLanguage, "Enter emergency contact name")} className="rounded-xl" />
           </FieldGroup>
-          <FieldGroup label="Phone Number">
+          <FieldGroup label={translateUi(uiLanguage, "Phone Number")}>
             <div className="flex gap-2">
               <PhoneCodePicker value={form.emergencyPhoneCode} onChange={v => setForm(f => ({ ...f, emergencyPhoneCode: v }))} triggerClassName="min-w-[100px] h-10 shrink-0" />
               <Input value={form.emergencyPhone} onChange={e => setForm(f => ({ ...f, emergencyPhone: e.target.value }))} placeholder="555 123 4567" className="rounded-xl flex-1" />
@@ -581,13 +581,13 @@ export default function SettingsPage() {
       <Card className="border-none shadow-lg shadow-black/5 p-6 mt-6">
         <SectionHeader title={t("settingsPage.changePassword")} description={t("settingsPage.changePasswordDesc")} />
         <div className="space-y-4 max-w-md">
-          <FieldGroup label="Current Password">
+          <FieldGroup label={translateUi(uiLanguage, "Current Password")}>
             <Input type="password" value={pwForm.currentPassword} onChange={e => setPwForm(f => ({ ...f, currentPassword: e.target.value }))} placeholder={translateUi(uiLanguage, "Enter current password")} className="rounded-xl" />
           </FieldGroup>
-          <FieldGroup label="New Password">
+          <FieldGroup label={translateUi(uiLanguage, "New Password")}>
             <Input type="password" value={pwForm.newPassword} onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))} placeholder={translateUi(uiLanguage, "Enter new password")} className="rounded-xl" />
           </FieldGroup>
-          <FieldGroup label="Confirm New Password">
+          <FieldGroup label={translateUi(uiLanguage, "Confirm New Password")}>
             <Input type="password" value={pwForm.confirmPassword} onChange={e => setPwForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder={translateUi(uiLanguage, "Confirm new password")} className="rounded-xl" />
           </FieldGroup>
         </div>
@@ -749,27 +749,27 @@ export default function SettingsPage() {
         <Card className="border-none shadow-lg shadow-black/5 p-6">
           <SectionHeader title={t("settingsPage.systemLogos")} description={t("settingsPage.systemLogosDesc")} />
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            <LogoUploader label="Light Mode Logo" dims="300x80px, PNG/SVG" value={s.logoUrl || ""} onChange={v => updateSettings({ logoUrl: v })} bgClass="bg-white" />
-            <LogoUploader label="Dark Mode Logo" dims="300x80px, PNG/SVG" value={s.logoDarkUrl || ""} onChange={v => updateSettings({ logoDarkUrl: v })} bgClass="bg-gray-900" />
-            <LogoUploader label="Square Logo" dims="200x200px" value={s.logoSquareUrl || ""} onChange={v => updateSettings({ logoSquareUrl: v })} />
-            <LogoUploader label="Favicon" dims="32x32px, ICO/PNG" value={s.faviconUrl || ""} onChange={v => updateSettings({ faviconUrl: v })} />
-            <LogoUploader label="Apple Touch Icon" dims="180x180px, PNG" value={s.appleTouchIconUrl || ""} onChange={v => updateSettings({ appleTouchIconUrl: v })} />
-            <LogoUploader label="PWA / App Icon" dims="512x512px, PNG" value={s.pwaIconUrl || ""} onChange={v => updateSettings({ pwaIconUrl: v })} />
+            <LogoUploader label={translateUi(uiLanguage, "Light Mode Logo")} dims="300x80px, PNG/SVG" value={s.logoUrl || ""} onChange={v => updateSettings({ logoUrl: v })} bgClass="bg-white" />
+            <LogoUploader label={translateUi(uiLanguage, "Dark Mode Logo")} dims="300x80px, PNG/SVG" value={s.logoDarkUrl || ""} onChange={v => updateSettings({ logoDarkUrl: v })} bgClass="bg-gray-900" />
+            <LogoUploader label={translateUi(uiLanguage, "Square Logo")} dims="200x200px" value={s.logoSquareUrl || ""} onChange={v => updateSettings({ logoSquareUrl: v })} />
+            <LogoUploader label={translateUi(uiLanguage, "Favicon")} dims="32x32px, ICO/PNG" value={s.faviconUrl || ""} onChange={v => updateSettings({ faviconUrl: v })} />
+            <LogoUploader label={translateUi(uiLanguage, "Apple Touch Icon")} dims="180x180px, PNG" value={s.appleTouchIconUrl || ""} onChange={v => updateSettings({ appleTouchIconUrl: v })} />
+            <LogoUploader label={translateUi(uiLanguage, "PWA / App Icon")} dims="512x512px, PNG" value={s.pwaIconUrl || ""} onChange={v => updateSettings({ pwaIconUrl: v })} />
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
           <SectionHeader title={t("settingsPage.themeColors")} description={t("settingsPage.themeColorsDesc")} />
           <div className="space-y-3">
-            <ColorField label="Primary Color" description="Navigation, links, and accents" value={s.themePrimary || ""} onChange={v => updateSettings({ themePrimary: v })} defaultColor="#3B82F6" />
-            <ColorField label="Secondary Color" description="Secondary elements and backgrounds" value={s.themeSecondary || ""} onChange={v => updateSettings({ themeSecondary: v })} defaultColor="#6B7280" />
-            <ColorField label="Accent Color" description="Highlights and special elements" value={s.themeAccent || ""} onChange={v => updateSettings({ themeAccent: v })} defaultColor="#8B5CF6" />
-            <ColorField label="Button Color" description="Primary action buttons" value={s.themeButton || ""} onChange={v => updateSettings({ themeButton: v })} defaultColor="#3B82F6" />
-            <ColorField label="Hover Color" description="Button and link hover state" value={s.themeHover || ""} onChange={v => updateSettings({ themeHover: v })} defaultColor="#2563EB" />
-            <ColorField label="Link Color" description="Hyperlinks and text links" value={s.themeLinkColor || ""} onChange={v => updateSettings({ themeLinkColor: v })} defaultColor="#2563EB" />
-            <ColorField label="Success" description="Success states and positive feedback" value={s.themeSuccess || ""} onChange={v => updateSettings({ themeSuccess: v })} defaultColor="#22C55E" />
-            <ColorField label="Warning" description="Warning states and caution indicators" value={s.themeWarning || ""} onChange={v => updateSettings({ themeWarning: v })} defaultColor="#F59E0B" />
-            <ColorField label="Danger" description="Error states and destructive actions" value={s.themeDanger || ""} onChange={v => updateSettings({ themeDanger: v })} defaultColor="#EF4444" />
+            <ColorField label={translateUi(uiLanguage, "Primary Color")} description={translateUi(uiLanguage, "Navigation, links, and accents")} value={s.themePrimary || ""} onChange={v => updateSettings({ themePrimary: v })} defaultColor="#3B82F6" />
+            <ColorField label={translateUi(uiLanguage, "Secondary Color")} description={translateUi(uiLanguage, "Secondary elements and backgrounds")} value={s.themeSecondary || ""} onChange={v => updateSettings({ themeSecondary: v })} defaultColor="#6B7280" />
+            <ColorField label={translateUi(uiLanguage, "Accent Color")} description={translateUi(uiLanguage, "Highlights and special elements")} value={s.themeAccent || ""} onChange={v => updateSettings({ themeAccent: v })} defaultColor="#8B5CF6" />
+            <ColorField label={translateUi(uiLanguage, "Button Color")} description={translateUi(uiLanguage, "Primary action buttons")} value={s.themeButton || ""} onChange={v => updateSettings({ themeButton: v })} defaultColor="#3B82F6" />
+            <ColorField label={translateUi(uiLanguage, "Hover Color")} description={translateUi(uiLanguage, "Button and link hover state")} value={s.themeHover || ""} onChange={v => updateSettings({ themeHover: v })} defaultColor="#2563EB" />
+            <ColorField label={translateUi(uiLanguage, "Link Color")} description={translateUi(uiLanguage, "Hyperlinks and text links")} value={s.themeLinkColor || ""} onChange={v => updateSettings({ themeLinkColor: v })} defaultColor="#2563EB" />
+            <ColorField label={translateUi(uiLanguage, "Success")} description={translateUi(uiLanguage, "Success states and positive feedback")} value={s.themeSuccess || ""} onChange={v => updateSettings({ themeSuccess: v })} defaultColor="#22C55E" />
+            <ColorField label={translateUi(uiLanguage, "Warning")} description={translateUi(uiLanguage, "Warning states and caution indicators")} value={s.themeWarning || ""} onChange={v => updateSettings({ themeWarning: v })} defaultColor="#F59E0B" />
+            <ColorField label={translateUi(uiLanguage, "Danger")} description={translateUi(uiLanguage, "Error states and destructive actions")} value={s.themeDanger || ""} onChange={v => updateSettings({ themeDanger: v })} defaultColor="#EF4444" />
           </div>
         </Card>
 
@@ -808,7 +808,7 @@ export default function SettingsPage() {
           themeHover: s.themeHover || null, themeLinkColor: s.themeLinkColor || null,
           themeSuccess: s.themeSuccess || null, themeWarning: s.themeWarning || null,
           themeDanger: s.themeDanger || null,
-        })} saving={sectionSaving === "branding"} label="Save Branding" />
+        })} saving={sectionSaving === "branding"} label={translateUi(uiLanguage, "Save Branding")} />
       </div>
     );
   }
@@ -821,31 +821,31 @@ export default function SettingsPage() {
         <Card className="border-none shadow-lg shadow-black/5 p-6">
           <SectionHeader title={t("settingsPage.companyInformation")} description={t("settingsPage.companyInformationDesc")} />
           <div className="grid sm:grid-cols-2 gap-5">
-            <FieldGroup label="Legal Company Name" description="Official registered company name"><Input value={s.legalCompanyName || ""} onChange={e => updateSettings({ legalCompanyName: e.target.value })} className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Public Brand Name" description="The name shown to clients and on the website"><Input value={s.publicBrandName || ""} onChange={e => updateSettings({ publicBrandName: e.target.value })} className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="General Email"><Input value={s.companyEmail || ""} onChange={e => updateSettings({ companyEmail: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Support Email"><Input value={s.supportEmail || ""} onChange={e => updateSettings({ supportEmail: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Sales Email"><Input value={s.salesEmail || ""} onChange={e => updateSettings({ salesEmail: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Phone"><Input value={s.companyPhone || ""} onChange={e => updateSettings({ companyPhone: e.target.value })} className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Website"><Input value={s.companyWebsite || ""} onChange={e => updateSettings({ companyWebsite: e.target.value })} placeholder="https://findandstudy.com" className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="WhatsApp Number"><Input value={s.whatsappNumber || ""} onChange={e => updateSettings({ whatsappNumber: e.target.value })} placeholder="+90 555 123 4567" className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Working Hours"><Input value={s.workingHours || ""} onChange={e => updateSettings({ workingHours: e.target.value })} placeholder={translateUi(uiLanguage, "Mon-Fri 9:00-18:00")} className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Address" className="sm:col-span-2"><Input value={s.companyAddress || ""} onChange={e => updateSettings({ companyAddress: e.target.value })} className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="City"><Input value={s.companyCity || ""} onChange={e => updateSettings({ companyCity: e.target.value })} className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Country"><Input value={s.companyCountry || ""} onChange={e => updateSettings({ companyCountry: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Legal Company Name")} description={translateUi(uiLanguage, "Official registered company name")}><Input value={s.legalCompanyName || ""} onChange={e => updateSettings({ legalCompanyName: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Public Brand Name")} description={translateUi(uiLanguage, "The name shown to clients and on the website")}><Input value={s.publicBrandName || ""} onChange={e => updateSettings({ publicBrandName: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "General Email")}><Input value={s.companyEmail || ""} onChange={e => updateSettings({ companyEmail: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Support Email")}><Input value={s.supportEmail || ""} onChange={e => updateSettings({ supportEmail: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Sales Email")}><Input value={s.salesEmail || ""} onChange={e => updateSettings({ salesEmail: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Phone")}><Input value={s.companyPhone || ""} onChange={e => updateSettings({ companyPhone: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Website")}><Input value={s.companyWebsite || ""} onChange={e => updateSettings({ companyWebsite: e.target.value })} placeholder="https://findandstudy.com" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "WhatsApp Number")}><Input value={s.whatsappNumber || ""} onChange={e => updateSettings({ whatsappNumber: e.target.value })} placeholder="+90 555 123 4567" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Working Hours")}><Input value={s.workingHours || ""} onChange={e => updateSettings({ workingHours: e.target.value })} placeholder={translateUi(uiLanguage, "Mon-Fri 9:00-18:00")} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Address")} className="sm:col-span-2"><Input value={s.companyAddress || ""} onChange={e => updateSettings({ companyAddress: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "City")}><Input value={s.companyCity || ""} onChange={e => updateSettings({ companyCity: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Country")}><Input value={s.companyCountry || ""} onChange={e => updateSettings({ companyCountry: e.target.value })} className="rounded-xl" /></FieldGroup>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
           <SectionHeader title={t("settingsPage.footerPublicContent")} description={t("settingsPage.footerPublicContentDesc")} />
           <div className="space-y-5">
-            <FieldGroup label="Footer Description" description="Short company description for the website footer">
+            <FieldGroup label={translateUi(uiLanguage, "Footer Description")} description={translateUi(uiLanguage, "Short company description for the website footer")}>
               <Textarea value={s.footerDescription || ""} onChange={e => updateSettings({ footerDescription: e.target.value })} className="rounded-xl min-h-[70px]" />
             </FieldGroup>
-            <FieldGroup label="Footer Copyright Text" description="e.g. © 2025 Find & Study. All rights reserved.">
+            <FieldGroup label={translateUi(uiLanguage, "Footer Copyright Text")} description={translateUi(uiLanguage, "e.g. © 2025 Find & Study. All rights reserved.")}>
               <Input value={s.footerCopyright || ""} onChange={e => updateSettings({ footerCopyright: e.target.value })} className="rounded-xl" />
             </FieldGroup>
-            <FieldGroup label="Contact CTA Text" description="Call-to-action text on contact sections">
+            <FieldGroup label={translateUi(uiLanguage, "Contact CTA Text")} description={translateUi(uiLanguage, "Call-to-action text on contact sections")}>
               <Input value={s.contactCtaText || ""} onChange={e => updateSettings({ contactCtaText: e.target.value })} placeholder={translateUi(uiLanguage, "Get in touch with us today!")} className="rounded-xl" />
             </FieldGroup>
           </div>
@@ -885,7 +885,7 @@ export default function SettingsPage() {
           socialInstagram: s.socialInstagram || null, socialFacebook: s.socialFacebook || null,
           socialLinkedin: s.socialLinkedin || null, socialTwitter: s.socialTwitter || null,
           socialYoutube: s.socialYoutube || null, socialTiktok: s.socialTiktok || null,
-        })} saving={sectionSaving === "company"} label="Save Company Details" />
+        })} saving={sectionSaving === "company"} label={translateUi(uiLanguage, "Save Company Details")} />
       </div>
     );
   }
@@ -913,11 +913,11 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "Site Identity")} description="Configure your site name and title format for search engines." />
+          <SectionHeader title={translateUi(uiLanguage, "Site Identity")} description={translateUi(uiLanguage, "Configure your site name and title format for search engines.")} />
           <div className="grid sm:grid-cols-2 gap-5">
-            <FieldGroup label="Site Name" description="Used in structured data and browser tabs"><Input value={s.siteName || ""} onChange={e => updateSettings({ siteName: e.target.value })} placeholder="Find & Study" className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Title Template" description="Use {{pageTitle}} as placeholder"><Input value={s.siteTitleTemplate || ""} onChange={e => updateSettings({ siteTitleTemplate: e.target.value })} placeholder={translateUi(uiLanguage, "{{pageTitle}} | Find & Study")} className="rounded-xl font-mono text-xs" /></FieldGroup>
-            <FieldGroup label="Canonical Base URL" className="sm:col-span-2"><Input value={s.canonicalBaseUrl || ""} onChange={e => updateSettings({ canonicalBaseUrl: e.target.value })} placeholder="https://findandstudy.com" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Site Name")} description={translateUi(uiLanguage, "Used in structured data and browser tabs")}><Input value={s.siteName || ""} onChange={e => updateSettings({ siteName: e.target.value })} placeholder="Find & Study" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Title Template")} description={translateUi(uiLanguage, "Use {{pageTitle}} as placeholder")}><Input value={s.siteTitleTemplate || ""} onChange={e => updateSettings({ siteTitleTemplate: e.target.value })} placeholder={translateUi(uiLanguage, "{{pageTitle}} | Find & Study")} className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Canonical Base URL")} className="sm:col-span-2"><Input value={s.canonicalBaseUrl || ""} onChange={e => updateSettings({ canonicalBaseUrl: e.target.value })} placeholder="https://findandstudy.com" className="rounded-xl" /></FieldGroup>
           </div>
         </Card>
 
@@ -929,12 +929,12 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "Default Meta Tags")} description="Default SEO metadata used when pages don't specify their own." />
+          <SectionHeader title={translateUi(uiLanguage, "Default Meta Tags")} description={translateUi(uiLanguage, "Default SEO metadata used when pages don't specify their own.")} />
           <div className="space-y-5">
-            <FieldGroup label="Meta Title" description={`${titleLen}/60 characters recommended`}>
+            <FieldGroup label={translateUi(uiLanguage, "Meta Title")} description={translateUi(uiLanguage, "{value0}/60 characters recommended", undefined, { value0: String(titleLen) })}>
               <Input value={s.seoMetaTitle || ""} onChange={e => updateSettings({ seoMetaTitle: e.target.value })} maxLength={70} className="rounded-xl" />
             </FieldGroup>
-            <FieldGroup label="Meta Description" description={`${descLen}/160 characters recommended`}>
+            <FieldGroup label={translateUi(uiLanguage, "Meta Description")} description={translateUi(uiLanguage, "{value0}/160 characters recommended", undefined, { value0: String(descLen) })}>
               <Textarea value={s.seoMetaDescription || ""} onChange={e => updateSettings({ seoMetaDescription: e.target.value })} maxLength={200} className="rounded-xl min-h-[70px]" />
             </FieldGroup>
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"> {translateUi(uiLanguage, "Meta keywords are intentionally not published. Search intent and catalogue taxonomy remain separate from page metadata.")} </div>
@@ -960,7 +960,7 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "AI Discovery & Answer Engines")} description="Manage search discovery and model-training preferences independently. These settings improve technical eligibility; they do not guarantee ranking or citation." />
+          <SectionHeader title={translateUi(uiLanguage, "AI Discovery & Answer Engines")} description={translateUi(uiLanguage, "Manage search discovery and model-training preferences independently. These settings improve technical eligibility; they do not guarantee ranking or citation.")} />
           <div className="space-y-4">
             <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
               <div><p className="text-sm font-semibold">{translateUi(uiLanguage, "Allow ChatGPT Search discovery")}</p><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Allows OAI-SearchBot to discover public pages for ChatGPT search.")}</p></div>
@@ -975,19 +975,19 @@ export default function SettingsPage() {
               <Switch checked={technicalPolicy.allowGoogleExtended} onCheckedChange={v => updateTechnicalPolicy({ allowGoogleExtended: v })} />
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <FieldGroup label="Maximum snippet" description="-1 means no explicit limit">
+              <FieldGroup label={translateUi(uiLanguage, "Maximum snippet")} description={translateUi(uiLanguage, "-1 means no explicit limit")}>
                 <Input type="number" min={-1} max={10000} value={technicalPolicy.maxSnippet} onChange={e => updateTechnicalPolicy({ maxSnippet: Number(e.target.value) })} className="rounded-xl" />
               </FieldGroup>
-              <FieldGroup label="Image preview">
+              <FieldGroup label={translateUi(uiLanguage, "Image preview")}>
                 <Select value={technicalPolicy.maxImagePreview} onValueChange={v => updateTechnicalPolicy({ maxImagePreview: v })}>
                   <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="large">{translateUi(uiLanguage, "Large")}</SelectItem><SelectItem value="standard">{translateUi(uiLanguage, "Standard")}</SelectItem><SelectItem value="none">{translateUi(uiLanguage, "None")}</SelectItem></SelectContent>
                 </Select>
               </FieldGroup>
-              <FieldGroup label="Maximum video preview" description="-1 means no explicit limit">
+              <FieldGroup label={translateUi(uiLanguage, "Maximum video preview")} description={translateUi(uiLanguage, "-1 means no explicit limit")}>
                 <Input type="number" min={-1} max={10000} value={technicalPolicy.maxVideoPreview} onChange={e => updateTechnicalPolicy({ maxVideoPreview: Number(e.target.value) })} className="rounded-xl" />
               </FieldGroup>
-              <FieldGroup label="x-default locale">
+              <FieldGroup label={translateUi(uiLanguage, "x-default locale")}>
                 <Select value={technicalPolicy.xDefaultLocale} onValueChange={v => updateTechnicalPolicy({ xDefaultLocale: v })}>
                   <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>{LANGUAGES.map(language => <SelectItem key={language.code} value={language.code}>{language.label}</SelectItem>)}</SelectContent>
@@ -1000,31 +1000,31 @@ export default function SettingsPage() {
             </div>
             <div className="rounded-xl border bg-muted/30 p-4 text-xs text-muted-foreground">
               <p className="font-semibold text-foreground">{translateUi(uiLanguage, "Crawler policy preview")}</p>
-              <code className="mt-2 block whitespace-pre-wrap">{`OAI-SearchBot: ${technicalPolicy.allowOaiSearchBot ? "Allow" : "Disallow"}\nGPTBot: ${technicalPolicy.allowGptBot ? "Allow" : "Disallow"}\nGoogle-Extended: ${technicalPolicy.allowGoogleExtended ? "Allow" : "Disallow"}`}</code>
+              <code className="mt-2 block whitespace-pre-wrap">{translateUi(uiLanguage, "OAI-SearchBot: {value0}\nGPTBot: {value1}\nGoogle-Extended: {value2}", undefined, { value0: String(technicalPolicy.allowOaiSearchBot ? "Allow" : "Disallow"), value1: String(technicalPolicy.allowGptBot ? "Allow" : "Disallow"), value2: String(technicalPolicy.allowGoogleExtended ? "Allow" : "Disallow") })}</code>
               <p className="mt-3">{translateUi(uiLanguage, "The existing llms.txt remains a supplementary, deterministic identity document. It is not treated as a ranking signal or an alternative to robots, sitemap, canonical or structured data.")}</p>
             </div>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "Open Graph / Social Sharing")} description="Control how your site appears when shared on social media." />
+          <SectionHeader title={translateUi(uiLanguage, "Open Graph / Social Sharing")} description={translateUi(uiLanguage, "Control how your site appears when shared on social media.")} />
           <div className="space-y-5">
             <div className="grid sm:grid-cols-2 gap-5">
-              <FieldGroup label="OG Title"><Input value={s.ogTitle || ""} onChange={e => updateSettings({ ogTitle: e.target.value })} className="rounded-xl" /></FieldGroup>
-              <FieldGroup label="Twitter/X Title"><Input value={s.twitterTitle || ""} onChange={e => updateSettings({ twitterTitle: e.target.value })} className="rounded-xl" /></FieldGroup>
+              <FieldGroup label={translateUi(uiLanguage, "OG Title")}><Input value={s.ogTitle || ""} onChange={e => updateSettings({ ogTitle: e.target.value })} className="rounded-xl" /></FieldGroup>
+              <FieldGroup label={translateUi(uiLanguage, "Twitter/X Title")}><Input value={s.twitterTitle || ""} onChange={e => updateSettings({ twitterTitle: e.target.value })} className="rounded-xl" /></FieldGroup>
             </div>
-            <FieldGroup label="OG Description"><Textarea value={s.ogDescription || ""} onChange={e => updateSettings({ ogDescription: e.target.value })} className="rounded-xl min-h-[60px]" /></FieldGroup>
-            <FieldGroup label="Twitter/X Description"><Textarea value={s.twitterDescription || ""} onChange={e => updateSettings({ twitterDescription: e.target.value })} className="rounded-xl min-h-[60px]" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "OG Description")}><Textarea value={s.ogDescription || ""} onChange={e => updateSettings({ ogDescription: e.target.value })} className="rounded-xl min-h-[60px]" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Twitter/X Description")}><Textarea value={s.twitterDescription || ""} onChange={e => updateSettings({ twitterDescription: e.target.value })} className="rounded-xl min-h-[60px]" /></FieldGroup>
             <div className="grid sm:grid-cols-3 gap-5">
-              <LogoUploader label="OG Image" dims="1200x630px" value={s.ogImageUrl || ""} onChange={v => updateSettings({ ogImageUrl: v })} />
-              <LogoUploader label="Twitter/X Image" dims="1200x628px" value={s.twitterImageUrl || ""} onChange={v => updateSettings({ twitterImageUrl: v })} />
-              <LogoUploader label="Default Share Image" dims="1200x630px" value={s.shareImageUrl || ""} onChange={v => updateSettings({ shareImageUrl: v })} />
+              <LogoUploader label={translateUi(uiLanguage, "OG Image")} dims="1200x630px" value={s.ogImageUrl || ""} onChange={v => updateSettings({ ogImageUrl: v })} />
+              <LogoUploader label={translateUi(uiLanguage, "Twitter/X Image")} dims="1200x628px" value={s.twitterImageUrl || ""} onChange={v => updateSettings({ twitterImageUrl: v })} />
+              <LogoUploader label={translateUi(uiLanguage, "Default Share Image")} dims="1200x630px" value={s.shareImageUrl || ""} onChange={v => updateSettings({ shareImageUrl: v })} />
             </div>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "Search Preview")} description="How your site may appear on Google search results." />
+          <SectionHeader title={translateUi(uiLanguage, "Search Preview")} description={translateUi(uiLanguage, "How your site may appear on Google search results.")} />
           <div className="p-5 rounded-xl border border-border/50 bg-white dark:bg-gray-950 max-w-lg">
             <p className="text-sm text-blue-700 dark:text-blue-400 truncate">{s.canonicalBaseUrl || "https://yoursite.com"}</p>
             <p className="text-lg text-blue-800 dark:text-blue-300 font-medium truncate hover:underline cursor-pointer mt-0.5">{s.seoMetaTitle || s.siteName || translateUi(uiLanguage, "Your Site Title")}</p>
@@ -1033,22 +1033,22 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "Analytics & Tracking")} description="Third-party tracking and verification codes." />
+          <SectionHeader title={translateUi(uiLanguage, "Analytics & Tracking")} description={translateUi(uiLanguage, "Third-party tracking and verification codes.")} />
           <div className="grid sm:grid-cols-2 gap-5">
-            <FieldGroup label="Google Search Console" description="Verification code"><Input value={s.googleSearchConsoleCode || ""} onChange={e => updateSettings({ googleSearchConsoleCode: e.target.value })} placeholder={translateUi(uiLanguage, "google-site-verification=...")} className="rounded-xl font-mono text-xs" /></FieldGroup>
-            <FieldGroup label="Google Analytics (GA4)" description="Measurement ID"><Input value={s.googleAnalyticsId || ""} onChange={e => updateSettings({ googleAnalyticsId: e.target.value })} placeholder={translateUi(uiLanguage, "G-XXXXXXXXXX")} className="rounded-xl font-mono text-xs" /></FieldGroup>
-            <FieldGroup label="Meta Pixel ID"><Input value={s.metaPixelId || ""} onChange={e => updateSettings({ metaPixelId: e.target.value })} placeholder="123456789012345" className="rounded-xl font-mono text-xs" /></FieldGroup>
-            <FieldGroup label="TikTok Pixel ID"><Input value={s.tiktokPixelId || ""} onChange={e => updateSettings({ tiktokPixelId: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Google Search Console")} description={translateUi(uiLanguage, "Verification code")}><Input value={s.googleSearchConsoleCode || ""} onChange={e => updateSettings({ googleSearchConsoleCode: e.target.value })} placeholder={translateUi(uiLanguage, "google-site-verification=...")} className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Google Analytics (GA4)")} description={translateUi(uiLanguage, "Measurement ID")}><Input value={s.googleAnalyticsId || ""} onChange={e => updateSettings({ googleAnalyticsId: e.target.value })} placeholder={translateUi(uiLanguage, "G-XXXXXXXXXX")} className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Meta Pixel ID")}><Input value={s.metaPixelId || ""} onChange={e => updateSettings({ metaPixelId: e.target.value })} placeholder="123456789012345" className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "TikTok Pixel ID")}><Input value={s.tiktokPixelId || ""} onChange={e => updateSettings({ tiktokPixelId: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "Structured Data (Schema.org)")} description="Organization data for rich search results." />
+          <SectionHeader title={translateUi(uiLanguage, "Structured Data (Schema.org)")} description={translateUi(uiLanguage, "Organization data for rich search results.")} />
           <div className="grid sm:grid-cols-2 gap-5">
-            <FieldGroup label="Organization Name"><Input value={s.orgSchemaName || ""} onChange={e => updateSettings({ orgSchemaName: e.target.value })} className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Website URL"><Input value={s.orgSchemaUrl || ""} onChange={e => updateSettings({ orgSchemaUrl: e.target.value })} className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Logo URL"><Input value={s.orgSchemaLogoUrl || ""} onChange={e => updateSettings({ orgSchemaLogoUrl: e.target.value })} className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Social Profiles" description="Comma-separated URLs"><Input value={s.orgSchemaSocials || ""} onChange={e => updateSettings({ orgSchemaSocials: e.target.value })} className="rounded-xl text-xs" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Organization Name")}><Input value={s.orgSchemaName || ""} onChange={e => updateSettings({ orgSchemaName: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Website URL")}><Input value={s.orgSchemaUrl || ""} onChange={e => updateSettings({ orgSchemaUrl: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Logo URL")}><Input value={s.orgSchemaLogoUrl || ""} onChange={e => updateSettings({ orgSchemaLogoUrl: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Social Profiles")} description={translateUi(uiLanguage, "Comma-separated URLs")}><Input value={s.orgSchemaSocials || ""} onChange={e => updateSettings({ orgSchemaSocials: e.target.value })} className="rounded-xl text-xs" /></FieldGroup>
           </div>
         </Card>
 
@@ -1065,7 +1065,7 @@ export default function SettingsPage() {
           metaPixelId: s.metaPixelId || null, tiktokPixelId: s.tiktokPixelId || null,
           orgSchemaName: s.orgSchemaName || null, orgSchemaUrl: s.orgSchemaUrl || null,
           orgSchemaLogoUrl: s.orgSchemaLogoUrl || null, orgSchemaSocials: s.orgSchemaSocials || null,
-        })} saving={sectionSaving === "seo"} label="Save SEO Settings" />
+        })} saving={sectionSaving === "seo"} label={translateUi(uiLanguage, "Save SEO Settings")} />
       </div>
     );
   }
@@ -1076,33 +1076,33 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "Email Identity")} description="Configure the sender details for all outgoing emails." />
+          <SectionHeader title={translateUi(uiLanguage, "Email Identity")} description={translateUi(uiLanguage, "Configure the sender details for all outgoing emails.")} />
           <div className="grid sm:grid-cols-2 gap-5">
-            <FieldGroup label="Sender Name" description="Displayed as the 'From' name"><Input value={s.emailSenderName || ""} onChange={e => updateSettings({ emailSenderName: e.target.value })} placeholder="Find & Study" className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Sender Email"><Input value={s.emailSenderEmail || ""} onChange={e => updateSettings({ emailSenderEmail: e.target.value })} type="email" placeholder={translateUi(uiLanguage, "info@findandstudy.com")} className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Reply-To Email" className="sm:col-span-2"><Input value={s.emailReplyTo || ""} onChange={e => updateSettings({ emailReplyTo: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Sender Name")} description={translateUi(uiLanguage, "Displayed as the 'From' name")}><Input value={s.emailSenderName || ""} onChange={e => updateSettings({ emailSenderName: e.target.value })} placeholder="Find & Study" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Sender Email")}><Input value={s.emailSenderEmail || ""} onChange={e => updateSettings({ emailSenderEmail: e.target.value })} type="email" placeholder={translateUi(uiLanguage, "info@findandstudy.com")} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Reply-To Email")} className="sm:col-span-2"><Input value={s.emailReplyTo || ""} onChange={e => updateSettings({ emailReplyTo: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "Email Branding")} description="Customize the look of outgoing emails." />
+          <SectionHeader title={translateUi(uiLanguage, "Email Branding")} description={translateUi(uiLanguage, "Customize the look of outgoing emails.")} />
           <div className="space-y-5">
-            <LogoUploader label="Email Header Logo" dims="300x80px, PNG" value={s.emailLogoUrl || ""} onChange={v => updateSettings({ emailLogoUrl: v })} />
-            <ColorField label="Email Button Color" description="Primary button color in emails" value={s.emailButtonColor || ""} onChange={v => updateSettings({ emailButtonColor: v })} defaultColor="#143591" />
-            <FieldGroup label="Email Footer Text" description="Shown at the bottom of every email">
+            <LogoUploader label={translateUi(uiLanguage, "Email Header Logo")} dims="300x80px, PNG" value={s.emailLogoUrl || ""} onChange={v => updateSettings({ emailLogoUrl: v })} />
+            <ColorField label={translateUi(uiLanguage, "Email Button Color")} description={translateUi(uiLanguage, "Primary button color in emails")} value={s.emailButtonColor || ""} onChange={v => updateSettings({ emailButtonColor: v })} defaultColor="#143591" />
+            <FieldGroup label={translateUi(uiLanguage, "Email Footer Text")} description={translateUi(uiLanguage, "Shown at the bottom of every email")}>
               <Textarea value={s.emailFooterText || ""} onChange={e => updateSettings({ emailFooterText: e.target.value })} className="rounded-xl min-h-[60px]" placeholder={translateUi(uiLanguage, "Find & Study Educational Consulting&#10;Istanbul, Turkey")} />
             </FieldGroup>
-            <FieldGroup label="Email Signature Block" description="Rich signature text appended to emails">
+            <FieldGroup label={translateUi(uiLanguage, "Email Signature Block")} description={translateUi(uiLanguage, "Rich signature text appended to emails")}>
               <Textarea value={s.emailSignatureBlock || ""} onChange={e => updateSettings({ emailSignatureBlock: e.target.value })} className="rounded-xl min-h-[60px]" />
             </FieldGroup>
-            <FieldGroup label="Disclaimer Text" description="Legal disclaimer at the bottom of emails">
+            <FieldGroup label={translateUi(uiLanguage, "Disclaimer Text")} description={translateUi(uiLanguage, "Legal disclaimer at the bottom of emails")}>
               <Textarea value={s.emailDisclaimerText || ""} onChange={e => updateSettings({ emailDisclaimerText: e.target.value })} className="rounded-xl min-h-[50px]" placeholder={translateUi(uiLanguage, "This email and any attachments are confidential...")} />
             </FieldGroup>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "Email Preview")} description="How a branded email might look." />
+          <SectionHeader title={translateUi(uiLanguage, "Email Preview")} description={translateUi(uiLanguage, "How a branded email might look.")} />
           <div className="max-w-md mx-auto rounded-xl border border-border/50 overflow-hidden bg-white dark:bg-gray-950">
             <div className="px-6 py-4 border-b border-border/30 text-center" style={{ backgroundColor: (s.emailButtonColor || "#143591") + "10" }}>
               {s.emailLogoUrl ? <img src={s.emailLogoUrl} className="max-h-10 mx-auto object-contain" alt="" /> : <p className="font-bold text-lg" style={{ color: s.emailButtonColor || "#143591" }}>{s.emailSenderName || translateUi(uiLanguage, "Your Company")}</p>}
@@ -1126,7 +1126,7 @@ export default function SettingsPage() {
           emailReplyTo: s.emailReplyTo || null, emailLogoUrl: s.emailLogoUrl || null,
           emailFooterText: s.emailFooterText || null, emailSignatureBlock: s.emailSignatureBlock || null,
           emailButtonColor: s.emailButtonColor || null, emailDisclaimerText: s.emailDisclaimerText || null,
-        })} saving={sectionSaving === "email"} label="Save Email Branding" />
+        })} saving={sectionSaving === "email"} label={translateUi(uiLanguage, "Save Email Branding")} />
       </div>
     );
   }
@@ -1137,37 +1137,37 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "PDF / Document Branding")} description="Customize the identity of generated PDFs and documents." />
+          <SectionHeader title={translateUi(uiLanguage, "PDF / Document Branding")} description={translateUi(uiLanguage, "Customize the identity of generated PDFs and documents.")} />
           <div className="space-y-5">
-            <LogoUploader label="PDF Logo" dims="300x80px, PNG/SVG" value={s.pdfLogoUrl || ""} onChange={v => updateSettings({ pdfLogoUrl: v })} />
+            <LogoUploader label={translateUi(uiLanguage, "PDF Logo")} dims="300x80px, PNG/SVG" value={s.pdfLogoUrl || ""} onChange={v => updateSettings({ pdfLogoUrl: v })} />
             <div className="grid sm:grid-cols-2 gap-5">
-              <FieldGroup label="Header Text" description="Displayed at the top of PDF documents">
+              <FieldGroup label={translateUi(uiLanguage, "Header Text")} description={translateUi(uiLanguage, "Displayed at the top of PDF documents")}>
                 <Input value={s.pdfHeaderText || ""} onChange={e => updateSettings({ pdfHeaderText: e.target.value })} placeholder={translateUi(uiLanguage, "Find & Study Educational Consulting")} className="rounded-xl" />
               </FieldGroup>
-              <FieldGroup label="Footer Text" description="Displayed at the bottom of every page">
+              <FieldGroup label={translateUi(uiLanguage, "Footer Text")} description={translateUi(uiLanguage, "Displayed at the bottom of every page")}>
                 <Input value={s.pdfFooterText || ""} onChange={e => updateSettings({ pdfFooterText: e.target.value })} placeholder={translateUi(uiLanguage, "© 2025 Find & Study. All rights reserved.")} className="rounded-xl" />
               </FieldGroup>
-              <FieldGroup label="Watermark Text" description="Faint text overlaid on document pages">
+              <FieldGroup label={translateUi(uiLanguage, "Watermark Text")} description={translateUi(uiLanguage, "Faint text overlaid on document pages")}>
                 <Input value={s.pdfWatermarkText || ""} onChange={e => updateSettings({ pdfWatermarkText: e.target.value })} placeholder={translateUi(uiLanguage, "CONFIDENTIAL")} className="rounded-xl" />
               </FieldGroup>
-              <FieldGroup label="Signature Label" description="Label above the signature line">
+              <FieldGroup label={translateUi(uiLanguage, "Signature Label")} description={translateUi(uiLanguage, "Label above the signature line")}>
                 <Input value={s.pdfSignatureLabel || ""} onChange={e => updateSettings({ pdfSignatureLabel: e.target.value })} placeholder={translateUi(uiLanguage, "Authorized Representative")} className="rounded-xl" />
               </FieldGroup>
             </div>
             <div className="grid sm:grid-cols-2 gap-5">
-              <LogoUploader label="Seal / Stamp Image" dims="200x200px, PNG" value={s.pdfSealImageUrl || ""} onChange={v => updateSettings({ pdfSealImageUrl: v })} />
+              <LogoUploader label={translateUi(uiLanguage, "Seal / Stamp Image")} dims="200x200px, PNG" value={s.pdfSealImageUrl || ""} onChange={v => updateSettings({ pdfSealImageUrl: v })} />
               <div>
-                <ColorField label="Document Primary Color" description="Accent color for PDF headers, borders, and highlights" value={s.pdfPrimaryColor || ""} onChange={v => updateSettings({ pdfPrimaryColor: v })} defaultColor="#143591" />
+                <ColorField label={translateUi(uiLanguage, "Document Primary Color")} description={translateUi(uiLanguage, "Accent color for PDF headers, borders, and highlights")} value={s.pdfPrimaryColor || ""} onChange={v => updateSettings({ pdfPrimaryColor: v })} defaultColor="#143591" />
               </div>
               <div>
-                <ColorField label="Proposal PDF Accent Color" description="Controls header gradient, card colors, numbered badges, and page number in the program proposal PDF. Falls back to navy/blue if unset." value={s.pdfAccentColor || ""} onChange={v => updateSettings({ pdfAccentColor: v })} defaultColor="#1e40af" />
+                <ColorField label={translateUi(uiLanguage, "Proposal PDF Accent Color")} description={translateUi(uiLanguage, "Controls header gradient, card colors, numbered badges, and page number in the program proposal PDF. Falls back to navy/blue if unset.")} value={s.pdfAccentColor || ""} onChange={v => updateSettings({ pdfAccentColor: v })} defaultColor="#1e40af" />
               </div>
             </div>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "Document Preview")} description="How your branded documents may look." />
+          <SectionHeader title={translateUi(uiLanguage, "Document Preview")} description={translateUi(uiLanguage, "How your branded documents may look.")} />
           <div className="max-w-sm mx-auto">
             <div className="rounded-xl border border-border/50 overflow-hidden bg-white dark:bg-gray-950 shadow-sm">
               <div className="h-2 w-full" style={{ backgroundColor: s.pdfPrimaryColor || "#143591" }} />
@@ -1203,7 +1203,7 @@ export default function SettingsPage() {
           pdfSignatureLabel: s.pdfSignatureLabel || null, pdfSealImageUrl: s.pdfSealImageUrl || null,
           pdfPrimaryColor: s.pdfPrimaryColor || null,
           pdfAccentColor: s.pdfAccentColor || null,
-        })} saving={sectionSaving === "documents"} label="Save Document Settings" />
+        })} saving={sectionSaving === "documents"} label={translateUi(uiLanguage, "Save Document Settings")} />
       </div>
     );
   }
@@ -1228,23 +1228,23 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "Site Configuration")} description="Domain, sitemap, and robots settings." />
+          <SectionHeader title={translateUi(uiLanguage, "Site Configuration")} description={translateUi(uiLanguage, "Domain, sitemap, and robots settings.")} />
           <div className="grid sm:grid-cols-2 gap-5">
-            <FieldGroup label="Canonical Domain"><Input value={s.canonicalBaseUrl || ""} onChange={e => updateSettings({ canonicalBaseUrl: e.target.value })} placeholder="https://findandstudy.com" className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Sitemap URL"><Input value={s.sitemapUrl || ""} onChange={e => updateSettings({ sitemapUrl: e.target.value })} placeholder="/sitemap.xml" className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="robots.txt Content" description="Custom robots.txt rules" className="sm:col-span-2">
+            <FieldGroup label={translateUi(uiLanguage, "Canonical Domain")}><Input value={s.canonicalBaseUrl || ""} onChange={e => updateSettings({ canonicalBaseUrl: e.target.value })} placeholder="https://findandstudy.com" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Sitemap URL")}><Input value={s.sitemapUrl || ""} onChange={e => updateSettings({ sitemapUrl: e.target.value })} placeholder="/sitemap.xml" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "robots.txt Content")} description={translateUi(uiLanguage, "Custom robots.txt rules")} className="sm:col-span-2">
               <Textarea value={s.robotsTxtContent || ""} onChange={e => updateSettings({ robotsTxtContent: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" placeholder={translateUi(uiLanguage, "User-agent: *&#10;Allow: /")} />
             </FieldGroup>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title={translateUi(uiLanguage, "Tracking & Widgets")} description="Third-party integrations and widget configurations." />
+          <SectionHeader title={translateUi(uiLanguage, "Tracking & Widgets")} description={translateUi(uiLanguage, "Third-party integrations and widget configurations.")} />
           <div className="grid sm:grid-cols-2 gap-5">
-            <FieldGroup label="LinkedIn Insight Tag"><Input value={s.linkedinInsightTag || ""} onChange={e => updateSettings({ linkedinInsightTag: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
-            <FieldGroup label="Microsoft Clarity / Hotjar ID"><Input value={s.clarityId || ""} onChange={e => updateSettings({ clarityId: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
-            <FieldGroup label="reCAPTCHA Site Key"><Input value={s.recaptchaSiteKey || ""} onChange={e => updateSettings({ recaptchaSiteKey: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
-            <FieldGroup label="WhatsApp Widget Number" description="Floating chat widget"><Input value={s.whatsappWidgetNumber || ""} onChange={e => updateSettings({ whatsappWidgetNumber: e.target.value })} placeholder="+90 555 123 4567" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "LinkedIn Insight Tag")}><Input value={s.linkedinInsightTag || ""} onChange={e => updateSettings({ linkedinInsightTag: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "Microsoft Clarity / Hotjar ID")}><Input value={s.clarityId || ""} onChange={e => updateSettings({ clarityId: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "reCAPTCHA Site Key")}><Input value={s.recaptchaSiteKey || ""} onChange={e => updateSettings({ recaptchaSiteKey: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label={translateUi(uiLanguage, "WhatsApp Widget Number")} description={translateUi(uiLanguage, "Floating chat widget")}><Input value={s.whatsappWidgetNumber || ""} onChange={e => updateSettings({ whatsappWidgetNumber: e.target.value })} placeholder="+90 555 123 4567" className="rounded-xl" /></FieldGroup>
           </div>
         </Card>
 
@@ -1253,18 +1253,18 @@ export default function SettingsPage() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <SectionHeader title={translateUi(uiLanguage, "Custom Scripts")} description="Inject custom code into the page. Use with caution — incorrect scripts may break the application." />
+                <SectionHeader title={translateUi(uiLanguage, "Custom Scripts")} description={translateUi(uiLanguage, "Inject custom code into the page. Use with caution — incorrect scripts may break the application.")} />
                 <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 mb-4">
                   <p className="text-xs text-amber-700 dark:text-amber-400">{translateUi(uiLanguage, "Only Super Admins can edit these fields. Malicious or broken scripts can compromise security and functionality.")}</p>
                 </div>
                 <div className="space-y-5">
-                  <FieldGroup label="Custom Head Script" description="Injected before </head> — for analytics, fonts, etc.">
+                  <FieldGroup label={translateUi(uiLanguage, "Custom Head Script")} description={translateUi(uiLanguage, "Injected before </head> — for analytics, fonts, etc.")}>
                     <Textarea value={s.customHeadScript || ""} onChange={e => updateSettings({ customHeadScript: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" placeholder={translateUi(uiLanguage, "<!-- Google Tag Manager -->")} />
                   </FieldGroup>
-                  <FieldGroup label="Custom Body-End Script" description="Injected before </body> — for chat widgets, etc.">
+                  <FieldGroup label={translateUi(uiLanguage, "Custom Body-End Script")} description={translateUi(uiLanguage, "Injected before </body> — for chat widgets, etc.")}>
                     <Textarea value={s.customBodyEndScript || ""} onChange={e => updateSettings({ customBodyEndScript: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" placeholder={translateUi(uiLanguage, "<!-- Live chat widget -->")} />
                   </FieldGroup>
-                  <FieldGroup label="Live Chat Script" description="Full live chat embed code">
+                  <FieldGroup label={translateUi(uiLanguage, "Live Chat Script")} description={translateUi(uiLanguage, "Full live chat embed code")}>
                     <Textarea value={s.liveChatScript || ""} onChange={e => updateSettings({ liveChatScript: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" />
                   </FieldGroup>
                 </div>
@@ -1286,7 +1286,7 @@ export default function SettingsPage() {
             payload.liveChatScript = s.liveChatScript || null;
           }
           saveSection("advanced", payload);
-        }} saving={sectionSaving === "advanced"} label="Save Advanced Settings" />
+        }} saving={sectionSaving === "advanced"} label={translateUi(uiLanguage, "Save Advanced Settings")} />
       </div>
     );
   }
@@ -1401,7 +1401,7 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <SectionHeader
           title={translateUi(uiLanguage, "Lead → Student Auto-Convert")}
-          description="Control what happens when an applicant completes the public Apply form or the embed widget. When enabled, the lead is moved to 'converted' and the linked student's status is set to the stage you choose."
+          description={translateUi(uiLanguage, "Control what happens when an applicant completes the public Apply form or the embed widget. When enabled, the lead is moved to 'converted' and the linked student's status is set to the stage you choose.")}
         />
         <div className="grid gap-5 sm:grid-cols-[1fr_240px] items-start">
           <div className="flex items-start gap-3 p-4 rounded-xl border border-border/50">
@@ -1415,7 +1415,7 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
               <p className="text-xs text-muted-foreground mt-0.5"> {translateUi(uiLanguage, "Public Apply and Embed widget submissions automatically convert the lead and create an active student. Disable to keep new submissions in the leads pipeline for manual review.")} </p>
             </div>
           </div>
-          <FieldGroup label="Initial student stage" description="Used as the student's status when auto-convert fires.">
+          <FieldGroup label={translateUi(uiLanguage, "Initial student stage")} description={translateUi(uiLanguage, "Used as the student's status when auto-convert fires.")}>
             <Select
               value={autoConvert.stageKey}
               onValueChange={(v) => saveAutoConvert({ ...autoConvert, stageKey: v })}
@@ -1435,7 +1435,7 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
       </Card>
 
       <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <SectionHeader title={translateUi(uiLanguage, "Pipeline Stages")} description="Configure the pipeline stages for leads, applications, and students. Changes here apply to all users — staff, agents, and sub-agents. On the Application pipeline you can also map each stage to a student status — when the application reaches that stage, the linked student's status is updated automatically." />
+        <SectionHeader title={translateUi(uiLanguage, "Pipeline Stages")} description={translateUi(uiLanguage, "Configure the pipeline stages for leads, applications, and students. Changes here apply to all users — staff, agents, and sub-agents. On the Application pipeline you can also map each stage to a student status — when the application reaches that stage, the linked student's status is updated automatically.")} />
         <div className="space-y-4">
           {pipelines.map(({ type, label, description, pipeline }) => (
             <div key={type} className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:border-primary/20 transition-colors">
@@ -1593,7 +1593,7 @@ function YearsManagement() {
     <Card className="border-none shadow-lg shadow-black/5 p-6">
       <SectionHeader
         title={translateUi(uiLanguage, "Academic Years")}
-        description="Define each academic year and its season window (start & end dates). The system uses today's date to decide which year is the active season — so records auto-tag correctly even when the season doesn't start on January 1."
+        description={translateUi(uiLanguage, "Define each academic year and its season window (start & end dates). The system uses today's date to decide which year is the active season — so records auto-tag correctly even when the season doesn't start on January 1.")}
       />
 
       <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4 mb-6">
@@ -1753,7 +1753,7 @@ function QuickLinksTab() {
           sortOrder: form.sortOrder,
         }),
       });
-      toast({ title: editingId ? translateUi(uiLanguage, "Updated") : translateUi(uiLanguage, "Created"), description: `Quick link "${form.title}" has been ${editingId ? "updated" : "created"}.` });
+      toast({ title: editingId ? translateUi(uiLanguage, "Updated") : translateUi(uiLanguage, "Created"), description: translateUi(uiLanguage, "Quick link \"{value0}\" has been {value1}.", undefined, { value0: String(form.title), value1: String(editingId ? "updated" : "created") }) });
       setShowForm(false);
       setEditingId(null);
       setForm({ title: "", url: "", logoUrl: "", color: "#6366f1", target: "agent", sortOrder: 0 });

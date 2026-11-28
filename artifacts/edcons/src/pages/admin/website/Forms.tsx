@@ -478,11 +478,7 @@ export default function WebsiteForms() {
                   </div>
                   <p className="text-sm text-muted-foreground">{t("websiteForms.honeypotEmbedBefore")}<code className="text-xs">{translateUi(uiLanguage, "_hp")}</code>{t("websiteForms.honeypotEmbedAfter")}</p>
                   <div className="bg-muted/50 rounded-lg p-4">
-                    <pre className="text-xs whitespace-pre-wrap">{`<form action="/api/public/website-forms/${selectedForm.slug}/submit" method="POST">
-  <input type="hidden" name="_hp" value="" style="display:none" />
-${fields.map(f => `  <label>${f.label}</label>\n  <input type="${f.fieldType}" name="${f.name}" ${f.isRequired ? 'required' : ''} />`).join('\n')}
-  <button type="submit">Submit</button>
-</form>`}</pre>
+                    <pre className="text-xs whitespace-pre-wrap">{translateUi(uiLanguage, "<form action=\"/api/public/website-forms/{value0}/submit\" method=\"POST\">\n  <input type=\"hidden\" name=\"_hp\" value=\"\" style=\"display:none\" />\n{value1}\n  <button type=\"submit\">Submit</button>\n</form>", undefined, { value0: String(selectedForm.slug), value1: String(fields.map(f => `  <label>${f.label}</label>\n  <input type="${f.fieldType}" name="${f.name}" ${f.isRequired ? 'required' : ''} />`).join('\n')) })}</pre>
                   </div>
                   <Button variant="outline" size="sm" className="gap-1"
                     onClick={() => {

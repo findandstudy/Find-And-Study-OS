@@ -649,7 +649,7 @@ export default function CourseFinder() {
       if (missingStudyLevels.length > 0) {
         toast({
           title: translateUi(uiLanguage, "Proposal generated with a partial document checklist"),
-          description: `No document requirements are configured for: ${missingStudyLevels.join(", ")}.`,
+          description: translateUi(uiLanguage, "No document requirements are configured for: {value0}.", undefined, { value0: String(missingStudyLevels.join(", ")) }),
         });
       }
     } catch (err: any) {
@@ -1307,11 +1307,11 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
             <tr className="border-b bg-muted/30 text-xs text-muted-foreground font-medium">
               <th className="p-3 w-10"></th>
               <th className="p-3 text-left min-w-[250px]">
-                <SortHeader label="Program" field="name" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+                <SortHeader label={translateUi(uiLanguage, "Program")} field="name" sortField={sortField} sortDir={sortDir} onSort={onSort} />
               </th>
               <ColumnHeader
                 asTh
-                label="University"
+                label={translateUi(uiLanguage, "University")}
                 className="text-left min-w-[160px]"
                 sort={sortFor("university")}
                 filter={{
@@ -1324,7 +1324,7 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
               />
               <ColumnHeader
                 asTh
-                label="Degree"
+                label={translateUi(uiLanguage, "Degree")}
                 className="text-left"
                 sort={sortFor("degree")}
                 filter={{
@@ -1337,7 +1337,7 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
               />
               <ColumnHeader
                 asTh
-                label="Country"
+                label={translateUi(uiLanguage, "Country")}
                 className="text-left"
                 sort={sortFor("country")}
                 filter={{
@@ -1350,7 +1350,7 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
               />
               <ColumnHeader
                 asTh
-                label="Language"
+                label={translateUi(uiLanguage, "Language")}
                 className="text-left"
                 sort={sortFor("language")}
                 filter={{
@@ -1363,7 +1363,7 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
               />
               <ColumnHeader
                 asTh
-                label="Tuition"
+                label={translateUi(uiLanguage, "Tuition")}
                 align="right"
                 className="text-right"
                 sort={sortFor("tuition")}
@@ -1380,7 +1380,7 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
               )}
               <ColumnHeader
                 asTh
-                label="Intakes"
+                label={translateUi(uiLanguage, "Intakes")}
                 align="center"
                 className="text-center"
                 filter={{
@@ -1393,7 +1393,7 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
               />
               <ColumnHeader
                 asTh
-                label="Status"
+                label={translateUi(uiLanguage, "Status")}
                 align="center"
                 className="text-center"
                 filter={{
@@ -2198,7 +2198,7 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
       return;
     }
     if (currentPartCount + files.length > MAX_DOCUMENT_PARTS) {
-      toast({ title: translateUi(uiLanguage, "Too many document parts"), description: `You can combine up to ${MAX_DOCUMENT_PARTS} parts in one document box.`, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Too many document parts"), description: translateUi(uiLanguage, "You can combine up to {value0} parts in one document box.", undefined, { value0: String(MAX_DOCUMENT_PARTS) }), variant: "destructive" });
       return;
     }
     for (const file of files) {
@@ -2486,7 +2486,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
         nationality: created.nationality || null,
         createdAt: created.createdAt,
       });
-      toast({ title: translateUi(uiLanguage, "Student registered"), description: `${created.firstName} ${created.lastName} has been added to the system.` });
+      toast({ title: translateUi(uiLanguage, "Student registered"), description: translateUi(uiLanguage, "{value0} {value1} has been added to the system.", undefined, { value0: String(created.firstName), value1: String(created.lastName) }) });
       setStep("documents");
     } catch (err: any) {
       toast({ title: translateUi(uiLanguage, "Registration failed"), description: err.message || translateUi(uiLanguage, "Could not create student"), variant: "destructive" });

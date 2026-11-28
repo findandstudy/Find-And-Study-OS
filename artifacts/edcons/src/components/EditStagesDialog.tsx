@@ -420,7 +420,7 @@ function StageEditForm({
 
       <FormSection
         title={translateUi(uiLanguage, "Stage audience")}
-        description="Control who can see this stage and, separately, who may move a record into it."
+        description={translateUi(uiLanguage, "Control who can see this stage and, separately, who may move a record into it.")}
       >
         <div className="space-y-2">
           <Label className="text-sm font-medium">{translateUi(uiLanguage, "Who can view this stage?")}</Label>

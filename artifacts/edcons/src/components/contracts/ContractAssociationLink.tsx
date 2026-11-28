@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { ExternalLink } from "lucide-react";
 
 type Props = {
@@ -33,6 +34,7 @@ function associationHref(subjectType?: string | null, subjectId?: number | null)
 }
 
 export function ContractAssociationLink({ subjectType, subjectId, subjectLabel, className = "" }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   if (!subjectType) return <span className={`text-muted-foreground ${className}`}>—</span>;
 
   const typeLabel = SUBJECT_LABELS[subjectType] || subjectType;
@@ -48,7 +50,7 @@ export function ContractAssociationLink({ subjectType, subjectId, subjectLabel, 
           target="_blank"
           rel="noreferrer"
           className="inline-flex max-w-full items-center gap-1 font-medium text-primary hover:underline"
-          title={`Open ${displayLabel}`}
+          title={translateUi(uiLanguage, "Open {value0}", undefined, { value0: String(displayLabel) })}
         >
           <span className="truncate">{displayLabel}</span>
           <ExternalLink className="h-3 w-3 shrink-0" />

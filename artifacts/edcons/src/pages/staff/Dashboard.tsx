@@ -165,7 +165,7 @@ export default function StaffDashboard() {
       });
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
-        toast({ title: t("common.error"), description: (body as any).error || `HTTP ${r.status}`, variant: "destructive" });
+        toast({ title: t("common.error"), description: (body as any).error || translateUi(uiLanguage, "HTTP {value0}", undefined, { value0: String(r.status) }), variant: "destructive" });
         return;
       }
       queryClient.invalidateQueries({ queryKey: ["/api/tasks", "dashboard-mine"] });

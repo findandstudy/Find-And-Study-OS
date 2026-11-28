@@ -367,7 +367,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
       const unavailable = data.sources.length - used;
       toast({
         title: translateUi(uiLanguage, "AI draft created"),
-        description: `${used} web source${used === 1 ? "" : "s"} used${unavailable ? `; ${unavailable} could not be read` : ""}. Review before publishing.`,
+        description: translateUi(uiLanguage, "{value0} web source{value1} used{value2}. Review before publishing.", undefined, { value0: String(used), value1: String(used === 1 ? "" : "s"), value2: String(unavailable ? `; ${unavailable} could not be read` : "") }),
       });
     },
     onError: (error: Error) => toast({ title: translateUi(uiLanguage, "AI draft could not be created"), description: error.message, variant: "destructive" }),
@@ -445,7 +445,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
     if (form.canonicalUrl.trim()) {
       const expected = editPost ? new RegExp(`^/${form.locale}/guides/[a-z0-9-]+-${editPost.id}$`) : null;
       if (!expected?.test(form.canonicalUrl.trim())) {
-        toast({ title: translateUi(uiLanguage, "Canonical path is not valid"), description: editPost ? `Use /${form.locale}/guides/article-slug-${editPost.id}, or leave it empty.` : translateUi(uiLanguage, "Save the new article first, then add a canonical override if needed."), variant: "destructive" });
+        toast({ title: translateUi(uiLanguage, "Canonical path is not valid"), description: editPost ? translateUi(uiLanguage, "Use /{value0}/guides/article-slug-{value1}, or leave it empty.", undefined, { value0: String(form.locale), value1: String(editPost.id) }) : translateUi(uiLanguage, "Save the new article first, then add a canonical override if needed."), variant: "destructive" });
         return;
       }
     }
@@ -835,7 +835,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label>{translateUi(uiLanguage, "Excerpt")}</Label>
-                <AiFieldButton action="generateExcerpt" context={form.body || form.title} locale={form.locale} onResult={r => setForm(f => ({ ...f, excerpt: r }))} label="Generate" />
+                <AiFieldButton action="generateExcerpt" context={form.body || form.title} locale={form.locale} onResult={r => setForm(f => ({ ...f, excerpt: r }))} label={translateUi(uiLanguage, "Generate")} />
               </div>
               <Textarea value={form.excerpt} onChange={e => setForm(f => ({ ...f, excerpt: e.target.value }))} className="rounded-xl" rows={2} placeholder={translateUi(uiLanguage, "Brief summary of the post")} />
             </div>
@@ -844,8 +844,8 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
               <div className="flex items-center justify-between">
                 <Label>{translateUi(uiLanguage, "Body (Rich Text / HTML)")}</Label>
                 <div className="flex gap-1">
-                  <AiFieldButton action="expandText" context={form.body || form.title} locale={form.locale} onResult={r => setForm(f => ({ ...f, body: r }))} label="Expand" />
-                  <AiFieldButton action="improveTone" context={form.body} locale={form.locale} onResult={r => setForm(f => ({ ...f, body: r }))} label="Improve" />
+                  <AiFieldButton action="expandText" context={form.body || form.title} locale={form.locale} onResult={r => setForm(f => ({ ...f, body: r }))} label={translateUi(uiLanguage, "Expand")} />
+                  <AiFieldButton action="improveTone" context={form.body} locale={form.locale} onResult={r => setForm(f => ({ ...f, body: r }))} label={translateUi(uiLanguage, "Improve")} />
                 </div>
               </div>
               <Textarea value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} className="rounded-xl font-mono text-sm" rows={12} placeholder={translateUi(uiLanguage, "Write your blog post content here...")} />
@@ -1030,7 +1030,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
             </div>
 
             <div className="border-t pt-4">
-              <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">{translateUi(uiLanguage, "SEO Settings")} <AiFieldButton action="generateMetaTitle" context={form.title + " " + (form.excerpt || form.body.slice(0, 200))} locale={form.locale} onResult={r => setForm(f => ({ ...f, metaTitle: r }))} label="AI Meta Title" /> <AiFieldButton action="generateMetaDescription" context={form.title + " " + (form.excerpt || form.body.slice(0, 300))} locale={form.locale} onResult={r => setForm(f => ({ ...f, metaDescription: r }))} label="AI Meta Desc" /></h4>
+              <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">{translateUi(uiLanguage, "SEO Settings")} <AiFieldButton action="generateMetaTitle" context={form.title + " " + (form.excerpt || form.body.slice(0, 200))} locale={form.locale} onResult={r => setForm(f => ({ ...f, metaTitle: r }))} label={translateUi(uiLanguage, "AI Meta Title")} /> <AiFieldButton action="generateMetaDescription" context={form.title + " " + (form.excerpt || form.body.slice(0, 300))} locale={form.locale} onResult={r => setForm(f => ({ ...f, metaDescription: r }))} label={translateUi(uiLanguage, "AI Meta Desc")} /></h4>
               <div className="space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -1044,7 +1044,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
                 </div>
                 <div className="space-y-1.5">
                   <Label>{translateUi(uiLanguage, "Canonical path")}</Label>
-                  <Input dir="ltr" value={form.canonicalUrl} onChange={e => setForm(f => ({ ...f, canonicalUrl: e.target.value }))} className="rounded-xl" placeholder={`/${form.locale}/guides/${form.slug || "article"}-${editPost?.id || "id"}`} />
+                  <Input dir="ltr" value={form.canonicalUrl} onChange={e => setForm(f => ({ ...f, canonicalUrl: e.target.value }))} className="rounded-xl" placeholder={translateUi(uiLanguage, "/{value0}/guides/{value1}-{value2}", undefined, { value0: String(form.locale), value1: String(form.slug || "article"), value2: String(editPost?.id || "id") })} />
                   <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Leave empty to use the generated locale-aware article URL. A custom path is accepted only when it keeps this article ID.")}</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">

@@ -608,7 +608,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                               </span>
                             )}
                             {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
-                              <span className="text-xs text-amber-500/70" data-testid="fu-edited-by"> {translateUi(uiLanguage, "(edited")}{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {formatDate(fu.updatedAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                              <span className="text-xs text-amber-500/70" data-testid="fu-edited-by"> {translateUi(uiLanguage, "(edited")}{fu.updatedByName ? translateUi(uiLanguage, " by {value0}", undefined, { value0: String(fu.updatedByName) }) : ""} {formatDate(fu.updatedAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
                                 {" "}
                                 {new Date(fu.updatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })})
                               </span>

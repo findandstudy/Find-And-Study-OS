@@ -612,7 +612,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
         <p className="text-sm text-muted-foreground py-2">{translateUi(uiLanguage, "This action cannot be undone.")}</p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? translateUi(uiLanguage, "Deleting...") : `Delete ${count}`}</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? translateUi(uiLanguage, "Deleting...") : translateUi(uiLanguage, "Delete {value0}", undefined, { value0: String(count) })}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -965,7 +965,7 @@ export default function AgentAppsPage() {
     for (const id of ids) { try { await deleteApp.mutateAsync(id); } catch { failed++; } }
     setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["applications"] });
-    if (failed === 0) toast({ title: `${ids.length} application${ids.length > 1 ? "s" : ""} deleted` });
+    if (failed === 0) toast({ title: translateUi(uiLanguage, "{value0} application{value1} deleted", undefined, { value0: String(ids.length), value1: String(ids.length > 1 ? "s" : "") }) });
     else toast({ title: translateUi(uiLanguage, "Some could not be deleted"), variant: "destructive" });
   }
 
@@ -1044,15 +1044,15 @@ export default function AgentAppsPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
-                    <SortHeader label="Student" sortKey="student" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Stage" sortKey="stage" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Country" sortKey="country" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="University" sortKey="university" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Program" sortKey="program" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Level" sortKey="level" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Intake" sortKey="intake" currentSort={sort} onSort={handleSort} />
-                    {showCommission && <SortHeader label="Commission" sortKey="fee" currentSort={sort} onSort={handleSort} />}
-                    <SortHeader label="Created" sortKey="date" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Student")} sortKey="student" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Stage")} sortKey="stage" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Country")} sortKey="country" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "University")} sortKey="university" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Program")} sortKey="program" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Level")} sortKey="level" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Intake")} sortKey="intake" currentSort={sort} onSort={handleSort} />
+                    {showCommission && <SortHeader label={translateUi(uiLanguage, "Commission")} sortKey="fee" currentSort={sort} onSort={handleSort} />}
+                    <SortHeader label={translateUi(uiLanguage, "Created")} sortKey="date" currentSort={sort} onSort={handleSort} />
                   </TableRow>
                 </TableHeader>
                 <TableBody>

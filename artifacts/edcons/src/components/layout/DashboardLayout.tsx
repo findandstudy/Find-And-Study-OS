@@ -958,7 +958,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                     )}
                     <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
                       <p className="text-sm font-semibold text-foreground truncate">{user.firstName} {user.lastName}</p>
-                      <p className="text-xs text-muted-foreground truncate">{user.email || `ID #${user.id}`}</p>
+                      <p className="text-xs text-muted-foreground truncate">{user.email || translateUi(uiLanguage, "ID #{value0}", undefined, { value0: String(user.id) })}</p>
                     </div>
                     <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0 group-data-[collapsible=icon]:hidden" />
                   </button>

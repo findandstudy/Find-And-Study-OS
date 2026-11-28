@@ -427,7 +427,7 @@ export function IntegrationsManager() {
           config: editConfig,
         }),
       });
-      toast({ title: `${isNamedAnthropicConnection(editDef.key) ? connectionName.trim() : editDef.name} settings saved` });
+      toast({ title: translateUi(uiLanguage, "{value0} settings saved", undefined, { value0: String(isNamedAnthropicConnection(editDef.key) ? connectionName.trim() : editDef.name) }) });
       setEditDef(null);
       fetchIntegrations();
     } catch (err: any) {
@@ -458,7 +458,7 @@ export function IntegrationsManager() {
   }
 
   function copyToClipboard(text: string, label: string) {
-    navigator.clipboard.writeText(text).then(() => toast({ title: `${label} copied` })).catch(() => {});
+    navigator.clipboard.writeText(text).then(() => toast({ title: translateUi(uiLanguage, "{value0} copied", undefined, { value0: String(label) }) })).catch(() => {});
   }
 
   async function handleTest(key: string) {
@@ -977,7 +977,7 @@ function ChannelAccountsDialog({
   }
 
   function copyToClipboard(text: string, label: string) {
-    navigator.clipboard.writeText(text).then(() => toast({ title: `${label} copied` })).catch(() => {});
+    navigator.clipboard.writeText(text).then(() => toast({ title: translateUi(uiLanguage, "{value0} copied", undefined, { value0: String(label) }) })).catch(() => {});
   }
 
   async function save() {

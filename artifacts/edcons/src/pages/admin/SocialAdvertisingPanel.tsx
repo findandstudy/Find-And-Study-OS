@@ -364,11 +364,11 @@ export default function SocialAdvertisingPanel({
         <span>
           {gate?.enabled
             ? tr
-              ? `Dış reklam işlemleri açık. Kampanya başına hard üst sınır ${maximumBudget} minor unit.`
-              : `External ad execution is enabled. Hard per-campaign cap: ${maximumBudget} minor units.`
+              ? translateUi(uiLanguage, "Dış reklam işlemleri açık. Kampanya başına hard üst sınır {value0} minor unit.", undefined, { value0: String(maximumBudget) })
+              : translateUi(uiLanguage, "External ad execution is enabled. Hard per-campaign cap: {value0} minor units.", undefined, { value0: String(maximumBudget) })
             : tr
-              ? `Dış reklam işlemleri kapalı (${gate?.reason ?? "SOCIAL_AD_WORKER_DISABLED"}). Plan ve onay kayıtları oluşturulabilir; provider çağrısı yapılmaz.`
-              : `External ad execution is disabled (${gate?.reason ?? "SOCIAL_AD_WORKER_DISABLED"}). Plans and approvals can be recorded without provider calls.`}
+              ? translateUi(uiLanguage, "Dış reklam işlemleri kapalı ({value0}). Plan ve onay kayıtları oluşturulabilir; provider çağrısı yapılmaz.", undefined, { value0: String(gate?.reason ?? "SOCIAL_AD_WORKER_DISABLED") })
+              : translateUi(uiLanguage, "External ad execution is disabled ({value0}). Plans and approvals can be recorded without provider calls.", undefined, { value0: String(gate?.reason ?? "SOCIAL_AD_WORKER_DISABLED") })}
         </span>
       </div>
 
@@ -765,8 +765,8 @@ export default function SocialAdvertisingPanel({
             </div>
             <p className="sm:col-span-2 text-xs text-muted-foreground">
               {tr
-                ? `Para birimi reklam hesabından gelir: ${selectedAccount?.currency_code ?? "—"}. CREATE işlemi harcama başlatmaz; kampanya sağlayıcıda PAUSED açılır.`
-                : `Currency comes from the ad account: ${selectedAccount?.currency_code ?? "—"}. CREATE never starts spending; the provider campaign is provisioned PAUSED.`}
+                ? translateUi(uiLanguage, "Para birimi reklam hesabından gelir: {value0}. CREATE işlemi harcama başlatmaz; kampanya sağlayıcıda PAUSED açılır.", undefined, { value0: String(selectedAccount?.currency_code ?? "—") })
+                : translateUi(uiLanguage, "Currency comes from the ad account: {value0}. CREATE never starts spending; the provider campaign is provisioned PAUSED.", undefined, { value0: String(selectedAccount?.currency_code ?? "—") })}
             </p>
           </div>
           <DialogFooter>

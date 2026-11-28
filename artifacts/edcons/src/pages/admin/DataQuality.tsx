@@ -171,7 +171,7 @@ export default function DataQualityPage() {
             </table>
           </div>
           {!loading && (catalogConfidence?.data.length ?? 0) === 0 && <div className="py-8 text-center text-muted-foreground">{translateUi(uiLanguage, "No active catalogue programs found.")}</div>}
-          <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Read-only preview. Nothing is published or changed from this panel.")}{catalogConfidence?.summary.truncated ? ` Showing the first ${catalogConfidence.summary.rowsReturned} highest-risk programs.` : ""}</p>
+          <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Read-only preview. Nothing is published or changed from this panel.")}{catalogConfidence?.summary.truncated ? translateUi(uiLanguage, " Showing the first {value0} highest-risk programs.", undefined, { value0: String(catalogConfidence.summary.rowsReturned) }) : ""}</p>
         </CardContent>
       </Card>
 

@@ -289,7 +289,7 @@ export default function SelfFillLinksPage() {
                   <td className="px-4 py-3"><Badge variant={STATUS_TONE[s.status]}>{t(`selfFill.status.${s.status}`)}</Badge></td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">
                     <div>{s.sendCount || 0} {translateUi(uiLanguage, "send")}{s.sendCount === 1 ? "" : "s"}</div>
-                    <div>{s.lastReminderAt ? `Reminder ${formatDateTime(lang, s.lastReminderAt)}` : s.lastSentAt ? formatDateTime(lang, s.lastSentAt) : translateUi(uiLanguage, "Not sent")}</div>
+                    <div>{s.lastReminderAt ? translateUi(uiLanguage, "Reminder {value0}", undefined, { value0: String(formatDateTime(lang, s.lastReminderAt)) }) : s.lastSentAt ? formatDateTime(lang, s.lastSentAt) : translateUi(uiLanguage, "Not sent")}</div>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{formatDateTime(lang, s.expiresAt)}</td>
                   <td className="px-4 py-3 text-right space-x-1">
@@ -367,7 +367,7 @@ export default function SelfFillLinksPage() {
               </div>
             </div>
             {form.subjectType && <div>
-              <Label>{form.subjectType === "other" ? translateUi(uiLanguage, "Association label") : `Select ${SUBJECT_LABELS[form.subjectType]}`}</Label>
+              <Label>{form.subjectType === "other" ? translateUi(uiLanguage, "Association label") : translateUi(uiLanguage, "Select {value0}", undefined, { value0: String(SUBJECT_LABELS[form.subjectType]) })}</Label>
               {form.subjectType === "other" ? (
                 <Input value={form.subjectLabel} onChange={e => setForm(f => ({ ...f, subjectLabel: e.target.value }))} placeholder={translateUi(uiLanguage, "Name or reference")} />
               ) : (
@@ -416,7 +416,7 @@ export default function SelfFillLinksPage() {
               </Select>
             </div>
             {editForm.subjectType && <div>
-              <Label>{editForm.subjectType === "other" ? translateUi(uiLanguage, "Association label") : `Select ${SUBJECT_LABELS[editForm.subjectType]}`}</Label>
+              <Label>{editForm.subjectType === "other" ? translateUi(uiLanguage, "Association label") : translateUi(uiLanguage, "Select {value0}", undefined, { value0: String(SUBJECT_LABELS[editForm.subjectType]) })}</Label>
               {editForm.subjectType === "other" ? (
                 <Input value={editForm.subjectLabel} onChange={e => setEditForm(f => ({ ...f, subjectLabel: e.target.value }))} />
               ) : (

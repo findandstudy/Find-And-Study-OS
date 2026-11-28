@@ -70,7 +70,7 @@ export function RowActionsMenu({
         body: JSON.stringify({ agentId: null }),
       });
       if (!res.ok) throw new Error("Failed to unlink agent");
-      toast({ title: translateUi(uiLanguage, "Agent unlinked"), description: `Removed agent from ${entityName}` });
+      toast({ title: translateUi(uiLanguage, "Agent unlinked"), description: translateUi(uiLanguage, "Removed agent from {value0}", undefined, { value0: String(entityName) }) });
       onRefresh?.();
       qc.invalidateQueries({ queryKey: [entityType === "lead" ? "/api/leads" : entityType === "student" ? "/api/students" : "applications"] });
     } catch (err: any) {
@@ -113,7 +113,7 @@ export function RowActionsMenu({
           {onAssign && staffUsersList && (currentAssignedToId ? (canReassign || currentAssignedToId === currentUserId) : canAssign) && (
             <DropdownMenuItem onClick={() => setAssignOpen(true)}>
               <UserPlus className="w-3.5 h-3.5 mr-2" />
-              {assignedName ? `Reassign (${assignedName})` : translateUi(uiLanguage, "Assign Staff")}
+              {assignedName ? translateUi(uiLanguage, "Reassign ({value0})", undefined, { value0: String(assignedName) }) : translateUi(uiLanguage, "Assign Staff")}
             </DropdownMenuItem>
           )}
 
@@ -226,7 +226,7 @@ function LinkAgentDialog({ open, onClose, entityType, entityId, entityName, onRe
         body: JSON.stringify({ agentId }),
       });
       if (!res.ok) throw new Error("Failed to link agent");
-      toast({ title: translateUi(uiLanguage, "Agent linked"), description: `Agent linked to ${entityName}` });
+      toast({ title: translateUi(uiLanguage, "Agent linked"), description: translateUi(uiLanguage, "Agent linked to {value0}", undefined, { value0: String(entityName) }) });
       onRefresh?.();
       qc.invalidateQueries({ queryKey: [entityType === "lead" ? "/api/leads" : entityType === "student" ? "/api/students" : "applications"] });
       setSearch("");
@@ -399,7 +399,7 @@ function SetPasswordDialog({ open, onClose, studentId, entityName }: {
         const err = await res.json().catch(() => ({ error: "Failed" }));
         throw new Error(err.error || "Failed to set password");
       }
-      toast({ title: translateUi(uiLanguage, "Password updated"), description: `Password has been set for ${entityName}` });
+      toast({ title: translateUi(uiLanguage, "Password updated"), description: translateUi(uiLanguage, "Password has been set for {value0}", undefined, { value0: String(entityName) }) });
       handleClose();
     } catch (err: any) {
       toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });

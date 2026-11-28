@@ -97,7 +97,7 @@ export function InboxSubmitTab({
     if (missingAcademic.length > 0) {
       toast({
         title: translateUi(uiLanguage, "Academic information is incomplete"),
-        description: `AI could not verify: ${missingAcademic.join(", ")}. Review the uploaded education documents or enter these fields manually.`,
+        description: translateUi(uiLanguage, "AI could not verify: {value0}. Review the uploaded education documents or enter these fields manually.", undefined, { value0: String(missingAcademic.join(", ")) }),
         variant: "destructive",
       });
       return;

@@ -175,7 +175,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove, applicationSession }:
       return;
     }
     if (currentPartCount + files.length > MAX_DOCUMENT_PARTS) {
-      toast({ title: translateUi(uiLanguage, "Too many document parts"), description: `You can combine up to ${MAX_DOCUMENT_PARTS} parts in one document box.`, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Too many document parts"), description: translateUi(uiLanguage, "You can combine up to {value0} parts in one document box.", undefined, { value0: String(MAX_DOCUMENT_PARTS) }), variant: "destructive" });
       return;
     }
 

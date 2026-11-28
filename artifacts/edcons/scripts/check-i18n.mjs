@@ -7,6 +7,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from 'typescript';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const trDir = join(root, "src/lib/i18n/translations");
@@ -37,7 +38,31 @@ function flattenValues(obj, prefix = "", out = new Map()) {
 }
 
 function interpolationTokens(value) {
-  return [...value.matchAll(/\{[a-zA-Z0-9_]+\}|%s/g)].map((match) => match[0]).sort();
+  return [...value.matchAll(/\{\{[^{}]+\}\}|\{[a-zA-Z0-9_]+\}|%s/g)]
+    .map(([token]) => token.startsWith('{{') ? `{{${token.slice(2, -2).split('|')[0]}}}` : token).sort();
+}
+
+const duplicateKeyErrors = [];
+const translationArtifactErrors = [];
+function inspectDictionary(file, source) {
+  const tree = ts.parseJsonText(file, source);
+  function visit(node, prefix = '') {
+    if (ts.isObjectLiteralExpression(node)) {
+      const seen = new Set();
+      for (const prop of node.properties) {
+        const key = prop.name?.text;
+        if (seen.has(key)) duplicateKeyErrors.push(`${file}:${prefix}${key}`);
+        seen.add(key);
+        if (prop.initializer) visit(prop.initializer, `${prefix}${key}.`);
+      }
+    } else ts.forEachChild(node, child => visit(child, prefix));
+  }
+  visit(tree);
+  for (const [key, value] of flattenValues(JSON.parse(source))) {
+    if (/@\s*(?:info|action|label|title)\b|QDialog|BelizComment|Saytcolor/i.test(value)) {
+      translationArtifactErrors.push(`${file}:${key}`);
+    }
+  }
 }
 
 const enValues = flattenValues(en);
@@ -67,6 +92,7 @@ const parityErrors = [];
 const placeholderErrors = [];
 const emptyValueErrors = [];
 const languageFiles = readdirSync(trDir).filter((file) => file.endsWith(".json"));
+for (const file of languageFiles) inspectDictionary(file, readFileSync(join(trDir, file), 'utf8'));
 const actualLanguages = languageFiles.map((file) => file.replace(/\.json$/, "")).sort();
 const expectedSorted = [...expectedLanguages].sort();
 const languageSetMismatch = actualLanguages.join("\0") !== expectedSorted.join("\0");
@@ -90,6 +116,17 @@ for (const file of languageFiles) {
 }
 
 let failed = false;
+for (const [label, errors] of [['duplicate JSON keys', duplicateKeyErrors], ['corrupt translation artifacts', translationArtifactErrors]]) {
+  if (errors.length) {
+    failed = true;
+    console.error(`[i18n-check] ${errors.length} ${label}:\n${errors.slice(0, 20).map(e => `  - ${e}`).join('\n')}`);
+  }
+}
+const sidebarSource = readFileSync(join(root, 'src/components/layout/DashboardLayout.tsx'), 'utf8');
+if (/title:\s*['"][^'"]*\p{L}[^'"]*['"]/u.test(sidebarSource)) {
+  failed = true;
+  console.error('[i18n-check] Sidebar menu titles must use the shared translation catalogue.');
+}
 if (languageSetMismatch) {
   failed = true;
   console.error(`\n[i18n-check] Language files differ from the canonical set.`);

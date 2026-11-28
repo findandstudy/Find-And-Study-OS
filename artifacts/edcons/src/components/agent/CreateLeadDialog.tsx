@@ -144,7 +144,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
         className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background hover:bg-accent/50 transition-colors"
       >
         <span className={`truncate ${localSelected.length === 0 ? "text-muted-foreground" : ""}`}>
-          {localSelected.length === 0 ? translateUi(uiLanguage, "Select countries...") : localSelected.length === 1 ? localSelected[0] : `${localSelected.length} countries selected`}
+          {localSelected.length === 0 ? translateUi(uiLanguage, "Select countries...") : localSelected.length === 1 ? localSelected[0] : translateUi(uiLanguage, "{value0} countries selected", undefined, { value0: String(localSelected.length) })}
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </button>

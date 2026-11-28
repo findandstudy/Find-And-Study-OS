@@ -10,10 +10,12 @@ export function uiTextKey(text: string): string {
   return `uiText.s${(hash >>> 0).toString(16)}`;
 }
 
-export function translateUi(lang: string, english: string, turkish?: string): string {
+export function translateUi(lang: string, english: string, turkish?: string, params?: Record<string, string | number>): string {
   const key = uiTextKey(english);
-  const value = getTranslation(isValidLanguage(lang) ? lang : 'en', key);
-  return value === key ? (lang === 'tr' && turkish ? turkish : english) : value;
+  const value = getTranslation(isValidLanguage(lang) ? lang : 'en', key, params);
+  let result = value === key ? (lang === 'tr' && turkish ? turkish : english) : value;
+  if (value === key && params) for (const [name, replacement] of Object.entries(params)) result = result.replaceAll(`{${name}}`, String(replacement));
+  return result;
 }
 
 /** Text-only React result preserves existing layout and follows locale changes. */

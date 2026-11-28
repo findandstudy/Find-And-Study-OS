@@ -313,7 +313,7 @@ function UsersTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive: newActive }),
       });
-      toast({ title: `User ${newActive ? "activated" : "deactivated"}` });
+      toast({ title: translateUi(uiLanguage, "User {value0}", undefined, { value0: String(newActive ? "activated" : "deactivated") }) });
       refetch();
     } catch (err: any) {
       toast({ title: translateUi(uiLanguage, "Error"), description: err.message, variant: "destructive" });
@@ -501,11 +501,11 @@ function UsersTab() {
           <table className="w-full">
             <thead>
               <tr className="bg-secondary/50 text-left">
-                <UserSortHeader label="User" sortKey="user" currentSort={sort} onSort={handleSort} />
-                <UserSortHeader label="Email" sortKey="email" currentSort={sort} onSort={handleSort} />
-                <UserSortHeader label="Role" sortKey="role" currentSort={sort} onSort={handleSort} />
+                <UserSortHeader label={translateUi(uiLanguage, "User")} sortKey="user" currentSort={sort} onSort={handleSort} />
+                <UserSortHeader label={translateUi(uiLanguage, "Email")} sortKey="email" currentSort={sort} onSort={handleSort} />
+                <UserSortHeader label={translateUi(uiLanguage, "Role")} sortKey="role" currentSort={sort} onSort={handleSort} />
                 <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{translateUi(uiLanguage, "Branch")}</th>
-                <UserSortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
+                <UserSortHeader label={translateUi(uiLanguage, "Status")} sortKey="status" currentSort={sort} onSort={handleSort} />
                 <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{translateUi(uiLanguage, "Actions")}</th>
               </tr>
             </thead>

@@ -1140,9 +1140,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     </div>
                   ) : (
                     <div className="space-y-3 text-sm">
-                      <InfoRow icon={<FileText className="w-4 h-4" />} label="Passport No" value={student?.passportNumber} />
-                      <InfoRow icon={<Calendar className="w-4 h-4" />} label="Issue Date" value={fmtDate(student?.passportIssueDate, dateFormat) || undefined} />
-                      <InfoRow icon={<Calendar className="w-4 h-4" />} label="Expiry Date" value={fmtDate(student?.passportExpiry, dateFormat) || undefined} />
+                      <InfoRow icon={<FileText className="w-4 h-4" />} label={translateUi(uiLanguage, "Passport No")} value={student?.passportNumber} />
+                      <InfoRow icon={<Calendar className="w-4 h-4" />} label={translateUi(uiLanguage, "Issue Date")} value={fmtDate(student?.passportIssueDate, dateFormat) || undefined} />
+                      <InfoRow icon={<Calendar className="w-4 h-4" />} label={translateUi(uiLanguage, "Expiry Date")} value={fmtDate(student?.passportExpiry, dateFormat) || undefined} />
                     </div>
                   )}
                 </div>
@@ -1617,7 +1617,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                               </span>
                             )}
                             {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
-                              <span className="text-xs text-amber-500/70" data-testid="fu-edited-by"> {translateUi(uiLanguage, "(edited")}{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {fmtDate(fu.updatedAt, dateFormat)}
+                              <span className="text-xs text-amber-500/70" data-testid="fu-edited-by"> {translateUi(uiLanguage, "(edited")}{fu.updatedByName ? translateUi(uiLanguage, " by {value0}", undefined, { value0: String(fu.updatedByName) }) : ""} {fmtDate(fu.updatedAt, dateFormat)}
                                 {" "}
                                 {new Date(fu.updatedAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })})
                               </span>
@@ -1661,7 +1661,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 }}
                 options={documentTypeOptions.map(d => ({ value: d.key, label: d.label }))}
                 placeholder={translateUi(uiLanguage, "Select document type")}
-                searchPlaceholder="Search document types..."
+                searchPlaceholder={translateUi(uiLanguage, "Search document types...")}
                 className="mt-1"
                 minDropdownWidth={320}
               />
@@ -1673,7 +1673,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 className="mt-1"
                 value={uploadName}
                 onChange={e => setUploadName(e.target.value)}
-                placeholder={`passport-${(student?.firstName ?? "").toLowerCase()}-${(student?.lastName ?? "").toLowerCase()}`}
+                placeholder={translateUi(uiLanguage, "passport-{value0}-{value1}", undefined, { value0: String((student?.firstName ?? "").toLowerCase()), value1: String((student?.lastName ?? "").toLowerCase()) })}
               />
             </div>
 
@@ -1947,12 +1947,12 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
             <div className="grid grid-cols-2 gap-4">
               <F required label={t("studentDetailPage.firstName")} value={form.firstName} onChange={field("firstName")} placeholder={t("studentDetailPage.firstNamePh")} latinUppercase />
               <F required label={t("studentDetailPage.lastName")} value={form.lastName} onChange={field("lastName")} placeholder={t("studentDetailPage.lastNamePh")} latinUppercase />
-              <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder={translateUi(uiLanguage, "email@example.com")} />
+              <F label={translateUi(uiLanguage, "Email")} value={form.email} onChange={field("email")} type="email" placeholder={translateUi(uiLanguage, "email@example.com")} />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Phone")}</Label>
                 <PhoneField value={form.phone} onChange={v => setForm(f => ({ ...f, phone: v }))} />
               </div>
-              <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
+              <F label={translateUi(uiLanguage, "Date of Birth")} value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Gender")}</Label>
                 <select
@@ -1971,10 +1971,10 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
               </div>
               <F label={t("studentDetailPage.mothersName")} value={form.motherName} onChange={field("motherName")} placeholder={t("studentDetailPage.mothersNamePh")} latinUppercase />
               <F label={t("studentDetailPage.fathersName")} value={form.fatherName} onChange={field("fatherName")} placeholder={t("studentDetailPage.fathersNamePh")} latinUppercase />
-              <F label="Address" value={form.address} onChange={field("address")} placeholder={translateUi(uiLanguage, "Full home address")} className="col-span-2" />
-              <F label="Residence City" value={form.addressCity} onChange={field("addressCity")} placeholder={translateUi(uiLanguage, "e.g. Khujand")} />
-              <F label="Postal Code" value={form.postalCode} onChange={field("postalCode")} placeholder="e.g. 735700" />
-              <F label="City of Birth (optional)" value={form.cityOfBirth} onChange={field("cityOfBirth")} placeholder={translateUi(uiLanguage, "e.g. Khujand")} />
+              <F label={translateUi(uiLanguage, "Address")} value={form.address} onChange={field("address")} placeholder={translateUi(uiLanguage, "Full home address")} className="col-span-2" />
+              <F label={translateUi(uiLanguage, "Residence City")} value={form.addressCity} onChange={field("addressCity")} placeholder={translateUi(uiLanguage, "e.g. Khujand")} />
+              <F label={translateUi(uiLanguage, "Postal Code")} value={form.postalCode} onChange={field("postalCode")} placeholder="e.g. 735700" />
+              <F label={translateUi(uiLanguage, "City of Birth (optional)")} value={form.cityOfBirth} onChange={field("cityOfBirth")} placeholder={translateUi(uiLanguage, "e.g. Khujand")} />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Needs Visa Support")}</Label>
                 <select
@@ -1996,9 +1996,9 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
               <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Passport / Identity")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder={translateUi(uiLanguage, "e.g. AB1234567")} className="col-span-2" />
-              <F label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" />
-              <F label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" />
+              <F label={translateUi(uiLanguage, "Passport Number")} value={form.passportNumber} onChange={field("passportNumber")} placeholder={translateUi(uiLanguage, "e.g. AB1234567")} className="col-span-2" />
+              <F label={translateUi(uiLanguage, "Issue Date")} value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" />
+              <F label={translateUi(uiLanguage, "Expiry Date")} value={form.passportExpiry} onChange={field("passportExpiry")} type="date" />
             </div>
           </section>
 
@@ -2019,10 +2019,10 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
                   </SelectContent>
                 </Select>
               </div>
-              <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder={translateUi(uiLanguage, "e.g. ANKARA FEN LISESI")} className="col-span-2" latinUppercase />
-              <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder={translateUi(uiLanguage, "e.g. ISTANBUL UNIVERSITY")} className="col-span-2" latinUppercase />
-              <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder={translateUi(uiLanguage, "e.g. BOGAZICI UNIVERSITY")} className="col-span-2" latinUppercase />
-              <F label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
+              <F label={translateUi(uiLanguage, "High School")} value={form.highSchool} onChange={field("highSchool")} placeholder={translateUi(uiLanguage, "e.g. ANKARA FEN LISESI")} className="col-span-2" latinUppercase />
+              <F label={translateUi(uiLanguage, "University (Bachelor)")} value={form.universityBachelor} onChange={field("universityBachelor")} placeholder={translateUi(uiLanguage, "e.g. ISTANBUL UNIVERSITY")} className="col-span-2" latinUppercase />
+              <F label={translateUi(uiLanguage, "University (Master)")} value={form.universityMaster} onChange={field("universityMaster")} placeholder={translateUi(uiLanguage, "e.g. BOGAZICI UNIVERSITY")} className="col-span-2" latinUppercase />
+              <F label={translateUi(uiLanguage, "Graduation Year")} value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "GPA")}</Label>
                 <div className="flex gap-1.5">
@@ -2046,7 +2046,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
                   </Select>
                 </div>
               </div>
-              <F label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder={translateUi(uiLanguage, "e.g. IELTS 7.0, TOEFL 100")} className="col-span-2" />
+              <F label={translateUi(uiLanguage, "Language Score")} value={form.languageScore} onChange={field("languageScore")} placeholder={translateUi(uiLanguage, "e.g. IELTS 7.0, TOEFL 100")} className="col-span-2" />
             </div>
           </section>
 
@@ -2133,7 +2133,7 @@ function InfoRow({
         document.body.removeChild(ta);
       }
       setCopied(true);
-      toast({ title: `${label} kopyalandı`, description: value! });
+      toast({ title: translateUi(uiLanguage, "{value0} kopyalandı", undefined, { value0: String(label) }), description: value! });
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
       toast({ title: translateUi(uiLanguage, "Kopyalanamadı"), variant: "destructive" });
@@ -2150,7 +2150,7 @@ function InfoRow({
           <button
             type="button"
             onClick={handleCopy}
-            title={`Kopyala: ${value}`}
+            title={translateUi(uiLanguage, "Kopyala: {value0}", undefined, { value0: String(value) })}
             className="group inline-flex items-center gap-1.5 max-w-full text-left font-medium text-foreground rounded px-1 -mx-1 py-0.5 hover:bg-muted/60 active:bg-muted transition-colors cursor-pointer"
             data-testid={`copy-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
           >
@@ -2445,7 +2445,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
                           {...getPreviewTriggerProps(previewTargetFor(doc))}
                           className="flex items-center gap-1.5 text-xs text-foreground/80 hover:text-primary font-medium transition-colors"
                           title={translateUi(uiLanguage, "Preview")}
-                          aria-label={`Preview ${doc.name}`}
+                          aria-label={translateUi(uiLanguage, "Preview {value0}", undefined, { value0: String(doc.name) })}
                           data-testid={`btn-preview-${doc.id}`}
                         >
                           <Eye className="w-3.5 h-3.5" />
@@ -2476,7 +2476,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
                         }}
                         className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
                         title={t("studentDetailPage.deleteTooltip")}
-                        aria-label={`Delete ${doc.name}`}
+                        aria-label={translateUi(uiLanguage, "Delete {value0}", undefined, { value0: String(doc.name) })}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -2552,7 +2552,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
                       </div>
                       {(doc.fileKey || doc.fileData || doc.fileUrl) && getPreviewKind(doc.mimeType) !== "other" && (
                         <Button asChild variant="ghost" size="icon" className="h-8 w-8" title={t("studentDetailPage.preview")}>
-                          <a {...getPreviewTriggerProps(previewTargetFor(doc))} aria-label={`Preview ${doc.name}`}>
+                          <a {...getPreviewTriggerProps(previewTargetFor(doc))} aria-label={translateUi(uiLanguage, "Preview {value0}", undefined, { value0: String(doc.name) })}>
                             <Eye className="w-4 h-4" />
                           </a>
                         </Button>
@@ -2662,7 +2662,7 @@ function ApplicationStageDocumentsSection({ studentId, basePath }: { studentId: 
                         </span>
                         {new Date(d.createdAt).toLocaleString()}
                         {d.uploadedByName && <> · {d.uploadedByName}</>}
-                        {d.sizeBytes ? ` · ${(d.sizeBytes / 1024).toFixed(0)} KB` : ""}
+                        {d.sizeBytes ? translateUi(uiLanguage, " · {value0} KB", undefined, { value0: String((d.sizeBytes / 1024).toFixed(0)) }) : ""}
                         {d.validUntil && <> {translateUi(uiLanguage, "· Geçerlilik:")} {new Date(d.validUntil).toLocaleDateString()}</>}
                       </p>
                     </div>

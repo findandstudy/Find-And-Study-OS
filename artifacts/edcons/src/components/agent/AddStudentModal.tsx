@@ -165,7 +165,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
       return;
     }
     if (currentPartCount + files.length > MAX_DOCUMENT_PARTS) {
-      toast({ title: translateUi(uiLanguage, "Too many document parts"), description: `You can combine up to ${MAX_DOCUMENT_PARTS} parts in one document box.`, variant: "destructive" });
+      toast({ title: translateUi(uiLanguage, "Too many document parts"), description: translateUi(uiLanguage, "You can combine up to {value0} parts in one document box.", undefined, { value0: String(MAX_DOCUMENT_PARTS) }), variant: "destructive" });
       return;
     }
     const safeFiles: File[] = [];
@@ -579,9 +579,9 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
           if (docCount > 0) {
             const result = await saveDocumentsForStudent(createdStudent.id, form.firstName, form.lastName);
             if (result.failed.length > 0) {
-              toast({ title: translateUi(uiLanguage, "Student created, but document upload is incomplete"), description: `${result.uploaded.length}/${docCount} documents added. Failed: ${result.failed.join(", ")}. Please upload them again from the student profile.`, variant: "destructive" });
+              toast({ title: translateUi(uiLanguage, "Student created, but document upload is incomplete"), description: translateUi(uiLanguage, "{value0}/{value1} documents added. Failed: {value2}. Please upload them again from the student profile.", undefined, { value0: String(result.uploaded.length), value1: String(docCount), value2: String(result.failed.join(", ")) }), variant: "destructive" });
             } else {
-              toast({ title: translateUi(uiLanguage, "Student created"), description: `${result.uploaded.length} document${result.uploaded.length !== 1 ? "s" : ""} added to profile.` });
+              toast({ title: translateUi(uiLanguage, "Student created"), description: translateUi(uiLanguage, "{value0} document{value1} added to profile.", undefined, { value0: String(result.uploaded.length), value1: String(result.uploaded.length !== 1 ? "s" : "") }) });
             }
           }
           else { toast({ title: translateUi(uiLanguage, "Student created successfully") }); }
@@ -724,14 +724,14 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
                   <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Personal Information")}</h3>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <FormField required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder={translateUi(uiLanguage, "First name")} aiExtracted={ef.has("firstName")} latinUppercase />
-                  <FormField required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder={translateUi(uiLanguage, "Last name")} aiExtracted={ef.has("lastName")} latinUppercase />
-                  <FormField required label="Email" value={form.email} onChange={field("email")} placeholder={translateUi(uiLanguage, "email@example.com")} type="email" aiExtracted={ef.has("email")} />
+                  <FormField required label={translateUi(uiLanguage, "First Name")} value={form.firstName} onChange={field("firstName")} placeholder={translateUi(uiLanguage, "First name")} aiExtracted={ef.has("firstName")} latinUppercase />
+                  <FormField required label={translateUi(uiLanguage, "Last Name")} value={form.lastName} onChange={field("lastName")} placeholder={translateUi(uiLanguage, "Last name")} aiExtracted={ef.has("lastName")} latinUppercase />
+                  <FormField required label={translateUi(uiLanguage, "Email")} value={form.email} onChange={field("email")} placeholder={translateUi(uiLanguage, "email@example.com")} type="email" aiExtracted={ef.has("email")} />
                   <div className="space-y-1.5">
                     <Label className="font-semibold text-sm flex items-center">{translateUi(uiLanguage, "Phone")}<span className="text-destructive ml-0.5">*</span>{ef.has("phone") && <AiBadge />}</Label>
                     <PhoneField value={form.phone} onChange={(v) => setForm(f => ({ ...f, phone: v }))} />
                   </div>
-                  <FormField required label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" aiExtracted={ef.has("dateOfBirth")} />
+                  <FormField required label={translateUi(uiLanguage, "Date of Birth")} value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" aiExtracted={ef.has("dateOfBirth")} />
                   <div>
                     <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">{translateUi(uiLanguage, "Gender")}<span className="text-destructive ml-0.5">*</span></Label>
                     <select value={form.gender} onChange={(e) => field("gender")(e.target.value)}
@@ -745,9 +745,9 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
                     <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">{translateUi(uiLanguage, "Nationality")}<span className="text-destructive ml-0.5">*</span>{ef.has("nationality") && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI ✓</span>}</Label>
                     <div className="mt-1"><NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} /></div>
                   </div>
-                  <FormField required label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder={translateUi(uiLanguage, "Mother's name")} aiExtracted={ef.has("motherName")} latinUppercase />
-                  <FormField required label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder={translateUi(uiLanguage, "Father's name")} aiExtracted={ef.has("fatherName")} latinUppercase />
-                  <div className="col-span-2"><FormField label="Address" value={form.address} onChange={field("address")} placeholder={translateUi(uiLanguage, "Full home address")} aiExtracted={ef.has("address")} /></div>
+                  <FormField required label={translateUi(uiLanguage, "Mother's Name")} value={form.motherName} onChange={field("motherName")} placeholder={translateUi(uiLanguage, "Mother's name")} aiExtracted={ef.has("motherName")} latinUppercase />
+                  <FormField required label={translateUi(uiLanguage, "Father's Name")} value={form.fatherName} onChange={field("fatherName")} placeholder={translateUi(uiLanguage, "Father's name")} aiExtracted={ef.has("fatherName")} latinUppercase />
+                  <div className="col-span-2"><FormField label={translateUi(uiLanguage, "Address")} value={form.address} onChange={field("address")} placeholder={translateUi(uiLanguage, "Full home address")} aiExtracted={ef.has("address")} /></div>
                 </div>
               </section>
 
@@ -757,9 +757,9 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
                   <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Passport / Identity")}</h3>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2"><FormField required label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder={translateUi(uiLanguage, "e.g. AB1234567")} aiExtracted={ef.has("passportNumber")} /></div>
-                  <FormField required label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" aiExtracted={ef.has("passportIssueDate")} />
-                  <FormField required label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" aiExtracted={ef.has("passportExpiry")} />
+                  <div className="col-span-2"><FormField required label={translateUi(uiLanguage, "Passport Number")} value={form.passportNumber} onChange={field("passportNumber")} placeholder={translateUi(uiLanguage, "e.g. AB1234567")} aiExtracted={ef.has("passportNumber")} /></div>
+                  <FormField required label={translateUi(uiLanguage, "Issue Date")} value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" aiExtracted={ef.has("passportIssueDate")} />
+                  <FormField required label={translateUi(uiLanguage, "Expiry Date")} value={form.passportExpiry} onChange={field("passportExpiry")} type="date" aiExtracted={ef.has("passportExpiry")} />
                 </div>
               </section>
 
@@ -776,14 +776,14 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
                       <SelectContent>{canonicalStudyLevels.map((level) => <SelectItem key={level.key} value={level.key}>{level.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div className="col-span-2"><FormField label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder={translateUi(uiLanguage, "e.g. Ankara Fen Lisesi")} aiExtracted={ef.has("highSchool")} /></div>
+                  <div className="col-span-2"><FormField label={translateUi(uiLanguage, "High School")} value={form.highSchool} onChange={field("highSchool")} placeholder={translateUi(uiLanguage, "e.g. Ankara Fen Lisesi")} aiExtracted={ef.has("highSchool")} /></div>
                   {isMasterOrHigher(applicationLevel) && (
-                    <div className="col-span-2"><FormField label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder={translateUi(uiLanguage, "e.g. Istanbul University")} aiExtracted={ef.has("universityBachelor")} /></div>
+                    <div className="col-span-2"><FormField label={translateUi(uiLanguage, "University (Bachelor)")} value={form.universityBachelor} onChange={field("universityBachelor")} placeholder={translateUi(uiLanguage, "e.g. Istanbul University")} aiExtracted={ef.has("universityBachelor")} /></div>
                   )}
                   {isDoctorate(applicationLevel) && (
-                    <div className="col-span-2"><FormField label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder={translateUi(uiLanguage, "e.g. Bogazici University")} aiExtracted={ef.has("universityMaster")} /></div>
+                    <div className="col-span-2"><FormField label={translateUi(uiLanguage, "University (Master)")} value={form.universityMaster} onChange={field("universityMaster")} placeholder={translateUi(uiLanguage, "e.g. Bogazici University")} aiExtracted={ef.has("universityMaster")} /></div>
                   )}
-                  <FormField label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" aiExtracted={ef.has("graduationYear")} />
+                  <FormField label={translateUi(uiLanguage, "Graduation Year")} value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" aiExtracted={ef.has("graduationYear")} />
                   <div className="space-y-1.5">
                     <Label className="font-semibold text-sm flex items-center">{translateUi(uiLanguage, "GPA")}{ef.has("gpa") && <AiBadge />}</Label>
                     <div className="flex gap-1.5">
@@ -797,7 +797,7 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
                       </Select>
                     </div>
                   </div>
-                  <div className="col-span-2"><FormField label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder={translateUi(uiLanguage, "e.g. IELTS 7.0, TOEFL 100")} aiExtracted={ef.has("languageScore")} /></div>
+                  <div className="col-span-2"><FormField label={translateUi(uiLanguage, "Language Score")} value={form.languageScore} onChange={field("languageScore")} placeholder={translateUi(uiLanguage, "e.g. IELTS 7.0, TOEFL 100")} aiExtracted={ef.has("languageScore")} /></div>
                 </div>
               </section>
 
@@ -837,7 +837,7 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
                 <Button variant="outline" onClick={() => setStep("review")} disabled={!canProceedToForm} className="rounded-xl text-muted-foreground">{translateUi(uiLanguage, "Skip AI Analysis")}</Button>
                 <Button onClick={analyzeDocuments} disabled={!canProceedToForm}
                   className="rounded-xl gap-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white border-0">
-                  <Sparkles className="w-4 h-4" /> {translateUi(uiLanguage, "Analyze")} {uploadedCount > 0 ? `${uploadedCount} Doc${uploadedCount !== 1 ? "s" : ""}` : translateUi(uiLanguage, "Documents")}
+                  <Sparkles className="w-4 h-4" /> {translateUi(uiLanguage, "Analyze")} {uploadedCount > 0 ? translateUi(uiLanguage, "{value0} Doc{value1}", undefined, { value0: String(uploadedCount), value1: String(uploadedCount !== 1 ? "s" : "") }) : translateUi(uiLanguage, "Documents")}
                 </Button>
               </div>
             </>

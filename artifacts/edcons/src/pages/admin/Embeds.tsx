@@ -314,7 +314,7 @@ export default function Embeds() {
                             <Checkbox
                               checked={selectedIds.includes(w.id)}
                               onCheckedChange={() => toggleSelect(w.id)}
-                              aria-label={`Select ${w.name}`}
+                              aria-label={translateUi(uiLanguage, "Select {value0}", undefined, { value0: String(w.name) })}
                               data-testid={`checkbox-widget-${w.id}`}
                             />
                           </TableCell>
@@ -916,8 +916,8 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                       value={presetUniversityIds}
                       onChange={setPresetUniversityIds}
                       placeholder={translateUi(uiLanguage, "Select universities")}
-                      searchPlaceholder="Search universities..."
-                      emptyText="No universities found"
+                      searchPlaceholder={translateUi(uiLanguage, "Search universities...")}
+                      emptyText={translateUi(uiLanguage, "No universities found")}
                       selectedText={count => `${count} ${count === 1 ? "university" : "universities"} selected`}
                     />
                   )}
@@ -1317,7 +1317,7 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
 
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    toast({ title: `${label} copied to clipboard` });
+    toast({ title: translateUi(uiLanguage, "{value0} copied to clipboard", undefined, { value0: String(label) }) });
   };
 
   return (

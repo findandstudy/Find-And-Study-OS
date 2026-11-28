@@ -685,7 +685,7 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
         <h3 className="font-display font-semibold text-base mb-5">{translateUi(uiLanguage, "Documents")}</h3>
         <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-5">
           <DocumentUploader
-            label="Logo for Agent Panel"
+            label={translateUi(uiLanguage, "Logo for Agent Panel")}
             accept="image/*"
             value={agentProfile.logoUrl}
             onUpload={file => handleDocUpload("logoUrl", file)}
@@ -695,17 +695,17 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
             readOnly={isStaff}
           />
           <DocumentViewer
-            label="Representative ID"
+            label={translateUi(uiLanguage, "Representative ID")}
             value={agentProfile.agentIdProofUrl}
           />
           {agentProfile.signedContract ? (
             <SignedAgencyContract contract={agentProfile.signedContract} />
           ) : (
-            <DocumentViewer label="Contract" value={agentProfile.contractUrl}
+            <DocumentViewer label={translateUi(uiLanguage, "Contract")} value={agentProfile.contractUrl}
               startDate={agentProfile.contractStartDate} endDate={agentProfile.contractEndDate} />
           )}
           <DocumentUploader
-            label="Business Certificate"
+            label={translateUi(uiLanguage, "Business Certificate")}
             accept="image/*,.pdf"
             value={agentProfile.businessCertUrl}
             onUpload={file => handleDocUpload("businessCertUrl", file)}
@@ -759,7 +759,7 @@ function DocumentUploader({
               target="_blank"
               rel="noopener noreferrer"
               download
-              aria-label={`Download ${label}`}
+              aria-label={translateUi(uiLanguage, "Download {value0}", undefined, { value0: String(label) })}
               className="absolute inset-0 z-0 cursor-pointer"
             />
             {!readOnly && <div className="absolute top-1.5 right-1.5 z-10 flex gap-1">
@@ -876,7 +876,7 @@ function DocumentViewer({
               target="_blank"
               rel="noopener noreferrer"
               download={fileName}
-              aria-label={`Download ${label}`}
+              aria-label={translateUi(uiLanguage, "Download {value0}", undefined, { value0: String(label) })}
               className="absolute inset-0 cursor-pointer"
             />
             <Download className="absolute top-2 right-2 w-4 h-4 text-primary pointer-events-none" />
@@ -939,7 +939,7 @@ function AgencyIntegrationCard({
         body: JSON.stringify({ isEnabled: enabled, config }),
       });
       onSaved();
-      toast({ title: `${title} saved` });
+      toast({ title: translateUi(uiLanguage, "{value0} saved", undefined, { value0: String(title) }) });
     } catch (error: any) {
       toast({ title: translateUi(uiLanguage, "Integration could not be saved"), description: error.message, variant: "destructive" });
     } finally {
@@ -1271,8 +1271,8 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
                         value={presetUniversityIds}
                         onChange={setPresetUniversityIds}
                         placeholder={translateUi(uiLanguage, "Select universities")}
-                        searchPlaceholder="Search universities…"
-                        emptyText="No universities found"
+                        searchPlaceholder={translateUi(uiLanguage, "Search universities…")}
+                        emptyText={translateUi(uiLanguage, "No universities found")}
                         selectedText={count => `${count} ${count === 1 ? "university" : "universities"} selected`}
                       />
                     )}

@@ -633,7 +633,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
               className="min-w-0 line-clamp-1 cursor-pointer text-sm font-bold text-foreground transition-colors hover:text-primary hover:underline"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
-              title={`Open ${studentName}`}
+              title={translateUi(uiLanguage, "Open {value0}", undefined, { value0: String(studentName) })}
             >
               {app.studentFirstName} {app.studentLastName}
             </Link>
@@ -671,7 +671,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
           <span
             className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-colors max-w-full truncate dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50 dark:hover:bg-amber-900/50"
             onClick={(e) => { e.stopPropagation(); setLoc(`/staff/agents/${app.agentId}`); }}
-            title={`Agent: ${app.agentName}`}
+            title={translateUi(uiLanguage, "Agent: {value0}", undefined, { value0: String(app.agentName) })}
           >
             <Building2 className="w-3 h-3 shrink-0" />{app.agentName}
           </span>
@@ -828,7 +828,7 @@ function DroppableAppColumn({ stage, label, variant, apps, totalCount, totalReve
               disabled={isLoading}
               onClick={onLoadMore}
             >
-              {isLoading ? translateUi(uiLanguage, "Loading…") : `Load more (${apps.length}/${totalCount})`}
+              {isLoading ? translateUi(uiLanguage, "Loading…") : translateUi(uiLanguage, "Load more ({value0}/{value1})", undefined, { value0: String(apps.length), value1: String(totalCount) })}
             </Button>
           )}
         </SortableContext>
@@ -1171,7 +1171,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
         <p className="text-sm text-muted-foreground py-2">{translateUi(uiLanguage, "This action cannot be undone.")}</p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("applicationsPage.cancel")}</Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? translateUi(uiLanguage, "Deleting...") : `Delete ${count}`}</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? translateUi(uiLanguage, "Deleting...") : translateUi(uiLanguage, "Delete {value0}", undefined, { value0: String(count) })}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -2083,7 +2083,7 @@ export default function ApplicationsPage() {
           toast({
             title: translateUi(uiLanguage, "Belge bulunamadı"),
             description: wanted
-              ? `"${action.documentName}" adlı belge bu aşamada yok.`
+              ? translateUi(uiLanguage, "\"{value0}\" adlı belge bu aşamada yok.", undefined, { value0: String(action.documentName) })
               : translateUi(uiLanguage, "Bu aşamada indirilebilecek bir belge yok."),
             variant: "destructive",
           });
@@ -2133,7 +2133,7 @@ export default function ApplicationsPage() {
     try {
       const res = await apiFetch(`${BASE_URL}/api/applications/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(selectedIds), action: "delete" }) });
       const d = res as any;
-      toast({ title: `${d.updated} application${d.updated !== 1 ? "s" : ""} deleted` });
+      toast({ title: translateUi(uiLanguage, "{value0} application{value1} deleted", undefined, { value0: String(d.updated), value1: String(d.updated !== 1 ? "s" : "") }) });
     } catch { toast({ title: translateUi(uiLanguage, "Some could not be deleted"), variant: "destructive" }); }
     setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["applications"] });
@@ -2143,7 +2143,7 @@ export default function ApplicationsPage() {
     try {
       const res = await apiFetch(`${BASE_URL}/api/applications/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(selectedIds), action: "assign", assignedToId: userId }) });
       const d = res as any;
-      toast({ title: `${d.updated} application${d.updated !== 1 ? "s" : ""} assigned` });
+      toast({ title: translateUi(uiLanguage, "{value0} application{value1} assigned", undefined, { value0: String(d.updated), value1: String(d.updated !== 1 ? "s" : "") }) });
       await invalidateAssignmentWorkspaceQueries(queryClient);
     } catch { toast({ title: translateUi(uiLanguage, "Could not assign applications"), variant: "destructive" }); }
     setSelectedIds(new Set());
@@ -2155,7 +2155,7 @@ export default function ApplicationsPage() {
       const res = await apiFetch(`${BASE_URL}/api/applications/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(selectedIds), action: "move", stage }) });
       const d = res as any;
       const skipped: any[] = Array.isArray(d.skipped) ? d.skipped : [];
-      toast({ title: `${d.updated} application${d.updated !== 1 ? "s" : ""} moved` });
+      toast({ title: translateUi(uiLanguage, "{value0} application{value1} moved", undefined, { value0: String(d.updated), value1: String(d.updated !== 1 ? "s" : "") }) });
       if (skipped.length > 0) {
         // Task #269 — bulk moves can't open a per-application document modal, so
         // affected applications are skipped server-side and reported here.
@@ -2361,7 +2361,7 @@ export default function ApplicationsPage() {
                       return (
                         <ColumnHeader
                           key={id}
-                          label="Student"
+                          label={translateUi(uiLanguage, "Student")}
                           sort={{ sortKey: "student", current: sort, onSort: handleSort }}
                           filter={{ type: "text", value: colFilters.student, onChange: v => setColFilters(f => ({ ...f, student: v })), placeholder: "Filter by student…", label: "Student contains" }}
                         />
@@ -2370,7 +2370,7 @@ export default function ApplicationsPage() {
                       return (
                         <ColumnHeader
                           key={id}
-                          label="Stage"
+                          label={translateUi(uiLanguage, "Stage")}
                           sort={{ sortKey: "stage", current: sort, onSort: handleSort }}
                           filter={{ type: "select", value: filters.stage, onChange: v => setFilters(f => ({ ...f, stage: v })), options: pipelineStages.map(s => ({ value: s.key, label: s.label })), label: "Stage" }}
                         />
@@ -2379,7 +2379,7 @@ export default function ApplicationsPage() {
                       return (
                         <ColumnHeader
                           key={id}
-                          label="Country"
+                          label={translateUi(uiLanguage, "Country")}
                           sort={{ sortKey: "country", current: sort, onSort: handleSort }}
                           filter={{ type: "select", value: filters.country, onChange: v => setFilters(f => ({ ...f, country: v })), options: uniqueAppCountries.map(c => ({ value: c, label: c })), label: "Country" }}
                         />
@@ -2388,7 +2388,7 @@ export default function ApplicationsPage() {
                       return (
                         <ColumnHeader
                           key={id}
-                          label="University"
+                          label={translateUi(uiLanguage, "University")}
                           sort={{ sortKey: "university", current: sort, onSort: handleSort }}
                           filter={{ type: "searchable-select", value: filters.university, onChange: v => setFilters(f => ({ ...f, university: v })), options: uniqueAppUniversities.map(([uid, name]) => ({ value: String(uid), label: name || `#${uid}` })), label: "University", placeholder: "Search universities…" }}
                         />
@@ -2397,7 +2397,7 @@ export default function ApplicationsPage() {
                       return (
                         <ColumnHeader
                           key={id}
-                          label="Program"
+                          label={translateUi(uiLanguage, "Program")}
                           sort={{ sortKey: "program", current: sort, onSort: handleSort }}
                           filter={{ type: "text", value: colFilters.program, onChange: v => setColFilters(f => ({ ...f, program: v })), placeholder: "Filter by program…", label: "Program contains" }}
                         />
@@ -2406,7 +2406,7 @@ export default function ApplicationsPage() {
                       return (
                         <ColumnHeader
                           key={id}
-                          label="Level"
+                          label={translateUi(uiLanguage, "Level")}
                           sort={{ sortKey: "level", current: sort, onSort: handleSort }}
                           filter={{ type: "select", value: colFilters.level, onChange: v => setColFilters(f => ({ ...f, level: v })), options: studyLevels.map(l => ({ value: l.key, label: l.label })), label: "Level" }}
                         />
@@ -2415,7 +2415,7 @@ export default function ApplicationsPage() {
                       return (
                         <ColumnHeader
                           key={id}
-                          label="Intake"
+                          label={translateUi(uiLanguage, "Intake")}
                           sort={{ sortKey: "intake", current: sort, onSort: handleSort }}
                           filter={{ type: "text", value: colFilters.intake, onChange: v => setColFilters(f => ({ ...f, intake: v })), placeholder: "Filter by intake…", label: "Intake contains" }}
                         />
@@ -2425,7 +2425,7 @@ export default function ApplicationsPage() {
                       return (
                         <ColumnHeader
                           key={id}
-                          label="Commission"
+                          label={translateUi(uiLanguage, "Commission")}
                           sort={{ sortKey: "fee", current: sort, onSort: handleSort }}
                         />
                       );
@@ -2433,7 +2433,7 @@ export default function ApplicationsPage() {
                       return (
                         <ColumnHeader
                           key={id}
-                          label="Assigned"
+                          label={translateUi(uiLanguage, "Assigned")}
                           filter={{
                             type: "select",
                             value: filters.assignedTo,
@@ -2462,7 +2462,7 @@ export default function ApplicationsPage() {
                       return (
                         <ColumnHeader
                           key={id}
-                          label="Created"
+                          label={translateUi(uiLanguage, "Created")}
                           sort={{ sortKey: "date", current: sort, onSort: handleSort }}
                           filter={{
                             type: "select",

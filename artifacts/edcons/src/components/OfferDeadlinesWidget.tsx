@@ -99,7 +99,7 @@ export function OfferDeadlinesWidget({ detailHrefPrefix, hideStudent }: Props) {
                     </div>
                     <div className="flex flex-col items-end shrink-0">
                       <Badge className={`text-[10px] px-1.5 py-0 border-0 ${urgencyClass(r.daysLeft)}`}>
-                        {r.daysLeft === null ? "—" : r.daysLeft <= 0 ? translateUi(uiLanguage, "Expired") : `${r.daysLeft} days`}
+                        {r.daysLeft === null ? "—" : r.daysLeft <= 0 ? translateUi(uiLanguage, "Expired") : translateUi(uiLanguage, "{value0} days", undefined, { value0: String(r.daysLeft) })}
                       </Badge>
                       <ChevronRight className="w-3 h-3 text-muted-foreground mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>

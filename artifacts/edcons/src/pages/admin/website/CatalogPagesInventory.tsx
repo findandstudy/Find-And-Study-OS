@@ -345,8 +345,8 @@ export default function CatalogPagesInventory() {
         description: allFailed
           ? generationErrorText(firstFailure?.error, tr)
           : tr
-            ? `${result.summary.created + result.summary.completed} taslak oluşturuldu/tamamlandı, ${generatedImages} görsel eklendi, ${imageFailures} görsel üretilemedi, ${result.summary.preserved} mevcut içerik korundu, ${result.summary.failed} işlem başarısız. Taslaklar otomatik yayınlanmadı.`
-            : `${result.summary.created + result.summary.completed} draft(s) were created/completed, ${generatedImages} image(s) were added, ${imageFailures} image generation(s) were unavailable, ${result.summary.preserved} existing item(s) were preserved, ${result.summary.failed} failed. Drafts were not auto-published.`,
+            ? translateUi(uiLanguage, "{value0} taslak oluşturuldu/tamamlandı, {value1} görsel eklendi, {value2} görsel üretilemedi, {value3} mevcut içerik korundu, {value4} işlem başarısız. Taslaklar otomatik yayınlanmadı.", undefined, { value0: String(result.summary.created + result.summary.completed), value1: String(generatedImages), value2: String(imageFailures), value3: String(result.summary.preserved), value4: String(result.summary.failed) })
+            : translateUi(uiLanguage, "{value0} draft(s) were created/completed, {value1} image(s) were added, {value2} image generation(s) were unavailable, {value3} existing item(s) were preserved, {value4} failed. Drafts were not auto-published.", undefined, { value0: String(result.summary.created + result.summary.completed), value1: String(generatedImages), value2: String(imageFailures), value3: String(result.summary.preserved), value4: String(result.summary.failed) }),
         ...(result.summary.failed ? { variant: "destructive" as const } : {}),
       });
     },
@@ -384,8 +384,8 @@ export default function CatalogPagesInventory() {
           ? translateUi(uiLanguage, "Çeviri taslakları kuyruğa alındı")
           : translateUi(uiLanguage, "Translation drafts queued"),
         description: tr
-          ? `${result.queued} sayfa-dil işi · section metinleri ve SEO birlikte çevrilecek · ${result.batchId.slice(0, 8)}`
-          : `${result.queued} page-language job(s) · sections and SEO will be translated together · ${result.batchId.slice(0, 8)}`,
+          ? translateUi(uiLanguage, "{value0} sayfa-dil işi · section metinleri ve SEO birlikte çevrilecek · {value1}", undefined, { value0: String(result.queued), value1: String(result.batchId.slice(0, 8)) })
+          : translateUi(uiLanguage, "{value0} page-language job(s) · sections and SEO will be translated together · {value1}", undefined, { value0: String(result.queued), value1: String(result.batchId.slice(0, 8)) }),
       });
     },
     onError: (error: Error) =>
@@ -596,8 +596,8 @@ export default function CatalogPagesInventory() {
             >
               <Languages className="me-2 h-4 w-4" />
               {tr
-                ? `${item.locale.toUpperCase()} section + SEO çevirisi`
-                : `Translate ${item.locale.toUpperCase()} sections + SEO`}
+                ? translateUi(uiLanguage, "{value0} section + SEO çevirisi", undefined, { value0: String(item.locale.toUpperCase()) })
+                : translateUi(uiLanguage, "Translate {value0} sections + SEO", undefined, { value0: String(item.locale.toUpperCase()) })}
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
@@ -801,8 +801,8 @@ export default function CatalogPagesInventory() {
                 </strong>
                 <p className="mt-1">
                   {tr
-                    ? `${generationReport.requested} sayfa-dil işlendi: ${generationReport.summary.created} yeni, ${generationReport.summary.completed} tamamlandı, ${generationReport.summary.preserved} korundu, ${generationReport.summary.failed} başarısız.`
-                    : `${generationReport.requested} page-language pair(s): ${generationReport.summary.created} new, ${generationReport.summary.completed} completed, ${generationReport.summary.preserved} preserved, ${generationReport.summary.failed} failed.`}
+                    ? translateUi(uiLanguage, "{value0} sayfa-dil işlendi: {value1} yeni, {value2} tamamlandı, {value3} korundu, {value4} başarısız.", undefined, { value0: String(generationReport.requested), value1: String(generationReport.summary.created), value2: String(generationReport.summary.completed), value3: String(generationReport.summary.preserved), value4: String(generationReport.summary.failed) })
+                    : translateUi(uiLanguage, "{value0} page-language pair(s): {value1} new, {value2} completed, {value3} preserved, {value4} failed.", undefined, { value0: String(generationReport.requested), value1: String(generationReport.summary.created), value2: String(generationReport.summary.completed), value3: String(generationReport.summary.preserved), value4: String(generationReport.summary.failed) })}
                 </p>
                 <p className="mt-1 text-xs opacity-80">
                   {tr
@@ -1116,8 +1116,8 @@ export default function CatalogPagesInventory() {
                       >
                         <Languages className="me-2 h-4 w-4" />
                         {tr
-                          ? `${locale.toUpperCase()} section + SEO`
-                          : `${locale.toUpperCase()} sections + SEO`}
+                          ? translateUi(uiLanguage, "{value0} section + SEO", undefined, { value0: String(locale.toUpperCase()) })
+                          : translateUi(uiLanguage, "{value0} sections + SEO", undefined, { value0: String(locale.toUpperCase()) })}
                       </Button>
                     )}
                     <Button

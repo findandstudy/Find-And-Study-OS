@@ -357,7 +357,7 @@ function TestimonialsTab() {
         { key: "name", label: "Name", render: (i: Testimonial) => (
           <div className="flex items-center gap-3">
             {i.photoUrl ? <img src={i.photoUrl} className="w-8 h-8 rounded-full object-cover" alt={i.name} /> : <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center text-xs font-bold text-amber-600">{i.name[0]}</div>}
-            <div><p className="font-medium">{i.name}</p>{i.role && <p className="text-xs text-muted-foreground">{i.role}{i.company ? ` at ${i.company}` : ""}</p>}</div>
+            <div><p className="font-medium">{i.name}</p>{i.role && <p className="text-xs text-muted-foreground">{i.role}{i.company ? translateUi(uiLanguage, " at {value0}", undefined, { value0: String(i.company) }) : ""}</p>}</div>
           </div>
         )},
         { key: "content", label: "Quote", render: (i: Testimonial) => <span className="line-clamp-1 text-muted-foreground text-xs max-w-[200px]">{translateUi(uiLanguage, "&ldquo;")}{i.content}{translateUi(uiLanguage, "&rdquo;")}</span> },

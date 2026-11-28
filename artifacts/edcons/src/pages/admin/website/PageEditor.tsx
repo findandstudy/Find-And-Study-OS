@@ -1388,7 +1388,7 @@ function BlockPreview({ blocks, locale, template, pageTitle, pageSlug, teamMembe
           </div>
           {collectionDependency(block) && !hasCollectionItems(block) ? (
             <div role="status" className="m-4 rounded-xl border border-dashed border-amber-400 bg-amber-50 p-5 text-sm text-amber-900">
-              {collectionsLoading ? translateUi(uiLanguage, "Collection data is loading…") : `This visible ${getBlockTypeDef(block.blockType)?.label || block.blockType} section is not rendered publicly until its collection contains data.`}
+              {collectionsLoading ? translateUi(uiLanguage, "Collection data is loading…") : translateUi(uiLanguage, "This visible {value0} section is not rendered publicly until its collection contains data.", undefined, { value0: String(getBlockTypeDef(block.blockType)?.label || block.blockType) })}
             </div>
           ) : block.blockType === "catalog_grid" && !block.content.sectionPreset
             ? <CatalogBlockPreview content={block.content} locale={locale} />

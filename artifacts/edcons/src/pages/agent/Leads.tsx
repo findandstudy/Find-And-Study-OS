@@ -473,7 +473,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
         className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background hover:bg-accent/50 transition-colors"
       >
         <span className={`truncate ${localSelected.length === 0 ? "text-muted-foreground" : ""}`}>
-          {localSelected.length === 0 ? translateUi(uiLanguage, "Select countries...") : localSelected.length === 1 ? localSelected[0] : `${localSelected.length} countries selected`}
+          {localSelected.length === 0 ? translateUi(uiLanguage, "Select countries...") : localSelected.length === 1 ? localSelected[0] : translateUi(uiLanguage, "{value0} countries selected", undefined, { value0: String(localSelected.length) })}
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </button>
@@ -656,7 +656,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending}>
-            {isPending ? translateUi(uiLanguage, "Deleting…") : `Delete ${count} Lead${count > 1 ? "s" : ""}`}
+            {isPending ? translateUi(uiLanguage, "Deleting…") : translateUi(uiLanguage, "Delete {value0} Lead{value1}", undefined, { value0: String(count), value1: String(count > 1 ? "s" : "") })}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -966,7 +966,7 @@ export default function AgentLeadsPage() {
     setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
     if (failed === 0) {
-      toast({ title: `${ids.length} lead${ids.length > 1 ? "s" : ""} deleted` });
+      toast({ title: translateUi(uiLanguage, "{value0} lead{value1} deleted", undefined, { value0: String(ids.length), value1: String(ids.length > 1 ? "s" : "") }) });
     } else {
       toast({ title: translateUi(uiLanguage, "Some leads could not be deleted"), variant: "destructive" });
     }
@@ -1011,8 +1011,8 @@ export default function AgentLeadsPage() {
           toast({
             title: translateUi(uiLanguage, "Lead converted to student"),
             description: result.merged
-              ? `Merged with existing student: ${studentName}`
-              : `New student created: ${studentName}`,
+              ? translateUi(uiLanguage, "Merged with existing student: {value0}", undefined, { value0: String(studentName) })
+              : translateUi(uiLanguage, "New student created: {value0}", undefined, { value0: String(studentName) }),
           });
         }
       } catch (err: any) {
@@ -1029,7 +1029,7 @@ export default function AgentLeadsPage() {
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
           queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
           const colLabel = targetCol?.title ?? targetStatus;
-          toast({ title: `Lead moved to ${colLabel}` });
+          toast({ title: translateUi(uiLanguage, "Lead moved to {value0}", undefined, { value0: String(colLabel) }) });
         },
         onError: () => {
           toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Failed to move lead"), variant: "destructive" });
@@ -1170,16 +1170,16 @@ export default function AgentLeadsPage() {
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
-                    <SortHeader label="Name" sortKey="name" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Email" sortKey="email" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Source" sortKey="source" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Program" sortKey="program" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Country" sortKey="country" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Name")} sortKey="name" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Email")} sortKey="email" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Status")} sortKey="status" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Source")} sortKey="source" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Program")} sortKey="program" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Country")} sortKey="country" currentSort={sort} onSort={handleSort} />
                     {canSeeRevenue && (
-                      <SortHeader label="Value" sortKey="value" currentSort={sort} onSort={handleSort} />
+                      <SortHeader label={translateUi(uiLanguage, "Value")} sortKey="value" currentSort={sort} onSort={handleSort} />
                     )}
-                    <SortHeader label="Created" sortKey="date" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label={translateUi(uiLanguage, "Created")} sortKey="date" currentSort={sort} onSort={handleSort} />
                     <TableHead className="w-20 text-right">{translateUi(uiLanguage, "Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>

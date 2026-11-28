@@ -122,8 +122,8 @@ export function PdfMarkupModal({
             </div>
             <p className="text-xs text-muted-foreground">
               {allowNegative
-                ? `Enter a positive number to increase or a negative number to decrease the fee in the PDF (range: -${MAX_MARKUP.toLocaleString()} to +${MAX_MARKUP.toLocaleString()}). Enter 0 or leave empty to remove adjustment.`
-                : `Enter a whole number to add on top of each program's service fee in the PDF (max ${MAX_MARKUP.toLocaleString()}). Enter 0 or leave empty to remove markup.`
+                ? translateUi(uiLanguage, "Enter a positive number to increase or a negative number to decrease the fee in the PDF (range: -{value0} to +{value1}). Enter 0 or leave empty to remove adjustment.", undefined, { value0: String(MAX_MARKUP.toLocaleString()), value1: String(MAX_MARKUP.toLocaleString()) })
+                : translateUi(uiLanguage, "Enter a whole number to add on top of each program's service fee in the PDF (max {value0}). Enter 0 or leave empty to remove markup.", undefined, { value0: String(MAX_MARKUP.toLocaleString()) })
               }
             </p>
           </div>

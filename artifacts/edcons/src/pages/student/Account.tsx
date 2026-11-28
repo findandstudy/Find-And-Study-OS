@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
@@ -542,6 +543,7 @@ function PendingMissingDocRequests({ onUploadFor }: { onUploadFor: (row: any) =>
 }
 
 function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfile: any }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -797,7 +799,7 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
                 className="mt-1"
                 value={uploadName}
                 onChange={e => setUploadName(e.target.value)}
-                placeholder={`passport-${(user?.firstName ?? "").toLowerCase()}-${(user?.lastName ?? "").toLowerCase()}`}
+                placeholder={translateUi(uiLanguage, "passport-{value0}-{value1}", undefined, { value0: String((user?.firstName ?? "").toLowerCase()), value1: String((user?.lastName ?? "").toLowerCase()) })}
               />
             </div>
 

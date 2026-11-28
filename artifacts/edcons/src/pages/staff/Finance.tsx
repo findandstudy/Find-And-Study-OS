@@ -460,7 +460,7 @@ function CommissionModal({
                   <SelectItem value="none">{t("financePage.noApplication")}</SelectItem>
                   {stuApps.map((a: any) => (
                     <SelectItem key={a.id} value={String(a.id)}>
-                      {[a.universityName, a.programName].filter(Boolean).join(" / ") || `App #${a.id}`}
+                      {[a.universityName, a.programName].filter(Boolean).join(" / ") || translateUi(uiLanguage, "App #{value0}", undefined, { value0: String(a.id) })}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -586,7 +586,7 @@ function CommissionModal({
                   <SelectItem value="none">{t("financePage.noStaff")}</SelectItem>
                   {staffUsers.map((u: any) => (
                     <SelectItem key={u.id} value={String(u.id)}>
-                      {[u.firstName, u.lastName].filter(Boolean).join(" ") || `User #${u.id}`}
+                      {[u.firstName, u.lastName].filter(Boolean).join(" ") || translateUi(uiLanguage, "User #{value0}", undefined, { value0: String(u.id) })}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -881,7 +881,7 @@ function ServiceFeeModal({
               <SelectContent>
                 {studentApplications.map((application: any) => (
                   <SelectItem key={application.id} value={String(application.id)}>
-                    {[application.universityName, application.programName, application.season].filter(Boolean).join(" · ") || `Application #${application.id}`}
+                    {[application.universityName, application.programName, application.season].filter(Boolean).join(" · ") || translateUi(uiLanguage, "Application #{value0}", undefined, { value0: String(application.id) })}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -2124,7 +2124,7 @@ export default function FinancePage() {
       qc.invalidateQueries({ queryKey: ["commissions"] });
       qc.invalidateQueries({ queryKey: ["finance-summary"] });
       qc.invalidateQueries({ queryKey: ["university-breakdown"] });
-      toast({ title: `${ids.length} commission${ids.length > 1 ? "s" : ""} deleted` });
+      toast({ title: translateUi(uiLanguage, "{value0} commission{value1} deleted", undefined, { value0: String(ids.length), value1: String(ids.length > 1 ? "s" : "") }) });
     } catch { toast({ title: t("financePage.errorDeletingCommissions"), variant: "destructive" }); }
     finally { setBulkDeleting(false); }
   }
@@ -2151,7 +2151,7 @@ export default function FinancePage() {
       setFeeSelected(new Set());
       qc.invalidateQueries({ queryKey: ["service-fees"] });
       qc.invalidateQueries({ queryKey: ["finance-summary"] });
-      toast({ title: `${ids.length} service fee${ids.length > 1 ? "s" : ""} deleted` });
+      toast({ title: translateUi(uiLanguage, "{value0} service fee{value1} deleted", undefined, { value0: String(ids.length), value1: String(ids.length > 1 ? "s" : "") }) });
     } catch { toast({ title: t("financePage.errorDeleting"), variant: "destructive" }); }
     finally { setFeeBulkDeleting(false); }
   }
@@ -2179,7 +2179,7 @@ export default function FinancePage() {
       qc.invalidateQueries({ queryKey: ["commissions"] });
       qc.invalidateQueries({ queryKey: ["finance-summary"] });
       qc.invalidateQueries({ queryKey: ["university-breakdown"] });
-      toast({ title: `${names.length} universit${names.length > 1 ? "ies" : "y"}'s commissions deleted` });
+      toast({ title: translateUi(uiLanguage, "{value0} universit{value1}'s commissions deleted", undefined, { value0: String(names.length), value1: String(names.length > 1 ? "ies" : "y") }) });
     } catch { toast({ title: t("financePage.errorDeleting"), variant: "destructive" }); }
     finally { setUniBulkDeleting(false); }
   }
@@ -2204,7 +2204,7 @@ export default function FinancePage() {
     try {
       await customFetch(`${BASE}/api/service-fees/${fee.id}`, { method: "PATCH", body: JSON.stringify(body) });
       qc.invalidateQueries({ queryKey: ["service-fees"] });
-      toast({ title: `Installment ${installment} marked as paid` });
+      toast({ title: translateUi(uiLanguage, "Installment {value0} marked as paid", undefined, { value0: String(installment) }) });
     } catch { toast({ title: t("financePage.errorGeneric"), variant: "destructive" }); }
   }
 
@@ -2392,7 +2392,7 @@ export default function FinancePage() {
                 <SelectTrigger className="w-44"><SelectValue placeholder={t("financePage.staffFilter")} /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("financePage.staffFilter")}</SelectItem>
-                  {filterStaff.map((u: any) => <SelectItem key={u.id} value={String(u.id)}>{[u.firstName, u.lastName].filter(Boolean).join(" ") || `User #${u.id}`}</SelectItem>)}
+                  {filterStaff.map((u: any) => <SelectItem key={u.id} value={String(u.id)}>{[u.firstName, u.lastName].filter(Boolean).join(" ") || translateUi(uiLanguage, "User #{value0}", undefined, { value0: String(u.id) })}</SelectItem>)}
                 </SelectContent>
               </Select>
               <div className="ml-auto flex items-center gap-2">
@@ -2444,7 +2444,7 @@ export default function FinancePage() {
                   className="ml-auto"
                 >
                   <Trash2 className="w-4 h-4 mr-1.5" />
-                  {bulkDeleting ? translateUi(uiLanguage, "Deleting...") : `Delete Selected (${commSelected.size})`}
+                  {bulkDeleting ? translateUi(uiLanguage, "Deleting...") : translateUi(uiLanguage, "Delete Selected ({value0})", undefined, { value0: String(commSelected.size) })}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setCommSelected(new Set())}> {translateUi(uiLanguage, "Clear Selection")} </Button>
               </div>
@@ -2568,7 +2568,7 @@ export default function FinancePage() {
                                           <SelectItem value="all">{t("financePage.staffFilter")}</SelectItem>
                                           {filterStaff.map((u: any) => (
                                             <SelectItem key={u.id} value={String(u.id)}>
-                                              {[u.firstName, u.lastName].filter(Boolean).join(" ") || `User #${u.id}`}
+                                              {[u.firstName, u.lastName].filter(Boolean).join(" ") || translateUi(uiLanguage, "User #{value0}", undefined, { value0: String(u.id) })}
                                             </SelectItem>
                                           ))}
                                         </SelectContent>
@@ -2638,7 +2638,7 @@ export default function FinancePage() {
                             <Checkbox
                               checked={commSelected.has(c.id)}
                               onCheckedChange={() => toggleCommSelect(c.id)}
-                              aria-label={`Select ${c.studentName}`}
+                              aria-label={translateUi(uiLanguage, "Select {value0}", undefined, { value0: String(c.studentName) })}
                             />
                           </td>
                           <td className="px-4 py-3">
@@ -2860,7 +2860,7 @@ export default function FinancePage() {
                   className="ml-auto"
                 >
                   <Trash2 className="w-4 h-4 mr-1.5" />
-                  {uniBulkDeleting ? translateUi(uiLanguage, "Deleting...") : `Delete All Commissions (${uniSelected.size})`}
+                  {uniBulkDeleting ? translateUi(uiLanguage, "Deleting...") : translateUi(uiLanguage, "Delete All Commissions ({value0})", undefined, { value0: String(uniSelected.size) })}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setUniSelected(new Set())}> {translateUi(uiLanguage, "Clear Selection")} </Button>
               </div>
@@ -2989,7 +2989,7 @@ export default function FinancePage() {
                               <Checkbox
                                 checked={uniSelected.has(u.universityName)}
                                 onCheckedChange={() => toggleUniSelect(u.universityName)}
-                                aria-label={`Select ${u.universityName}`}
+                                aria-label={translateUi(uiLanguage, "Select {value0}", undefined, { value0: String(u.universityName) })}
                               />
                             </td>
                             <td className="px-4 py-3">
@@ -3111,7 +3111,7 @@ export default function FinancePage() {
                     <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
                       <tr>
                         <td className="px-3 py-3" />
-                        <td className="px-4 py-3 text-slate-600">{sortedUniBreakdown.length} {translateUi(uiLanguage, "Universities")}{uniFilter ? ` (filtered from ${uniBreakdown.length})` : ""}</td>
+                        <td className="px-4 py-3 text-slate-600">{sortedUniBreakdown.length} {translateUi(uiLanguage, "Universities")}{uniFilter ? translateUi(uiLanguage, " (filtered from {value0})", undefined, { value0: String(uniBreakdown.length) }) : ""}</td>
                         <td className="px-4 py-3 text-right text-blue-700 tabular-nums">{universityCurrencyRows("totalCommission").map(row => <div key={row.code}>{fmt(row.value, row.code)}</div>)}</td>
                         <td className="px-4 py-3 text-right text-green-700 tabular-nums">{universityCurrencyRows("totalCollected").map(row => <div key={row.code}>{fmt(row.value, row.code)}</div>)}</td>
                         <td className="px-4 py-3 text-right text-rose-600 tabular-nums">{universityCurrencyRows("totalRemaining").map(row => <div key={row.code}>{fmt(row.value, row.code)}</div>)}</td>
@@ -3150,7 +3150,7 @@ export default function FinancePage() {
                 <SelectTrigger className="w-44"><SelectValue placeholder={t("financePage.staffFilter")} /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("financePage.staffFilter")}</SelectItem>
-                  {filterStaff.map((u: any) => <SelectItem key={u.id} value={String(u.id)}>{[u.firstName, u.lastName].filter(Boolean).join(" ") || `User #${u.id}`}</SelectItem>)}
+                  {filterStaff.map((u: any) => <SelectItem key={u.id} value={String(u.id)}>{[u.firstName, u.lastName].filter(Boolean).join(" ") || translateUi(uiLanguage, "User #{value0}", undefined, { value0: String(u.id) })}</SelectItem>)}
                 </SelectContent>
               </Select>
               <div className="ml-auto flex items-center gap-2">
@@ -3191,7 +3191,7 @@ export default function FinancePage() {
                   className="ml-auto"
                 >
                   <Trash2 className="w-4 h-4 mr-1.5" />
-                  {feeBulkDeleting ? translateUi(uiLanguage, "Deleting...") : `Delete Selected (${feeSelected.size})`}
+                  {feeBulkDeleting ? translateUi(uiLanguage, "Deleting...") : translateUi(uiLanguage, "Delete Selected ({value0})", undefined, { value0: String(feeSelected.size) })}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setFeeSelected(new Set())}> {translateUi(uiLanguage, "Clear Selection")} </Button>
               </div>
@@ -3375,7 +3375,7 @@ export default function FinancePage() {
                                           <SelectItem value="all">{t("financePage.staffFilter")}</SelectItem>
                                           {filterStaff.map((u: any) => (
                                             <SelectItem key={u.id} value={String(u.id)}>
-                                              {[u.firstName, u.lastName].filter(Boolean).join(" ") || `User #${u.id}`}
+                                              {[u.firstName, u.lastName].filter(Boolean).join(" ") || translateUi(uiLanguage, "User #{value0}", undefined, { value0: String(u.id) })}
                                             </SelectItem>
                                           ))}
                                         </SelectContent>
@@ -3401,7 +3401,7 @@ export default function FinancePage() {
                             <Checkbox
                               checked={feeSelected.has(f.id)}
                               onCheckedChange={() => toggleFeeSelect(f.id)}
-                              aria-label={`Select ${f.studentName}`}
+                              aria-label={translateUi(uiLanguage, "Select {value0}", undefined, { value0: String(f.studentName) })}
                             />
                           </td>
                           <td className="px-4 py-3">
@@ -3503,7 +3503,7 @@ export default function FinancePage() {
                   <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
                     <tr>
                       <td className="px-3 py-3" />
-                      <td colSpan={3} className="px-4 py-3 text-slate-600">{translateUi(uiLanguage, "Totals (")}{sortedFilteredFees.length}{sortedFilteredFees.length !== fees.length ? ` of ${fees.length}` : ""})</td>
+                      <td colSpan={3} className="px-4 py-3 text-slate-600">{translateUi(uiLanguage, "Totals (")}{sortedFilteredFees.length}{sortedFilteredFees.length !== fees.length ? translateUi(uiLanguage, " of {value0}", undefined, { value0: String(fees.length) }) : ""})</td>
                       <td className="px-4 py-3 text-right text-slate-800 tabular-nums">
                         {fmt(feeSummary.totalServiceFees || 0)}
                       </td>

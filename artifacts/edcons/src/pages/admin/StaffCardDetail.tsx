@@ -1087,6 +1087,7 @@ function SalaryTab({ payments, totals, userId, onSaved }: { payments: any[]; tot
 
 // ─── Commissions ────────────────────────────────────────────────────────────
 function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions: any[]; totals: any; userId: number; onSaved: () => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
 
@@ -1171,7 +1172,7 @@ function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions:
                 <td className="p-3">{c.payDate ? new Date(c.payDate).toLocaleDateString() : "—"}</td>
                 <td className="p-3 font-medium">{Number(c.amount).toFixed(2)} {c.currency}</td>
                 <td className="p-3 text-xs text-muted-foreground">
-                  {c.studentId ? `S#${c.studentId}` : ""} {c.agentId ? `· A#${c.agentId}` : ""} {c.applicationId ? `· App#${c.applicationId}` : ""}
+                  {c.studentId ? `S#${c.studentId}` : ""} {c.agentId ? `· A#${c.agentId}` : ""} {c.applicationId ? translateUi(uiLanguage, "· App#{value0}", undefined, { value0: String(c.applicationId) }) : ""}
                 </td>
                 <td className="p-3">
                   <Select value={c.status} onValueChange={(v) => updateStatus(c.id, v)}>

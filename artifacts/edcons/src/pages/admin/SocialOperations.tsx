@@ -1054,10 +1054,10 @@ export default function SocialOperations() {
           {tr
             ? context.data?.publishingEnabled
               ? translateUi(uiLanguage, "Yayın worker'ı yalnız ikinci onaydan sonra çalışır; başarı ancak provider receipt ve post referansı doğrulanınca kaydedilir.")
-              : `Gerçek provider yayını güvenlik kapısında kapalıdır (${context.data?.publicationGate?.reason ?? "SOCIAL_PROVIDER_PUBLISHING_DISABLED"}). İçerik ve yayın onayı birbirinden ayrıdır.`
+              : translateUi(uiLanguage, "Gerçek provider yayını güvenlik kapısında kapalıdır ({value0}). İçerik ve yayın onayı birbirinden ayrıdır.", undefined, { value0: String(context.data?.publicationGate?.reason ?? "SOCIAL_PROVIDER_PUBLISHING_DISABLED") })
             : context.data?.publishingEnabled
               ? translateUi(uiLanguage, "The publishing worker runs only after a second approval; success is recorded only with verified provider receipt and post references.")
-              : `Real provider publishing is safety-gated (${context.data?.publicationGate?.reason ?? "SOCIAL_PROVIDER_PUBLISHING_DISABLED"}). Content and publication approvals are separate.`}
+              : translateUi(uiLanguage, "Real provider publishing is safety-gated ({value0}). Content and publication approvals are separate.", undefined, { value0: String(context.data?.publicationGate?.reason ?? "SOCIAL_PROVIDER_PUBLISHING_DISABLED") })}
         </span>
       </div>
 
@@ -1111,12 +1111,12 @@ export default function SocialOperations() {
                       <p className="mt-1 text-xs text-muted-foreground">
                         {disabled
                           ? tr
-                            ? `Güvenlik kapısında kapalı (${worker.reason ?? "DISABLED"}).`
-                            : `Disabled by safety gate (${worker.reason ?? "DISABLED"}).`
+                            ? translateUi(uiLanguage, "Güvenlik kapısında kapalı ({value0}).", undefined, { value0: String(worker.reason ?? "DISABLED") })
+                            : translateUi(uiLanguage, "Disabled by safety gate ({value0}).", undefined, { value0: String(worker.reason ?? "DISABLED") })
                           : ready
                             ? tr
-                              ? `${worker.currentReleaseWorkers} güncel release worker'ı canlı.`
-                              : `${worker.currentReleaseWorkers} current-release worker(s) are live.`
+                              ? translateUi(uiLanguage, "{value0} güncel release worker'ı canlı.", undefined, { value0: String(worker.currentReleaseWorkers) })
+                              : translateUi(uiLanguage, "{value0} current-release worker(s) are live.", undefined, { value0: String(worker.currentReleaseWorkers) })
                             : tr
                               ? translateUi(uiLanguage, "Worker bekleniyor fakat güncel release heartbeat'i alınamıyor.")
                               : translateUi(uiLanguage, "Worker is expected but no current-release heartbeat is available.")}
@@ -1372,8 +1372,8 @@ export default function SocialOperations() {
               {creatives.data?.creativeGate.enabled !== true && (
                 <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                   {tr
-                    ? `Harici AI üretimi güvenlik kapısında kapalıdır (${creatives.data?.creativeGate.reason ?? context.data?.creativeGate?.reason ?? "SOCIAL_CREATIVE_WORKER_DISABLED"}). İstek ve onay kuyruğu kullanılabilir; dış maliyet oluşmaz.`
-                    : `External AI generation is safety-gated (${creatives.data?.creativeGate.reason ?? context.data?.creativeGate?.reason ?? "SOCIAL_CREATIVE_WORKER_DISABLED"}). Requests and approvals remain available without external spend.`}
+                    ? translateUi(uiLanguage, "Harici AI üretimi güvenlik kapısında kapalıdır ({value0}). İstek ve onay kuyruğu kullanılabilir; dış maliyet oluşmaz.", undefined, { value0: String(creatives.data?.creativeGate.reason ?? context.data?.creativeGate?.reason ?? "SOCIAL_CREATIVE_WORKER_DISABLED") })
+                    : translateUi(uiLanguage, "External AI generation is safety-gated ({value0}). Requests and approvals remain available without external spend.", undefined, { value0: String(creatives.data?.creativeGate.reason ?? context.data?.creativeGate?.reason ?? "SOCIAL_CREATIVE_WORKER_DISABLED") })}
                 </div>
               )}
               {(creatives.data?.data ?? []).length === 0 ? (
@@ -1590,8 +1590,8 @@ export default function SocialOperations() {
               {context.data?.providerConnectionGate?.enabled !== true && (
                 <p className="mt-4 text-xs text-amber-700 dark:text-amber-300">
                   {tr
-                    ? `Sağlayıcı bağlantı testi güvenlik kapısında kapalıdır (${context.data?.providerConnectionGate?.reason ?? "SOCIAL_PROVIDER_CONNECTIVITY_DISABLED"}).`
-                    : `Provider connection testing is safety-gated (${context.data?.providerConnectionGate?.reason ?? "SOCIAL_PROVIDER_CONNECTIVITY_DISABLED"}).`}
+                    ? translateUi(uiLanguage, "Sağlayıcı bağlantı testi güvenlik kapısında kapalıdır ({value0}).", undefined, { value0: String(context.data?.providerConnectionGate?.reason ?? "SOCIAL_PROVIDER_CONNECTIVITY_DISABLED") })
+                    : translateUi(uiLanguage, "Provider connection testing is safety-gated ({value0}).", undefined, { value0: String(context.data?.providerConnectionGate?.reason ?? "SOCIAL_PROVIDER_CONNECTIVITY_DISABLED") })}
                 </p>
               )}
               <Button variant="link" asChild className="mt-4 px-0">
@@ -1885,8 +1885,8 @@ export default function SocialOperations() {
               {performance.data?.providerConnectionGate.enabled !== true && (
                 <p className="mt-4 text-xs text-amber-700 dark:text-amber-300">
                   {tr
-                    ? `Gerçek metrik toplama güvenlik kapısında kapalıdır (${performance.data?.providerConnectionGate.reason ?? "SOCIAL_PROVIDER_CONNECTIVITY_DISABLED"}).`
-                    : `Real metric collection is safety-gated (${performance.data?.providerConnectionGate.reason ?? "SOCIAL_PROVIDER_CONNECTIVITY_DISABLED"}).`}
+                    ? translateUi(uiLanguage, "Gerçek metrik toplama güvenlik kapısında kapalıdır ({value0}).", undefined, { value0: String(performance.data?.providerConnectionGate.reason ?? "SOCIAL_PROVIDER_CONNECTIVITY_DISABLED") })
+                    : translateUi(uiLanguage, "Real metric collection is safety-gated ({value0}).", undefined, { value0: String(performance.data?.providerConnectionGate.reason ?? "SOCIAL_PROVIDER_CONNECTIVITY_DISABLED") })}
                 </p>
               )}
             </CardContent>

@@ -144,7 +144,7 @@ export function ContractSubjectPicker({ subjectType, subjectId, subjectLabel, on
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onFocus={() => { if (query.trim().length >= 2) setOpen(true); }}
-        placeholder={`Search ${typeLabel} by name, email or reference`}
+        placeholder={translateUi(uiLanguage, "Search {value0} by name, email or reference", undefined, { value0: String(typeLabel) })}
         className="pl-9 pr-9"
         autoComplete="off"
       />

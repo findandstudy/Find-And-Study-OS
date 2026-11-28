@@ -70,7 +70,7 @@ function ProviderConnectionCard({ provider, row, canEdit, onSaved }: { provider:
       const saved = await requestWithTimeout<IntegrationRow>(`/api/integrations/${provider}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: label, category: "ai", isEnabled: enabled, config: { apiKey: apiKey.trim(), model } }) });
       setApiKey(typeof saved.config?.apiKey === "string" ? saved.config.apiKey : "");
       setSavedCredentialReady(!saved.requiresCredentialReset);
-      toast({ title: `${label} bağlantısı kaydedildi`, description: translateUi(uiLanguage, "API anahtarı şifreli saklanır ve yalnız maskeli gösterilir.") });
+      toast({ title: translateUi(uiLanguage, "{value0} bağlantısı kaydedildi", undefined, { value0: String(label) }), description: translateUi(uiLanguage, "API anahtarı şifreli saklanır ve yalnız maskeli gösterilir.") });
       void onSaved();
     } catch (error: any) { toast({ title: translateUi(uiLanguage, "Bağlantı kaydedilemedi"), description: error?.body?.message || error?.message, variant: "destructive" }); }
     finally { setBusy(null); }
@@ -80,7 +80,7 @@ function ProviderConnectionCard({ provider, row, canEdit, onSaved }: { provider:
     try {
       const result: any = await requestWithTimeout(`/api/integrations/${provider}/test`, { method: "POST" }, 30_000);
       const skipped = result?.status === "simulated" || result?.status === "not_supported";
-      toast({ title: skipped ? translateUi(uiLanguage, "Bağlantı testi çalıştırılmadı") : result?.success ? `${label} bağlantısı doğrulandı` : translateUi(uiLanguage, "Bağlantı testi başarısız"), description: result?.message, variant: !skipped && !result?.success ? "destructive" : undefined });
+      toast({ title: skipped ? translateUi(uiLanguage, "Bağlantı testi çalıştırılmadı") : result?.success ? translateUi(uiLanguage, "{value0} bağlantısı doğrulandı", undefined, { value0: String(label) }) : translateUi(uiLanguage, "Bağlantı testi başarısız"), description: result?.message, variant: !skipped && !result?.success ? "destructive" : undefined });
     } catch (error: any) { toast({ title: translateUi(uiLanguage, "Bağlantı testi başarısız"), description: error?.message, variant: "destructive" }); }
     finally { setBusy(null); }
   };

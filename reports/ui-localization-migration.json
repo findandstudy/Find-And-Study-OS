@@ -420,7 +420,8 @@
         "pages/staff/CourseFinder.tsx",
         "pages/staff/StudentDetail.tsx",
         "pages/staff/Students.tsx",
-        "pages/admin/website/pageEditorCopy.ts"
+        "pages/admin/website/pageEditorCopy.ts",
+        "pages/staff/Settings.tsx"
       ],
       "tr": "Telefon"
     },
@@ -1369,7 +1370,9 @@
         "pages/institution/Workspace.tsx",
         "components/notifications/emailAutomationModel.ts",
         "pages/admin/TeamDesigner.tsx",
-        "pages/admin/website/pageEditorCopy.ts"
+        "pages/admin/website/pageEditorCopy.ts",
+        "pages/agent/Leads.tsx",
+        "pages/agent/Students.tsx"
       ],
       "tr": "Ad"
     },
@@ -1708,13 +1711,17 @@
     "sc491505e": {
       "en": "Residence City",
       "contexts": [
-        "components/inbox/InboxSubmitTab.tsx"
+        "components/inbox/InboxSubmitTab.tsx",
+        "pages/staff/StudentDetail.tsx",
+        "pages/staff/Students.tsx"
       ]
     },
     "s5d6add3": {
       "en": "Postal Code",
       "contexts": [
-        "components/inbox/InboxSubmitTab.tsx"
+        "components/inbox/InboxSubmitTab.tsx",
+        "pages/staff/StudentDetail.tsx",
+        "pages/staff/Students.tsx"
       ]
     },
     "s9571bbf4": {
@@ -3616,7 +3623,9 @@
         "pages/agent/AgentApps.tsx",
         "pages/institution/Workspace.tsx",
         "pages/institution/Workspace.tsx",
-        "pages/staff/Applications.tsx"
+        "pages/staff/Applications.tsx",
+        "pages/agent/Leads.tsx",
+        "pages/staff/CourseFinder.tsx"
       ]
     },
     "sc1522ef1": {
@@ -3820,7 +3829,9 @@
         "pages/admin/website/Pages.tsx",
         "pages/agent/MyContract.tsx",
         "pages/staff/AgencyApplications.tsx",
-        "pages/staff/OperationsCenter.tsx"
+        "pages/staff/OperationsCenter.tsx",
+        "pages/staff/Agents.tsx",
+        "pages/staff/CourseFinder.tsx"
       ],
       "tr": "Durum"
     },
@@ -3931,7 +3942,14 @@
         "pages/staff/Applications.tsx",
         "pages/staff/CourseFinder.tsx",
         "pages/staff/Students.tsx",
-        "pages/admin/website/pageEditorCopy.ts"
+        "pages/admin/website/pageEditorCopy.ts",
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/admin/Users.tsx",
+        "pages/agent/Leads.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/Settings.tsx",
+        "pages/staff/StudentDetail.tsx"
       ],
       "tr": "E-posta"
     },
@@ -4059,7 +4077,10 @@
         "pages/staff/Applications.tsx",
         "pages/staff/Applications.tsx",
         "pages/staff/StudentDetail.tsx",
-        "pages/staff/Students.tsx"
+        "pages/staff/Students.tsx",
+        "pages/agent/Leads.tsx",
+        "pages/staff/CourseFinder.tsx",
+        "pages/staff/Settings.tsx"
       ]
     },
     "sbbce7e06": {
@@ -4080,7 +4101,9 @@
         "pages/agent/Account.tsx",
         "pages/staff/Applications.tsx",
         "pages/staff/Applications.tsx",
-        "pages/admin/website/pageEditorCopy.ts"
+        "pages/admin/website/pageEditorCopy.ts",
+        "pages/staff/Settings.tsx",
+        "pages/staff/Students.tsx"
       ],
       "tr": "Şehir"
     },
@@ -4186,7 +4209,8 @@
         "pages/staff/Applications.tsx",
         "pages/admin/website/Pages.tsx",
         "components/layout/PublicLayout.tsx",
-        "pages/admin/website/CatalogPagesInventory.tsx"
+        "pages/admin/website/CatalogPagesInventory.tsx",
+        "pages/staff/CourseFinder.tsx"
       ],
       "tr": "Dil"
     },
@@ -4240,13 +4264,15 @@
     "sf1131d9a": {
       "en": "Primary Color",
       "contexts": [
-        "pages/admin/Embeds.tsx"
+        "pages/admin/Embeds.tsx",
+        "pages/staff/Settings.tsx"
       ]
     },
     "s90a28362": {
       "en": "Button Color",
       "contexts": [
-        "pages/admin/Embeds.tsx"
+        "pages/admin/Embeds.tsx",
+        "pages/staff/Settings.tsx"
       ]
     },
     "s93ad4c03": {
@@ -4544,7 +4570,10 @@
       "contexts": [
         "pages/admin/Popups.tsx",
         "components/notifications/emailAutomationModel.ts",
-        "pages/staff/Settings.tsx"
+        "pages/staff/Settings.tsx",
+        "pages/agent/AgentApps.tsx",
+        "pages/agent/Leads.tsx",
+        "pages/staff/Applications.tsx"
       ],
       "tr": "Oluşturulma"
     },
@@ -5066,7 +5095,8 @@
     "sa331afd2": {
       "en": "New Password",
       "contexts": [
-        "pages/admin/Users.tsx"
+        "pages/admin/Users.tsx",
+        "pages/staff/Settings.tsx"
       ]
     },
     "sfe18c7eb": {
@@ -5410,7 +5440,8 @@
         "pages/admin/website/Blog.tsx",
         "pages/admin/website/Collections.tsx",
         "components/notifications/emailAutomationModel.ts",
-        "pages/staff/OperationsCenter.tsx"
+        "pages/staff/OperationsCenter.tsx",
+        "pages/staff/Agents.tsx"
       ],
       "tr": "Kategori"
     },
@@ -5839,7 +5870,8 @@
       "contexts": [
         "pages/admin/website/Blog.tsx",
         "pages/admin/website/SeoOverrides.tsx",
-        "pages/admin/website/PageEditor.tsx"
+        "pages/admin/website/PageEditor.tsx",
+        "pages/staff/Settings.tsx"
       ],
       "tr": "SEO başlığı"
     },
@@ -5855,7 +5887,8 @@
         "pages/admin/website/Blog.tsx",
         "pages/admin/website/SeoOverrides.tsx",
         "pages/admin/website/SeoOverrides.tsx",
-        "pages/admin/website/PageEditor.tsx"
+        "pages/admin/website/PageEditor.tsx",
+        "pages/staff/Settings.tsx"
       ],
       "tr": "SEO açıklaması"
     },
@@ -6108,7 +6141,11 @@
         "pages/admin/website/Collections.tsx",
         "pages/admin/website/GlobalComponents.tsx",
         "pages/staff/Applications.tsx",
-        "pages/admin/website/pageEditorCopy.ts"
+        "pages/admin/website/pageEditorCopy.ts",
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/Settings.tsx",
+        "pages/staff/StudentDetail.tsx"
       ],
       "tr": "Adres"
     },
@@ -7121,7 +7158,8 @@
       "en": "Value",
       "contexts": [
         "pages/admin/website/GlobalComponents.tsx",
-        "pages/admin/website/pageEditorCopy.ts"
+        "pages/admin/website/pageEditorCopy.ts",
+        "pages/agent/Leads.tsx"
       ],
       "tr": "Değer"
     },
@@ -7592,7 +7630,8 @@
       "contexts": [
         "pages/staff/Applications.tsx",
         "pages/admin/website/PageEditor.tsx",
-        "pages/admin/website/Pages.tsx"
+        "pages/admin/website/Pages.tsx",
+        "pages/staff/Agents.tsx"
       ],
       "tr": "İletişim"
     },
@@ -8334,7 +8373,8 @@
     "s2ad98036": {
       "en": "OG Image",
       "contexts": [
-        "pages/admin/website/SeoOverrides.tsx"
+        "pages/admin/website/SeoOverrides.tsx",
+        "pages/staff/Settings.tsx"
       ]
     },
     "s6b95499f": {
@@ -8392,7 +8432,8 @@
       "en": "OG Title",
       "contexts": [
         "pages/admin/website/SeoOverrides.tsx",
-        "pages/admin/website/PageEditor.tsx"
+        "pages/admin/website/PageEditor.tsx",
+        "pages/staff/Settings.tsx"
       ],
       "tr": "Paylaşım başlığı (OG)"
     },
@@ -8400,7 +8441,8 @@
       "en": "OG Description",
       "contexts": [
         "pages/admin/website/SeoOverrides.tsx",
-        "pages/admin/website/PageEditor.tsx"
+        "pages/admin/website/PageEditor.tsx",
+        "pages/staff/Settings.tsx"
       ],
       "tr": "Paylaşım açıklaması (OG)"
     },
@@ -8446,7 +8488,8 @@
       "en": "Save SEO Settings",
       "contexts": [
         "pages/admin/website/SeoOverrides.tsx",
-        "pages/admin/website/PageEditor.tsx"
+        "pages/admin/website/PageEditor.tsx",
+        "pages/staff/Settings.tsx"
       ],
       "tr": "SEO ayarlarını kaydet"
     },
@@ -8993,7 +9036,8 @@
         "pages/staff/Applications.tsx",
         "pages/staff/Finance.tsx",
         "pages/staff/StudentDetail.tsx",
-        "components/OfferDeadlinesWidget.tsx"
+        "components/OfferDeadlinesWidget.tsx",
+        "pages/staff/CourseFinder.tsx"
       ]
     },
     "s51a35dc0": {
@@ -9694,14 +9738,16 @@
     "s86308e89": {
       "en": "Degree",
       "contexts": [
-        "pages/institution/Workspace.tsx"
+        "pages/institution/Workspace.tsx",
+        "pages/staff/CourseFinder.tsx"
       ]
     },
     "s31f3d692": {
       "en": "Intakes",
       "contexts": [
         "pages/institution/Workspace.tsx",
-        "pages/staff/Applications.tsx"
+        "pages/staff/Applications.tsx",
+        "pages/staff/CourseFinder.tsx"
       ]
     },
     "s56be502b": {
@@ -9749,7 +9795,8 @@
     "se0a63e12": {
       "en": "User",
       "contexts": [
-        "pages/institution/Workspace.tsx"
+        "pages/institution/Workspace.tsx",
+        "pages/admin/Users.tsx"
       ]
     },
     "s2ec9957f": {
@@ -10032,7 +10079,8 @@
       "en": "Contract",
       "contexts": [
         "pages/staff/Agents.tsx",
-        "pages/staff/AgencyApplications.tsx"
+        "pages/staff/AgencyApplications.tsx",
+        "pages/agent/Account.tsx"
       ]
     },
     "sc02f7a24": {
@@ -10124,14 +10172,20 @@
       "en": "First Name",
       "contexts": [
         "pages/staff/Agents.tsx",
-        "pages/staff/CourseFinder.tsx"
+        "pages/staff/CourseFinder.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/Settings.tsx"
       ]
     },
     "s99e25be0": {
       "en": "Last Name",
       "contexts": [
         "pages/staff/Agents.tsx",
-        "pages/staff/CourseFinder.tsx"
+        "pages/staff/CourseFinder.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/Settings.tsx"
       ]
     },
     "s3b65e10c": {
@@ -10254,7 +10308,8 @@
     "s5848e4ca": {
       "en": "Logo for Agent Panel",
       "contexts": [
-        "pages/staff/Agents.tsx"
+        "pages/staff/Agents.tsx",
+        "pages/agent/Account.tsx"
       ]
     },
     "sb7608901": {
@@ -10273,7 +10328,8 @@
     "s2cb7bbbc": {
       "en": "Business Certificate",
       "contexts": [
-        "pages/staff/Agents.tsx"
+        "pages/staff/Agents.tsx",
+        "pages/agent/Account.tsx"
       ]
     },
     "scb8daa3f": {
@@ -10439,7 +10495,8 @@
     "sfee66f95": {
       "en": "Field of Study",
       "contexts": [
-        "pages/staff/Applications.tsx"
+        "pages/staff/Applications.tsx",
+        "pages/staff/Students.tsx"
       ]
     },
     "s22fa6af7": {
@@ -10505,7 +10562,8 @@
     "sde578bb0": {
       "en": "Commission",
       "contexts": [
-        "pages/staff/Applications.tsx"
+        "pages/staff/Applications.tsx",
+        "pages/agent/AgentApps.tsx"
       ]
     },
     "s4e26fc61": {
@@ -10570,7 +10628,8 @@
       "en": "Agent",
       "contexts": [
         "pages/staff/Applications.tsx",
-        "pages/staff/Applications.tsx"
+        "pages/staff/Applications.tsx",
+        "pages/staff/Agents.tsx"
       ]
     },
     "s1f93146f": {
@@ -10761,7 +10820,8 @@
     "s75c172cc": {
       "en": "Contact Person",
       "contexts": [
-        "pages/staff/CourseFinder.tsx"
+        "pages/staff/CourseFinder.tsx",
+        "pages/staff/Agents.tsx"
       ]
     },
     "s773541d1": {
@@ -14471,7 +14531,8 @@
     "s788f4feb": {
       "en": "Improve",
       "contexts": [
-        "pages/admin/website/AiWritingAssistant.tsx"
+        "pages/admin/website/AiWritingAssistant.tsx",
+        "pages/admin/website/Blog.tsx"
       ],
       "tr": "İyileştir"
     },
@@ -14485,7 +14546,8 @@
     "se7d05501": {
       "en": "Expand",
       "contexts": [
-        "pages/admin/website/AiWritingAssistant.tsx"
+        "pages/admin/website/AiWritingAssistant.tsx",
+        "pages/admin/website/Blog.tsx"
       ],
       "tr": "Genişlet"
     },
@@ -17404,7 +17466,8 @@
     "seb1ff75f": {
       "en": "Logo URL",
       "contexts": [
-        "pages/admin/website/pageEditorCopy.ts"
+        "pages/admin/website/pageEditorCopy.ts",
+        "pages/staff/Settings.tsx"
       ],
       "tr": "Logo adresi"
     },
@@ -22013,7 +22076,8 @@
     "sa64b1ba5": {
       "en": "Institution",
       "contexts": [
-        "pages/admin/website/CatalogPagesInventory.tsx"
+        "pages/admin/website/CatalogPagesInventory.tsx",
+        "pages/institution/Workspace.tsx"
       ]
     },
     "s946f16ad": {
@@ -23619,7 +23683,8 @@
     "scb8e95b7": {
       "en": "Verification code",
       "contexts": [
-        "pages/agent/VerifyEmail.tsx"
+        "pages/agent/VerifyEmail.tsx",
+        "pages/staff/Settings.tsx"
       ]
     },
     "s14c06f5d": {
@@ -25747,7 +25812,8 @@
     "s37c4fc8f": {
       "en": "Warning",
       "contexts": [
-        "pages/staff/Students.tsx"
+        "pages/staff/Students.tsx",
+        "pages/staff/Settings.tsx"
       ]
     },
     "sd04f9ed1": {
@@ -25874,6 +25940,1838 @@
       "en": "legacy_fallback",
       "contexts": [
         "pages/student/Dashboard.tsx"
+      ]
+    },
+    "sb71f414d": {
+      "en": "You can combine up to {value0} parts in one document box.",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/public/PublicProgramApplicationDialog.tsx",
+        "pages/staff/CourseFinder.tsx"
+      ]
+    },
+    "s9862e017": {
+      "en": "{value0}/{value1} documents added. Failed: {value2}. Please upload them again from the student profile.",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx"
+      ]
+    },
+    "sa219ec45": {
+      "en": "{value0} document{value1} added to profile.",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx"
+      ]
+    },
+    "sc4194aa7": {
+      "en": "Date of Birth",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/StudentDetail.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "sb92635e4": {
+      "en": "Passport Number",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/Settings.tsx",
+        "pages/staff/StudentDetail.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "sfa8391b4": {
+      "en": "Issue Date",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/StudentDetail.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "sc1cf09be": {
+      "en": "Expiry Date",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/StudentDetail.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "s8ab05d33": {
+      "en": "High School",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/StudentDetail.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "sb0e21e0a": {
+      "en": "University (Bachelor)",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/StudentDetail.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "saacf1032": {
+      "en": "University (Master)",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/StudentDetail.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "s44762226": {
+      "en": "Graduation Year",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/StudentDetail.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "s85522e49": {
+      "en": "Language Score",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/StudentDetail.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "s54d4003a": {
+      "en": "{value0} Doc{value1}",
+      "contexts": [
+        "components/AddStudentModal.tsx",
+        "components/agent/AddStudentModal.tsx"
+      ]
+    },
+    "sb3102baf": {
+      "en": "Mother's Name",
+      "contexts": [
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx"
+      ]
+    },
+    "s2fdc7834": {
+      "en": "Father's Name",
+      "contexts": [
+        "components/agent/AddStudentModal.tsx",
+        "pages/agent/Students.tsx"
+      ]
+    },
+    "s5bfc9303": {
+      "en": "{value0} countries selected",
+      "contexts": [
+        "components/agent/CreateLeadDialog.tsx",
+        "pages/agent/Leads.tsx",
+        "pages/staff/LeadDetail.tsx"
+      ]
+    },
+    "s4f4b3e0c": {
+      "en": "{value0} bağlantısı kaydedildi",
+      "contexts": [
+        "components/AiContentTranslationSettings.tsx"
+      ]
+    },
+    "scd545c0f": {
+      "en": "{value0} bağlantısı doğrulandı",
+      "contexts": [
+        "components/AiContentTranslationSettings.tsx"
+      ]
+    },
+    "sf24b20f4": {
+      "en": "{value0} · {value1} selected",
+      "contexts": [
+        "components/BulkMessageDialog.tsx"
+      ]
+    },
+    "sc87ebdda": {
+      "en": "Open {value0}",
+      "contexts": [
+        "components/contracts/ContractAssociationLink.tsx",
+        "pages/staff/Applications.tsx"
+      ]
+    },
+    "s8e92dac2": {
+      "en": "Edit {value0}",
+      "contexts": [
+        "components/contracts/ContractBrandProfilesDialog.tsx"
+      ]
+    },
+    "sbee5c9b2": {
+      "en": "Search {value0} by name, email or reference",
+      "contexts": [
+        "components/contracts/ContractSubjectPicker.tsx"
+      ]
+    },
+    "s1423ca9a": {
+      "en": "Enter a positive number to increase or a negative number to decrease the fee in the PDF (range: -{value0} to +{value1}). Enter 0 or leave empty to remove adjustment.",
+      "contexts": [
+        "components/course-finder/PdfMarkupModal.tsx"
+      ]
+    },
+    "s89383353": {
+      "en": "Enter a whole number to add on top of each program's service fee in the PDF (max {value0}). Enter 0 or leave empty to remove markup.",
+      "contexts": [
+        "components/course-finder/PdfMarkupModal.tsx"
+      ]
+    },
+    "s439e3eae": {
+      "en": "corner-{value0}",
+      "contexts": [
+        "components/DocumentScanner.tsx"
+      ]
+    },
+    "sa3fd38c5": {
+      "en": "Control who can see this stage and, separately, who may move a record into it.",
+      "contexts": [
+        "components/EditStagesDialog.tsx"
+      ]
+    },
+    "sd7cb36b2": {
+      "en": "AI could not verify: {value0}. Review the uploaded education documents or enter these fields manually.",
+      "contexts": [
+        "components/inbox/InboxSubmitTab.tsx"
+      ]
+    },
+    "s5529b6b6": {
+      "en": "{value0} settings saved",
+      "contexts": [
+        "components/IntegrationsManager.tsx"
+      ]
+    },
+    "sfdc75ca0": {
+      "en": "{value0} copied",
+      "contexts": [
+        "components/IntegrationsManager.tsx"
+      ]
+    },
+    "sec63d1d8": {
+      "en": "ID #{value0}",
+      "contexts": [
+        "components/layout/DashboardLayout.tsx"
+      ]
+    },
+    "sddc2902d": {
+      "en": "© {value0} {value1}. All rights reserved.",
+      "contexts": [
+        "components/layout/PublicLayout.tsx"
+      ]
+    },
+    "se87125e7": {
+      "en": "{value0} days",
+      "contexts": [
+        "components/OfferDeadlinesWidget.tsx",
+        "pages/staff/OperationsCenter.tsx"
+      ]
+    },
+    "sc1230143": {
+      "en": "Removed agent from {value0}",
+      "contexts": [
+        "components/RowActionsMenu.tsx"
+      ]
+    },
+    "sb80dbb5b": {
+      "en": "Reassign ({value0})",
+      "contexts": [
+        "components/RowActionsMenu.tsx"
+      ]
+    },
+    "s6b08b7a5": {
+      "en": "Agent linked to {value0}",
+      "contexts": [
+        "components/RowActionsMenu.tsx"
+      ]
+    },
+    "s61278b46": {
+      "en": "Password has been set for {value0}",
+      "contexts": [
+        "components/RowActionsMenu.tsx"
+      ]
+    },
+    "s12e819de": {
+      "en": "Select {value0}",
+      "contexts": [
+        "pages/admin/Contracts.tsx",
+        "pages/admin/Embeds.tsx",
+        "pages/admin/SelfFillLinks.tsx",
+        "pages/staff/Finance.tsx",
+        "pages/staff/Tasks.tsx"
+      ]
+    },
+    "se7c6c2b1": {
+      "en": " Showing the first {value0} highest-risk programs.",
+      "contexts": [
+        "pages/admin/DataQuality.tsx"
+      ]
+    },
+    "sf3cbe94b": {
+      "en": "Search universities...",
+      "contexts": [
+        "pages/admin/Embeds.tsx"
+      ]
+    },
+    "s5d8fff0e": {
+      "en": "No universities found",
+      "contexts": [
+        "pages/admin/Embeds.tsx",
+        "pages/agent/Account.tsx"
+      ]
+    },
+    "sb53a0733": {
+      "en": "{value0} copied to clipboard",
+      "contexts": [
+        "pages/admin/Embeds.tsx"
+      ]
+    },
+    "sbe63cf84": {
+      "en": "Reminder {value0}",
+      "contexts": [
+        "pages/admin/SelfFillLinks.tsx"
+      ]
+    },
+    "sfe8dc78e": {
+      "en": "Dış reklam işlemleri açık. Kampanya başına hard üst sınır {value0} minor unit.",
+      "contexts": [
+        "pages/admin/SocialAdvertisingPanel.tsx"
+      ]
+    },
+    "sbfac9920": {
+      "en": "External ad execution is enabled. Hard per-campaign cap: {value0} minor units.",
+      "contexts": [
+        "pages/admin/SocialAdvertisingPanel.tsx"
+      ]
+    },
+    "s7c2eb49d": {
+      "en": "Dış reklam işlemleri kapalı ({value0}). Plan ve onay kayıtları oluşturulabilir; provider çağrısı yapılmaz.",
+      "contexts": [
+        "pages/admin/SocialAdvertisingPanel.tsx"
+      ]
+    },
+    "s50baeb71": {
+      "en": "External ad execution is disabled ({value0}). Plans and approvals can be recorded without provider calls.",
+      "contexts": [
+        "pages/admin/SocialAdvertisingPanel.tsx"
+      ]
+    },
+    "sba668da7": {
+      "en": "Para birimi reklam hesabından gelir: {value0}. CREATE işlemi harcama başlatmaz; kampanya sağlayıcıda PAUSED açılır.",
+      "contexts": [
+        "pages/admin/SocialAdvertisingPanel.tsx"
+      ]
+    },
+    "s26d02abb": {
+      "en": "Currency comes from the ad account: {value0}. CREATE never starts spending; the provider campaign is provisioned PAUSED.",
+      "contexts": [
+        "pages/admin/SocialAdvertisingPanel.tsx"
+      ]
+    },
+    "s4901f9b6": {
+      "en": "Gerçek provider yayını güvenlik kapısında kapalıdır ({value0}). İçerik ve yayın onayı birbirinden ayrıdır.",
+      "contexts": [
+        "pages/admin/SocialOperations.tsx"
+      ]
+    },
+    "s189322c6": {
+      "en": "Real provider publishing is safety-gated ({value0}). Content and publication approvals are separate.",
+      "contexts": [
+        "pages/admin/SocialOperations.tsx"
+      ]
+    },
+    "s524e4f2d": {
+      "en": "Güvenlik kapısında kapalı ({value0}).",
+      "contexts": [
+        "pages/admin/SocialOperations.tsx"
+      ]
+    },
+    "s9cd735ed": {
+      "en": "Disabled by safety gate ({value0}).",
+      "contexts": [
+        "pages/admin/SocialOperations.tsx"
+      ]
+    },
+    "s62ac3c8b": {
+      "en": "{value0} güncel release worker'ı canlı.",
+      "contexts": [
+        "pages/admin/SocialOperations.tsx"
+      ]
+    },
+    "s10c0c73d": {
+      "en": "{value0} current-release worker(s) are live.",
+      "contexts": [
+        "pages/admin/SocialOperations.tsx"
+      ]
+    },
+    "sed539ea5": {
+      "en": "Harici AI üretimi güvenlik kapısında kapalıdır ({value0}). İstek ve onay kuyruğu kullanılabilir; dış maliyet oluşmaz.",
+      "contexts": [
+        "pages/admin/SocialOperations.tsx"
+      ]
+    },
+    "s1ca4d17b": {
+      "en": "External AI generation is safety-gated ({value0}). Requests and approvals remain available without external spend.",
+      "contexts": [
+        "pages/admin/SocialOperations.tsx"
+      ]
+    },
+    "s8c45704d": {
+      "en": "Sağlayıcı bağlantı testi güvenlik kapısında kapalıdır ({value0}).",
+      "contexts": [
+        "pages/admin/SocialOperations.tsx"
+      ]
+    },
+    "s277f0f28": {
+      "en": "Provider connection testing is safety-gated ({value0}).",
+      "contexts": [
+        "pages/admin/SocialOperations.tsx"
+      ]
+    },
+    "s50b727fd": {
+      "en": "Gerçek metrik toplama güvenlik kapısında kapalıdır ({value0}).",
+      "contexts": [
+        "pages/admin/SocialOperations.tsx"
+      ]
+    },
+    "sff26e52d": {
+      "en": "Real metric collection is safety-gated ({value0}).",
+      "contexts": [
+        "pages/admin/SocialOperations.tsx"
+      ]
+    },
+    "sd38fbd9b": {
+      "en": "· App#{value0}",
+      "contexts": [
+        "pages/admin/StaffCardDetail.tsx"
+      ]
+    },
+    "sa0867d4b": {
+      "en": "User {value0}",
+      "contexts": [
+        "pages/admin/Users.tsx"
+      ]
+    },
+    "sb4d05605": {
+      "en": "{value0} web source{value1} used{value2}. Review before publishing.",
+      "contexts": [
+        "pages/admin/website/Blog.tsx"
+      ]
+    },
+    "s3d8676b6": {
+      "en": "Use /{value0}/guides/article-slug-{value1}, or leave it empty.",
+      "contexts": [
+        "pages/admin/website/Blog.tsx"
+      ]
+    },
+    "sc75562b2": {
+      "en": "Generate",
+      "contexts": [
+        "pages/admin/website/Blog.tsx"
+      ]
+    },
+    "s8f73b4e6": {
+      "en": "AI Meta Title",
+      "contexts": [
+        "pages/admin/website/Blog.tsx"
+      ]
+    },
+    "s9259c161": {
+      "en": "AI Meta Desc",
+      "contexts": [
+        "pages/admin/website/Blog.tsx"
+      ]
+    },
+    "s8335a56e": {
+      "en": "/{value0}/guides/{value1}-{value2}",
+      "contexts": [
+        "pages/admin/website/Blog.tsx"
+      ]
+    },
+    "sab230bb1": {
+      "en": "{value0} taslak oluşturuldu/tamamlandı, {value1} görsel eklendi, {value2} görsel üretilemedi, {value3} mevcut içerik korundu, {value4} işlem başarısız. Taslaklar otomatik yayınlanmadı.",
+      "contexts": [
+        "pages/admin/website/CatalogPagesInventory.tsx"
+      ]
+    },
+    "sdfa5e684": {
+      "en": "{value0} draft(s) were created/completed, {value1} image(s) were added, {value2} image generation(s) were unavailable, {value3} existing item(s) were preserved, {value4} failed. Drafts were not auto-published.",
+      "contexts": [
+        "pages/admin/website/CatalogPagesInventory.tsx"
+      ]
+    },
+    "se3ac370c": {
+      "en": "{value0} sayfa-dil işi · section metinleri ve SEO birlikte çevrilecek · {value1}",
+      "contexts": [
+        "pages/admin/website/CatalogPagesInventory.tsx"
+      ]
+    },
+    "s70baa7d4": {
+      "en": "{value0} page-language job(s) · sections and SEO will be translated together · {value1}",
+      "contexts": [
+        "pages/admin/website/CatalogPagesInventory.tsx"
+      ]
+    },
+    "sb8920305": {
+      "en": "{value0} section + SEO çevirisi",
+      "contexts": [
+        "pages/admin/website/CatalogPagesInventory.tsx"
+      ]
+    },
+    "s2d0bcd46": {
+      "en": "Translate {value0} sections + SEO",
+      "contexts": [
+        "pages/admin/website/CatalogPagesInventory.tsx"
+      ]
+    },
+    "s36adc921": {
+      "en": "{value0} sayfa-dil işlendi: {value1} yeni, {value2} tamamlandı, {value3} korundu, {value4} başarısız.",
+      "contexts": [
+        "pages/admin/website/CatalogPagesInventory.tsx"
+      ]
+    },
+    "s3ad7cec0": {
+      "en": "{value0} page-language pair(s): {value1} new, {value2} completed, {value3} preserved, {value4} failed.",
+      "contexts": [
+        "pages/admin/website/CatalogPagesInventory.tsx"
+      ]
+    },
+    "saf596417": {
+      "en": "{value0} section + SEO",
+      "contexts": [
+        "pages/admin/website/CatalogPagesInventory.tsx"
+      ]
+    },
+    "s3212c0a0": {
+      "en": "{value0} sections + SEO",
+      "contexts": [
+        "pages/admin/website/CatalogPagesInventory.tsx"
+      ]
+    },
+    "s694e4563": {
+      "en": " at {value0}",
+      "contexts": [
+        "pages/admin/website/Collections.tsx"
+      ]
+    },
+    "s9a53d63e": {
+      "en": "{value0} picker",
+      "contexts": [
+        "pages/admin/website/DetailSectionAppearanceFields.tsx"
+      ]
+    },
+    "s5845e76e": {
+      "en": "<form action=\"/api/public/website-forms/{value0}/submit\" method=\"POST\">\n  <input type=\"hidden\" name=\"_hp\" value=\"\" style=\"display:none\" />\n{value1}\n  <button type=\"submit\">Submit</button>\n</form>",
+      "contexts": [
+        "pages/admin/website/Forms.tsx"
+      ]
+    },
+    "s7e022c1c": {
+      "en": "This visible {value0} section is not rendered publicly until its collection contains data.",
+      "contexts": [
+        "pages/admin/website/PageEditor.tsx"
+      ]
+    },
+    "s806ced36": {
+      "en": "{value0}, yayınlanan sayfanın gerçek bağlamından otomatik doldurulur.",
+      "contexts": [
+        "pages/admin/website/PageEditorFields.tsx"
+      ]
+    },
+    "s63077880": {
+      "en": "{value0} is filled automatically from the published page context.",
+      "contexts": [
+        "pages/admin/website/PageEditorFields.tsx"
+      ]
+    },
+    "s20b821ae": {
+      "en": "{value0} item(s) updated",
+      "contexts": [
+        "pages/admin/website/TranslationQueuePanel.tsx"
+      ]
+    },
+    "sfa93cf19": {
+      "en": "{value0} item(s) need attention.",
+      "contexts": [
+        "pages/admin/website/TranslationQueuePanel.tsx"
+      ]
+    },
+    "s60a9d01": {
+      "en": "Representative ID",
+      "contexts": [
+        "pages/agent/Account.tsx"
+      ]
+    },
+    "s95ee194a": {
+      "en": "Download {value0}",
+      "contexts": [
+        "pages/agent/Account.tsx"
+      ]
+    },
+    "sbbf65e0f": {
+      "en": "{value0} saved",
+      "contexts": [
+        "pages/agent/Account.tsx",
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "seb85576b": {
+      "en": "Search universities…",
+      "contexts": [
+        "pages/agent/Account.tsx"
+      ]
+    },
+    "s9371f303": {
+      "en": "Delete {value0}",
+      "contexts": [
+        "pages/agent/AgentApps.tsx",
+        "pages/agent/Students.tsx",
+        "pages/staff/Applications.tsx",
+        "pages/staff/StudentDetail.tsx"
+      ]
+    },
+    "sd9b82237": {
+      "en": "{value0} application{value1} deleted",
+      "contexts": [
+        "pages/agent/AgentApps.tsx",
+        "pages/staff/Applications.tsx"
+      ]
+    },
+    "sc4bf3837": {
+      "en": "Delete {value0} Lead{value1}",
+      "contexts": [
+        "pages/agent/Leads.tsx"
+      ]
+    },
+    "sff99116f": {
+      "en": "{value0} lead{value1} deleted",
+      "contexts": [
+        "pages/agent/Leads.tsx"
+      ]
+    },
+    "sab3a1f10": {
+      "en": "Merged with existing student: {value0}",
+      "contexts": [
+        "pages/agent/Leads.tsx"
+      ]
+    },
+    "s9b1f177d": {
+      "en": "New student created: {value0}",
+      "contexts": [
+        "pages/agent/Leads.tsx"
+      ]
+    },
+    "s92927e92": {
+      "en": "Lead moved to {value0}",
+      "contexts": [
+        "pages/agent/Leads.tsx"
+      ]
+    },
+    "s587d1a0e": {
+      "en": "{value0} student{value1} deleted",
+      "contexts": [
+        "pages/agent/Students.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "s7505646a": {
+      "en": "Student moved → {value0}",
+      "contexts": [
+        "pages/agent/Students.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "s59388803": {
+      "en": "Passport",
+      "contexts": [
+        "pages/agent/Students.tsx"
+      ]
+    },
+    "sf8f2b670": {
+      "en": "Joined",
+      "contexts": [
+        "pages/agent/Students.tsx"
+      ]
+    },
+    "s2f7f7f22": {
+      "en": "Applications",
+      "contexts": [
+        "pages/institution/Workspace.tsx"
+      ]
+    },
+    "sffc1e963": {
+      "en": "SLA breached",
+      "contexts": [
+        "pages/institution/Workspace.tsx"
+      ]
+    },
+    "sccd9874f": {
+      "en": "Pending approval",
+      "contexts": [
+        "pages/institution/Workspace.tsx"
+      ]
+    },
+    "se68d9f29": {
+      "en": "Priority",
+      "contexts": [
+        "pages/institution/Workspace.tsx"
+      ]
+    },
+    "s969d0a5c": {
+      "en": "Open cases",
+      "contexts": [
+        "pages/institution/Workspace.tsx"
+      ]
+    },
+    "sebfa87e7": {
+      "en": "Privacy",
+      "contexts": [
+        "pages/institution/Workspace.tsx"
+      ]
+    },
+    "s821a7885": {
+      "en": "{value0} preview placeholder",
+      "contexts": [
+        "pages/public/DetailLayout.tsx"
+      ]
+    },
+    "sc63f2d11": {
+      "en": "Contact person assigned to {value0} agent(s)",
+      "contexts": [
+        "pages/staff/Agents.tsx"
+      ]
+    },
+    "s80885cb4": {
+      "en": "Contact person removed from {value0} agent(s)",
+      "contexts": [
+        "pages/staff/Agents.tsx"
+      ]
+    },
+    "s8acf6d7a": {
+      "en": "{value0} agent(s) deleted",
+      "contexts": [
+        "pages/staff/Agents.tsx"
+      ]
+    },
+    "s2dfb098f": {
+      "en": "Agent {value0}",
+      "contexts": [
+        "pages/staff/Agents.tsx"
+      ]
+    },
+    "s468ab38f": {
+      "en": "Commission %",
+      "contexts": [
+        "pages/staff/Agents.tsx"
+      ]
+    },
+    "s6634d1be": {
+      "en": " +{value0} more",
+      "contexts": [
+        "pages/staff/Agents.tsx"
+      ]
+    },
+    "sfbd515ef": {
+      "en": "{value0} staff selected",
+      "contexts": [
+        "pages/staff/Agents.tsx"
+      ]
+    },
+    "s7acaa5d3": {
+      "en": " by {value0}",
+      "contexts": [
+        "pages/staff/ApplicationDetail.tsx",
+        "pages/staff/LeadDetail.tsx",
+        "pages/staff/StudentDetail.tsx"
+      ]
+    },
+    "sc1cb0549": {
+      "en": "Agent: {value0}",
+      "contexts": [
+        "pages/staff/Applications.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "s9e222557": {
+      "en": "Load more ({value0}/{value1})",
+      "contexts": [
+        "pages/staff/Applications.tsx"
+      ]
+    },
+    "scb7d2d3": {
+      "en": "\"{value0}\" adlı belge bu aşamada yok.",
+      "contexts": [
+        "pages/staff/Applications.tsx"
+      ]
+    },
+    "sd3583c66": {
+      "en": "{value0} application{value1} assigned",
+      "contexts": [
+        "pages/staff/Applications.tsx"
+      ]
+    },
+    "s494cbc3d": {
+      "en": "{value0} application{value1} moved",
+      "contexts": [
+        "pages/staff/Applications.tsx"
+      ]
+    },
+    "s2b64a7dd": {
+      "en": "Assigned",
+      "contexts": [
+        "pages/staff/Applications.tsx"
+      ]
+    },
+    "s13178041": {
+      "en": "No document requirements are configured for: {value0}.",
+      "contexts": [
+        "pages/staff/CourseFinder.tsx"
+      ]
+    },
+    "s2e7ee27b": {
+      "en": "Tuition",
+      "contexts": [
+        "pages/staff/CourseFinder.tsx"
+      ]
+    },
+    "s8df2fa4b": {
+      "en": "{value0} {value1} has been added to the system.",
+      "contexts": [
+        "pages/staff/CourseFinder.tsx"
+      ]
+    },
+    "s54448556": {
+      "en": "HTTP {value0}",
+      "contexts": [
+        "pages/staff/Dashboard.tsx"
+      ]
+    },
+    "s2fe12dc": {
+      "en": "App #{value0}",
+      "contexts": [
+        "pages/staff/Finance.tsx"
+      ]
+    },
+    "sb63ea266": {
+      "en": "User #{value0}",
+      "contexts": [
+        "pages/staff/Finance.tsx"
+      ]
+    },
+    "s241693b1": {
+      "en": "Application #{value0}",
+      "contexts": [
+        "pages/staff/Finance.tsx",
+        "pages/staff/OperationsCenter.tsx"
+      ]
+    },
+    "s89efd834": {
+      "en": "{value0} commission{value1} deleted",
+      "contexts": [
+        "pages/staff/Finance.tsx"
+      ]
+    },
+    "s80daebb2": {
+      "en": "{value0} service fee{value1} deleted",
+      "contexts": [
+        "pages/staff/Finance.tsx"
+      ]
+    },
+    "s2fdc518": {
+      "en": "{value0} universit{value1}'s commissions deleted",
+      "contexts": [
+        "pages/staff/Finance.tsx"
+      ]
+    },
+    "s3c975e49": {
+      "en": "Installment {value0} marked as paid",
+      "contexts": [
+        "pages/staff/Finance.tsx"
+      ]
+    },
+    "s788fbb15": {
+      "en": "Delete Selected ({value0})",
+      "contexts": [
+        "pages/staff/Finance.tsx"
+      ]
+    },
+    "s3a8e96c9": {
+      "en": "Delete All Commissions ({value0})",
+      "contexts": [
+        "pages/staff/Finance.tsx"
+      ]
+    },
+    "s8b31c942": {
+      "en": " (filtered from {value0})",
+      "contexts": [
+        "pages/staff/Finance.tsx"
+      ]
+    },
+    "s7f014c1b": {
+      "en": " of {value0}",
+      "contexts": [
+        "pages/staff/Finance.tsx"
+      ]
+    },
+    "s5e8221a7": {
+      "en": "Search document types...",
+      "contexts": [
+        "pages/staff/LeadDetail.tsx",
+        "pages/staff/StudentDetail.tsx"
+      ]
+    },
+    "s967e346": {
+      "en": "Gelen hat: {value0}",
+      "contexts": [
+        "pages/staff/Messages.tsx"
+      ]
+    },
+    "s32854be4": {
+      "en": "Open {value0} #{value1} in a new tab",
+      "contexts": [
+        "pages/staff/Messages.tsx"
+      ]
+    },
+    "sc8bdcc39": {
+      "en": "Internal announcement sent to {value0} users",
+      "contexts": [
+        "pages/staff/Messages.tsx"
+      ]
+    },
+    "s89c191ea": {
+      "en": "{value0} safe failure(s) queued again",
+      "contexts": [
+        "pages/staff/Messages.tsx"
+      ]
+    },
+    "s57c1f29f": {
+      "en": "{value0} veri kaynağı yüklenemedi; görünüm yalnız doğrulanabilen kaynakları gösteriyor.",
+      "contexts": [
+        "pages/staff/OperationsCenter.tsx"
+      ]
+    },
+    "sf45537ae": {
+      "en": "{value0} data source(s) failed; this view shows only successfully loaded sources.",
+      "contexts": [
+        "pages/staff/OperationsCenter.tsx"
+      ]
+    },
+    "s739ff07c": {
+      "en": "{value0} / {value1} kayıt gösteriliyor",
+      "contexts": [
+        "pages/staff/OperationsCenter.tsx"
+      ]
+    },
+    "s154e2148": {
+      "en": "{value0} of {value1} records shown",
+      "contexts": [
+        "pages/staff/OperationsCenter.tsx"
+      ]
+    },
+    "sec9e38b8": {
+      "en": "Student #{value0}",
+      "contexts": [
+        "pages/staff/OperationsCenter.tsx"
+      ]
+    },
+    "s94071cdc": {
+      "en": "{value0} uploaded",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s1a637601": {
+      "en": "Start Date",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s21555bc2": {
+      "en": "Home Address",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s605c1c67": {
+      "en": "Employment Contract",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s9e3cb2c0": {
+      "en": "Passport Document",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sfe2b40f": {
+      "en": "Full Name",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sf25088d8": {
+      "en": "Phone Number",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s3f24a0d3": {
+      "en": "Current Password",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s7a80272a": {
+      "en": "Confirm New Password",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s87062221": {
+      "en": "Light Mode Logo",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s5ce367d5": {
+      "en": "Square Logo",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sfcc7577": {
+      "en": "Favicon",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s32b6eb31": {
+      "en": "Apple Touch Icon",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s50ba23ee": {
+      "en": "PWA / App Icon",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s6d43819a": {
+      "en": "Navigation, links, and accents",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sf6f34602": {
+      "en": "Secondary Color",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s7f06c092": {
+      "en": "Secondary elements and backgrounds",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sb1fb3bc8": {
+      "en": "Accent Color",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sa0e560b3": {
+      "en": "Highlights and special elements",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sc9b6630": {
+      "en": "Primary action buttons",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s3a28c186": {
+      "en": "Hover Color",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s9727b1c7": {
+      "en": "Button and link hover state",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sb2a0848a": {
+      "en": "Link Color",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s24bde003": {
+      "en": "Hyperlinks and text links",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s29b64ffd": {
+      "en": "Success states and positive feedback",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sdf504a6b": {
+      "en": "Warning states and caution indicators",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sd2f84523": {
+      "en": "Error states and destructive actions",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s49084d6b": {
+      "en": "Save Branding",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sa9a41adc": {
+      "en": "Legal Company Name",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sbb49e266": {
+      "en": "Official registered company name",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sd7d837a4": {
+      "en": "Public Brand Name",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sf3e0bb1d": {
+      "en": "The name shown to clients and on the website",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s2c4edaa3": {
+      "en": "General Email",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s3e52b6a0": {
+      "en": "Support Email",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s23208d17": {
+      "en": "Sales Email",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s3013116a": {
+      "en": "Website",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s477acea0": {
+      "en": "WhatsApp Number",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sd4dae107": {
+      "en": "Working Hours",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s1b22ab48": {
+      "en": "Footer Description",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sbeb61e94": {
+      "en": "Short company description for the website footer",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s249544f6": {
+      "en": "Footer Copyright Text",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s13075ef": {
+      "en": "e.g. © 2025 Find & Study. All rights reserved.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s1feeae0": {
+      "en": "Contact CTA Text",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s99af64e2": {
+      "en": "Call-to-action text on contact sections",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "saf907b0d": {
+      "en": "Save Company Details",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s5be903be": {
+      "en": "Configure your site name and title format for search engines.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s6efffcb1": {
+      "en": "Site Name",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sdfe4f025": {
+      "en": "Used in structured data and browser tabs",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sdd651e99": {
+      "en": "Title Template",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s6403c95c": {
+      "en": "Use {{pageTitle}} as placeholder",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s744bf917": {
+      "en": "Canonical Base URL",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s7660386c": {
+      "en": "Default SEO metadata used when pages don't specify their own.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s9c2a69c6": {
+      "en": "{value0}/60 characters recommended",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sf1efce05": {
+      "en": "{value0}/160 characters recommended",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sacd2e247": {
+      "en": "Manage search discovery and model-training preferences independently. These settings improve technical eligibility; they do not guarantee ranking or citation.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s2ca9fda8": {
+      "en": "Maximum snippet",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s4b1d46df": {
+      "en": "-1 means no explicit limit",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sfe4dbe2": {
+      "en": "Image preview",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sac077d66": {
+      "en": "Maximum video preview",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s818d9e6b": {
+      "en": "x-default locale",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sbfefe537": {
+      "en": "OAI-SearchBot: {value0}\nGPTBot: {value1}\nGoogle-Extended: {value2}",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s47aff4a9": {
+      "en": "Control how your site appears when shared on social media.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s9a30a45d": {
+      "en": "Twitter/X Title",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sad44f75": {
+      "en": "Twitter/X Description",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s76552926": {
+      "en": "Twitter/X Image",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sbace1078": {
+      "en": "Default Share Image",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s40ddbca7": {
+      "en": "How your site may appear on Google search results.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sc46e9280": {
+      "en": "Third-party tracking and verification codes.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s5cdc1497": {
+      "en": "Google Search Console",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sfc5493c9": {
+      "en": "Google Analytics (GA4)",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s1469499c": {
+      "en": "Measurement ID",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sb7d122cd": {
+      "en": "Meta Pixel ID",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s119b32bc": {
+      "en": "TikTok Pixel ID",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "se7a9d139": {
+      "en": "Organization data for rich search results.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s7bf9dd9d": {
+      "en": "Organization Name",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sbeecb80f": {
+      "en": "Website URL",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sb4798638": {
+      "en": "Social Profiles",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s51ca52e4": {
+      "en": "Comma-separated URLs",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s8faf8b4a": {
+      "en": "Configure the sender details for all outgoing emails.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sddc79f47": {
+      "en": "Sender Name",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sd6f45d96": {
+      "en": "Displayed as the 'From' name",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s48483a64": {
+      "en": "Sender Email",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s5467058b": {
+      "en": "Reply-To Email",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s1416b95a": {
+      "en": "Customize the look of outgoing emails.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s25eed577": {
+      "en": "Email Header Logo",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s4e9e3862": {
+      "en": "Email Button Color",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s8efcedd0": {
+      "en": "Primary button color in emails",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s77eaaa05": {
+      "en": "Email Footer Text",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sa1dac97b": {
+      "en": "Shown at the bottom of every email",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s8307d008": {
+      "en": "Email Signature Block",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s792cfb57": {
+      "en": "Rich signature text appended to emails",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s37045c85": {
+      "en": "Disclaimer Text",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s7f41d742": {
+      "en": "Legal disclaimer at the bottom of emails",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s6c2d5a22": {
+      "en": "How a branded email might look.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s6204fc23": {
+      "en": "Save Email Branding",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s17fc0fa3": {
+      "en": "Customize the identity of generated PDFs and documents.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sdd531010": {
+      "en": "PDF Logo",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sb8ed31b2": {
+      "en": "Displayed at the top of PDF documents",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s48701305": {
+      "en": "Footer Text",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s182757d8": {
+      "en": "Displayed at the bottom of every page",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s15c796c4": {
+      "en": "Watermark Text",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "scba49f4e": {
+      "en": "Faint text overlaid on document pages",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s73daaecf": {
+      "en": "Signature Label",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sc7a2d355": {
+      "en": "Label above the signature line",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sa995a1e7": {
+      "en": "Seal / Stamp Image",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s9f4b9df1": {
+      "en": "Document Primary Color",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sbd7c6ec4": {
+      "en": "Accent color for PDF headers, borders, and highlights",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s5e64778e": {
+      "en": "Proposal PDF Accent Color",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sbef7200": {
+      "en": "Controls header gradient, card colors, numbered badges, and page number in the program proposal PDF. Falls back to navy/blue if unset.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sfdea1a78": {
+      "en": "How your branded documents may look.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sb697ff8e": {
+      "en": "Save Document Settings",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s1a7376f7": {
+      "en": "Domain, sitemap, and robots settings.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s2cd04b63": {
+      "en": "Canonical Domain",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sb7cb0789": {
+      "en": "Sitemap URL",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "se72ad6d7": {
+      "en": "robots.txt Content",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s51d40c2a": {
+      "en": "Custom robots.txt rules",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sa09855fa": {
+      "en": "Third-party integrations and widget configurations.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s9eada31f": {
+      "en": "LinkedIn Insight Tag",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s2e62710b": {
+      "en": "Microsoft Clarity / Hotjar ID",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "scf4c1116": {
+      "en": "reCAPTCHA Site Key",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s143c4b1e": {
+      "en": "WhatsApp Widget Number",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "se8dee13d": {
+      "en": "Floating chat widget",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sf9f01298": {
+      "en": "Inject custom code into the page. Use with caution — incorrect scripts may break the application.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sc4283037": {
+      "en": "Custom Head Script",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sd482a75a": {
+      "en": "Injected before </head> — for analytics, fonts, etc.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s53899f51": {
+      "en": "Custom Body-End Script",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s99c00369": {
+      "en": "Injected before </body> — for chat widgets, etc.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sacc3fea6": {
+      "en": "Live Chat Script",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s1dcd7b4a": {
+      "en": "Full live chat embed code",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s569b9c4b": {
+      "en": "Save Advanced Settings",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sdc33368f": {
+      "en": "Control what happens when an applicant completes the public Apply form or the embed widget. When enabled, the lead is moved to 'converted' and the linked student's status is set to the stage you choose.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s5f87bdd2": {
+      "en": "Initial student stage",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s93cd62b6": {
+      "en": "Used as the student's status when auto-convert fires.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "sc3d7aa": {
+      "en": "Configure the pipeline stages for leads, applications, and students. Changes here apply to all users — staff, agents, and sub-agents. On the Application pipeline you can also map each stage to a student status — when the application reaches that stage, the linked student's status is updated automatically.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s90a60c55": {
+      "en": "Define each academic year and its season window (start & end dates). The system uses today's date to decide which year is the active season — so records auto-tag correctly even when the season doesn't start on January 1.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s6ea4a99d": {
+      "en": "Quick link \"{value0}\" has been {value1}.",
+      "contexts": [
+        "pages/staff/Settings.tsx"
+      ]
+    },
+    "s4dcb716e": {
+      "en": "Passport No",
+      "contexts": [
+        "pages/staff/StudentDetail.tsx"
+      ]
+    },
+    "s867c1ff6": {
+      "en": "passport-{value0}-{value1}",
+      "contexts": [
+        "pages/staff/StudentDetail.tsx",
+        "pages/student/Account.tsx"
+      ]
+    },
+    "sf10be70d": {
+      "en": "City of Birth (optional)",
+      "contexts": [
+        "pages/staff/StudentDetail.tsx",
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "sa709f45c": {
+      "en": "{value0} kopyalandı",
+      "contexts": [
+        "pages/staff/StudentDetail.tsx"
+      ]
+    },
+    "sff92c8b7": {
+      "en": "Kopyala: {value0}",
+      "contexts": [
+        "pages/staff/StudentDetail.tsx"
+      ]
+    },
+    "se42ba58c": {
+      "en": "Preview {value0}",
+      "contexts": [
+        "pages/staff/StudentDetail.tsx"
+      ]
+    },
+    "s79d26e32": {
+      "en": " · {value0} KB",
+      "contexts": [
+        "pages/staff/StudentDetail.tsx"
+      ]
+    },
+    "sb3d83b94": {
+      "en": "{value0} Students",
+      "contexts": [
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "se425eb11": {
+      "en": "{value0} student{value1} assigned",
+      "contexts": [
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "s4c3cd7f4": {
+      "en": "{value0} student{value1} moved",
+      "contexts": [
+        "pages/staff/Students.tsx"
+      ]
+    },
+    "sb1ba8d01": {
+      "en": "{value0} task{value1} archived",
+      "contexts": [
+        "pages/staff/Tasks.tsx"
       ]
     }
   }

@@ -368,7 +368,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="border-t border-white/10 mt-12 pt-6 text-center text-sm text-white/40">
-            {settings.footerCopyright || `© ${new Date().getFullYear()} ${settings.publicBrandName || companyName}. All rights reserved.`}
+            {settings.footerCopyright || translateUi(uiLanguage, "© {value0} {value1}. All rights reserved.", undefined, { value0: String(new Date().getFullYear()), value1: String(settings.publicBrandName || companyName) })}
           </div>
         </div>
       </footer>

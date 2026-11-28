@@ -545,7 +545,7 @@ export default function ContractsPage() {
               <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Linking an agent, company or another record is optional.")}</p>
             </div>
             {subjectType && <div>
-              <Label>{subjectType === "other" ? translateUi(uiLanguage, "Association label") : `Select ${SUBJECT_LABELS[subjectType]}`}</Label>
+              <Label>{subjectType === "other" ? translateUi(uiLanguage, "Association label") : translateUi(uiLanguage, "Select {value0}", undefined, { value0: String(SUBJECT_LABELS[subjectType]) })}</Label>
               {subjectType === "other" ? (
                 <Input value={subjectLabel} onChange={event => setSubjectLabel(event.target.value)} placeholder={translateUi(uiLanguage, "Name or reference")} />
               ) : (

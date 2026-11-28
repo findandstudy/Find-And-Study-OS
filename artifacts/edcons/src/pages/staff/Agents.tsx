@@ -513,7 +513,7 @@ export default function AgentsPage() {
         body: JSON.stringify({ ids: Array.from(ids), assignedStaffId: staffId }),
       });
       const staffName = staffId ? staffMembers.find(s => s.id === staffId) : null;
-      toast({ title: staffId ? `Contact person assigned to ${ids.size} agent(s)` : `Contact person removed from ${ids.size} agent(s)` });
+      toast({ title: staffId ? translateUi(uiLanguage, "Contact person assigned to {value0} agent(s)", undefined, { value0: String(ids.size) }) : translateUi(uiLanguage, "Contact person removed from {value0} agent(s)", undefined, { value0: String(ids.size) }) });
       setSelectedIds(new Set());
       setSubSelectedIds(new Set());
       fetchAgents();
@@ -546,7 +546,7 @@ export default function AgentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: Array.from(ids) }),
       });
-      toast({ title: `${ids.size} agent(s) deleted` });
+      toast({ title: translateUi(uiLanguage, "{value0} agent(s) deleted", undefined, { value0: String(ids.size) }) });
       setSelectedIds(new Set());
       setSubSelectedIds(new Set());
       fetchAgents();
@@ -564,7 +564,7 @@ export default function AgentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      toast({ title: `Agent ${newStatus === "active" ? "activated" : "deactivated"}` });
+      toast({ title: translateUi(uiLanguage, "Agent {value0}", undefined, { value0: String(newStatus === "active" ? "activated" : "deactivated") }) });
       fetchAgents();
       fetchSubAgents();
     } catch (err: any) {
@@ -788,49 +788,49 @@ export default function AgentsPage() {
               )}
               <ColumnHeader
                 asTh
-                label="Agent"
+                label={translateUi(uiLanguage, "Agent")}
                 sort={{ sortKey: "agent", current: agentSort, onSort: handleAgentSort }}
                 filter={{ type: "text", value: agentColFilters.agent, onChange: v => setAgentColFilters(f => ({ ...f, agent: v })), placeholder: "Filter by name…", label: "Agent contains" }}
               />
               <ColumnHeader
                 asTh
-                label="Contact"
+                label={translateUi(uiLanguage, "Contact")}
                 sort={{ sortKey: "contact", current: agentSort, onSort: handleAgentSort }}
                 filter={{ type: "text", value: agentColFilters.contact, onChange: v => setAgentColFilters(f => ({ ...f, contact: v })), placeholder: "Filter by email/phone…", label: "Contact contains" }}
               />
               {showParent && (
                 <ColumnHeader
                   asTh
-                  label="Parent Agent"
+                  label={translateUi(uiLanguage, "Parent Agent")}
                   sort={{ sortKey: "parent", current: agentSort, onSort: handleAgentSort }}
                 />
               )}
               <ColumnHeader
                 asTh
-                label="Country"
+                label={translateUi(uiLanguage, "Country")}
                 sort={{ sortKey: "country", current: agentSort, onSort: handleAgentSort }}
                 filter={{ type: "select", value: agentColFilters.country, onChange: v => setAgentColFilters(f => ({ ...f, country: v })), options: uniqueAgentCountries.map(c => ({ value: c, label: c })), label: "Country" }}
               />
               <ColumnHeader
                 asTh
-                label="Category"
+                label={translateUi(uiLanguage, "Category")}
                 sort={{ sortKey: "category", current: agentSort, onSort: handleAgentSort }}
                 filter={{ type: "select", value: agentColFilters.category, onChange: v => setAgentColFilters(f => ({ ...f, category: v })), options: uniqueAgentCategories.map(c => ({ value: c, label: c })), label: "Category" }}
               />
               <ColumnHeader
                 asTh
-                label="Commission %"
+                label={translateUi(uiLanguage, "Commission %")}
                 sort={{ sortKey: "commission", current: agentSort, onSort: handleAgentSort }}
               />
               <ColumnHeader
                 asTh
-                label="Contact Person"
+                label={translateUi(uiLanguage, "Contact Person")}
                 sort={{ sortKey: "contactPerson", current: agentSort, onSort: handleAgentSort }}
                 filter={{ type: "select", value: agentColFilters.contactPerson, onChange: v => setAgentColFilters(f => ({ ...f, contactPerson: v })), options: uniqueContactPersons.map(c => ({ value: c, label: c })), label: "Contact person" }}
               />
               <ColumnHeader
                 asTh
-                label="Status"
+                label={translateUi(uiLanguage, "Status")}
                 sort={{ sortKey: "status", current: agentSort, onSort: handleAgentSort }}
                 filter={{ type: "select", value: agentColFilters.status, onChange: v => setAgentColFilters(f => ({ ...f, status: v })), options: uniqueAgentStatuses.map(s => ({ value: s, label: s })), label: "Status" }}
               />
@@ -1044,7 +1044,7 @@ export default function AgentsPage() {
                   <p className="text-sm text-red-700 dark:text-red-400">
                     <span className="font-semibold">{expired.length} {translateUi(uiLanguage, "agent(s)")}</span> {translateUi(uiLanguage, "with expired contracts:")}{" "}
                     {expired.slice(0, 3).map(a => `${a.firstName} ${a.lastName}`).join(", ")}
-                    {expired.length > 3 ? ` +${expired.length - 3} more` : ""}
+                    {expired.length > 3 ? translateUi(uiLanguage, " +{value0} more", undefined, { value0: String(expired.length - 3) }) : ""}
                   </p>
                 </div>
               )}
@@ -1057,7 +1057,7 @@ export default function AgentsPage() {
                       const d = Math.ceil((new Date(a.contractEndDate!).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                       return `${a.firstName} ${a.lastName} (${d}d)`;
                     }).join(", ")}
-                    {expiring.length > 3 ? ` +${expiring.length - 3} more` : ""}
+                    {expiring.length > 3 ? translateUi(uiLanguage, " +{value0} more", undefined, { value0: String(expiring.length - 3) }) : ""}
                   </p>
                 </div>
               )}
@@ -1436,7 +1436,7 @@ export default function AgentsPage() {
                         <span className="text-xs truncate">
                           {form.assignedStaff.length === 0
                             ? translateUi(uiLanguage, "Select staff...")
-                            : `${form.assignedStaff.length} staff selected`}
+                            : translateUi(uiLanguage, "{value0} staff selected", undefined, { value0: String(form.assignedStaff.length) })}
                         </span>
                         <ChevronRight className="h-4 w-4 opacity-50" />
                       </Button>

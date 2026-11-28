@@ -769,7 +769,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                             </span>
                           )}
                           {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
-                            <span className="text-xs text-amber-500/70"> {translateUi(uiLanguage, "(edited")}{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {formatDate(fu.updatedAt, lang, { day: "2-digit", month: "2-digit", year: "numeric" }, dateFormat)}
+                            <span className="text-xs text-amber-500/70"> {translateUi(uiLanguage, "(edited")}{fu.updatedByName ? translateUi(uiLanguage, " by {value0}", undefined, { value0: String(fu.updatedByName) }) : ""} {formatDate(fu.updatedAt, lang, { day: "2-digit", month: "2-digit", year: "numeric" }, dateFormat)}
                               {" "}
                               {new Date(fu.updatedAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })})
                             </span>
@@ -1159,7 +1159,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
         className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background hover:bg-accent/50 transition-colors"
       >
         <span className={`truncate ${localSelected.length === 0 ? "text-muted-foreground" : ""}`}>
-          {localSelected.length === 0 ? translateUi(uiLanguage, "Select countries...") : localSelected.length === 1 ? localSelected[0] : `${localSelected.length} countries selected`}
+          {localSelected.length === 0 ? translateUi(uiLanguage, "Select countries...") : localSelected.length === 1 ? localSelected[0] : translateUi(uiLanguage, "{value0} countries selected", undefined, { value0: String(localSelected.length) })}
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </button>
@@ -1529,6 +1529,7 @@ function LeadDocUploadDialog({ open, onClose, leadId, docOptions, onUploaded }: 
   docOptions: { value: string; label: string }[];
   onUploaded: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [docType, setDocType] = useState("");
@@ -1596,7 +1597,7 @@ function LeadDocUploadDialog({ open, onClose, leadId, docOptions, onUploaded }: 
                 onValueChange={setDocType}
                 options={docOptions}
                 placeholder={t("leadDetailPage.selectDocType")}
-                searchPlaceholder="Search document types..."
+                searchPlaceholder={translateUi(uiLanguage, "Search document types...")}
                 disabled={uploading}
                 minDropdownWidth={320}
                 className="mt-1"

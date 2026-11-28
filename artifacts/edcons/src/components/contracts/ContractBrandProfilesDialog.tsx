@@ -170,7 +170,7 @@ export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onCh
           </div>
           <div className="rounded-lg border p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold">{editing ? `Edit ${editing.name}` : translateUi(uiLanguage, "New brand profile")}</h3>
+              <h3 className="font-semibold">{editing ? translateUi(uiLanguage, "Edit {value0}", undefined, { value0: String(editing.name) }) : translateUi(uiLanguage, "New brand profile")}</h3>
               {editing && <Button type="button" size="sm" variant="ghost" onClick={reset}><Plus className="h-4 w-4 mr-1" /> {translateUi(uiLanguage, "New")}</Button>}
             </div>
             <div className="grid grid-cols-2 gap-3">

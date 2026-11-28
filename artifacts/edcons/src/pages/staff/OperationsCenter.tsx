@@ -581,8 +581,8 @@ export default function OperationsCenter() {
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <span>
             {tr
-              ? `${partialErrors} veri kaynağı yüklenemedi; görünüm yalnız doğrulanabilen kaynakları gösteriyor.`
-              : `${partialErrors} data source(s) failed; this view shows only successfully loaded sources.`}
+              ? translateUi(uiLanguage, "{value0} veri kaynağı yüklenemedi; görünüm yalnız doğrulanabilen kaynakları gösteriyor.", undefined, { value0: String(partialErrors) })
+              : translateUi(uiLanguage, "{value0} data source(s) failed; this view shows only successfully loaded sources.", undefined, { value0: String(partialErrors) })}
           </span>
         </div>
       )}
@@ -773,8 +773,8 @@ export default function OperationsCenter() {
               <div className="mt-4 flex flex-col items-center gap-2 text-xs text-muted-foreground">
                 <span>
                   {tr
-                    ? `${exceptionRows.length} / ${exceptions.data?.pages[0]?.meta.total ?? 0} kayıt gösteriliyor`
-                    : `${exceptionRows.length} of ${exceptions.data?.pages[0]?.meta.total ?? 0} records shown`}
+                    ? translateUi(uiLanguage, "{value0} / {value1} kayıt gösteriliyor", undefined, { value0: String(exceptionRows.length), value1: String(exceptions.data?.pages[0]?.meta.total ?? 0) })
+                    : translateUi(uiLanguage, "{value0} of {value1} records shown", undefined, { value0: String(exceptionRows.length), value1: String(exceptions.data?.pages[0]?.meta.total ?? 0) })}
                 </span>
                 {exceptions.hasNextPage && (
                   <Button
@@ -872,9 +872,9 @@ export default function OperationsCenter() {
                           </td>
                           <td className="px-3 py-3">
                             {document.applicationId
-                              ? `Application #${document.applicationId}`
+                              ? translateUi(uiLanguage, "Application #{value0}", undefined, { value0: String(document.applicationId) })
                               : document.studentId
-                                ? `Student #${document.studentId}`
+                                ? translateUi(uiLanguage, "Student #{value0}", undefined, { value0: String(document.studentId) })
                                 : "—"}
                           </td>
                           <td className="px-3 py-3 text-xs text-muted-foreground">
@@ -1132,7 +1132,7 @@ export default function OperationsCenter() {
                       <div>
                         <p className="font-medium">
                           {offer.universityName ||
-                            `Application #${offer.applicationId}`}
+                            translateUi(uiLanguage, "Application #{value0}", undefined, { value0: String(offer.applicationId) })}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {offer.programName || "—"}
@@ -1147,7 +1147,7 @@ export default function OperationsCenter() {
                       >
                         {offer.daysLeft == null
                           ? "—"
-                          : `${offer.daysLeft} days`}
+                          : translateUi(uiLanguage, "{value0} days", undefined, { value0: String(offer.daysLeft) })}
                       </Badge>
                     </a>
                   ))}

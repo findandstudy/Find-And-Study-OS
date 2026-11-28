@@ -534,7 +534,7 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
               disabled={!preview || importing || preview.length === 0}
               className="rounded-xl gap-2"
             >
-              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />} {translateUi(uiLanguage, "Import")} {preview ? `${preview.length} Students` : translateUi(uiLanguage, "Students")}
+              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />} {translateUi(uiLanguage, "Import")} {preview ? translateUi(uiLanguage, "{value0} Students", undefined, { value0: String(preview.length) }) : translateUi(uiLanguage, "Students")}
             </Button>
           </div>
         )}
@@ -625,7 +625,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
           <span
             className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-colors max-w-full truncate dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50 dark:hover:bg-amber-900/50"
             onClick={(e) => { e.stopPropagation(); setLoc(`/staff/agents/${student.agentId}`); }}
-            title={`Agent: ${student.agentName}`}
+            title={translateUi(uiLanguage, "Agent: {value0}", undefined, { value0: String(student.agentName) })}
           >
             <Building2 className="w-3 h-3 shrink-0" />{student.agentName}
           </span>
@@ -953,7 +953,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
             <div className="grid grid-cols-2 gap-4">
               <F required label={t("studentsPage.firstName")} value={form.firstName} onChange={field("firstName")} placeholder={t("studentsPage.firstNamePlaceholder")} latinUppercase />
               <F required label={t("studentsPage.lastName")} value={form.lastName} onChange={field("lastName")} placeholder={t("studentsPage.lastNamePlaceholder")} latinUppercase />
-              <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder={translateUi(uiLanguage, "email@example.com")} />
+              <F label={translateUi(uiLanguage, "Email")} value={form.email} onChange={field("email")} type="email" placeholder={translateUi(uiLanguage, "email@example.com")} />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Phone")}</Label>
                 <div className="flex gap-1.5">
@@ -961,7 +961,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                   <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 000 0000" className="rounded-xl flex-1 h-9" />
                 </div>
               </div>
-              <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
+              <F label={translateUi(uiLanguage, "Date of Birth")} value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Nationality")}</Label>
                 <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
@@ -969,9 +969,9 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               <F label={t("studentsPage.motherName")} value={form.motherName} onChange={field("motherName")} placeholder={t("studentsPage.motherNamePlaceholder")} latinUppercase />
               <F label={t("studentsPage.fatherName")} value={form.fatherName} onChange={field("fatherName")} placeholder={t("studentsPage.fatherNamePlaceholder")} latinUppercase />
               <F label={t("studentsPage.address")} value={form.address} onChange={field("address")} placeholder={t("studentsPage.addressPlaceholder")} className="col-span-2" />
-              <F label="Residence City" value={form.addressCity} onChange={field("addressCity")} placeholder={translateUi(uiLanguage, "e.g. Khujand")} />
-              <F label="Postal Code" value={form.postalCode} onChange={field("postalCode")} placeholder="e.g. 735700" />
-              <F label="City of Birth (optional)" value={form.cityOfBirth} onChange={field("cityOfBirth")} placeholder={translateUi(uiLanguage, "e.g. Khujand")} />
+              <F label={translateUi(uiLanguage, "Residence City")} value={form.addressCity} onChange={field("addressCity")} placeholder={translateUi(uiLanguage, "e.g. Khujand")} />
+              <F label={translateUi(uiLanguage, "Postal Code")} value={form.postalCode} onChange={field("postalCode")} placeholder="e.g. 735700" />
+              <F label={translateUi(uiLanguage, "City of Birth (optional)")} value={form.cityOfBirth} onChange={field("cityOfBirth")} placeholder={translateUi(uiLanguage, "e.g. Khujand")} />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Needs Visa Support")}</Label>
                 <select
@@ -1000,9 +1000,9 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Passport / Identity")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder={translateUi(uiLanguage, "e.g. AB1234567")} className="col-span-2" />
-              <F label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" />
-              <F label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" />
+              <F label={translateUi(uiLanguage, "Passport Number")} value={form.passportNumber} onChange={field("passportNumber")} placeholder={translateUi(uiLanguage, "e.g. AB1234567")} className="col-span-2" />
+              <F label={translateUi(uiLanguage, "Issue Date")} value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" />
+              <F label={translateUi(uiLanguage, "Expiry Date")} value={form.passportExpiry} onChange={field("passportExpiry")} type="date" />
             </div>
           </section>
 
@@ -1036,25 +1036,25 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                 if (showLevelSpecific) return (
                   <>
                     <F label={priorLabel} value={priorValue} onChange={field(priorField)} placeholder={priorPlaceholder} className="col-span-2" />
-                    <F label="City" value={form.eduCity} onChange={field("eduCity")} placeholder={translateUi(uiLanguage, "e.g. Istanbul")} />
+                    <F label={translateUi(uiLanguage, "City")} value={form.eduCity} onChange={field("eduCity")} placeholder={translateUi(uiLanguage, "e.g. Istanbul")} />
                     <div className="space-y-1.5">
                       <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Country")}</Label>
                       <NationalityCombobox value={form.eduCountry} onChange={field("eduCountry")} countries={allCountries} />
                     </div>
                     {!isBachelorApp && (
-                      <F label="Field of Study" value={form.eduField} onChange={field("eduField")} placeholder={translateUi(uiLanguage, "e.g. Computer Engineering")} className="col-span-2" />
+                      <F label={translateUi(uiLanguage, "Field of Study")} value={form.eduField} onChange={field("eduField")} placeholder={translateUi(uiLanguage, "e.g. Computer Engineering")} className="col-span-2" />
                     )}
                   </>
                 );
                 return (
                   <>
-                    <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder={translateUi(uiLanguage, "e.g. Ankara Fen Lisesi")} className="col-span-2" />
-                    <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder={translateUi(uiLanguage, "e.g. Istanbul University")} className="col-span-2" />
-                    <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder={translateUi(uiLanguage, "e.g. Bogazici University")} className="col-span-2" />
+                    <F label={translateUi(uiLanguage, "High School")} value={form.highSchool} onChange={field("highSchool")} placeholder={translateUi(uiLanguage, "e.g. Ankara Fen Lisesi")} className="col-span-2" />
+                    <F label={translateUi(uiLanguage, "University (Bachelor)")} value={form.universityBachelor} onChange={field("universityBachelor")} placeholder={translateUi(uiLanguage, "e.g. Istanbul University")} className="col-span-2" />
+                    <F label={translateUi(uiLanguage, "University (Master)")} value={form.universityMaster} onChange={field("universityMaster")} placeholder={translateUi(uiLanguage, "e.g. Bogazici University")} className="col-span-2" />
                   </>
                 );
               })()}
-              <F label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
+              <F label={translateUi(uiLanguage, "Graduation Year")} value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">{translateUi(uiLanguage, "GPA")}</Label>
                 <div className="flex gap-1.5">
@@ -1078,7 +1078,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                   </Select>
                 </div>
               </div>
-              <F label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder={translateUi(uiLanguage, "e.g. IELTS 7.0, TOEFL 100")} className="col-span-2" />
+              <F label={translateUi(uiLanguage, "Language Score")} value={form.languageScore} onChange={field("languageScore")} placeholder={translateUi(uiLanguage, "e.g. IELTS 7.0, TOEFL 100")} className="col-span-2" />
             </div>
           </section>
 
@@ -1514,7 +1514,7 @@ export default function StudentsPage() {
       const res = await fetch(`${BASE_URL}/api/students/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() }, credentials: "include", body: JSON.stringify({ ids: Array.from(selectedIds), action: "delete" }) });
       if (!res.ok) throw new Error("Failed");
       const d = await res.json();
-      toast({ title: `${d.updated} student${d.updated !== 1 ? "s" : ""} deleted` });
+      toast({ title: translateUi(uiLanguage, "{value0} student{value1} deleted", undefined, { value0: String(d.updated), value1: String(d.updated !== 1 ? "s" : "") }) });
     } catch { toast({ title: translateUi(uiLanguage, "Some could not be deleted"), variant: "destructive" }); }
     setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
     invalidate();
@@ -1525,7 +1525,7 @@ export default function StudentsPage() {
       const res = await fetch(`${BASE_URL}/api/students/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() }, credentials: "include", body: JSON.stringify({ ids: Array.from(selectedIds), action: "assign", assignedToId: userId }) });
       if (!res.ok) throw new Error("Failed");
       const d = await res.json();
-      toast({ title: `${d.updated} student${d.updated !== 1 ? "s" : ""} assigned` });
+      toast({ title: translateUi(uiLanguage, "{value0} student{value1} assigned", undefined, { value0: String(d.updated), value1: String(d.updated !== 1 ? "s" : "") }) });
       await invalidateAssignmentWorkspaceQueries(queryClient);
     } catch { toast({ title: translateUi(uiLanguage, "Could not assign students"), variant: "destructive" }); }
     setSelectedIds(new Set()); invalidate();
@@ -1536,7 +1536,7 @@ export default function StudentsPage() {
       const res = await fetch(`${BASE_URL}/api/students/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() }, credentials: "include", body: JSON.stringify({ ids: Array.from(selectedIds), action: "move", status }) });
       if (!res.ok) throw new Error("Failed");
       const d = await res.json();
-      toast({ title: `${d.updated} student${d.updated !== 1 ? "s" : ""} moved` });
+      toast({ title: translateUi(uiLanguage, "{value0} student{value1} moved", undefined, { value0: String(d.updated), value1: String(d.updated !== 1 ? "s" : "") }) });
     } catch { toast({ title: translateUi(uiLanguage, "Could not move students"), variant: "destructive" }); }
     setSelectedIds(new Set()); invalidate();
   }
@@ -1581,7 +1581,7 @@ export default function StudentsPage() {
       invalidate();
       queryClient.invalidateQueries({ queryKey: [`/api/students/${studentId}`] });
       const colLabel = pipelineStages.find(s => s.key === targetStatus)?.label ?? targetStatus;
-      toast({ title: `Student moved → ${colLabel}` });
+      toast({ title: translateUi(uiLanguage, "Student moved → {value0}", undefined, { value0: String(colLabel) }) });
     }).catch(() => {
       toast({ title: translateUi(uiLanguage, "Error"), description: translateUi(uiLanguage, "Could not move student"), variant: "destructive" });
       invalidate();

@@ -117,10 +117,10 @@ function Home() {
   const total = counts.reduce((sum: number, item: any) => sum + Number(item.count), 0);
   return <div className="space-y-6">
     <div className="grid gap-4 md:grid-cols-4">
-      <Metric icon={Inbox} label="Applications" value={total} />
-      <Metric icon={Clock3} label="SLA breached" value={query.data?.overdueCount ?? 0} tone="danger" />
-      <Metric icon={ShieldCheck} label="Pending approval" value={query.data?.pendingDecisionCount ?? 0} />
-      <Metric icon={School} label="Institution" value={query.data?.context?.institutionName ?? "—"} />
+      <Metric icon={Inbox} label={translateUi(uiLanguage, "Applications")} value={total} />
+      <Metric icon={Clock3} label={translateUi(uiLanguage, "SLA breached")} value={query.data?.overdueCount ?? 0} tone="danger" />
+      <Metric icon={ShieldCheck} label={translateUi(uiLanguage, "Pending approval")} value={query.data?.pendingDecisionCount ?? 0} />
+      <Metric icon={School} label={translateUi(uiLanguage, "Institution")} value={query.data?.context?.institutionName ?? "—"} />
     </div>
     <Card><CardHeader><CardTitle>{translateUi(uiLanguage, "Admissions pipeline")}</CardTitle><CardDescription>{translateUi(uiLanguage, "Only cases shared with this institution relationship are included.")}</CardDescription></CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{counts.map((item: any) => <div key={item.lifecycle_state} className="rounded-lg border p-4"><div className="text-2xl font-semibold">{item.count}</div><div className="text-sm text-muted-foreground">{human(item.lifecycle_state)}</div></div>)}</CardContent>
@@ -156,7 +156,7 @@ function ApplicationReview({ id, context }: { id: string; context?: Context }) {
   return <div className="space-y-6">
     <Button variant="ghost" className="gap-2" onClick={() => navigate("/institution/review-queue")}><ArrowLeft className="h-4 w-4" />{translateUi(uiLanguage, "Review queue")}</Button>
     <Card><CardHeader><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle>{app.masked_student_ref}</CardTitle><CardDescription>{translateUi(uiLanguage, "Case")} {app.id} {translateUi(uiLanguage, "· legacy application #")}{app.legacy_application_id}</CardDescription></div><Status value={app.lifecycle_state} /></div></CardHeader>
-      <CardContent><div className="grid gap-4 md:grid-cols-4"><Info label="Program" value={`#${app.program_id ?? "—"}`} /><Info label="Intake" value={app.intake_key} /><Info label="Priority" value={human(app.priority)} /><Info label="Readiness" value={`${app.readiness_percent}%`} /></div>{["REVIEWING","INFORMATION_REQUESTED"].includes(app.lifecycle_state)&&caps.has("institution.evidence.assess")&&caps.has("institution.applications.review")&&<Button className="mt-5" variant="outline" disabled={ready.isPending} onClick={()=>ready.mutate({})}>{translateUi(uiLanguage, "Validate evidence and mark ready for decision")}</Button>}</CardContent>
+      <CardContent><div className="grid gap-4 md:grid-cols-4"><Info label={translateUi(uiLanguage, "Program")} value={`#${app.program_id ?? "—"}`} /><Info label={translateUi(uiLanguage, "Intake")} value={app.intake_key} /><Info label={translateUi(uiLanguage, "Priority")} value={human(app.priority)} /><Info label={translateUi(uiLanguage, "Readiness")} value={`${app.readiness_percent}%`} /></div>{["REVIEWING","INFORMATION_REQUESTED"].includes(app.lifecycle_state)&&caps.has("institution.evidence.assess")&&caps.has("institution.applications.review")&&<Button className="mt-5" variant="outline" disabled={ready.isPending} onClick={()=>ready.mutate({})}>{translateUi(uiLanguage, "Validate evidence and mark ready for decision")}</Button>}</CardContent>
     </Card>
     <div className="grid gap-6 xl:grid-cols-2">
       <Card><CardHeader><CardTitle>{translateUi(uiLanguage, "Shared applicant profile")}</CardTitle><CardDescription>{translateUi(uiLanguage, "Purpose-limited projection; internal CRM notes and commercial fields are excluded.")}</CardDescription></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2">{Object.entries(app.shared_profile ?? {}).map(([key, value]) => <Info key={key} label={human(key)} value={String(value ?? "—")} />)}</CardContent></Card>
@@ -241,7 +241,7 @@ function Analytics() {
   const { lang: uiLanguage } = useUiLanguage();
   const query=useQuery<any>({queryKey:["institution","analytics"],queryFn:()=>customFetch("/api/institution/analytics")});
   if(query.isLoading)return <Loading/>;if(query.error)return <ErrorState error={query.error}/>;
-  return <div className="space-y-6"><div className="grid gap-4 md:grid-cols-3"><Metric icon={Inbox} label="Open cases" value={query.data?.sla?.open??0}/><Metric icon={Clock3} label="SLA breached" value={query.data?.sla?.breached??0} tone="danger"/><Metric icon={ShieldCheck} label="Privacy" value="Aggregate only"/></div><Card><CardHeader><CardTitle>{translateUi(uiLanguage, "Pipeline distribution")}</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{query.data?.states?.map((item:any)=><div key={item.lifecycle_state} className="rounded-lg border p-4"><div className="text-2xl font-semibold">{item.count}</div><div className="text-xs text-muted-foreground">{human(item.lifecycle_state)}</div></div>)}</CardContent></Card></div>;
+  return <div className="space-y-6"><div className="grid gap-4 md:grid-cols-3"><Metric icon={Inbox} label={translateUi(uiLanguage, "Open cases")} value={query.data?.sla?.open??0}/><Metric icon={Clock3} label={translateUi(uiLanguage, "SLA breached")} value={query.data?.sla?.breached??0} tone="danger"/><Metric icon={ShieldCheck} label={translateUi(uiLanguage, "Privacy")} value="Aggregate only"/></div><Card><CardHeader><CardTitle>{translateUi(uiLanguage, "Pipeline distribution")}</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{query.data?.states?.map((item:any)=><div key={item.lifecycle_state} className="rounded-lg border p-4"><div className="text-2xl font-semibold">{item.count}</div><div className="text-xs text-muted-foreground">{human(item.lifecycle_state)}</div></div>)}</CardContent></Card></div>;
 }
 
 function Integrations() {

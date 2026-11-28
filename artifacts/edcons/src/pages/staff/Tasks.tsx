@@ -474,7 +474,7 @@ function TasksTabContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: Array.from(selectedIds) }),
       });
-      toast({ title: `${result.archived} task${result.archived === 1 ? "" : "s"} archived` });
+      toast({ title: translateUi(uiLanguage, "{value0} task{value1} archived", undefined, { value0: String(result.archived), value1: String(result.archived === 1 ? "" : "s") }) });
       setSelectedIds(new Set());
       void loadTasks(showArchived);
     } catch (err) {
@@ -1021,7 +1021,7 @@ function TasksTabContent() {
                                 checked={selectedIds.has(task.id)}
                                 onCheckedChange={value => toggleTaskSelection(task.id, value === true)}
                                 onClick={event => event.stopPropagation()}
-                                aria-label={`Select ${task.title}`}
+                                aria-label={translateUi(uiLanguage, "Select {value0}", undefined, { value0: String(task.title) })}
                                 data-testid={`checkbox-task-card-${task.id}`}
                               />
                             )}
@@ -1232,7 +1232,7 @@ function TasksTabContent() {
                             <Checkbox
                               checked={selectedIds.has(task.id)}
                               onCheckedChange={value => toggleTaskSelection(task.id, value === true)}
-                              aria-label={`Select ${task.title}`}
+                              aria-label={translateUi(uiLanguage, "Select {value0}", undefined, { value0: String(task.title) })}
                               data-testid={`checkbox-task-row-${task.id}`}
                             />
                           </TableCell>

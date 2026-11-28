@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { AlertCircle, CheckCircle2, Loader2, MessageCircle, Send } from "lucide-react";
@@ -63,6 +64,7 @@ export function BulkMessageDialog({
   entityIds,
   onCreated,
 }: BulkMessageDialogProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t } = useI18n();
   const tx = (key: string, vars?: Record<string, string | number>) => t(`bulkMessageDialog.${key}`, vars);
@@ -222,7 +224,7 @@ export function BulkMessageDialog({
                 id="campaign-name"
                 value={campaignName}
                 onChange={(event) => setCampaignName(event.target.value)}
-                placeholder={`${selectedTemplate?.externalTemplateName || "WhatsApp campaign"} · ${uniqueEntityIds.length} selected`}
+                placeholder={translateUi(uiLanguage, "{value0} · {value1} selected", undefined, { value0: String(selectedTemplate?.externalTemplateName || "WhatsApp campaign"), value1: String(uniqueEntityIds.length) })}
                 maxLength={180}
               />
             </div>

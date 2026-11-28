@@ -19,7 +19,7 @@ function PreviewEmptySection({ layoutKey }: { layoutKey: string }) {
   const key = layoutKey.replace(/^editorial-/, "");
   const title = previewSectionLabels[key] ?? key.replace(/([a-z])([A-Z])/g, "$1 $2");
   const message = "No reviewed content has been added for this record yet. This section is part of the shared template and can be completed in the CMS editor.";
-  return <section data-detail-section={layoutKey} id={layoutKey} className={`detail-section detail-editorial-section detail-preview-empty is-${key}`} aria-label={`${title} preview placeholder`}>
+  return <section data-detail-section={layoutKey} id={layoutKey} className={`detail-section detail-editorial-section detail-preview-empty is-${key}`} aria-label={translateUi(uiLanguage, "{value0} preview placeholder", undefined, { value0: String(title) })}>
     <div className="detail-wrap detail-editorial-content">
       <div className="detail-editorial-heading"><span aria-hidden="true">+</span><h2>{title}</h2></div>
       <p className="detail-prose detail-editorial-intro">{message}</p>

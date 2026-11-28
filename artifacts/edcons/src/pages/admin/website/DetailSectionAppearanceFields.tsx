@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ export function DetailSectionAppearanceFields({ value, onChange, copy, inherited
   copy: Copy;
   inherited?: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const patch = (key: PresentationKey, next: DetailSectionPresentation[PresentationKey]) =>
     onChange(clean({ ...value, [key]: next }));
   const choice = (key: PresentationKey, current: string | undefined, fallback: string, options: Array<[string, string, string]>) => (
@@ -32,7 +34,7 @@ export function DetailSectionAppearanceFields({ value, onChange, copy, inherited
     <div className="space-y-1.5">
       <Label>{label}</Label>
       <div className="flex gap-2">
-        <Input type="color" className="h-10 w-12 shrink-0 cursor-pointer p-1" value={value[key] ?? "#ffffff"} onChange={(event) => patch(key, event.target.value.toUpperCase())} aria-label={`${label} picker`} />
+        <Input type="color" className="h-10 w-12 shrink-0 cursor-pointer p-1" value={value[key] ?? "#ffffff"} onChange={(event) => patch(key, event.target.value.toUpperCase())} aria-label={translateUi(uiLanguage, "{value0} picker", undefined, { value0: String(label) })} />
         <Input value={value[key] ?? ""} maxLength={7} placeholder={inherited ? copy("Inherit", "Devral") : copy("Template default", "Şablon varsayılanı")} onChange={(event) => patch(key, event.target.value.trim() || undefined)} />
         {value[key] && <Button type="button" variant="ghost" size="sm" onClick={() => patch(key, undefined)}>{copy("Clear", "Temizle")}</Button>}
       </div>
