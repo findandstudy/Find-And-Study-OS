@@ -841,3 +841,12 @@ ac850912, staging a6ecdc5706c608576e9153a7df701577abf53b27; frontend overlay
 yayında, health PASS. TypeScript/i18n/render/build PASS. Aktif kanal yokluğu
 nedeniyle Inbox UI ve uygulanmayan viewport nedeniyle mobil görsel kanıt yok.
 Detay STAGING_PIPELINE_UI_REVIEW_2026-11-28.md; Apply production değişmedi.
+
+### 28 Kasım — dashboard pipeline paneli kaldırıldı
+Kullanıcı önceki ayrı dashboard kutusu talebini geri çekti. Admin ve staff
+Dashboard içindeki WorkPipelineDashboardWidget import/mount'ları kaldırıldı;
+mevcut Upcoming Follow-ups alanı korunur. Pipeline not/takip ve in-app
+bildirim yetenekleri aynen kalır. Local 37be75fa, staging integration 73aa7d96;
+release staging-20261128T053646Z-73aa7d96f254. Frontend build ve health PASS.
+Canlı admin UI'da pipeline panel sayısı 0, Upcoming Follow-ups başlık sayısı 1
+olarak doğrulandı. Ayrı pipeline dashboard kutusunu yeniden ekleme.
