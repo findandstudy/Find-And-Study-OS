@@ -837,7 +837,9 @@
     "requirementsHint": "Min. 8 characters, 1 uppercase letter, 1 number"
   },
   "a11y": {
-    "skipToContent": "Skip to main content"
+    "skipToContent": "Skip to main content",
+    "breadcrumb": "Breadcrumb navigation",
+    "pagination": "Page navigation"
   },
   "tasks": {
     "title": "Tasks",

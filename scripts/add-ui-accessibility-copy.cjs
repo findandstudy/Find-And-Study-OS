@@ -1,0 +1,2 @@
+const fs=require('node:fs'),path=require('node:path');const dir=path.resolve(__dirname,'../artifacts/edcons/src/lib/i18n/translations');
+for(const file of fs.readdirSync(dir).filter(f=>f.endsWith('.json'))){const p=path.join(dir,file),d=JSON.parse(fs.readFileSync(p,'utf8'));d.a11y.breadcrumb??=file==='tr.json'?'İçerik yolu':'Breadcrumb navigation';d.a11y.pagination??=file==='tr.json'?'Sayfa gezintisi':'Page navigation';fs.writeFileSync(p,JSON.stringify(d,null,2)+'\n');}

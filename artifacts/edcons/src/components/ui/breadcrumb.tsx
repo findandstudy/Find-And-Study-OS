@@ -1,4 +1,4 @@
-import { translateUi, UiText } from "@/lib/ui-localization";
+import { translateUi, UiText, useUiLanguage } from "@/lib/ui-localization";
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { ChevronRight, MoreHorizontal } from "lucide-react"
@@ -10,7 +10,10 @@ const Breadcrumb = React.forwardRef<
   React.ComponentPropsWithoutRef<"nav"> & {
     separator?: React.ReactNode
   }
->(({ ...props }, ref) => <nav ref={ref} aria-label="breadcrumb" {...props} />)
+>(({ ...props }, ref) => {
+  const { t } = useUiLanguage();
+  return <nav ref={ref} aria-label={t('a11y.breadcrumb')} {...props} />;
+})
 Breadcrumb.displayName = "Breadcrumb"
 
 const BreadcrumbList = React.forwardRef<

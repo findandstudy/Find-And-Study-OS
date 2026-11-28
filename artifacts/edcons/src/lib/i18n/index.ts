@@ -175,7 +175,7 @@ export function getTranslation(lang: Language, key: string, params?: Record<stri
   let value = direct || fallback || key;
   if (params) {
     for (const [k, v] of Object.entries(params)) {
-      value = value.replace(`{${k}}`, String(v));
+      value = value.replaceAll(`{${k}}`, String(v));
     }
   }
   return value;

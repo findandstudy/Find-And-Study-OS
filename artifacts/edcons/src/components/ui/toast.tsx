@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useUiLanguage } from "@/lib/ui-localization";
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cva, type VariantProps } from "class-variance-authority"
 import { X } from "lucide-react"
@@ -88,7 +89,9 @@ ToastAction.displayName = ToastPrimitives.Action.displayName
 const ToastClose = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Close>,
   React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close>
->(({ className, ...props }, ref) => (
+>(({ className, ...props }, ref) => {
+  const { t } = useUiLanguage();
+  return (
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
@@ -96,12 +99,13 @@ const ToastClose = React.forwardRef<
       className
     )}
     toast-close=""
-    aria-label="Close notification"
+    aria-label={t('common.close')}
     {...props}
   >
     <X className="h-4 w-4" aria-hidden="true" />
   </ToastPrimitives.Close>
-))
+  );
+})
 ToastClose.displayName = ToastPrimitives.Close.displayName
 
 const ToastTitle = React.forwardRef<

@@ -1,18 +1,21 @@
-import { translateUi, UiText } from "@/lib/ui-localization";
+import { translateUi, UiText, useUiLanguage } from "@/lib/ui-localization";
 import * as React from "react"
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ButtonProps, buttonVariants } from "@/components/ui/button"
 
-const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => (
+const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => {
+  const { t } = useUiLanguage();
+  return (
   <nav
     role="navigation"
-    aria-label="pagination"
+    aria-label={t('a11y.pagination')}
     className={cn("mx-auto flex w-full justify-center", className)}
     {...props}
   />
-)
+  );
+}
 Pagination.displayName = "Pagination"
 
 const PaginationContent = React.forwardRef<
@@ -63,9 +66,11 @@ PaginationLink.displayName = "PaginationLink"
 const PaginationPrevious = ({
   className,
   ...props
-}: React.ComponentProps<typeof PaginationLink>) => (
+}: React.ComponentProps<typeof PaginationLink>) => {
+  const { t } = useUiLanguage();
+  return (
   <PaginationLink
-    aria-label="Go to previous page"
+    aria-label={t('common.previous')}
     size="default"
     className={cn("gap-1 pl-2.5", className)}
     {...props}
@@ -73,15 +78,18 @@ const PaginationPrevious = ({
     <ChevronLeft className="h-4 w-4" />
     <span><UiText text={"Previous"} /></span>
   </PaginationLink>
-)
+  );
+}
 PaginationPrevious.displayName = "PaginationPrevious"
 
 const PaginationNext = ({
   className,
   ...props
-}: React.ComponentProps<typeof PaginationLink>) => (
+}: React.ComponentProps<typeof PaginationLink>) => {
+  const { t } = useUiLanguage();
+  return (
   <PaginationLink
-    aria-label="Go to next page"
+    aria-label={t('common.next')}
     size="default"
     className={cn("gap-1 pr-2.5", className)}
     {...props}
@@ -89,7 +97,8 @@ const PaginationNext = ({
     <span><UiText text={"Next"} /></span>
     <ChevronRight className="h-4 w-4" />
   </PaginationLink>
-)
+  );
+}
 PaginationNext.displayName = "PaginationNext"
 
 const PaginationEllipsis = ({

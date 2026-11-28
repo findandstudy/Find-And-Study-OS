@@ -213,6 +213,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function SettingsPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { user } = useAuth(true);
   const { lang, setLang, t } = useI18n();
   const { toast } = useToast();
