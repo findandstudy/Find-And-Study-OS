@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { PDFParse } from "pdf-parse";
 import sharp from "sharp";
 import { loadDocumentBytes, type DocBytesSource } from "./documentBytes";
 
@@ -96,11 +97,39 @@ async function renderPdfFirstPage(buffer: Buffer): Promise<Buffer | null> {
           );
           rendered = true;
         } catch {
-          // A missing/failed renderer is not fatal. The caller returns initials.
+          // Fall through to the bundled, cross-platform renderer below. The
+          // deployed runtime may not have pdftoppm or Ghostscript installed.
         }
       }
-      if (!rendered) return null;
-      return await readFile(outputPath);
+      if (rendered) {
+        try {
+          const renderedBuffer = await readFile(outputPath);
+          // A renderer can exit successfully but leave an unusable output
+          // behind. Validate it before accepting it as the canonical image.
+          await sharp(renderedBuffer).metadata();
+          return renderedBuffer;
+        } catch {
+          // Use the bundled renderer below.
+        }
+      }
+
+      // Do not turn a valid PDF photograph into a successful initials image
+      // merely because an optional system binary is unavailable. pdf-parse
+      // ships with pdf.js and a Node canvas implementation, so this fallback
+      // works in the same application bundle on staging and production.
+      const parser = new PDFParse({ data: buffer });
+      try {
+        const screenshot = await parser.getScreenshot({
+          first: 1,
+          desiredWidth: 512,
+          imageBuffer: true,
+          imageDataUrl: false,
+        });
+        const page = screenshot.pages[0];
+        return page?.data ? Buffer.from(page.data) : null;
+      } finally {
+        await parser.destroy();
+      }
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }

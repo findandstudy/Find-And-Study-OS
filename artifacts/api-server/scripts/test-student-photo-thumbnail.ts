@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { PDFDocument, rgb } from "pdf-lib";
 import sharp from "sharp";
 import {
@@ -32,14 +31,7 @@ test("large source images become small cacheable JPEG thumbnails", async () => {
   assert.deepEqual(second.buffer, first.buffer);
 });
 
-test("PDF photographs render their first page into a bounded JPEG thumbnail", async (context) => {
-  const hasPdfRenderer = spawnSync("pdftoppm", ["-v"]).status === 0
-    || spawnSync("gs", ["--version"]).status === 0;
-  if (!hasPdfRenderer) {
-    context.skip("pdftoppm or ghostscript is required for PDF thumbnail rendering");
-    return;
-  }
-
+test("PDF photographs render their first page into a bounded JPEG thumbnail", async () => {
   clearStudentPhotoThumbnailCacheForTests();
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([200, 200]);
