@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, Copy, GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ type Props = {
 };
 
 export function ContractFieldBuilder({ value, onChange, disabled = false }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [jsonDraft, setJsonDraft] = useState(() => JSON.stringify(value, null, 2));
@@ -73,7 +75,7 @@ export function ContractFieldBuilder({ value, onChange, disabled = false }: Prop
             <div className="grid grid-cols-[auto_minmax(0,1.4fr)_minmax(120px,.7fr)_auto] gap-2 items-end">
               <GripVertical className="h-4 w-4 text-muted-foreground self-center" />
               <div>
-                <Label className="text-xs">Field label</Label>
+                <Label className="text-xs">{translateUi(uiLanguage, "Field label")}</Label>
                 <Input value={field.label} disabled={disabled} onChange={event => {
                   const label = event.target.value;
                   const oldGeneratedKey = makeKey(field.label);
@@ -81,7 +83,7 @@ export function ContractFieldBuilder({ value, onChange, disabled = false }: Prop
                 }} />
               </div>
               <div>
-                <Label className="text-xs">Type</Label>
+                <Label className="text-xs">{translateUi(uiLanguage, "Type")}</Label>
                 <Select value={field.type} disabled={disabled} onValueChange={type => update(index, { type: type as ContractIntakeField["type"] })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{FIELD_TYPES.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
@@ -95,19 +97,19 @@ export function ContractFieldBuilder({ value, onChange, disabled = false }: Prop
             </div>
             <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
               <div>
-                <Label className="text-xs">Field key</Label>
+                <Label className="text-xs">{translateUi(uiLanguage, "Field key")}</Label>
                 <Input value={field.key} disabled={disabled} className="font-mono text-xs" onChange={event => update(index, { key: event.target.value.replace(/[^a-zA-Z0-9_]/g, "") })} />
               </div>
               <div>
-                <Label className="text-xs">Contract placeholder (optional)</Label>
+                <Label className="text-xs">{translateUi(uiLanguage, "Contract placeholder (optional)")}</Label>
                 <Input value={field.maps_to || ""} disabled={disabled} className="font-mono text-xs" placeholder={field.key} onChange={event => update(index, { maps_to: event.target.value || undefined })} />
               </div>
               <div>
-                <Label className="text-xs">Depends on (optional)</Label>
+                <Label className="text-xs">{translateUi(uiLanguage, "Depends on (optional)")}</Label>
                 <Select value={field.dependsOn || "none"} disabled={disabled} onValueChange={dependsOn => update(index, { dependsOn: dependsOn === "none" ? undefined : dependsOn })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No dependency</SelectItem>
+                    <SelectItem value="none">{translateUi(uiLanguage, "No dependency")}</SelectItem>
                     {value.filter((_, current) => current !== index).map(candidate => <SelectItem key={candidate.key} value={candidate.key}>{candidate.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -115,27 +117,25 @@ export function ContractFieldBuilder({ value, onChange, disabled = false }: Prop
             </div>
             {field.type === "select" && (
               <div className="mt-2">
-                <Label className="text-xs">Options (one per line)</Label>
+                <Label className="text-xs">{translateUi(uiLanguage, "Options (one per line)")}</Label>
                 <Textarea rows={3} disabled={disabled} value={(field.options || []).join("\n")} onChange={event => update(index, { options: event.target.value.split("\n").map(item => item.trim()).filter(Boolean) })} />
               </div>
             )}
             <label className="mt-3 inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={Boolean(field.required)} disabled={disabled} onChange={event => update(index, { required: event.target.checked })} />
-              Required field
-            </label>
+              <input type="checkbox" checked={Boolean(field.required)} disabled={disabled} onChange={event => update(index, { required: event.target.checked })} /> {translateUi(uiLanguage, "Required field")} </label>
           </div>
         ))}
       </div>
-      <Button type="button" variant="outline" onClick={add} disabled={disabled}><Plus className="h-4 w-4 mr-2" /> Add field</Button>
+      <Button type="button" variant="outline" onClick={add} disabled={disabled}><Plus className="h-4 w-4 mr-2" /> {translateUi(uiLanguage, "Add field")}</Button>
       <div className="rounded-lg border overflow-hidden">
         <button type="button" className="w-full flex items-center justify-between px-3 py-2 text-sm bg-muted/30" onClick={() => setAdvancedOpen(open => !open)}>
-          <span className="inline-flex items-center gap-2"><Copy className="h-4 w-4" /> Advanced JSON</span>
+          <span className="inline-flex items-center gap-2"><Copy className="h-4 w-4" /> {translateUi(uiLanguage, "Advanced JSON")}</span>
           {advancedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
         {advancedOpen && (
           <div className="p-3 space-y-2">
             <Textarea rows={10} value={jsonDraft} disabled={disabled} onChange={event => setJsonDraft(event.target.value)} className="font-mono text-xs" />
-            <Button type="button" size="sm" variant="secondary" disabled={disabled} onClick={applyJson}>Validate and apply JSON</Button>
+            <Button type="button" size="sm" variant="secondary" disabled={disabled} onClick={applyJson}>{translateUi(uiLanguage, "Validate and apply JSON")}</Button>
           </div>
         )}
       </div>

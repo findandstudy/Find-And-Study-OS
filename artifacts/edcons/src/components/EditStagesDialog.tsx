@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -293,6 +294,7 @@ function StageEditForm({
   automaticMessageOptionsLoading: boolean;
   automaticMessageOptionsError: string | null;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const isApplicationStage = stage.entityType === "application";
   const actions: StageAction[] = Array.isArray(stage.actions) ? stage.actions : [];
@@ -416,11 +418,11 @@ function StageEditForm({
       </FormSection>
 
       <FormSection
-        title="Stage audience"
+        title={translateUi(uiLanguage, "Stage audience")}
         description="Control who can see this stage and, separately, who may move a record into it."
       >
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Who can view this stage?</Label>
+          <Label className="text-sm font-medium">{translateUi(uiLanguage, "Who can view this stage?")}</Label>
           <MultiCheckGrid
             values={stage.visibleToRoles ?? DEFAULT_STAGE_AUDIENCE}
             options={STAGE_AUDIENCE_OPTIONS}
@@ -428,7 +430,7 @@ function StageEditForm({
           />
         </div>
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Who can transition records to this stage?</Label>
+          <Label className="text-sm font-medium">{translateUi(uiLanguage, "Who can transition records to this stage?")}</Label>
           <MultiCheckGrid
             values={stage.transitionAllowedRoles ?? DEFAULT_STAGE_AUDIENCE}
             options={STAGE_AUDIENCE_OPTIONS}
@@ -557,7 +559,7 @@ function StageEditForm({
               )}
             </div>
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Send for record origins</Label>
+              <Label className="text-sm font-medium">{translateUi(uiLanguage, "Send for record origins")}</Label>
               <MultiCheckGrid
                 values={stage.automaticMessage.originTypes ?? ["direct"]}
                 options={MESSAGE_ORIGIN_OPTIONS}
@@ -569,7 +571,7 @@ function StageEditForm({
                   },
                 })}
               />
-              <p className="text-[11px] text-muted-foreground">Direct is the default. Agent and Sub-Agent records are included only when selected.</p>
+              <p className="text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Direct is the default. Agent and Sub-Agent records are included only when selected.")}</p>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               {t("editStages.automaticMessageOnceHint")}

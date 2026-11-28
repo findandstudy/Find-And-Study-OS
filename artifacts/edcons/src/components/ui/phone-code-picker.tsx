@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDown, Search, X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function PhoneCodePicker({ value, onChange, className, triggerClassName }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [pickedIso, setPickedIso] = useState<string | null>(null);
@@ -135,7 +137,7 @@ export function PhoneCodePicker({ value, onChange, className, triggerClassName }
             <span className="text-foreground font-mono text-xs flex-1 text-left">{selected.code}</span>
           </>
         ) : (
-          <span className="text-muted-foreground text-xs flex-1 text-left">Code</span>
+          <span className="text-muted-foreground text-xs flex-1 text-left">{translateUi(uiLanguage, "Code")}</span>
         )}
         <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
       </button>
@@ -149,7 +151,7 @@ export function PhoneCodePicker({ value, onChange, className, triggerClassName }
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search country or code…"
+              placeholder={translateUi(uiLanguage, "Search country or code…")}
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
             {search && (
@@ -160,7 +162,7 @@ export function PhoneCodePicker({ value, onChange, className, triggerClassName }
           </div>
           <div className="max-h-[280px] overflow-y-auto p-1">
             {items.length === 0
-              ? <div className="py-6 text-center text-sm text-muted-foreground">No results</div>
+              ? <div className="py-6 text-center text-sm text-muted-foreground">{translateUi(uiLanguage, "No results")}</div>
               : items.map(renderItem)}
           </div>
         </div>

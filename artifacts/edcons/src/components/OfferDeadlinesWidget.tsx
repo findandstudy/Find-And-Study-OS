@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export function OfferDeadlinesWidget({ detailHrefPrefix, hideStudent }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { data, isLoading } = useQuery<{ data: DeadlineRow[] }>({
     queryKey: ["offer-letter-deadlines"],
     queryFn: () => customFetch(`${BASE_URL}/api/applications/offer-letter-deadlines`),
@@ -57,15 +59,15 @@ export function OfferDeadlinesWidget({ detailHrefPrefix, hideStudent }: Props) {
           <AlertTriangle className="w-4 h-4 text-amber-600" />
         </div>
         <div>
-          <h3 className="font-semibold text-foreground">Offer Letter Deadlines</h3>
-          <p className="text-xs text-muted-foreground">Upcoming expiry dates</p>
+          <h3 className="font-semibold text-foreground">{translateUi(uiLanguage, "Offer Letter Deadlines")}</h3>
+          <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Upcoming expiry dates")}</p>
         </div>
       </div>
 
       {isLoading ? (
-        <p className="text-xs text-muted-foreground py-4 text-center">Loading...</p>
+        <p className="text-xs text-muted-foreground py-4 text-center">{translateUi(uiLanguage, "Loading...")}</p>
       ) : rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center">No upcoming offer letter deadlines.</p>
+        <p className="text-xs text-muted-foreground py-4 text-center">{translateUi(uiLanguage, "No upcoming offer letter deadlines.")}</p>
       ) : (
         <div className="space-y-2 max-h-[320px] overflow-y-auto">
           {rows.map(r => {

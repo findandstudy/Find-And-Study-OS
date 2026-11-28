@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { QuickContactDialog } from "@/components/QuickContact";
@@ -250,6 +251,7 @@ function AppStudentAvatar({ app, size = "sm" }: { app: any; size?: "sm" | "md" }
 
 /* ── StudentSearchInput ──────────────────────────────────── */
 function StudentSearchInput({ value, onChange }: { value: Student | null; onChange: (s: Student | null) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -292,11 +294,11 @@ function StudentSearchInput({ value, onChange }: { value: Student | null; onChan
       <PopoverTrigger asChild>
         <div className="relative cursor-text" onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <Input ref={inputRef} placeholder="Search student..." value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} className="pl-9 rounded-xl" autoComplete="off" />
+          <Input ref={inputRef} placeholder={translateUi(uiLanguage, "Search student...")} value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} className="pl-9 rounded-xl" autoComplete="off" />
         </div>
       </PopoverTrigger>
       <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-64 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
-        {isLoading && <div className="p-3 text-sm text-muted-foreground text-center">Searching...</div>}
+        {isLoading && <div className="p-3 text-sm text-muted-foreground text-center">{translateUi(uiLanguage, "Searching...")}</div>}
         {!isLoading && students.length === 0 && <div className="p-4 text-sm text-muted-foreground text-center">{query.length === 0 ? "Start typing to search" : "No students found"}</div>}
         {students.map(student => (
           <button key={student.id} type="button" className="w-full flex items-center gap-3 p-3 hover:bg-secondary/70 transition-colors text-left border-b border-border/50 last:border-0" onMouseDown={e => { e.preventDefault(); onChange(student); setQuery(""); setOpen(false); }}>
@@ -375,6 +377,7 @@ function ensureUrl(u?: string | null) {
 }
 
 function UniversityInfoPopup({ universityId, onClose }: { universityId: number; onClose: () => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { data: uni, isLoading } = useQuery<any>({
     queryKey: ["university-info", universityId],
     queryFn: () => apiFetch(`${BASE_URL}/api/universities/${universityId}`),
@@ -420,37 +423,37 @@ function UniversityInfoPopup({ universityId, onClose }: { universityId: number; 
             <div className="space-y-4 mt-3">
               {uni.description && <p className="text-sm text-muted-foreground leading-relaxed">{uni.description}</p>}
               <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                <h4 className="text-sm font-semibold flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /> Location</h4>
+                <h4 className="text-sm font-semibold flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /> {translateUi(uiLanguage, "Location")}</h4>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  {uni.country && <div><span className="text-muted-foreground text-xs">Country</span><p className="font-medium">{uni.country}</p></div>}
-                  {uni.city && <div><span className="text-muted-foreground text-xs">City</span><p className="font-medium">{uni.city}</p></div>}
+                  {uni.country && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Country")}</span><p className="font-medium">{uni.country}</p></div>}
+                  {uni.city && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "City")}</span><p className="font-medium">{uni.city}</p></div>}
                 </div>
-                {uni.address && <div><span className="text-muted-foreground text-xs">Address</span><p className="text-sm font-medium">{uni.address}</p></div>}
+                {uni.address && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Address")}</span><p className="text-sm font-medium">{uni.address}</p></div>}
               </div>
               {(uni.qsRanking || uni.timesRanking || uni.ranking) && (
                 <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                  <h4 className="text-sm font-semibold flex items-center gap-2"><Award className="w-4 h-4 text-primary" /> Rankings</h4>
+                  <h4 className="text-sm font-semibold flex items-center gap-2"><Award className="w-4 h-4 text-primary" /> {translateUi(uiLanguage, "Rankings")}</h4>
                   <div className="grid grid-cols-3 gap-3">
-                    {uni.qsRanking && <div className="text-center bg-white rounded-lg p-2 border"><p className="text-lg font-bold text-primary">#{uni.qsRanking}</p><p className="text-[10px] text-muted-foreground font-medium">QS World</p></div>}
-                    {uni.timesRanking && <div className="text-center bg-white rounded-lg p-2 border"><p className="text-lg font-bold text-primary">#{uni.timesRanking}</p><p className="text-[10px] text-muted-foreground font-medium">Times HE</p></div>}
-                    {uni.ranking && <div className="text-center bg-white rounded-lg p-2 border"><p className="text-lg font-bold text-primary">#{uni.ranking}</p><p className="text-[10px] text-muted-foreground font-medium">National</p></div>}
+                    {uni.qsRanking && <div className="text-center bg-white rounded-lg p-2 border"><p className="text-lg font-bold text-primary">#{uni.qsRanking}</p><p className="text-[10px] text-muted-foreground font-medium">{translateUi(uiLanguage, "QS World")}</p></div>}
+                    {uni.timesRanking && <div className="text-center bg-white rounded-lg p-2 border"><p className="text-lg font-bold text-primary">#{uni.timesRanking}</p><p className="text-[10px] text-muted-foreground font-medium">{translateUi(uiLanguage, "Times HE")}</p></div>}
+                    {uni.ranking && <div className="text-center bg-white rounded-lg p-2 border"><p className="text-lg font-bold text-primary">#{uni.ranking}</p><p className="text-[10px] text-muted-foreground font-medium">{translateUi(uiLanguage, "National")}</p></div>}
                   </div>
                 </div>
               )}
               {periods.filter(period => period.verifiedAt && period.isActive !== false).length > 0 && (
                 <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                  <h4 className="text-sm font-semibold flex items-center gap-2"><CalendarDays className="w-4 h-4 text-primary" /> Application Calendar</h4>
+                  <h4 className="text-sm font-semibold flex items-center gap-2"><CalendarDays className="w-4 h-4 text-primary" /> {translateUi(uiLanguage, "Application Calendar")}</h4>
                   <div className="space-y-2">
                     {periods.filter(period => period.verifiedAt && period.isActive !== false).map(period => (
                       <div key={period.id} className="rounded-lg border bg-background p-3 text-sm">
                         <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{period.termName} {period.academicYear}</p>{period.campusName && <Badge variant="outline">{period.campusName}</Badge>}</div>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                          <div><span className="text-muted-foreground">Applications open</span><p className="font-medium">{period.applicationsOpenAt}</p></div>
-                          <div><span className="text-muted-foreground">Deadline</span><p className="font-medium">{period.applicationDeadlineAt}</p></div>
-                          {period.classesStartOn && <div><span className="text-muted-foreground">Classes start</span><p className="font-medium">{period.classesStartOn}</p></div>}
-                          {period.classesEndOn && <div><span className="text-muted-foreground">Classes end</span><p className="font-medium">{period.classesEndOn}</p></div>}
+                          <div><span className="text-muted-foreground">{translateUi(uiLanguage, "Applications open")}</span><p className="font-medium">{period.applicationsOpenAt}</p></div>
+                          <div><span className="text-muted-foreground">{translateUi(uiLanguage, "Deadline")}</span><p className="font-medium">{period.applicationDeadlineAt}</p></div>
+                          {period.classesStartOn && <div><span className="text-muted-foreground">{translateUi(uiLanguage, "Classes start")}</span><p className="font-medium">{period.classesStartOn}</p></div>}
+                          {period.classesEndOn && <div><span className="text-muted-foreground">{translateUi(uiLanguage, "Classes end")}</span><p className="font-medium">{period.classesEndOn}</p></div>}
                         </div>
-                        <p className="mt-2 text-xs text-muted-foreground">{period.timezone} · Verified source: {period.sourceName || period.sourceUrl}</p>
+                        <p className="mt-2 text-xs text-muted-foreground">{period.timezone} {translateUi(uiLanguage, "· Verified source:")} {period.sourceName || period.sourceUrl}</p>
                       </div>
                     ))}
                   </div>
@@ -458,7 +461,7 @@ function UniversityInfoPopup({ universityId, onClose }: { universityId: number; 
               )}
               {(uni.contactName || uni.contactEmail || uni.contactPhone) && (
                 <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                  <h4 className="text-sm font-semibold flex items-center gap-2"><User className="w-4 h-4 text-primary" /> Contact</h4>
+                  <h4 className="text-sm font-semibold flex items-center gap-2"><User className="w-4 h-4 text-primary" /> {translateUi(uiLanguage, "Contact")}</h4>
                   <div className="space-y-2">
                     {uni.contactName && <div className="flex items-center gap-2 text-sm"><User className="w-3.5 h-3.5 text-muted-foreground" /><span className="font-medium">{uni.contactName}</span></div>}
                     {uni.contactEmail && <a href={`mailto:${uni.contactEmail}`} className="flex items-center gap-2 text-sm text-primary hover:underline"><Mail className="w-3.5 h-3.5" />{uni.contactEmail}</a>}
@@ -468,13 +471,13 @@ function UniversityInfoPopup({ universityId, onClose }: { universityId: number; 
               )}
               {ensureUrl(uni.website) && (
                 <a href={ensureUrl(uni.website)!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary hover:underline">
-                  <Globe className="w-4 h-4" /> Visit Website <ExternalLink className="w-3 h-3" />
+                  <Globe className="w-4 h-4" /> {translateUi(uiLanguage, "Visit Website")} <ExternalLink className="w-3 h-3" />
                 </a>
               )}
             </div>
           </>
         ) : (
-          <p className="text-sm text-muted-foreground py-8 text-center">University information not available.</p>
+          <p className="text-sm text-muted-foreground py-8 text-center">{translateUi(uiLanguage, "University information not available.")}</p>
         )}
       </DialogContent>
     </Dialog>
@@ -483,6 +486,7 @@ function UniversityInfoPopup({ universityId, onClose }: { universityId: number; 
 }
 
 function ProgramInfoPopup({ programId, onClose, canSeeCommission }: { programId: number; onClose: () => void; canSeeCommission?: boolean }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { data, isLoading } = useQuery<any>({
     queryKey: ["program-info", programId],
     queryFn: () => apiFetch(`${BASE_URL}/api/course-finder?programId=${programId}&limit=1`),
@@ -530,56 +534,56 @@ function ProgramInfoPopup({ programId, onClose, canSeeCommission }: { programId:
             </DialogHeader>
             <div className="space-y-4 mt-3">
               <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                <h4 className="text-sm font-semibold flex items-center gap-2"><GraduationCap className="w-4 h-4 text-primary" /> Program Details</h4>
+                <h4 className="text-sm font-semibold flex items-center gap-2"><GraduationCap className="w-4 h-4 text-primary" /> {translateUi(uiLanguage, "Program Details")}</h4>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-muted-foreground text-xs">Program Name</span><p className="font-medium">{p.name}</p></div>
-                  {p.degree && <div><span className="text-muted-foreground text-xs">Degree / Level</span><p className="font-medium">{p.degree}</p></div>}
-                  {p.language && <div><span className="text-muted-foreground text-xs">Language</span><p className="font-medium">{p.language}</p></div>}
-                  {p.duration && <div><span className="text-muted-foreground text-xs">Duration</span><p className="font-medium">{p.duration}</p></div>}
-                  {p.intakes && <div><span className="text-muted-foreground text-xs">Intakes</span><p className="font-medium">{p.intakes}</p></div>}
-                  {p.field && <div><span className="text-muted-foreground text-xs">Field of Study</span><p className="font-medium">{p.field}</p></div>}
+                  <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Program Name")}</span><p className="font-medium">{p.name}</p></div>
+                  {p.degree && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Degree / Level")}</span><p className="font-medium">{p.degree}</p></div>}
+                  {p.language && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Language")}</span><p className="font-medium">{p.language}</p></div>}
+                  {p.duration && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Duration")}</span><p className="font-medium">{p.duration}</p></div>}
+                  {p.intakes && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Intakes")}</span><p className="font-medium">{p.intakes}</p></div>}
+                  {p.field && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Field of Study")}</span><p className="font-medium">{p.field}</p></div>}
                 </div>
               </div>
               {programCalendar?.effectiveApplicationPeriod?.verifiedAt && (
                 <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                  <h4 className="text-sm font-semibold flex items-center gap-2"><CalendarDays className="w-4 h-4 text-primary" /> Application Calendar</h4>
+                  <h4 className="text-sm font-semibold flex items-center gap-2"><CalendarDays className="w-4 h-4 text-primary" /> {translateUi(uiLanguage, "Application Calendar")}</h4>
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div><span className="text-muted-foreground text-xs">Term</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.termName} {programCalendar.effectiveApplicationPeriod.academicYear}</p></div>
-                    {programCalendar.effectiveApplicationPeriod.campusName && <div><span className="text-muted-foreground text-xs">Campus</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.campusName}</p></div>}
-                    <div><span className="text-muted-foreground text-xs">Applications open</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.applicationsOpenAt}</p></div>
-                    <div><span className="text-muted-foreground text-xs">Deadline</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.applicationDeadlineAt}</p></div>
+                    <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Term")}</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.termName} {programCalendar.effectiveApplicationPeriod.academicYear}</p></div>
+                    {programCalendar.effectiveApplicationPeriod.campusName && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Campus")}</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.campusName}</p></div>}
+                    <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Applications open")}</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.applicationsOpenAt}</p></div>
+                    <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Deadline")}</span><p className="font-medium">{programCalendar.effectiveApplicationPeriod.applicationDeadlineAt}</p></div>
                   </div>
                   <p className="text-xs text-muted-foreground">{programCalendar.effectiveApplicationPeriod.sourceTimezone}{Object.values(programCalendar.effectiveApplicationPeriod.overrides || {}).some(Boolean) ? " · Program-specific override" : " · University default"}</p>
                 </div>
               )}
               <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                <h4 className="text-sm font-semibold flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" /> University</h4>
+                <h4 className="text-sm font-semibold flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" /> {translateUi(uiLanguage, "University")}</h4>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  {p.universityName && <div><span className="text-muted-foreground text-xs">University</span><p className="font-medium">{p.universityName}</p></div>}
-                  {p.universityCountry && <div><span className="text-muted-foreground text-xs">Country</span><p className="font-medium">{p.universityCountry}</p></div>}
-                  {p.universityCity && <div><span className="text-muted-foreground text-xs">City</span><p className="font-medium">{p.universityCity}</p></div>}
-                  {p.universityStatus && <div><span className="text-muted-foreground text-xs">Status</span><p className="font-medium">{p.universityStatus}</p></div>}
+                  {p.universityName && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "University")}</span><p className="font-medium">{p.universityName}</p></div>}
+                  {p.universityCountry && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Country")}</span><p className="font-medium">{p.universityCountry}</p></div>}
+                  {p.universityCity && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "City")}</span><p className="font-medium">{p.universityCity}</p></div>}
+                  {p.universityStatus && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Status")}</span><p className="font-medium">{p.universityStatus}</p></div>}
                 </div>
               </div>
               <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                <h4 className="text-sm font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4 text-primary" /> Fees & Finance</h4>
+                <h4 className="text-sm font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4 text-primary" /> {translateUi(uiLanguage, "Fees & Finance")}</h4>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  {fmtCur(p.tuitionFee) && <div><span className="text-muted-foreground text-xs">Tuition Fee</span><p className="font-medium">{fmtCur(p.tuitionFee)}</p></div>}
-                  {p.feeType && <div><span className="text-muted-foreground text-xs">Fee Type</span><p className="font-medium">{p.feeType}</p></div>}
-                  {fmtCur(p.applicationFee) && <div><span className="text-muted-foreground text-xs">Application Fee</span><p className="font-medium">{fmtCur(p.applicationFee)}</p></div>}
-                  {fmtCur(p.enrollmentFee) && <div><span className="text-muted-foreground text-xs">Enrolment Fee</span><p className="font-medium">{fmtCur(p.enrollmentFee)}</p></div>}
-                  {fmtCur(programCalendar?.adaptationFee ?? p.adaptationFee) && <div><span className="text-muted-foreground text-xs">Adaptation Fee</span><p className="font-medium">{fmtCur(programCalendar?.adaptationFee ?? p.adaptationFee)}</p></div>}
-                  {fmtCur(p.depositFee) && <div><span className="text-muted-foreground text-xs">Deposit Fee</span><p className="font-medium">{fmtCur(p.depositFee)}</p></div>}
-                  {fmtCur(p.serviceFeeAmount) && <div><span className="text-muted-foreground text-xs">Service Fee</span><p className="font-medium">{fmtCur(p.serviceFeeAmount)}</p></div>}
-                  {canSeeCommission && fmtCur(p.commissionAmount) && <div><span className="text-muted-foreground text-xs">Commission</span><p className="font-medium text-emerald-600">{fmtCur(p.commissionAmount)}</p></div>}
+                  {fmtCur(p.tuitionFee) && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Tuition Fee")}</span><p className="font-medium">{fmtCur(p.tuitionFee)}</p></div>}
+                  {p.feeType && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Fee Type")}</span><p className="font-medium">{p.feeType}</p></div>}
+                  {fmtCur(p.applicationFee) && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Application Fee")}</span><p className="font-medium">{fmtCur(p.applicationFee)}</p></div>}
+                  {fmtCur(p.enrollmentFee) && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Enrolment Fee")}</span><p className="font-medium">{fmtCur(p.enrollmentFee)}</p></div>}
+                  {fmtCur(programCalendar?.adaptationFee ?? p.adaptationFee) && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Adaptation Fee")}</span><p className="font-medium">{fmtCur(programCalendar?.adaptationFee ?? p.adaptationFee)}</p></div>}
+                  {fmtCur(p.depositFee) && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Deposit Fee")}</span><p className="font-medium">{fmtCur(p.depositFee)}</p></div>}
+                  {fmtCur(p.serviceFeeAmount) && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Service Fee")}</span><p className="font-medium">{fmtCur(p.serviceFeeAmount)}</p></div>}
+                  {canSeeCommission && fmtCur(p.commissionAmount) && <div><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Commission")}</span><p className="font-medium text-emerald-600">{fmtCur(p.commissionAmount)}</p></div>}
                 </div>
-                {programCalendar?.requirements && <div className="pt-2 border-t"><span className="text-muted-foreground text-xs">Requirements</span><p className="text-sm whitespace-pre-wrap">{programCalendar.requirements}</p></div>}
-                {programCalendar?.refundProcess && <div className="pt-2 border-t"><span className="text-muted-foreground text-xs">Refund Process</span><p className="text-sm whitespace-pre-wrap">{programCalendar.refundProcess}</p></div>}
+                {programCalendar?.requirements && <div className="pt-2 border-t"><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Requirements")}</span><p className="text-sm whitespace-pre-wrap">{programCalendar.requirements}</p></div>}
+                {programCalendar?.refundProcess && <div className="pt-2 border-t"><span className="text-muted-foreground text-xs">{translateUi(uiLanguage, "Refund Process")}</span><p className="text-sm whitespace-pre-wrap">{programCalendar.refundProcess}</p></div>}
               </div>
             </div>
           </>
         ) : (
-          <p className="text-sm text-muted-foreground py-8 text-center">Program information not available.</p>
+          <p className="text-sm text-muted-foreground py-8 text-center">{translateUi(uiLanguage, "Program information not available.")}</p>
         )}
       </DialogContent>
     </Dialog>
@@ -589,6 +593,7 @@ function ProgramInfoPopup({ programId, onClose, canSeeCommission }: { programId:
 
 /* ── DraggableAppCard ─────────────────────────────────────── */
 function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, staffUsersList, currentUserId, canSeeCommission, canAssign, canReassign, canMoveCards }: { app: any; onView: (id: number) => void; variant?: ColVariant; assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canSeeCommission?: boolean; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id, disabled: !canMoveCards });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
@@ -684,21 +689,20 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
             canReassign && staffUsersList ? (
               <AssignPopover staffUsers={staffUsersList} currentUserId={currentUserId} onAssign={(uid) => onAssign(app.id, uid)} />
             ) : canAssign && currentUserId ? (
-              <button onClick={(e) => { e.stopPropagation(); onAssign(app.id, currentUserId); }} className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5" title="Assign to me">
-                <UserPlus className="w-3 h-3 shrink-0" />Assign to me
-              </button>
+              <button onClick={(e) => { e.stopPropagation(); onAssign(app.id, currentUserId); }} className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5" title={translateUi(uiLanguage, "Assign to me")}>
+                <UserPlus className="w-3 h-3 shrink-0" />{translateUi(uiLanguage, "Assign to me")} </button>
             ) : null
           ) : assignedUserName ? (
             <span className="flex min-w-0 items-center gap-0.5 truncate text-[10px] text-muted-foreground" title={assignedUserName}><UserCheck2 className="w-3 h-3 shrink-0" />{assignedUserName}</span>
           ) : null}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          <button onClick={(e) => { e.stopPropagation(); openContact("internal"); }} title="Message"
+          <button onClick={(e) => { e.stopPropagation(); openContact("internal"); }} title={translateUi(uiLanguage, "Message")}
             className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
             <MessageSquare className="w-3.5 h-3.5" />
           </button>
           {app.studentEmail && (
-            <button onClick={(e) => { e.stopPropagation(); openContact("email"); }} title="Email"
+            <button onClick={(e) => { e.stopPropagation(); openContact("email"); }} title={translateUi(uiLanguage, "Email")}
               className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
               <Mail className="w-3.5 h-3.5" />
             </button>
@@ -713,7 +717,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
             href={appDetailHref(app.id)}
             onClick={(e) => { if (wantsNewTab(e)) return; e.preventDefault(); onView(app.id); }}
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-            title="View application"
+            title={translateUi(uiLanguage, "View application")}
           >
             <Eye className="w-3.5 h-3.5" />
           </a>
@@ -750,6 +754,7 @@ function DroppableAppColumn({ stage, label, variant, apps, totalCount, totalReve
   staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void;
   staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canSeeCommission?: boolean; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { setNodeRef, isOver } = useDroppable({ id: stage });
   const v = variant as ColVariant;
   const loadedRevenue = apps.reduce((sum, a) => sum + (parseFloat(a.commissionAmount) || 0), 0);
@@ -809,14 +814,10 @@ function DroppableAppColumn({ stage, label, variant, apps, totalCount, totalReve
             <DraggableAppCard key={app.id} app={app} onView={onView} variant={v} assignedUserName={app.assignedToId && staffUsersMap ? staffUsersMap[app.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} canSeeCommission={canSeeCommission} canAssign={canAssign} canReassign={canReassign} canMoveCards={canMoveCards} />
           ))}
           {!isLoading && apps.length === 0 && (
-            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
-              Drop here
-            </div>
+            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}> {translateUi(uiLanguage, "Drop here")} </div>
           )}
           {isLoading && apps.length === 0 && (
-            <div className="h-20 rounded-xl flex items-center justify-center text-sm text-muted-foreground">
-              Loading…
-            </div>
+            <div className="h-20 rounded-xl flex items-center justify-center text-sm text-muted-foreground"> {translateUi(uiLanguage, "Loading…")} </div>
           )}
           {onLoadMore && apps.length < (totalCount ?? apps.length) && (
             <Button
@@ -859,6 +860,7 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
 
 /* ── EditApplicationDialog ───────────────────────────────── */
 function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; onClose: () => void; app: any; stages: PipelineStage[] }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { user, hasPermission } = useAuth();
   const canSeeCommission = hasPermission("applications.view_commission");
@@ -1040,7 +1042,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
               </SelectContent>
             </Select>
             {form.universityName && !form.universityId && (
-              <p className="text-xs text-muted-foreground mt-1">Current: {form.universityName}</p>
+              <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Current:")} {form.universityName}</p>
             )}
           </div>
           <div className="space-y-1.5">
@@ -1065,7 +1067,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
               </SelectContent>
             </Select>
             {form.programName && !form.programId && (
-              <p className="text-xs text-muted-foreground mt-1">Current: {form.programName}</p>
+              <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Current:")} {form.programName}</p>
             )}
           </div>
           <div className="space-y-1.5">
@@ -1084,16 +1086,14 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
           </div>
           <div className="space-y-1.5 col-span-2">
             <Label className="flex items-center gap-2">
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-              Tuition Fee (USD)
-              {hasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50">Discounted</span>}
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-500" /> {translateUi(uiLanguage, "Tuition Fee (USD)")} {hasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50">{translateUi(uiLanguage, "Discounted")}</span>}
             </Label>
             <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} />
             {selectedProgForFee && (selectedProgForFee.tuitionFee != null || selectedProgForFee.discountedFee != null || selectedProgForFee.commissionRate != null) && (
               <div className="flex flex-wrap gap-3 text-xs mt-1">
-                {selectedProgForFee.tuitionFee != null && <span className="text-muted-foreground">Standard: <strong>${selectedProgForFee.tuitionFee.toLocaleString()}</strong></span>}
-                {selectedProgForFee.discountedFee != null && <span className="text-amber-600">Discounted: <strong>${selectedProgForFee.discountedFee.toLocaleString()}</strong></span>}
-                {canSeeCommission && selectedProgForFee.commissionRate != null && <span className="text-indigo-600">Commission: <strong>{selectedProgForFee.commissionRate}%</strong></span>}
+                {selectedProgForFee.tuitionFee != null && <span className="text-muted-foreground">{translateUi(uiLanguage, "Standard:")} <strong>${selectedProgForFee.tuitionFee.toLocaleString()}</strong></span>}
+                {selectedProgForFee.discountedFee != null && <span className="text-amber-600">{translateUi(uiLanguage, "Discounted:")} <strong>${selectedProgForFee.discountedFee.toLocaleString()}</strong></span>}
+                {canSeeCommission && selectedProgForFee.commissionRate != null && <span className="text-indigo-600">{translateUi(uiLanguage, "Commission:")} <strong>{selectedProgForFee.commissionRate}%</strong></span>}
               </div>
             )}
           </div>
@@ -1160,13 +1160,14 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
 function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
   open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   return (
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Delete {count} Application{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
-        <p className="text-sm text-muted-foreground py-2">This action cannot be undone.</p>
+        <DialogHeader><DialogTitle>Delete {count} {translateUi(uiLanguage, "Application")}{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground py-2">{translateUi(uiLanguage, "This action cannot be undone.")}</p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("applicationsPage.cancel")}</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? "Deleting..." : `Delete ${count}`}</Button>
@@ -1231,6 +1232,7 @@ function FilterPopover({ filters, onChange, stages, apps, facets, staffUsersList
   currentUserId?: number;
   clearAssignedTo: string;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const hasActive = Object.entries(filters).some(([k, v]) => v !== (k === "assignedTo" ? clearAssignedTo : (DEFAULT_FILTERS as any)[k]));
@@ -1273,11 +1275,11 @@ function FilterPopover({ filters, onChange, stages, apps, facets, staffUsersList
       </PopoverTrigger>
       <PopoverContent className="w-72 p-4 space-y-3 max-h-[70vh] overflow-y-auto" align="end">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Filters</p>
-          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ ...DEFAULT_FILTERS, assignedTo: clearAssignedTo })}>Clear</Button>}
+          <p className="text-sm font-semibold">{translateUi(uiLanguage, "Filters")}</p>
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ ...DEFAULT_FILTERS, assignedTo: clearAssignedTo })}>{translateUi(uiLanguage, "Clear")}</Button>}
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Stage</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "Stage")}</Label>
           <Select value={filters.stage} onValueChange={v => onChange({ ...filters, stage: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -1287,7 +1289,7 @@ function FilterPopover({ filters, onChange, stages, apps, facets, staffUsersList
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Study Country</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "Study Country")}</Label>
           <Select value={filters.country} onValueChange={v => onChange({ ...filters, country: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
@@ -1297,7 +1299,7 @@ function FilterPopover({ filters, onChange, stages, apps, facets, staffUsersList
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">University</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "University")}</Label>
           <Select value={filters.university} onValueChange={v => onChange({ ...filters, university: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
@@ -1307,7 +1309,7 @@ function FilterPopover({ filters, onChange, stages, apps, facets, staffUsersList
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">University Type</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "University Type")}</Label>
           <Select value={filters.universityType} onValueChange={v => onChange({ ...filters, universityType: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -1318,7 +1320,7 @@ function FilterPopover({ filters, onChange, stages, apps, facets, staffUsersList
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Agent</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "Agent")}</Label>
           <Select value={filters.agent} onValueChange={v => onChange({ ...filters, agent: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
@@ -1329,19 +1331,19 @@ function FilterPopover({ filters, onChange, stages, apps, facets, staffUsersList
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Origin</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "Origin")}</Label>
           <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="direct">Direct</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="sub_agent">Sub-Agent</SelectItem>
+              <SelectItem value="all">{translateUi(uiLanguage, "All")}</SelectItem>
+              <SelectItem value="direct">{translateUi(uiLanguage, "Direct")}</SelectItem>
+              <SelectItem value="agent">{translateUi(uiLanguage, "Agent")}</SelectItem>
+              <SelectItem value="sub_agent">{translateUi(uiLanguage, "Sub-Agent")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Assigned To</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "Assigned To")}</Label>
           <Select value={filters.assignedTo} onValueChange={v => onChange({ ...filters, assignedTo: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
@@ -1367,20 +1369,20 @@ function FilterPopover({ filters, onChange, stages, apps, facets, staffUsersList
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Created Date</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "Created Date")}</Label>
           <Select value={filters.dateRange} onValueChange={v => onChange({ ...filters, dateRange: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("applicationsPage.allTime")}</SelectItem>
               <SelectItem value="today">{t("applicationsPage.today")}</SelectItem>
               <SelectItem value="yesterday">{t("applicationsPage.yesterday")}</SelectItem>
-              <SelectItem value="last7">Last 7 Days</SelectItem>
+              <SelectItem value="last7">{translateUi(uiLanguage, "Last 7 Days")}</SelectItem>
               <SelectItem value="thisMonth">{t("applicationsPage.thisMonth")}</SelectItem>
               <SelectItem value="thisYear">{t("applicationsPage.thisYear")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>Apply</Button>
+        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>{translateUi(uiLanguage, "Apply")}</Button>
       </PopoverContent>
     </Popover>
     </>
@@ -1389,6 +1391,7 @@ function FilterPopover({ filters, onChange, stages, apps, facets, staffUsersList
 
 /* ── AddApplicationModal ─────────────────────────────────── */
 function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open: boolean; onClose: () => void; onSuccess: () => void; defaultStage?: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const { season } = useSeason();
@@ -1472,72 +1475,70 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
     <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle className="text-xl font-display">New Application</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="text-xl font-display">{translateUi(uiLanguage, "New Application")}</DialogTitle></DialogHeader>
         <div className="space-y-5 py-2">
           <div className="space-y-2">
-            <Label className="font-semibold flex items-center gap-1.5"><User className="w-4 h-4 text-primary" /> Student <span className="text-destructive">*</span></Label>
+            <Label className="font-semibold flex items-center gap-1.5"><User className="w-4 h-4 text-primary" /> {translateUi(uiLanguage, "Student")} <span className="text-destructive">*</span></Label>
             <StudentSearchInput value={selectedStudent} onChange={setSelectedStudent} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="font-semibold">Country <span className="text-destructive">*</span></Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "Country")} <span className="text-destructive">*</span></Label>
               <Select value={form.country} onValueChange={v => setForm({ ...form, country: v, universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "" })}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
                 <SelectContent className="max-h-60">{activeDestinations.map(c => <SelectItem key={c.id} value={c.name}><span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span></SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="font-semibold">University</Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "University")}</Label>
               <Select value={form.universityId} onValueChange={v => { const uni = universities.find(u => String(u.id) === v); setForm({ ...form, universityId: v, universityName: uni?.name ?? "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "" }); }} disabled={!form.country || universities.length === 0}>
                 <SelectTrigger className="rounded-xl"><SelectValue placeholder={!form.country ? "Select country first..." : universities.length === 0 ? "No universities" : "Select..."} /></SelectTrigger>
                 <SelectContent className="max-h-60">{universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="font-semibold">Level <span className="text-destructive">*</span></Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "Level")} <span className="text-destructive">*</span></Label>
               <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
                 <SelectContent>{studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="font-semibold">Program</Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "Program")}</Label>
               <Select value={form.programId} onValueChange={handleProgramSelect} disabled={!form.universityId || programs.length === 0}>
                 <SelectTrigger className="rounded-xl"><SelectValue placeholder={!form.universityId ? "Select uni first..." : programs.length === 0 ? "No programs" : "Select..."} /></SelectTrigger>
                 <SelectContent className="max-h-60">{programs.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}{p.degree && <span className="text-muted-foreground ml-1 text-xs">({p.degree})</span>}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="font-semibold">Language</Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "Language")}</Label>
               <Select value={form.instructionLanguage} onValueChange={v => setForm({ ...form, instructionLanguage: v })}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
                 <SelectContent>{INSTRUCTION_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="font-semibold">Intake</Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "Intake")}</Label>
               <Select value={form.intake} onValueChange={v => setForm({ ...form, intake: v })}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
                 <SelectContent>{addIntakeOptions.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2 col-span-2">
               <Label className="font-semibold flex items-center gap-2">
-                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                Tuition Fee (USD)
-                {addHasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50">Discounted</span>}
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" /> {translateUi(uiLanguage, "Tuition Fee (USD)")} {addHasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50">{translateUi(uiLanguage, "Discounted")}</span>}
               </Label>
               <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} placeholder="e.g. 15000" className="rounded-xl" />
               {addSelProgForFee && (addSelProgForFee.tuitionFee != null || addSelProgForFee.discountedFee != null || addSelProgForFee.commissionRate != null) && (
                 <div className="flex flex-wrap gap-3 text-xs">
-                  {addSelProgForFee.tuitionFee != null && <span className="text-muted-foreground">Standard: <strong>${addSelProgForFee.tuitionFee.toLocaleString()}</strong></span>}
-                  {addSelProgForFee.discountedFee != null && <span className="text-amber-600">Discounted: <strong>${addSelProgForFee.discountedFee.toLocaleString()}</strong></span>}
-                  {canSeeCommission && addSelProgForFee.commissionRate != null && <span className="text-indigo-600">Commission: <strong>{addSelProgForFee.commissionRate}%</strong></span>}
+                  {addSelProgForFee.tuitionFee != null && <span className="text-muted-foreground">{translateUi(uiLanguage, "Standard:")} <strong>${addSelProgForFee.tuitionFee.toLocaleString()}</strong></span>}
+                  {addSelProgForFee.discountedFee != null && <span className="text-amber-600">{translateUi(uiLanguage, "Discounted:")} <strong>${addSelProgForFee.discountedFee.toLocaleString()}</strong></span>}
+                  {canSeeCommission && addSelProgForFee.commissionRate != null && <span className="text-indigo-600">{translateUi(uiLanguage, "Commission:")} <strong>{addSelProgForFee.commissionRate}%</strong></span>}
                 </div>
               )}
             </div>
             <div className="space-y-2 col-span-2">
-              <Label className="font-semibold">Notes</Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "Notes")}</Label>
               <textarea placeholder={t("applicationsPage.notesPlaceholder")} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
             </div>
           </div>
@@ -1554,6 +1555,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
 
 /* ── ApplicationsPage ────────────────────────────────────── */
 export default function ApplicationsPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const dateFormat = useDateFormat();
   const { levels: studyLevels, labelOf: studyLabelOf } = useStudyLevels();
@@ -2232,8 +2234,8 @@ export default function ApplicationsPage() {
             </div>
             <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} apps={allApps} facets={applicationFacets} staffUsersList={staffUsersList} canViewOthers={canViewOthers} canViewUnassigned={canViewUnassigned} currentUserId={user?.id} clearAssignedTo={roleBasedAssignedDefault} />
             <div className="flex items-center border rounded-full overflow-hidden">
-              <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
-              <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
+              <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title={translateUi(uiLanguage, "Pipeline view")}><LayoutGrid className="w-4 h-4" /></button>
+              <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title={translateUi(uiLanguage, "List view")}><List className="w-4 h-4" /></button>
             </div>
             <BulkActionBar
               selectedCount={selectedIds.size}
@@ -2269,12 +2271,10 @@ export default function ApplicationsPage() {
             )}
             {isAdmin && (
               <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => { const a = document.createElement("a"); const idsParam = selectedIds.size > 0 ? `&ids=${Array.from(selectedIds).join(",")}` : ""; a.href = `${BASE_URL}/api/export/applications?season=${encodeURIComponent(season || "")}${idsParam}`; a.click(); }}>
-                <Download className="w-3.5 h-3.5" /> Excel
-              </Button>
+                <Download className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Excel")} </Button>
             )}
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" /> New Application
-            </Button>
+              <Plus className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "New Application")} </Button>
           </div>
         </div>
 
@@ -2454,9 +2454,9 @@ export default function ApplicationsPage() {
                         />
                       );
                     case "button1":
-                      return <TableHead key={id} className="w-28 text-xs font-semibold text-muted-foreground">Quick Button</TableHead>;
+                      return <TableHead key={id} className="w-28 text-xs font-semibold text-muted-foreground">{translateUi(uiLanguage, "Quick Button")}</TableHead>;
                     case "button2":
-                      return <TableHead key={id} className="w-28 text-xs font-semibold text-muted-foreground">Quick Button</TableHead>;
+                      return <TableHead key={id} className="w-28 text-xs font-semibold text-muted-foreground">{translateUi(uiLanguage, "Quick Button")}</TableHead>;
                     case "created":
                       return (
                         <ColumnHeader
@@ -2655,14 +2655,14 @@ export default function ApplicationsPage() {
                       <TableRow className="bg-muted/50">
                         <TableHead className="w-10"><Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} /></TableHead>
                         {visibleAppCols.map((id) => renderHeaderCell(id as AppColId))}
-                        <TableHead className="w-20 text-right">Actions</TableHead>
+                        <TableHead className="w-20 text-right">{translateUi(uiLanguage, "Actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {isLoading ? (
-                        <TableRow><TableCell colSpan={totalColSpan} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={totalColSpan} className="text-center py-12 text-muted-foreground">{translateUi(uiLanguage, "Loading...")}</TableCell></TableRow>
                       ) : pagedApps.length === 0 ? (
-                        <TableRow><TableCell colSpan={totalColSpan} className="text-center py-12 text-muted-foreground">No applications found</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={totalColSpan} className="text-center py-12 text-muted-foreground">{translateUi(uiLanguage, "No applications found")}</TableCell></TableRow>
                       ) : pagedApps.map((app: any) => {
                         const sm = stageMap[app.stage];
                         const stageColor = sm ? getStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200";

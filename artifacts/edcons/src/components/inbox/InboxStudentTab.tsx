@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { toLatinUpper, transliterateToLatin } from "@/lib/latin-utils";
 import { useQuery } from "@tanstack/react-query";
@@ -278,6 +279,7 @@ export function InboxStudentTab({
   onUpdated,
   onReadyToSubmit,
 }: InboxStudentTabProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const { levels, isLoading: levelsLoading } = useStudyLevels();
@@ -1016,7 +1018,7 @@ export function InboxStudentTab({
                           type="button"
                           onClick={() => handleRemoveStaged(req.documentType)}
                           className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          aria-label="Remove"
+                          aria-label={translateUi(uiLanguage, "Remove")}
                         >
                           <XIcon className="w-3 h-3 text-muted-foreground hover:text-destructive" />
                         </button>
@@ -1233,9 +1235,7 @@ export function InboxStudentTab({
           </p>
         )}
         {docReqsError && !extracting && (
-          <p className="text-center text-[10px] text-rose-600 mt-1">
-            Document requirements could not be verified.
-          </p>
+          <p className="text-center text-[10px] text-rose-600 mt-1"> {translateUi(uiLanguage, "Document requirements could not be verified.")} </p>
         )}
       </div>
 

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -358,10 +359,11 @@ function MetricCard({
 }
 
 function ReportLoading() {
+  const { lang: uiLanguage } = useUiLanguage();
   return (
     <div
       className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
-      aria-label="Loading report"
+      aria-label={translateUi(uiLanguage, "Loading report")}
     >
       {[0, 1, 2, 3].map((key) => (
         <Skeleton key={key} className="h-36 rounded-xl" />
@@ -812,6 +814,7 @@ function FinancePanel({
   locale: string;
   retry: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   if (!report) return <ReportError retry={retry} copy={copy} />;
   const money = (amount: number, currency: string) => {
     try {
@@ -840,7 +843,7 @@ function FinancePanel({
           <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="py-3">Currency</th>
+                <th className="py-3">{translateUi(uiLanguage, "Currency")}</th>
                 <th>{copy.gross}</th>
                 <th>{copy.liability}</th>
                 <th>{copy.net}</th>
@@ -882,8 +885,7 @@ function FinancePanel({
                 <div className="mb-3 flex justify-between">
                   <Badge variant="outline">{row.currency}</Badge>
                   <span className="text-xs text-muted-foreground">
-                    {row.records} records
-                  </span>
+                    {row.records} {translateUi(uiLanguage, "records")} </span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div>
@@ -924,7 +926,7 @@ function FinancePanel({
                     {row.type.replaceAll("_", " ")}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {row.records} records · {row.currency}
+                    {row.records} {translateUi(uiLanguage, "records ·")} {row.currency}
                   </p>
                 </div>
                 <p className="font-semibold">

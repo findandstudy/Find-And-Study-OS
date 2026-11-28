@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { CountryDirectory } from './CountryDirectory';
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -256,6 +257,7 @@ function ActionLink({ href, label, secondary = false }: { href: unknown; label: 
 }
 
 export function Block({ block, index }: { block: PageBlock; index: number }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const content = block.content;
   switch (block.blockType) {
     case "home_fallback_hero": {
@@ -381,7 +383,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
                 const Icon = iconByName[iconName] || Globe2;
                 const href = safeUrl(card.linkUrl);
                 const image = safeImageUrl(card.imageUrl);
-                const body = <><div className="home-service-card-head"><div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center"><Icon className="w-7 h-7 text-primary transition-colors duration-300" /></div><h3 className="text-xl font-bold font-display">{text(card.title, 300)}</h3></div><p className="text-muted-foreground leading-relaxed">{text(card.description)}</p>{image ? <div className="home-service-card-media"><img src={image} alt="" loading="lazy" /></div> : null}<span className="home-service-card-link">Explore support <ArrowRight aria-hidden="true" /></span></>;
+                const body = <><div className="home-service-card-head"><div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center"><Icon className="w-7 h-7 text-primary transition-colors duration-300" /></div><h3 className="text-xl font-bold font-display">{text(card.title, 300)}</h3></div><p className="text-muted-foreground leading-relaxed">{text(card.description)}</p>{image ? <div className="home-service-card-media"><img src={image} alt="" loading="lazy" /></div> : null}<span className="home-service-card-link">{translateUi(uiLanguage, "Explore support")} <ArrowRight aria-hidden="true" /></span></>;
                 return <article key={cardIndex} className="home-bento-card group">{href ? <a className="block h-full" href={href}>{body}</a> : body}</article>;
               })}
             </div>
@@ -450,7 +452,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
               })}
             </div>
           ) : (
-            <p className="mt-8 rounded-2xl border border-dashed p-8 text-center text-muted-foreground">No published catalogue entries are available yet.</p>
+            <p className="mt-8 rounded-2xl border border-dashed p-8 text-center text-muted-foreground">{translateUi(uiLanguage, "No published catalogue entries are available yet.")}</p>
           )}
         </section>
       );
@@ -484,7 +486,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
       const image = safeImageUrl(content.imageUrl);
       const href = safeUrl(content.ctaUrl);
       const imageFirst = content.imagePosition !== "right";
-      const media = <div className="overflow-hidden rounded-3xl bg-secondary/60">{image ? <img src={image} alt={text(content.altText, 300)} className="h-full min-h-80 w-full object-cover" loading="lazy" /> : <div className="flex min-h-80 items-center justify-center text-sm text-muted-foreground">Image</div>}</div>;
+      const media = <div className="overflow-hidden rounded-3xl bg-secondary/60">{image ? <img src={image} alt={text(content.altText, 300)} className="h-full min-h-80 w-full object-cover" loading="lazy" /> : <div className="flex min-h-80 items-center justify-center text-sm text-muted-foreground">{translateUi(uiLanguage, "Image")}</div>}</div>;
       const editorial = <div className="flex flex-col justify-center py-4">{content.eyebrow ? <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">{text(content.eyebrow, 200)}</p> : null}<h2 className="mt-3 font-display text-3xl font-bold md:text-5xl">{text(content.title, 500)}</h2>{content.body ? <p className="mt-5 text-lg leading-8 text-muted-foreground">{text(content.body, 4_000)}</p> : null}{href && content.ctaLabel ? <p className="mt-7"><a href={href} className="inline-flex rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground">{text(content.ctaLabel, 200)}</a></p> : null}</div>;
       return <section className="cms-responsive-grid mx-auto grid max-w-6xl gap-10 px-4 py-16 md:grid-cols-2 md:items-stretch">{imageFirst ? <>{media}{editorial}</> : <>{editorial}{media}</>}</section>;
     }
@@ -493,7 +495,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
       return <section className="mx-auto max-w-6xl px-4 py-16"><div className="max-w-3xl"><h2 className="font-display text-3xl font-bold md:text-4xl">{text(content.title, 500)}</h2>{content.subtitle ? <p className="mt-3 text-lg text-muted-foreground">{text(content.subtitle)}</p> : null}</div><div className={`cms-responsive-grid mt-8 grid gap-5 ${columnClass}`}>{items(content.images, 24).map((item, galleryIndex) => { const image = safeImageUrl(item.imageUrl); const href = safeUrl(item.linkUrl); const visual = <figure className="group overflow-hidden rounded-2xl border bg-card"><div className="aspect-[4/3] overflow-hidden bg-secondary/60">{image ? <img src={image} alt={text(item.altText, 300)} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" /> : null}</div>{item.caption ? <figcaption className="p-4 text-sm font-medium">{text(item.caption, 300)}</figcaption> : null}</figure>; return href ? <a key={galleryIndex} href={href}>{visual}</a> : <div key={galleryIndex}>{visual}</div>; })}</div></section>;
     }
     case "process_steps":
-      return <section className="home-timeline px-4 py-20"><div className="mx-auto max-w-6xl"><div className="home-process-intro"><div className="home-process-emblem"><Plane aria-hidden="true" /><FileText aria-hidden="true" /></div><div><p className="home-section-kicker">How it works</p><h2 className="font-display text-3xl font-bold md:text-5xl">{text(content.title, 500)}</h2>{content.subtitle ? <p className="mt-4 text-lg leading-8 text-muted-foreground">{text(content.subtitle)}</p> : null}</div></div><ol className="cms-responsive-grid mt-12 grid gap-5 md:grid-cols-3">{items(content.steps, 12).map((step, stepIndex) => <li key={stepIndex} className="home-timeline-step"><div className="home-step-icon">{stepIndex === 0 ? <Globe2 /> : stepIndex === 1 ? <FileText /> : <Plane />}</div><span>{text(step.number, 32) || String(stepIndex + 1).padStart(2, "0")}</span><i aria-hidden="true" /><h3>{text(step.title, 300)}</h3><p>{text(step.description, 2_000)}</p></li>)}</ol></div></section>;
+      return <section className="home-timeline px-4 py-20"><div className="mx-auto max-w-6xl"><div className="home-process-intro"><div className="home-process-emblem"><Plane aria-hidden="true" /><FileText aria-hidden="true" /></div><div><p className="home-section-kicker">{translateUi(uiLanguage, "How it works")}</p><h2 className="font-display text-3xl font-bold md:text-5xl">{text(content.title, 500)}</h2>{content.subtitle ? <p className="mt-4 text-lg leading-8 text-muted-foreground">{text(content.subtitle)}</p> : null}</div></div><ol className="cms-responsive-grid mt-12 grid gap-5 md:grid-cols-3">{items(content.steps, 12).map((step, stepIndex) => <li key={stepIndex} className="home-timeline-step"><div className="home-step-icon">{stepIndex === 0 ? <Globe2 /> : stepIndex === 1 ? <FileText /> : <Plane />}</div><span>{text(step.number, 32) || String(stepIndex + 1).padStart(2, "0")}</span><i aria-hidden="true" /><h3>{text(step.title, 300)}</h3><p>{text(step.description, 2_000)}</p></li>)}</ol></div></section>;
     case "quote_banner": {
       const portrait = safeImageUrl(content.imageUrl);
       return <section className="mx-auto max-w-6xl px-4 py-16"><blockquote className="relative overflow-hidden rounded-[2rem] bg-slate-950 px-8 py-12 text-white md:px-14"><div className="absolute -end-8 -top-16 text-[14rem] font-serif leading-none text-white/5" aria-hidden="true">“</div><div className="relative flex flex-col gap-8 md:flex-row md:items-center">{portrait ? <img src={portrait} alt="" className="h-20 w-20 shrink-0 rounded-full object-cover ring-4 ring-white/10" loading="lazy" /> : null}<div><p className="max-w-4xl font-display text-2xl font-semibold leading-relaxed md:text-4xl">“{text(content.quote, 4_000)}”</p>{content.author || content.role ? <footer className="mt-6 text-sm text-white/70"><strong className="text-white">{text(content.author, 200)}</strong>{content.role ? ` · ${text(content.role, 300)}` : ""}</footer> : null}</div></div></blockquote></section>;
@@ -506,7 +508,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
       const members = items(content.members);
       if (!members.length) return null;
       const supportIcons = [GraduationCap, FileText, Users, Compass];
-      return <section className={content.variant === "home-support-team" ? "home-support-team" : "mx-auto max-w-6xl px-4 py-14"}><div className="home-support-team-inner"><div className="home-support-team-intro">{content.eyebrow ? <p className="home-section-kicker">{text(content.eyebrow, 200)}</p> : null}<h2>{text(content.title, 500)}</h2>{content.subtitle ? <p>{text(content.subtitle, 2_000)}</p> : null}<a href={safeUrl(content.ctaUrl) || "/en/contact"}>Meet your next step <ArrowRight /></a></div><div className="cms-responsive-grid home-support-team-grid">{members.map((member, index) => { const photo = safeImageUrl(member.photo); const Icon = supportIcons[index % supportIcons.length] || Users; return <article key={index}>{photo ? <img src={photo} alt={text(member.name, 200)} loading="lazy" /> : <div className="home-support-avatar"><Icon aria-hidden="true" /></div>}<div><h3>{text(member.name, 200)}</h3><p>{text(member.role, 200)}</p><small>{text(member.bio)}</small></div></article>; })}</div></div></section>;
+      return <section className={content.variant === "home-support-team" ? "home-support-team" : "mx-auto max-w-6xl px-4 py-14"}><div className="home-support-team-inner"><div className="home-support-team-intro">{content.eyebrow ? <p className="home-section-kicker">{text(content.eyebrow, 200)}</p> : null}<h2>{text(content.title, 500)}</h2>{content.subtitle ? <p>{text(content.subtitle, 2_000)}</p> : null}<a href={safeUrl(content.ctaUrl) || "/en/contact"}>{translateUi(uiLanguage, "Meet your next step")} <ArrowRight /></a></div><div className="cms-responsive-grid home-support-team-grid">{members.map((member, index) => { const photo = safeImageUrl(member.photo); const Icon = supportIcons[index % supportIcons.length] || Users; return <article key={index}>{photo ? <img src={photo} alt={text(member.name, 200)} loading="lazy" /> : <div className="home-support-avatar"><Icon aria-hidden="true" /></div>}<div><h3>{text(member.name, 200)}</h3><p>{text(member.role, 200)}</p><small>{text(member.bio)}</small></div></article>; })}</div></div></section>;
     }
     case "office_list": {
       const offices = items(content.offices);
@@ -559,6 +561,7 @@ export function Block({ block, index }: { block: PageBlock; index: number }) {
 }
 
 export default function PublicPage({ slug }: { slug: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang, localePath } = useI18n();
   const [page, setPage] = useState<PageResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -621,9 +624,9 @@ export default function PublicPage({ slug }: { slug: string }) {
   }, [lang, page]);
   useJsonLd(schema);
 
-  if (loading) return <main className="mx-auto max-w-6xl px-4 py-28" aria-busy="true" aria-live="polite"><div role="status" aria-label="Loading page" className="h-12 w-2/3 animate-pulse rounded bg-secondary" /><div className="mt-8 h-80 animate-pulse rounded-3xl bg-secondary" /></main>;
+  if (loading) return <main className="mx-auto max-w-6xl px-4 py-28" aria-busy="true" aria-live="polite"><div role="status" aria-label={translateUi(uiLanguage, "Loading page")} className="h-12 w-2/3 animate-pulse rounded bg-secondary" /><div className="mt-8 h-80 animate-pulse rounded-3xl bg-secondary" /></main>;
   if (failed || !page) {
-    return <main className="mx-auto max-w-3xl px-4 py-28 text-center"><FileText className="mx-auto h-14 w-14 text-muted-foreground/30" /><h1 className="mt-5 text-2xl font-bold">Page not found</h1><p className="mt-2 text-muted-foreground">This page is unavailable or has not been published in this language.</p><Button asChild variant="outline" className="mt-7 rounded-full"><Link href={localePath("")}><ArrowLeft className="mr-2 h-4 w-4" />{SITE_NAME}</Link></Button></main>;
+    return <main className="mx-auto max-w-3xl px-4 py-28 text-center"><FileText className="mx-auto h-14 w-14 text-muted-foreground/30" /><h1 className="mt-5 text-2xl font-bold">{translateUi(uiLanguage, "Page not found")}</h1><p className="mt-2 text-muted-foreground">{translateUi(uiLanguage, "This page is unavailable or has not been published in this language.")}</p><Button asChild variant="outline" className="mt-7 rounded-full"><Link href={localePath("")}><ArrowLeft className="mr-2 h-4 w-4" />{SITE_NAME}</Link></Button></main>;
   }
   return <CmsPageCanvas><div data-public-page-version={page.data.versionNumber}>{page.data.blocks.map((block, index) => <CmsBlock block={block} index={index} variables={{ siteName: SITE_NAME, pageTitle: page.data.title, pageSlug: page.data.slug, pageLocale: lang }} key={`${block.blockType}-${block.sortOrder}-${index}`} />)}</div></CmsPageCanvas>;
 }

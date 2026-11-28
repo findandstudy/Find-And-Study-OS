@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { toLatinUpper } from "@/lib/textTransform";
@@ -311,6 +312,7 @@ John,Doe,john@example.com,+1-555-0001,American,1998-05-15,male,US12345678,Mary D
 Jane,Smith,jane@example.com,+44-20-0002,British,2000-09-22,female,GB87654321,Sarah Smith,Robert Smith`;
 
 function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void; }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -387,9 +389,7 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
       <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/50 shrink-0">
           <DialogTitle className="text-xl font-display flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" />
-            Bulk Import Students
-          </DialogTitle>
+            <Users className="w-5 h-5 text-primary" /> {translateUi(uiLanguage, "Bulk Import Students")} </DialogTitle>
         </DialogHeader>
 
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
@@ -398,16 +398,14 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
               <div className="bg-gradient-to-br from-blue-50 to-violet-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
                 <Sparkles className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">AI-powered CSV / Excel Import</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Upload any CSV or Excel file with student data. AI will intelligently map column names regardless of format — no strict header requirements.
-                  </p>
+                  <p className="text-sm font-semibold">{translateUi(uiLanguage, "AI-powered CSV / Excel Import")}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5"> {translateUi(uiLanguage, "Upload any CSV or Excel file with student data. AI will intelligently map column names regardless of format — no strict header requirements.")} </p>
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-semibold">CSV File</p>
+                  <p className="text-sm font-semibold">{translateUi(uiLanguage, "CSV File")}</p>
                   <button
                     className="text-xs text-primary hover:underline flex items-center gap-1"
                     onClick={() => {
@@ -422,8 +420,7 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
                       URL.revokeObjectURL(url);
                     }}
                   >
-                    <Download className="w-3 h-3" /> Download Sample
-                  </button>
+                    <Download className="w-3 h-3" /> {translateUi(uiLanguage, "Download Sample")} </button>
                 </div>
 
                 {!csvFile ? (
@@ -432,8 +429,8 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
                     onClick={() => inputRef.current?.click()}
                   >
                     <FileUp className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-sm font-semibold text-foreground">Drop CSV or Excel file here or click to browse</p>
-                    <p className="text-xs text-muted-foreground mt-1">Accepts .csv, .xlsx, .xls files</p>
+                    <p className="text-sm font-semibold text-foreground">{translateUi(uiLanguage, "Drop CSV or Excel file here or click to browse")}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Accepts .csv, .xlsx, .xls files")}</p>
                     <input
                       ref={inputRef}
                       type="file"
@@ -467,8 +464,8 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
                 <div className="flex items-center gap-3 p-4 bg-violet-50 border border-violet-100 rounded-xl">
                   <Loader2 className="w-5 h-5 text-violet-500 animate-spin" />
                   <div>
-                    <p className="text-sm font-semibold text-violet-700">AI is parsing your CSV…</p>
-                    <p className="text-xs text-violet-600">Mapping columns and extracting student records</p>
+                    <p className="text-sm font-semibold text-violet-700">{translateUi(uiLanguage, "AI is parsing your CSV…")}</p>
+                    <p className="text-xs text-violet-600">{translateUi(uiLanguage, "Mapping columns and extracting student records")}</p>
                   </div>
                 </div>
               )}
@@ -476,10 +473,9 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
               {preview && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-semibold">
-                      Preview — <span className="text-primary">{preview.length} students</span>
+                    <p className="text-sm font-semibold"> {translateUi(uiLanguage, "Preview —")} <span className="text-primary">{preview.length} {translateUi(uiLanguage, "students")}</span>
                     </p>
-                    <span className="text-xs text-muted-foreground">Scroll to review all</span>
+                    <span className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Scroll to review all")}</span>
                   </div>
                   <div className="border border-border rounded-xl overflow-hidden">
                     <div className="overflow-x-auto max-h-60">
@@ -520,26 +516,25 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
                 <CheckCircle2 className="w-10 h-10 text-emerald-500" />
               </div>
               <div>
-                <p className="text-2xl font-display font-bold">{result.success} Students Imported!</p>
+                <p className="text-2xl font-display font-bold">{result.success} {translateUi(uiLanguage, "Students Imported!")}</p>
                 {result.errors > 0 && (
-                  <p className="text-sm text-destructive mt-1">{result.errors} row{result.errors !== 1 ? "s" : ""} skipped (missing required fields)</p>
+                  <p className="text-sm text-destructive mt-1">{result.errors} {translateUi(uiLanguage, "row")}{result.errors !== 1 ? "s" : ""} {translateUi(uiLanguage, "skipped (missing required fields)")}</p>
                 )}
               </div>
-              <Button onClick={handleClose} className="rounded-xl mt-2">Done</Button>
+              <Button onClick={handleClose} className="rounded-xl mt-2">{translateUi(uiLanguage, "Done")}</Button>
             </div>
           )}
         </div>
 
         {!result && (
           <div className="px-6 pb-5 pt-3 border-t border-border/50 flex items-center justify-between shrink-0">
-            <Button variant="outline" onClick={handleClose} className="rounded-xl">Cancel</Button>
+            <Button variant="outline" onClick={handleClose} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
             <Button
               onClick={importAll}
               disabled={!preview || importing || preview.length === 0}
               className="rounded-xl gap-2"
             >
-              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
-              Import {preview ? `${preview.length} Students` : "Students"}
+              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />} {translateUi(uiLanguage, "Import")} {preview ? `${preview.length} Students` : "Students"}
             </Button>
           </div>
         )}
@@ -585,6 +580,7 @@ function StudentAvatar({ student, size = "sm" }: { student: any; size?: "sm" | "
 }
 
 function DraggableStudentCard({ student, onView, variant, assignedUserName, onAssign, staffUsersList, currentUserId, canAssign, canReassign, canMoveCards }: { student: any; onView: (id: number) => void; variant?: StuColVariant; assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: student.id, disabled: !canMoveCards });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
@@ -646,21 +642,20 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
             canReassign && staffUsersList ? (
               <AssignPopover staffUsers={staffUsersList} currentUserId={currentUserId} onAssign={(uid) => onAssign(student.id, uid)} />
             ) : canAssign && currentUserId ? (
-              <button onClick={(e) => { e.stopPropagation(); onAssign(student.id, currentUserId); }} className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5" title="Assign to me">
-                <UserPlus className="w-3 h-3 shrink-0" />Assign to me
-              </button>
+              <button onClick={(e) => { e.stopPropagation(); onAssign(student.id, currentUserId); }} className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5" title={translateUi(uiLanguage, "Assign to me")}>
+                <UserPlus className="w-3 h-3 shrink-0" />{translateUi(uiLanguage, "Assign to me")} </button>
             ) : null
           ) : assignedUserName ? (
             <span className="flex min-w-0 items-center gap-0.5 truncate text-[10px] text-muted-foreground" title={assignedUserName}><UserCheck className="w-3 h-3 shrink-0" />{assignedUserName}</span>
           ) : null}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          <button onClick={(e) => { e.stopPropagation(); openContact("internal"); }} title="Message"
+          <button onClick={(e) => { e.stopPropagation(); openContact("internal"); }} title={translateUi(uiLanguage, "Message")}
             className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
             <MessageSquare className="w-3.5 h-3.5" />
           </button>
           {student.email && (
-            <button onClick={(e) => { e.stopPropagation(); openContact("email"); }} title="Email"
+            <button onClick={(e) => { e.stopPropagation(); openContact("email"); }} title={translateUi(uiLanguage, "Email")}
               className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
               <Mail className="w-3.5 h-3.5" />
             </button>
@@ -674,7 +669,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
           <Link
             href={`/staff/students/${student.id}`}
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-            title="View student"
+            title={translateUi(uiLanguage, "View student")}
           >
             <Eye className="w-3.5 h-3.5" />
           </Link>
@@ -699,6 +694,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
 }
 
 function DroppableStuColumn({ status, label, variant, students, totalCount, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canAssign, canReassign, canMoveCards }: { status: string; label: string; variant?: string | null; students: any[]; totalCount?: number; onView: (id: number) => void; staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const v = variant as StuColVariant;
 
@@ -739,7 +735,7 @@ function DroppableStuColumn({ status, label, variant, students, totalCount, onVi
             <DraggableStudentCard key={s.id} student={s} onView={onView} variant={v} assignedUserName={s.assignedToId && staffUsersMap ? staffUsersMap[s.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} canAssign={canAssign} canReassign={canReassign} canMoveCards={canMoveCards} />
           ))}
           {students.length === 0 && (
-            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>Drop here</div>
+            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>{translateUi(uiLanguage, "Drop here")}</div>
           )}
         </SortableContext>
       </div>
@@ -749,6 +745,7 @@ function DroppableStuColumn({ status, label, variant, students, totalCount, onVi
 }
 
 function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; onClose: () => void; student: any; stages: PipelineStage[] }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { levels: studyLevels } = useStudyLevels();
   const [form, setForm] = useState({
@@ -950,14 +947,14 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-border/50 pb-2">
               <User className="w-4 h-4 text-primary" />
-              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Personal Information</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Personal Information")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <F required label={t("studentsPage.firstName")} value={form.firstName} onChange={field("firstName")} placeholder={t("studentsPage.firstNamePlaceholder")} latinUppercase />
               <F required label={t("studentsPage.lastName")} value={form.lastName} onChange={field("lastName")} placeholder={t("studentsPage.lastNamePlaceholder")} latinUppercase />
-              <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder="email@example.com" />
+              <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder={translateUi(uiLanguage, "email@example.com")} />
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Phone</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Phone")}</Label>
                 <div className="flex gap-1.5">
                   <PhoneCodePicker value={form.phoneCode} onChange={field("phoneCode")} triggerClassName="w-[100px] h-9 shrink-0" />
                   <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 000 0000" className="rounded-xl flex-1 h-9" />
@@ -965,29 +962,29 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               </div>
               <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Nationality</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Nationality")}</Label>
                 <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
               </div>
               <F label={t("studentsPage.motherName")} value={form.motherName} onChange={field("motherName")} placeholder={t("studentsPage.motherNamePlaceholder")} latinUppercase />
               <F label={t("studentsPage.fatherName")} value={form.fatherName} onChange={field("fatherName")} placeholder={t("studentsPage.fatherNamePlaceholder")} latinUppercase />
               <F label={t("studentsPage.address")} value={form.address} onChange={field("address")} placeholder={t("studentsPage.addressPlaceholder")} className="col-span-2" />
-              <F label="Residence City" value={form.addressCity} onChange={field("addressCity")} placeholder="e.g. Khujand" />
+              <F label="Residence City" value={form.addressCity} onChange={field("addressCity")} placeholder={translateUi(uiLanguage, "e.g. Khujand")} />
               <F label="Postal Code" value={form.postalCode} onChange={field("postalCode")} placeholder="e.g. 735700" />
-              <F label="City of Birth (optional)" value={form.cityOfBirth} onChange={field("cityOfBirth")} placeholder="e.g. Khujand" />
+              <F label="City of Birth (optional)" value={form.cityOfBirth} onChange={field("cityOfBirth")} placeholder={translateUi(uiLanguage, "e.g. Khujand")} />
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Needs Visa Support</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Needs Visa Support")}</Label>
                 <select
                   value={form.needsVisaSupport}
                   onChange={(e) => field("needsVisaSupport")(e.target.value)}
                   className="flex h-9 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">Not specified</option>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
+                  <option value="">{translateUi(uiLanguage, "Not specified")}</option>
+                  <option value="yes">{translateUi(uiLanguage, "Yes")}</option>
+                  <option value="no">{translateUi(uiLanguage, "No")}</option>
                 </select>
               </div>
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Status</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Status")}</Label>
                 <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
                   <SelectTrigger className="h-9 text-sm rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>{stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
@@ -999,10 +996,10 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-border/50 pb-2">
               <span className="text-base leading-none">{"\u{1F6C2}"}</span>
-              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Passport / Identity</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Passport / Identity")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder="e.g. AB1234567" className="col-span-2" />
+              <F label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder={translateUi(uiLanguage, "e.g. AB1234567")} className="col-span-2" />
               <F label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" />
               <F label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" />
             </div>
@@ -1011,14 +1008,14 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-border/50 pb-2">
               <GraduationCap className="w-4 h-4 text-primary" />
-              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Education</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Education")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2 space-y-1.5">
-                <Label className="font-semibold text-sm">Interested Level</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Interested Level")}</Label>
                 <Select value={form.interestedLevel} onValueChange={field("interestedLevel")}>
                   <SelectTrigger className="rounded-xl h-9">
-                    <SelectValue placeholder="Select level..." />
+                    <SelectValue placeholder={translateUi(uiLanguage, "Select level...")} />
                   </SelectTrigger>
                   <SelectContent>
                     {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
@@ -1038,27 +1035,27 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                 if (showLevelSpecific) return (
                   <>
                     <F label={priorLabel} value={priorValue} onChange={field(priorField)} placeholder={priorPlaceholder} className="col-span-2" />
-                    <F label="City" value={form.eduCity} onChange={field("eduCity")} placeholder="e.g. Istanbul" />
+                    <F label="City" value={form.eduCity} onChange={field("eduCity")} placeholder={translateUi(uiLanguage, "e.g. Istanbul")} />
                     <div className="space-y-1.5">
-                      <Label className="font-semibold text-sm">Country</Label>
+                      <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Country")}</Label>
                       <NationalityCombobox value={form.eduCountry} onChange={field("eduCountry")} countries={allCountries} />
                     </div>
                     {!isBachelorApp && (
-                      <F label="Field of Study" value={form.eduField} onChange={field("eduField")} placeholder="e.g. Computer Engineering" className="col-span-2" />
+                      <F label="Field of Study" value={form.eduField} onChange={field("eduField")} placeholder={translateUi(uiLanguage, "e.g. Computer Engineering")} className="col-span-2" />
                     )}
                   </>
                 );
                 return (
                   <>
-                    <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" className="col-span-2" />
-                    <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. Istanbul University" className="col-span-2" />
-                    <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. Bogazici University" className="col-span-2" />
+                    <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder={translateUi(uiLanguage, "e.g. Ankara Fen Lisesi")} className="col-span-2" />
+                    <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder={translateUi(uiLanguage, "e.g. Istanbul University")} className="col-span-2" />
+                    <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder={translateUi(uiLanguage, "e.g. Bogazici University")} className="col-span-2" />
                   </>
                 );
               })()}
               <F label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">GPA</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "GPA")}</Label>
                 <div className="flex gap-1.5">
                   <Input
                     type="number" step="0.01" min="0"
@@ -1080,12 +1077,12 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                   </Select>
                 </div>
               </div>
-              <F label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder="e.g. IELTS 7.0, TOEFL 100" className="col-span-2" />
+              <F label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder={translateUi(uiLanguage, "e.g. IELTS 7.0, TOEFL 100")} className="col-span-2" />
             </div>
           </section>
 
           <div className="space-y-1.5">
-            <Label className="font-semibold text-sm">Notes</Label>
+            <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Notes")}</Label>
             <textarea
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
@@ -1096,9 +1093,9 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
           </div>
         </div>
         <DialogFooter className="pt-3 border-t border-border/50">
-          <Button variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
+          <Button variant="outline" onClick={onClose} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleSave} disabled={!form.firstName || !form.lastName || saving} className="rounded-xl">
-            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Saving...</> : "Save Changes"}
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{translateUi(uiLanguage, "Saving...")}</> : "Save Changes"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1158,6 +1155,7 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
   canViewOthers: boolean;
   canViewUnassigned: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const hasActive = Object.entries(filters).some(([k, v]) => v !== (DEFAULT_STU_FILTERS as any)[k]);
@@ -1187,15 +1185,15 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
       </PopoverTrigger>
       <PopoverContent className="w-72 p-4 space-y-3 max-h-[70vh] overflow-y-auto" align="end">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Filter</p>
-          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange({ ...DEFAULT_STU_FILTERS, assignment: "all" })}>Clear</Button>}
+          <p className="text-sm font-semibold">{translateUi(uiLanguage, "Filter")}</p>
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange({ ...DEFAULT_STU_FILTERS, assignment: "all" })}>{translateUi(uiLanguage, "Clear")}</Button>}
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Status</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "Status")}</Label>
           <Select value={filters.status} onValueChange={v => onChange({ ...filters, status: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{translateUi(uiLanguage, "All")}</SelectItem>
               {stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -1294,6 +1292,7 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
 }
 
 export default function StudentsPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -1610,7 +1609,7 @@ export default function StudentsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">{t("staffStudents.title")}</h1>
-            <p className="text-muted-foreground text-sm mt-1">{data?.meta?.total ?? 0} total students</p>
+            <p className="text-muted-foreground text-sm mt-1">{data?.meta?.total ?? 0} {translateUi(uiLanguage, "total students")}</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative w-64">
@@ -1630,8 +1629,8 @@ export default function StudentsPage() {
               canViewUnassigned={canViewUnassigned}
             />
             <div className="flex items-center border rounded-full overflow-hidden">
-              <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
-              <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
+              <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title={translateUi(uiLanguage, "Pipeline view")}><LayoutGrid className="w-4 h-4" /></button>
+              <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title={translateUi(uiLanguage, "List view")}><List className="w-4 h-4" /></button>
             </div>
             <BulkActionBar
               selectedCount={selectedIds.size}
@@ -1646,17 +1645,14 @@ export default function StudentsPage() {
             />
             {isAdmin && (
               <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => { const a = document.createElement("a"); const idsParam = selectedIds.size > 0 ? `&ids=${Array.from(selectedIds).join(",")}` : ""; a.href = `${BASE_URL}/api/export/students?season=${encodeURIComponent(season || "")}${idsParam}`; a.click(); }}>
-                <Download className="w-3.5 h-3.5" /> Excel
-              </Button>
+                <Download className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Excel")} </Button>
             )}
             {(isAdmin || hasPermission("students.import")) && (
               <Button variant="outline" className="rounded-full gap-2 border-primary/30 text-primary hover:bg-primary/5" onClick={() => setBulkOpen(true)}>
-                <FileUp className="w-4 h-4" /> Bulk Import
-              </Button>
+                <FileUp className="w-4 h-4" /> {translateUi(uiLanguage, "Bulk Import")} </Button>
             )}
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" /> Add Student
-            </Button>
+              <Plus className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Add Student")} </Button>
           </div>
         </div>
 

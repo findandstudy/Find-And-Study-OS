@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useRef, useEffect, useLayoutEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, X, Check } from "lucide-react";
@@ -35,6 +36,7 @@ export function SearchableSelect({
   minDropdownWidth = 240,
   wrapItems = false,
 }: SearchableSelectProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const emitChange = onChange ?? onValueChange ?? (() => {});
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -163,7 +165,7 @@ export function SearchableSelect({
       )}
       <div className="max-h-72 overflow-y-auto p-1">
         {filtered.length === 0 ? (
-          <div className="px-3 py-3 text-xs text-muted-foreground text-center">No results</div>
+          <div className="px-3 py-3 text-xs text-muted-foreground text-center">{translateUi(uiLanguage, "No results")}</div>
         ) : (
           (() => {
             const groups = new Map<string, typeof filtered>();

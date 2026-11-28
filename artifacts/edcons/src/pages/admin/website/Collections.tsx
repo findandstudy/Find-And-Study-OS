@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -64,17 +65,18 @@ function CollectionTable<T extends CollectionItem>({ items, columns, onEdit, onD
   onEdit: (item: T) => void;
   onDelete: (id: number) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   return (
     <Card className="border-none shadow-lg shadow-black/5 overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b bg-muted/30">
             {columns.map(c => <th key={c.key} className="py-3 px-4 text-left font-semibold text-muted-foreground">{c.label}</th>)}
-            <th className="py-3 px-4 text-right font-semibold text-muted-foreground">Actions</th>
+            <th className="py-3 px-4 text-right font-semibold text-muted-foreground">{translateUi(uiLanguage, "Actions")}</th>
           </tr></thead>
           <tbody>
             {items.length === 0 ? (
-              <tr><td colSpan={columns.length + 1} className="py-12 text-center text-muted-foreground">No items yet</td></tr>
+              <tr><td colSpan={columns.length + 1} className="py-12 text-center text-muted-foreground">{translateUi(uiLanguage, "No items yet")}</td></tr>
             ) : items.map(item => (
               <tr key={item.id} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
                 {columns.map(c => (
@@ -126,6 +128,7 @@ interface OfficeForm {
 }
 
 function OfficesTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { items, saveMut, deleteMut } = useCollectionCrud<Office>("/api/website/collections/offices", "col-offices");
   const [dialog, setDialog] = useState(false);
   const [editItem, setEditItem] = useState<Office | null>(null);
@@ -146,8 +149,8 @@ function OfficesTab() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <p className="text-muted-foreground text-sm">Physical office locations displayed on your website.</p>
-        <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> Add Office</Button>
+        <p className="text-muted-foreground text-sm">{translateUi(uiLanguage, "Physical office locations displayed on your website.")}</p>
+        <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> {translateUi(uiLanguage, "Add Office")}</Button>
       </div>
       <CollectionTable items={items} onEdit={openEdit} onDelete={id => deleteMut.mutate(id)} columns={[
         { key: "name", label: "Name", render: (i: Office) => <span className="font-medium">{i.name}</span> },
@@ -162,23 +165,23 @@ function OfficesTab() {
           <DialogHeader><DialogTitle>{editItem ? "Edit Office" : "New Office"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Name *</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="rounded-xl" /></div>
-              <div className="space-y-1.5"><Label>City</Label><Input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Name *")}</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "City")}</Label><Input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className="rounded-xl" /></div>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Country</Label><Input value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} className="rounded-xl" /></div>
-              <div className="space-y-1.5"><Label>Sort Order</Label><Input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Country")}</Label><Input value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Sort Order")}</Label><Input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))} className="rounded-xl" /></div>
             </div>
-            <div className="space-y-1.5"><Label>Address</Label><Textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} className="rounded-xl" rows={2} /></div>
+            <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Address")}</Label><Textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} className="rounded-xl" rows={2} /></div>
             <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Phone</Label><Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="rounded-xl" /></div>
-              <div className="space-y-1.5"><Label>Email</Label><Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Phone")}</Label><Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Email")}</Label><Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="rounded-xl" /></div>
             </div>
-            <div className="space-y-1.5"><Label>Map Embed URL</Label><Input value={form.mapEmbedUrl} onChange={e => setForm(f => ({ ...f, mapEmbedUrl: e.target.value }))} className="rounded-xl" placeholder="Google Maps embed link" /></div>
-            <div className="space-y-1.5"><Label>Image URL</Label><Input value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} className="rounded-xl" /></div>
-            <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>Active</Label></div>
+            <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Map Embed URL")}</Label><Input value={form.mapEmbedUrl} onChange={e => setForm(f => ({ ...f, mapEmbedUrl: e.target.value }))} className="rounded-xl" placeholder={translateUi(uiLanguage, "Google Maps embed link")} /></div>
+            <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Image URL")}</Label><Input value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} className="rounded-xl" /></div>
+            <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>{translateUi(uiLanguage, "Active")}</Label></div>
             <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setDialog(false)} className="rounded-xl">Cancel</Button>
+              <Button variant="outline" onClick={() => setDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
               <Button onClick={save} disabled={saveMut.isPending} className="rounded-xl">{editItem ? "Update" : "Create"}</Button>
             </div>
           </div>
@@ -194,6 +197,7 @@ interface TeamForm {
 }
 
 function TeamTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { items, saveMut, deleteMut } = useCollectionCrud<TeamMember>("/api/website/collections/team-members", "col-team");
   const [dialog, setDialog] = useState(false);
   const [editItem, setEditItem] = useState<TeamMember | null>(null);
@@ -214,8 +218,8 @@ function TeamTab() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <p className="text-muted-foreground text-sm">Team members displayed on your website's About page.</p>
-        <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> Add Member</Button>
+        <p className="text-muted-foreground text-sm">{translateUi(uiLanguage, "Team members displayed on your website's About page.")}</p>
+        <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> {translateUi(uiLanguage, "Add Member")}</Button>
       </div>
       <CollectionTable items={items} onEdit={openEdit} onDelete={id => deleteMut.mutate(id)} columns={[
         { key: "name", label: "Name", render: (i: TeamMember) => (
@@ -233,21 +237,21 @@ function TeamTab() {
           <DialogHeader><DialogTitle>{editItem ? "Edit Team Member" : "New Team Member"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Name *</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="rounded-xl" /></div>
-              <div className="space-y-1.5"><Label>Title / Role</Label><Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className="rounded-xl" placeholder="e.g. Marketing Director" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Name *")}</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Title / Role")}</Label><Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className="rounded-xl" placeholder={translateUi(uiLanguage, "e.g. Marketing Director")} /></div>
             </div>
-            <div className="space-y-1.5"><Label>Bio</Label><Textarea value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} className="rounded-xl" rows={3} /></div>
+            <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Bio")}</Label><Textarea value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} className="rounded-xl" rows={3} /></div>
             <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Photo URL</Label><Input value={form.photoUrl} onChange={e => setForm(f => ({ ...f, photoUrl: e.target.value }))} className="rounded-xl" /></div>
-              <div className="space-y-1.5"><Label>Email</Label><Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Photo URL")}</Label><Input value={form.photoUrl} onChange={e => setForm(f => ({ ...f, photoUrl: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Email")}</Label><Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="rounded-xl" /></div>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>LinkedIn URL</Label><Input value={form.linkedinUrl} onChange={e => setForm(f => ({ ...f, linkedinUrl: e.target.value }))} className="rounded-xl" /></div>
-              <div className="space-y-1.5"><Label>Sort Order</Label><Input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "LinkedIn URL")}</Label><Input value={form.linkedinUrl} onChange={e => setForm(f => ({ ...f, linkedinUrl: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Sort Order")}</Label><Input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))} className="rounded-xl" /></div>
             </div>
-            <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>Active</Label></div>
+            <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>{translateUi(uiLanguage, "Active")}</Label></div>
             <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setDialog(false)} className="rounded-xl">Cancel</Button>
+              <Button variant="outline" onClick={() => setDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
               <Button onClick={save} disabled={saveMut.isPending} className="rounded-xl">{editItem ? "Update" : "Create"}</Button>
             </div>
           </div>
@@ -263,6 +267,7 @@ interface FaqForm {
 }
 
 function FaqsTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { items, saveMut, deleteMut } = useCollectionCrud<Faq>("/api/website/collections/faqs", "col-faqs");
   const [dialog, setDialog] = useState(false);
   const [editItem, setEditItem] = useState<Faq | null>(null);
@@ -283,8 +288,8 @@ function FaqsTab() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <p className="text-muted-foreground text-sm">Frequently asked questions for your website.</p>
-        <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> Add FAQ</Button>
+        <p className="text-muted-foreground text-sm">{translateUi(uiLanguage, "Frequently asked questions for your website.")}</p>
+        <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> {translateUi(uiLanguage, "Add FAQ")}</Button>
       </div>
       <CollectionTable items={items} onEdit={openEdit} onDelete={id => deleteMut.mutate(id)} columns={[
         { key: "question", label: "Question", render: (i: Faq) => <span className="font-medium line-clamp-1">{i.question}</span> },
@@ -296,15 +301,15 @@ function FaqsTab() {
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{editItem ? "Edit FAQ" : "New FAQ"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-1.5"><Label>Question *</Label><Input value={form.question} onChange={e => setForm(f => ({ ...f, question: e.target.value }))} className="rounded-xl" /></div>
-            <div className="space-y-1.5"><Label>Answer *</Label><Textarea value={form.answer} onChange={e => setForm(f => ({ ...f, answer: e.target.value }))} className="rounded-xl" rows={4} /></div>
+            <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Question *")}</Label><Input value={form.question} onChange={e => setForm(f => ({ ...f, question: e.target.value }))} className="rounded-xl" /></div>
+            <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Answer *")}</Label><Textarea value={form.answer} onChange={e => setForm(f => ({ ...f, answer: e.target.value }))} className="rounded-xl" rows={4} /></div>
             <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Category</Label><Input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="rounded-xl" placeholder="e.g. Admissions" /></div>
-              <div className="space-y-1.5"><Label>Sort Order</Label><Input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Category")}</Label><Input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="rounded-xl" placeholder={translateUi(uiLanguage, "e.g. Admissions")} /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Sort Order")}</Label><Input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))} className="rounded-xl" /></div>
             </div>
-            <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>Active</Label></div>
+            <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>{translateUi(uiLanguage, "Active")}</Label></div>
             <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setDialog(false)} className="rounded-xl">Cancel</Button>
+              <Button variant="outline" onClick={() => setDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
               <Button onClick={save} disabled={saveMut.isPending} className="rounded-xl">{editItem ? "Update" : "Create"}</Button>
             </div>
           </div>
@@ -320,6 +325,7 @@ interface TestimonialForm {
 }
 
 function TestimonialsTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { items, saveMut, deleteMut } = useCollectionCrud<Testimonial>("/api/website/collections/testimonials", "col-testimonials");
   const [dialog, setDialog] = useState(false);
   const [editItem, setEditItem] = useState<Testimonial | null>(null);
@@ -344,8 +350,8 @@ function TestimonialsTab() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <p className="text-muted-foreground text-sm">Student testimonials and reviews for your website.</p>
-        <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> Add Testimonial</Button>
+        <p className="text-muted-foreground text-sm">{translateUi(uiLanguage, "Student testimonials and reviews for your website.")}</p>
+        <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> {translateUi(uiLanguage, "Add Testimonial")}</Button>
       </div>
       <CollectionTable items={items} onEdit={openEdit} onDelete={id => deleteMut.mutate(id)} columns={[
         { key: "name", label: "Name", render: (i: Testimonial) => (
@@ -354,7 +360,7 @@ function TestimonialsTab() {
             <div><p className="font-medium">{i.name}</p>{i.role && <p className="text-xs text-muted-foreground">{i.role}{i.company ? ` at ${i.company}` : ""}</p>}</div>
           </div>
         )},
-        { key: "content", label: "Quote", render: (i: Testimonial) => <span className="line-clamp-1 text-muted-foreground text-xs max-w-[200px]">&ldquo;{i.content}&rdquo;</span> },
+        { key: "content", label: "Quote", render: (i: Testimonial) => <span className="line-clamp-1 text-muted-foreground text-xs max-w-[200px]">{translateUi(uiLanguage, "&ldquo;")}{i.content}{translateUi(uiLanguage, "&rdquo;")}</span> },
         { key: "rating", label: "Rating", render: (i: Testimonial) => <span className="text-amber-500">{Array.from({ length: i.rating ?? 0 }).map((_, j) => "\u2605").join("")}</span> },
         { key: "sortOrder", label: "Order" },
         { key: "isActive", label: "Status", render: (i: Testimonial) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
@@ -364,21 +370,21 @@ function TestimonialsTab() {
           <DialogHeader><DialogTitle>{editItem ? "Edit Testimonial" : "New Testimonial"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Name *</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="rounded-xl" /></div>
-              <div className="space-y-1.5"><Label>Role / Title</Label><Input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className="rounded-xl" placeholder="e.g. Student" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Name *")}</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Role / Title")}</Label><Input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className="rounded-xl" placeholder={translateUi(uiLanguage, "e.g. Student")} /></div>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Company / University</Label><Input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} className="rounded-xl" /></div>
-              <div className="space-y-1.5"><Label>Rating (1-5)</Label><Input type="number" min={1} max={5} value={form.rating} onChange={e => setForm(f => ({ ...f, rating: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Company / University")}</Label><Input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Rating (1-5)")}</Label><Input type="number" min={1} max={5} value={form.rating} onChange={e => setForm(f => ({ ...f, rating: e.target.value }))} className="rounded-xl" /></div>
             </div>
-            <div className="space-y-1.5"><Label>Quote / Content *</Label><Textarea value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} className="rounded-xl" rows={4} /></div>
+            <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Quote / Content *")}</Label><Textarea value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} className="rounded-xl" rows={4} /></div>
             <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Photo URL</Label><Input value={form.photoUrl} onChange={e => setForm(f => ({ ...f, photoUrl: e.target.value }))} className="rounded-xl" /></div>
-              <div className="space-y-1.5"><Label>Sort Order</Label><Input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Photo URL")}</Label><Input value={form.photoUrl} onChange={e => setForm(f => ({ ...f, photoUrl: e.target.value }))} className="rounded-xl" /></div>
+              <div className="space-y-1.5"><Label>{translateUi(uiLanguage, "Sort Order")}</Label><Input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))} className="rounded-xl" /></div>
             </div>
-            <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>Active</Label></div>
+            <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>{translateUi(uiLanguage, "Active")}</Label></div>
             <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setDialog(false)} className="rounded-xl">Cancel</Button>
+              <Button variant="outline" onClick={() => setDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
               <Button onClick={save} disabled={saveMut.isPending} className="rounded-xl">{editItem ? "Update" : "Create"}</Button>
             </div>
           </div>
@@ -389,6 +395,7 @@ function TestimonialsTab() {
 }
 
 export default function WebsiteCollections() {
+  const { lang: uiLanguage } = useUiLanguage();
   const [tab, setTab] = useState("offices");
 
   return (
@@ -396,17 +403,17 @@ export default function WebsiteCollections() {
         <div className="flex items-center gap-3">
           <Layers className="w-6 h-6 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Collections</h1>
-            <p className="text-sm text-muted-foreground">Manage structured content displayed on your website.</p>
+            <h1 className="text-2xl font-bold">{translateUi(uiLanguage, "Collections")}</h1>
+            <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "Manage structured content displayed on your website.")}</p>
           </div>
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="rounded-xl bg-secondary/50 p-1">
-            <TabsTrigger value="offices" className="rounded-lg gap-2"><Building2 className="w-4 h-4" /> Offices</TabsTrigger>
-            <TabsTrigger value="team" className="rounded-lg gap-2"><Users className="w-4 h-4" /> Team</TabsTrigger>
-            <TabsTrigger value="faqs" className="rounded-lg gap-2"><HelpCircle className="w-4 h-4" /> FAQs</TabsTrigger>
-            <TabsTrigger value="testimonials" className="rounded-lg gap-2"><MessageSquareQuote className="w-4 h-4" /> Testimonials</TabsTrigger>
+            <TabsTrigger value="offices" className="rounded-lg gap-2"><Building2 className="w-4 h-4" /> {translateUi(uiLanguage, "Offices")}</TabsTrigger>
+            <TabsTrigger value="team" className="rounded-lg gap-2"><Users className="w-4 h-4" /> {translateUi(uiLanguage, "Team")}</TabsTrigger>
+            <TabsTrigger value="faqs" className="rounded-lg gap-2"><HelpCircle className="w-4 h-4" /> {translateUi(uiLanguage, "FAQs")}</TabsTrigger>
+            <TabsTrigger value="testimonials" className="rounded-lg gap-2"><MessageSquareQuote className="w-4 h-4" /> {translateUi(uiLanguage, "Testimonials")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="offices" className="mt-6"><OfficesTab /></TabsContent>

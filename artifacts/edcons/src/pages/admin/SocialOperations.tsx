@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -340,6 +341,7 @@ function requestKey(prefix: string): string {
 }
 
 export default function SocialOperations() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { user, hasPermission } = useAuth(true);
   const { lang } = useI18n();
   const tr = lang === "tr";
@@ -2031,7 +2033,7 @@ export default function SocialOperations() {
                           <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
                             <div className="rounded-lg bg-muted/60 p-2">
                               <p className="font-semibold">{brief.tracked_leads}</p>
-                              <p className="text-[11px] text-muted-foreground">Lead</p>
+                              <p className="text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Lead")}</p>
                             </div>
                             <div className="rounded-lg bg-muted/60 p-2">
                               <p className="font-semibold">
@@ -2160,9 +2162,9 @@ export default function SocialOperations() {
                   })
                 }
               >
-                <option value="CAPTION">Caption / copy</option>
-                <option value="IMAGE">Image</option>
-                <option value="VIDEO">Video</option>
+                <option value="CAPTION">{translateUi(uiLanguage, "Caption / copy")}</option>
+                <option value="IMAGE">{translateUi(uiLanguage, "Image")}</option>
+                <option value="VIDEO">{translateUi(uiLanguage, "Video")}</option>
               </select>
             </div>
             <div>
@@ -2179,10 +2181,10 @@ export default function SocialOperations() {
               />
             </div>
             <div>
-              <Label>Provider</Label>
+              <Label>{translateUi(uiLanguage, "Provider")}</Label>
               <Input
                 className="mt-1"
-                placeholder="anthropic / openai / runway"
+                placeholder={translateUi(uiLanguage, "anthropic / openai / runway")}
                 value={creativeForm.provider}
                 onChange={(event) =>
                   setCreativeForm({
@@ -2276,7 +2278,7 @@ export default function SocialOperations() {
               </div>
             )}
             <div className="sm:col-span-2">
-              <Label>Prompt</Label>
+              <Label>{translateUi(uiLanguage, "Prompt")}</Label>
               <Textarea
                 className="mt-1 min-h-32"
                 maxLength={12_000}
@@ -2669,7 +2671,7 @@ export default function SocialOperations() {
               />
             </div>
             <div>
-              <Label>Campaign key</Label>
+              <Label>{translateUi(uiLanguage, "Campaign key")}</Label>
               <Input
                 className="mt-1"
                 value={briefForm.campaignKey}
@@ -2682,7 +2684,7 @@ export default function SocialOperations() {
               />
             </div>
             <div>
-              <Label>utm_campaign</Label>
+              <Label>{translateUi(uiLanguage, "utm_campaign")}</Label>
               <Input
                 className="mt-1"
                 value={briefForm.utmCampaign}
@@ -2700,7 +2702,7 @@ export default function SocialOperations() {
                 : "utm_content is generated as an immutable system tracking key so provider leads and actual CRM outcomes can be verified separately."}
             </div>
             <div className="sm:col-span-2">
-              <Label>Caption / copy</Label>
+              <Label>{translateUi(uiLanguage, "Caption / copy")}</Label>
               <Textarea
                 className="mt-1 min-h-28"
                 value={briefForm.caption}
@@ -2744,7 +2746,7 @@ export default function SocialOperations() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <Label>Provider</Label>
+              <Label>{translateUi(uiLanguage, "Provider")}</Label>
               <Input
                 className="mt-1"
                 value={accountForm.provider}
@@ -2757,10 +2759,10 @@ export default function SocialOperations() {
               />
             </div>
             <div>
-              <Label>Account key</Label>
+              <Label>{translateUi(uiLanguage, "Account key")}</Label>
               <Input
                 className="mt-1"
-                placeholder="instagram:main"
+                placeholder={translateUi(uiLanguage, "instagram:main")}
                 value={accountForm.accountKey}
                 onChange={(event) =>
                   setAccountForm({
@@ -2799,10 +2801,10 @@ export default function SocialOperations() {
                   })
                 }
               >
-                <option value="PROFILE">Profile</option>
-                <option value="PAGE">Page</option>
-                <option value="CHANNEL">Channel</option>
-                <option value="AD_ACCOUNT">Ad account</option>
+                <option value="PROFILE">{translateUi(uiLanguage, "Profile")}</option>
+                <option value="PAGE">{translateUi(uiLanguage, "Page")}</option>
+                <option value="CHANNEL">{translateUi(uiLanguage, "Channel")}</option>
+                <option value="AD_ACCOUNT">{translateUi(uiLanguage, "Ad account")}</option>
               </select>
             </div>
             {accountForm.accountKind === "AD_ACCOUNT" && (

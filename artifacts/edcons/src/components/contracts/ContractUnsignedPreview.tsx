@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useRef, useState } from "react";
 import { Download, Loader2, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ export function ContractUnsignedPreview({ template, onClose }: {
   template: { id: number; name: string; version: number } | null;
   onClose: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang } = useI18n();
   const words = COPY[lang as keyof typeof COPY] || COPY.en;
   const [html, setHtml] = useState("");
@@ -94,7 +96,7 @@ export function ContractUnsignedPreview({ template, onClose }: {
         <DialogTitle className="px-5 break-words">{words.title} — {template?.name} · v{template?.version}</DialogTitle>
         <DialogDescription>{words.notice}</DialogDescription>
       </DialogHeader>
-      <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900" dir="ltr">UNSIGNED TEST PREVIEW — NOT A SIGNED CONTRACT</div>
+      <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900" dir="ltr">{translateUi(uiLanguage, "UNSIGNED TEST PREVIEW — NOT A SIGNED CONTRACT")}</div>
       {error && <div role="alert" className="rounded border border-destructive/30 p-3 text-sm text-destructive flex items-center gap-3"><span className="flex-1">{error}</span><Button variant="outline" size="sm" disabled={loading || downloading} onClick={() => setAttempt(value => value + 1)}><RotateCw className="h-4 w-4 me-1" />{words.retry}</Button></div>}
       {loading && <div role="status" className="flex-1 flex items-center justify-center gap-2"><Loader2 className="h-5 w-5 animate-spin" />{words.loading}</div>}
       {!loading && html && <iframe key={`${template?.id}-${attempt}`} title={words.frame} sandbox="" referrerPolicy="no-referrer" src={`${BASE_URL}/api/contract-templates/${template?.id}/unsigned-preview.html`} className="min-h-0 flex-1 w-full rounded border bg-slate-100" />}

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 /**
  * PortalUniversitiesTab.tsx — SUB-STEP D
  *
@@ -190,6 +191,7 @@ interface AddDialogProps {
 }
 
 function AddUniversityDialog({ open, onClose, onCreated }: AddDialogProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [name, setName] = useState("");
@@ -254,7 +256,7 @@ function AddUniversityDialog({ open, onClose, onCreated }: AddDialogProps) {
               id="uni-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="İstanbul Üniversitesi"
+              placeholder={translateUi(uiLanguage, "İstanbul Üniversitesi")}
               autoFocus
             />
           </div>
@@ -266,7 +268,7 @@ function AddUniversityDialog({ open, onClose, onCreated }: AddDialogProps) {
               id="uni-key"
               value={key}
               onChange={(e) => { setKey(e.target.value); setKeyEdited(true); }}
-              placeholder="istanbul_universitesi"
+              placeholder={translateUi(uiLanguage, "istanbul_universitesi")}
               className="font-mono text-sm"
             />
             <p className="text-xs text-muted-foreground">
@@ -323,6 +325,7 @@ const INTAKE_OPTIONS = ["fall", "spring", "summer", "rolling"] as const;
 const DEGREE_OPTIONS = ["bachelor", "master", "phd"] as const;
 
 function EditDefaultsDialog({ uni, onClose, onSaved, registryAdapters }: EditDefaultsDialogProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const defaults = (uni?.defaults ?? {}) as UniversityDefaults;
@@ -426,7 +429,7 @@ function EditDefaultsDialog({ uni, onClose, onSaved, registryAdapters }: EditDef
               id="edit-uni-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="İstanbul Üniversitesi"
+              placeholder={translateUi(uiLanguage, "İstanbul Üniversitesi")}
             />
           </div>
 
@@ -578,6 +581,7 @@ interface CredentialsDialogProps {
 }
 
 function CredentialsDialog({ uni, onClose, onSaved, onCleared }: CredentialsDialogProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
 
@@ -679,7 +683,7 @@ function CredentialsDialog({ uni, onClose, onSaved, onCleared }: CredentialsDial
               autoFocus
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="portal@example.com"
+              placeholder={translateUi(uiLanguage, "portal@example.com")}
             />
           </div>
 
@@ -718,7 +722,7 @@ function CredentialsDialog({ uni, onClose, onSaved, onCleared }: CredentialsDial
               id="cred-extra"
               value={extra}
               onChange={(e) => { setExtra(e.target.value); validateExtra(e.target.value); }}
-              placeholder='{"token": "..."}'
+              placeholder={translateUi(uiLanguage, "{\"token\": \"...\"}")}
               rows={3}
               className="font-mono text-xs resize-none"
             />

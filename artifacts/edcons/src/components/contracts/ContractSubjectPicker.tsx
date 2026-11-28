@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
@@ -70,6 +71,7 @@ function searchPath(type: string, query: string): string {
 }
 
 export function ContractSubjectPicker({ subjectType, subjectId, subjectLabel, onChange }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ContractSubjectSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -128,7 +130,7 @@ export function ContractSubjectPicker({ subjectType, subjectId, subjectLabel, on
           <div className="truncate text-sm font-medium">{selected.label}</div>
           <div className="text-xs capitalize text-muted-foreground">{typeLabel} #{selected.id}</div>
         </div>
-        <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => onChange("", "")} title="Clear selection">
+        <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => onChange("", "")} title={translateUi(uiLanguage, "Clear selection")}>
           <X className="h-4 w-4" />
         </Button>
       </div>
@@ -152,7 +154,7 @@ export function ContractSubjectPicker({ subjectType, subjectId, subjectLabel, on
           {error ? (
             <div className="px-3 py-2 text-sm text-destructive">{error}</div>
           ) : !loading && results.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">No matching {typeLabel} found.</div>
+            <div className="px-3 py-2 text-sm text-muted-foreground">{translateUi(uiLanguage, "No matching")} {typeLabel} {translateUi(uiLanguage, "found.")}</div>
           ) : (
             results.map((result) => (
               <button

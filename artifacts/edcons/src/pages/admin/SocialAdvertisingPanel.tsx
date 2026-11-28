@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -136,6 +137,7 @@ export default function SocialAdvertisingPanel({
   accounts: SocialAccountOption[];
   briefs: SocialBriefOption[];
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -597,7 +599,7 @@ export default function SocialAdvertisingPanel({
               </select>
             </div>
             <div>
-              <Label>AD_CREATIVE</Label>
+              <Label>{translateUi(uiLanguage, "AD_CREATIVE")}</Label>
               <select
                 className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={form.briefId}
@@ -662,7 +664,7 @@ export default function SocialAdvertisingPanel({
                 onChange={(event) =>
                   setForm({ ...form, countryCodes: event.target.value })
                 }
-                placeholder="TR, DE"
+                placeholder={translateUi(uiLanguage, "TR, DE")}
               />
             </div>
             <div>
@@ -673,7 +675,7 @@ export default function SocialAdvertisingPanel({
                 onChange={(event) =>
                   setForm({ ...form, languageCodes: event.target.value })
                 }
-                placeholder="tr, en"
+                placeholder={translateUi(uiLanguage, "tr, en")}
               />
             </div>
             <div>

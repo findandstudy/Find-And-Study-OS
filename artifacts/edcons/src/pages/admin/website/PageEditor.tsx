@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { sharedPageHeaderBlocks } from "@/lib/website/pageHeader";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -163,6 +164,7 @@ interface PublicationPreflight {
 }
 
 function PageEditorSession({ id }: { id: number }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang } = useI18n();
   const copy = (en: string, tr?: string) => pageEditorText(lang, en, tr);
   const preflightIssueText = (issue: { code: string; message: string }) => ({
@@ -966,8 +968,7 @@ function PageEditorSession({ id }: { id: number }) {
             <Sheet open={seoOpen} onOpenChange={setSeoOpen}>
               <SheetTrigger asChild>
                 <Button disabled={!seoFetched} variant="outline" size="sm" className="h-7 text-xs gap-1">
-                  <Settings2 className="w-3.5 h-3.5" /> SEO
-                </Button>
+                  <Settings2 className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "SEO")} </Button>
               </SheetTrigger>
               <SheetContent>
                 <SheetHeader>
@@ -1013,7 +1014,7 @@ function PageEditorSession({ id }: { id: number }) {
                     </div>
                   </div>
                   <Separator />
-                  <h4 className="text-xs font-bold uppercase text-muted-foreground">Open Graph</h4>
+                  <h4 className="text-xs font-bold uppercase text-muted-foreground">{translateUi(uiLanguage, "Open Graph")}</h4>
                   <div className="space-y-1.5">
                     <Label htmlFor="page-seo-og-title" className="text-xs font-medium">{copy("OG Title", "Paylaşım başlığı (OG)")}</Label>
                     <Input id="page-seo-og-title" value={seo.ogTitle} onChange={e => setSeo(s => ({ ...s, ogTitle: e.target.value }))} placeholder={copy("Social share title", "Sosyal paylaşım başlığı")} className="h-8 text-sm" />
@@ -1029,7 +1030,7 @@ function PageEditorSession({ id }: { id: number }) {
                   {(seo.ogTitle || seo.ogDescription || seo.ogImageUrl || globalSeo.ogImageUrl) && (
                     <div className="rounded border p-3 bg-muted/30">
                       <p className="text-[10px] text-muted-foreground mb-1">{copy("Social Share Preview", "Sosyal paylaşım önizlemesi")}</p>
-                      {(seo.ogImageUrl || globalSeo.ogImageUrl) && <div className="w-full h-24 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground overflow-hidden"><img src={seo.ogImageUrl || globalSeo.ogImageUrl} alt="OG" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} /></div>}
+                      {(seo.ogImageUrl || globalSeo.ogImageUrl) && <div className="w-full h-24 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground overflow-hidden"><img src={seo.ogImageUrl || globalSeo.ogImageUrl} alt={translateUi(uiLanguage, "OG")} className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} /></div>}
                       <p className="text-sm font-medium truncate">{seo.ogTitle || seo.metaTitle || page?.title || globalSeo.metaTitle || "Title"}</p>
                       <p className="text-xs text-muted-foreground line-clamp-2">{seo.ogDescription || seo.metaDescription || globalSeo.metaDescription || ""}</p>
                     </div>
@@ -1084,7 +1085,7 @@ function PageEditorSession({ id }: { id: number }) {
                             <p className="text-xs text-muted-foreground">
                               {v.publishedAt ? new Date(v.publishedAt).toLocaleString() : new Date(v.createdAt).toLocaleString()}
                             </p>
-                            <p className="text-xs text-muted-foreground">by {authorName}</p>
+                            <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "by")} {authorName}</p>
                             {review && <p className="mt-1 max-w-48 text-xs text-muted-foreground">{review.reasonCode}: {review.comment}</p>}
                           </div>
                           {!review && <Button
@@ -1150,9 +1151,9 @@ function PageEditorSession({ id }: { id: number }) {
                   </div>
                   <dl className="grid gap-2 rounded-lg border p-3 text-xs sm:grid-cols-2">
                     <div><dt className="text-muted-foreground">{copy("Public route", "Public adres")}</dt><dd className="mt-1 break-all font-medium">{preflight.publication.route}</dd></div>
-                    <div><dt className="text-muted-foreground">Canonical</dt><dd className="mt-1 break-all font-medium">{preflight.publication.canonical}</dd></div>
+                    <div><dt className="text-muted-foreground">{translateUi(uiLanguage, "Canonical")}</dt><dd className="mt-1 break-all font-medium">{preflight.publication.canonical}</dd></div>
                     <div><dt className="text-muted-foreground">{copy("Search visibility", "Arama görünürlüğü")}</dt><dd className="mt-1 font-medium">{preflight.publication.indexable ? copy("Indexable", "İndekslenebilir") : "Noindex"}</dd></div>
-                    <div><dt className="text-muted-foreground">Sitemap</dt><dd className="mt-1 font-medium">{preflight.publication.sitemapEligible ? copy("Eligible", "Uygun") : copy("Excluded", "Hariç")}</dd></div>
+                    <div><dt className="text-muted-foreground">{translateUi(uiLanguage, "Sitemap")}</dt><dd className="mt-1 font-medium">{preflight.publication.sitemapEligible ? copy("Eligible", "Uygun") : copy("Excluded", "Hariç")}</dd></div>
                     <div><dt className="text-muted-foreground">{copy("Revision", "Sürüm")}</dt><dd className="mt-1 break-all font-mono">{preflight.digest.slice(0, 16)}</dd></div>
                     <div><dt className="text-muted-foreground">{copy("Valid until", "Geçerlilik sonu")}</dt><dd className="mt-1 font-medium">{new Date(preflight.expiresAt).toLocaleString(lang)}</dd></div>
                   </dl>
@@ -1167,7 +1168,7 @@ function PageEditorSession({ id }: { id: number }) {
               <DialogContent className="max-w-lg">
                 <DialogHeader><DialogTitle>{copy("Request changes", "Değişiklik iste")}</DialogTitle></DialogHeader>
                 <p className="text-sm text-muted-foreground">{copy("The exact reviewed revision and your reason will be kept in version history. The page returns to draft; published content is not changed.", "İncelenen exact sürüm ve nedeniniz sürüm geçmişinde saklanır. Sayfa taslağa döner; yayındaki içerik değişmez.")}</p>
-                <div className="space-y-2"><Label htmlFor="change-reason">{copy("Reason", "Neden")}</Label><Select value={changeRequest.reasonCode} onValueChange={reasonCode => setChangeRequest(value => ({ ...value, reasonCode }))}><SelectTrigger id="change-reason"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CONTENT">{copy("Content", "İçerik")}</SelectItem><SelectItem value="SEO">SEO</SelectItem><SelectItem value="TRANSLATION">{copy("Translation", "Çeviri")}</SelectItem><SelectItem value="MEDIA">{copy("Media", "Medya")}</SelectItem><SelectItem value="LEGAL">{copy("Legal / compliance", "Hukuk / uyum")}</SelectItem><SelectItem value="OTHER">{copy("Other", "Diğer")}</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2"><Label htmlFor="change-reason">{copy("Reason", "Neden")}</Label><Select value={changeRequest.reasonCode} onValueChange={reasonCode => setChangeRequest(value => ({ ...value, reasonCode }))}><SelectTrigger id="change-reason"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CONTENT">{copy("Content", "İçerik")}</SelectItem><SelectItem value="SEO">{translateUi(uiLanguage, "SEO")}</SelectItem><SelectItem value="TRANSLATION">{copy("Translation", "Çeviri")}</SelectItem><SelectItem value="MEDIA">{copy("Media", "Medya")}</SelectItem><SelectItem value="LEGAL">{copy("Legal / compliance", "Hukuk / uyum")}</SelectItem><SelectItem value="OTHER">{copy("Other", "Diğer")}</SelectItem></SelectContent></Select></div>
                 <div className="space-y-2"><Label htmlFor="change-comment">{copy("What needs to change?", "Nelerin değişmesi gerekiyor?")}</Label><Textarea id="change-comment" maxLength={1000} rows={5} value={changeRequest.comment} onChange={event => setChangeRequest(value => ({ ...value, comment: event.target.value }))} /></div>
                 <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setChangesOpen(false)}>{copy("Cancel", "İptal")}</Button><Button variant="destructive" disabled={changeRequest.comment.trim().length < 3 || requestChangesMutation.isPending} onClick={() => requestChangesMutation.mutate()}>{requestChangesMutation.isPending ? copy("Saving...", "Kaydediliyor...") : copy("Return to draft", "Taslağa geri gönder")}</Button></div>
               </DialogContent>
@@ -1368,13 +1369,12 @@ function PageEditorSession({ id }: { id: number }) {
 }
 
 function BlockPreview({ blocks, locale, template, pageTitle, pageSlug, teamMembers, offices, collectionsLoading }: { blocks: PageBlock[]; locale: string; template?: string | null; pageTitle: string; pageSlug: string; teamMembers: CmsTeamMember[]; offices: CmsOffice[]; collectionsLoading: boolean }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const visibleBlocks = blocks.filter(b => b.isVisible).map(block => hydrateCollectionBlock(block, teamMembers, offices));
 
   if (visibleBlocks.length === 0) {
     return (
-      <div className="flex items-center justify-center h-96 text-muted-foreground text-sm">
-        Add blocks to see a preview
-      </div>
+      <div className="flex items-center justify-center h-96 text-muted-foreground text-sm"> {translateUi(uiLanguage, "Add blocks to see a preview")} </div>
     );
   }
 

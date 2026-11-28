@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -105,6 +106,7 @@ function slugify(s: string) {
 }
 
 export default function WebsiteForms() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t } = useI18n();
   const qc = useQueryClient();
@@ -472,9 +474,9 @@ export default function WebsiteForms() {
                   <h3 className="font-semibold">{t("websiteForms.embedCode")}</h3>
                   <p className="text-sm text-muted-foreground">{t("websiteForms.embedIntro")}</p>
                   <div className="bg-muted/50 rounded-lg p-4">
-                    <code className="text-xs break-all">POST /api/public/website-forms/{selectedForm.slug}/submit</code>
+                    <code className="text-xs break-all">{translateUi(uiLanguage, "POST /api/public/website-forms/")}{selectedForm.slug}/submit</code>
                   </div>
-                  <p className="text-sm text-muted-foreground">{t("websiteForms.honeypotEmbedBefore")}<code className="text-xs">_hp</code>{t("websiteForms.honeypotEmbedAfter")}</p>
+                  <p className="text-sm text-muted-foreground">{t("websiteForms.honeypotEmbedBefore")}<code className="text-xs">{translateUi(uiLanguage, "_hp")}</code>{t("websiteForms.honeypotEmbedAfter")}</p>
                   <div className="bg-muted/50 rounded-lg p-4">
                     <pre className="text-xs whitespace-pre-wrap">{`<form action="/api/public/website-forms/${selectedForm.slug}/submit" method="POST">
   <input type="hidden" name="_hp" value="" style="display:none" />
@@ -545,7 +547,7 @@ ${fields.map(f => `  <label>${f.label}</label>\n  <input type="${f.fieldType}" n
                 <div>
                   <Label className="text-xs">{t("websiteForms.crmSourceLabel")}</Label>
                   <Input value={formData.crmSource} onChange={e => setFormData(f => ({ ...f, crmSource: e.target.value }))} placeholder={t("websiteForms.crmSourcePlaceholder")} className="mt-1" />
-                  <p className="text-[10px] text-muted-foreground mt-1">{t("websiteForms.crmSourceHelpBefore")}"website-form:{'{'}slug{'}'}"{t("websiteForms.crmSourceHelpAfter")}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{t("websiteForms.crmSourceHelpBefore")}{translateUi(uiLanguage, "\"website-form:")}{'{'}{translateUi(uiLanguage, "slug")}{'}'}"{t("websiteForms.crmSourceHelpAfter")}</p>
                 </div>
                 <div>
                   <Label className="text-xs">{t("websiteForms.pageSourceLabel")}</Label>

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
@@ -102,6 +103,7 @@ async function uploadFileToStorage(file: File): Promise<string> {
 }
 
 export default function AgentAccount() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { user } = useAuth(true);
   const { t, lang, setLang } = useI18n();
   const { toast } = useToast();
@@ -478,7 +480,7 @@ export default function AgentAccount() {
                   </div>
                   <div className="flex justify-between items-center py-3">
                     <span className="text-sm text-muted-foreground">{t("staffSettings.secureAuth")}</span>
-                    <span className="text-sm text-foreground">{t("common.email")} &amp; {t("login.passwordLabel")}</span>
+                    <span className="text-sm text-foreground">{t("common.email")} {translateUi(uiLanguage, "&")} {t("login.passwordLabel")}</span>
                   </div>
                 </div>
               </Card>
@@ -503,6 +505,7 @@ export default function AgentAccount() {
 }
 
 function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfile: any; agentLoading: boolean; isStaff?: boolean }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [businessName, setBusinessName] = useState("");
@@ -572,7 +575,7 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
   if (agentLoading) {
     return (
       <Card className="border shadow-sm p-6">
-        <h3 className="font-display font-semibold text-base mb-6">Agency Information</h3>
+        <h3 className="font-display font-semibold text-base mb-6">{translateUi(uiLanguage, "Agency Information")}</h3>
         <div className="space-y-3">
           {[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-secondary animate-pulse rounded-lg" />)}
         </div>
@@ -583,11 +586,11 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
   if (!agentProfile) {
     return (
       <Card className="border shadow-sm p-6">
-        <h3 className="font-display font-semibold text-base mb-6">Agency Information</h3>
+        <h3 className="font-display font-semibold text-base mb-6">{translateUi(uiLanguage, "Agency Information")}</h3>
         <div className="text-center py-12 text-muted-foreground">
           <Briefcase className="w-12 h-12 mx-auto mb-3 text-muted-foreground/20" />
-          <p className="font-medium">No agency profile yet</p>
-          <p className="text-sm mt-1">Your agency details will appear here once set up by an admin</p>
+          <p className="font-medium">{translateUi(uiLanguage, "No agency profile yet")}</p>
+          <p className="text-sm mt-1">{translateUi(uiLanguage, "Your agency details will appear here once set up by an admin")}</p>
         </div>
       </Card>
     );
@@ -597,30 +600,28 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
     <div className="space-y-6">
       <div className="grid lg:grid-cols-[1fr_280px] gap-6">
         <Card className="border shadow-sm p-6">
-          <h3 className="font-display font-semibold text-base mb-5">Agency Details</h3>
+          <h3 className="font-display font-semibold text-base mb-5">{translateUi(uiLanguage, "Agency Details")}</h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between p-3.5 rounded-lg bg-secondary/40 border border-border/50">
               <div className="flex items-center gap-3">
                 <Briefcase className="w-4 h-4 text-primary" />
                 <div>
-                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Agency Code</p>
+                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{translateUi(uiLanguage, "Agency Code")}</p>
                   <p className="text-sm font-bold text-foreground font-mono">
-                    {agentProfile.agencyCode || <span className="text-muted-foreground italic font-normal text-xs">Not assigned</span>}
+                    {agentProfile.agencyCode || <span className="text-muted-foreground italic font-normal text-xs">{translateUi(uiLanguage, "Not assigned")}</span>}
                   </p>
                 </div>
               </div>
-              <Badge variant="outline" className="text-[10px] shrink-0">Admin</Badge>
+              <Badge variant="outline" className="text-[10px] shrink-0">{translateUi(uiLanguage, "Admin")}</Badge>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                Business Name
-                {isStaff && <Lock className="w-3 h-3 text-muted-foreground/60" />}
+              <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5"> {translateUi(uiLanguage, "Business Name")} {isStaff && <Lock className="w-3 h-3 text-muted-foreground/60" />}
               </Label>
               <Input
                 value={businessName}
                 onChange={e => !isStaff && setBusinessName(e.target.value)}
-                placeholder="Your legal company name"
+                placeholder={translateUi(uiLanguage, "Your legal company name")}
                 className="h-10"
                 disabled={isStaff}
               />
@@ -633,14 +634,14 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
 
             {agentProfile?.effectiveFeatures?.custom_branding && <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">Primary brand color</Label>
+                <Label className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "Primary brand color")}</Label>
                 <div className="flex gap-2">
                   <input type="color" value={primaryBrandColor} onChange={e => !isStaff && setPrimaryBrandColor(e.target.value.toUpperCase())} disabled={isStaff} className="h-10 w-12 rounded border p-1" />
                   <Input value={primaryBrandColor} onChange={e => !isStaff && setPrimaryBrandColor(e.target.value.toUpperCase())} disabled={isStaff} className="h-10 font-mono" />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">Secondary brand color</Label>
+                <Label className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "Secondary brand color")}</Label>
                 <div className="flex gap-2">
                   <input type="color" value={secondaryBrandColor} onChange={e => !isStaff && setSecondaryBrandColor(e.target.value.toUpperCase())} disabled={isStaff} className="h-10 w-12 rounded border p-1" />
                   <Input value={secondaryBrandColor} onChange={e => !isStaff && setSecondaryBrandColor(e.target.value.toUpperCase())} disabled={isStaff} className="h-10 font-mono" />
@@ -651,9 +652,7 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
             {!isStaff && (
               <div className="flex justify-end pt-3 border-t border-border/50">
                 <Button onClick={handleSaveAgency} disabled={saving} size="sm" className="gap-2 px-6">
-                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  Save Changes
-                </Button>
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} {translateUi(uiLanguage, "Save Changes")} </Button>
               </div>
             )}
           </div>
@@ -673,7 +672,7 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
                 <div className="flex-1">
                   <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{f.label}</p>
                   <p className="text-sm font-semibold text-foreground capitalize">
-                    {f.value || <span className="text-muted-foreground italic font-normal text-xs">Not set</span>}
+                    {f.value || <span className="text-muted-foreground italic font-normal text-xs">{translateUi(uiLanguage, "Not set")}</span>}
                   </p>
                 </div>
               </div>
@@ -683,7 +682,7 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
       </div>
 
       <Card className="border shadow-sm p-6">
-        <h3 className="font-display font-semibold text-base mb-5">Documents</h3>
+        <h3 className="font-display font-semibold text-base mb-5">{translateUi(uiLanguage, "Documents")}</h3>
         <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-5">
           <DocumentUploader
             label="Logo for Agent Panel"
@@ -841,6 +840,7 @@ function DocumentViewer({
   endDate?: string | null;
   adminOnly?: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   // Derive a friendly file name from the storage URL (strip query/hash, take
   // last path segment, decode URI). Falls back to "contract" if unparseable.
   const fileName = (() => {
@@ -858,7 +858,7 @@ function DocumentViewer({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
-        {adminOnly && <Badge variant="outline" className="text-[9px] px-1.5 py-0">Admin Only</Badge>}
+        {adminOnly && <Badge variant="outline" className="text-[9px] px-1.5 py-0">{translateUi(uiLanguage, "Admin Only")}</Badge>}
       </div>
       <div className="relative w-full aspect-[4/3] rounded-lg border-2 border-dashed border-border/60 bg-secondary/30 flex items-center justify-center overflow-hidden">
         {value ? (
@@ -883,7 +883,7 @@ function DocumentViewer({
         ) : (
           <div className="flex flex-col items-center gap-1.5 text-muted-foreground/40 p-4">
             <FileText className="w-7 h-7" />
-            <span className="text-[10px] font-medium text-center">Not uploaded</span>
+            <span className="text-[10px] font-medium text-center">{translateUi(uiLanguage, "Not uploaded")}</span>
           </div>
         )}
       </div>
@@ -908,6 +908,7 @@ function AgencyIntegrationCard({
   record?: AgencyIntegrationRecord;
   onSaved: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const [enabled, setEnabled] = useState(false);
   const [config, setConfig] = useState<Record<string, string>>({});
@@ -950,12 +951,10 @@ function AgencyIntegrationCard({
       <div className="flex items-center justify-between gap-4">
         <div>
           <h3 className="font-display font-semibold">{title}</h3>
-          <p className="text-xs text-muted-foreground mt-1">Credentials are encrypted and isolated to this agency.</p>
+          <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Credentials are encrypted and isolated to this agency.")}</p>
         </div>
         <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} className="h-4 w-4 accent-primary" />
-          Enabled
-        </label>
+          <input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} className="h-4 w-4 accent-primary" /> {translateUi(uiLanguage, "Enabled")} </label>
       </div>
       <div className="grid sm:grid-cols-2 gap-3">
         {fields.map(([key, label]) => (
@@ -972,15 +971,14 @@ function AgencyIntegrationCard({
       </div>
       <div className="flex justify-end pt-2">
         <Button onClick={save} disabled={saving} className="gap-2">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Save integration
-        </Button>
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} {translateUi(uiLanguage, "Save integration")} </Button>
       </div>
     </Card>
   );
 }
 
 function AgencyIntegrationsTab({ features }: { features: Record<string, boolean> }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const query = useQuery<{ integrations: AgencyIntegrationRecord[] }>({
     queryKey: ["agent-integrations"],
     queryFn: () => customFetch("/api/agents/me/integrations"),
@@ -990,10 +988,10 @@ function AgencyIntegrationsTab({ features }: { features: Record<string, boolean>
   return (
     <div className="space-y-6">
       {features.email_integration && (
-        <AgencyIntegrationCard kind="email" title="Agency Email" record={integrations.find(item => item.kind === "email")} onSaved={() => query.refetch()} />
+        <AgencyIntegrationCard kind="email" title={translateUi(uiLanguage, "Agency Email")} record={integrations.find(item => item.kind === "email")} onSaved={() => query.refetch()} />
       )}
       {features.whatsapp_integration && (
-        <AgencyIntegrationCard kind="whatsapp" title="Agency WhatsApp" record={integrations.find(item => item.kind === "whatsapp")} onSaved={() => query.refetch()} />
+        <AgencyIntegrationCard kind="whatsapp" title={translateUi(uiLanguage, "Agency WhatsApp")} record={integrations.find(item => item.kind === "whatsapp")} onSaved={() => query.refetch()} />
       )}
     </div>
   );
@@ -1012,6 +1010,7 @@ type AgentEmbedFilterOptions = {
 };
 
 function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -1180,41 +1179,37 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
         <Card className="border shadow-sm p-6 space-y-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="font-display font-semibold text-base">Website Widget</h3>
-              <p className="text-sm text-muted-foreground mt-1">Create a responsive website experience with your agency branding applied automatically.</p>
+              <h3 className="font-display font-semibold text-base">{translateUi(uiLanguage, "Website Widget")}</h3>
+              <p className="text-sm text-muted-foreground mt-1">{translateUi(uiLanguage, "Create a responsive website experience with your agency branding applied automatically.")}</p>
             </div>
             <Badge variant="outline">{agentProfile.planTier || "standard"}</Badge>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>Experience</Label>
+              <Label>{translateUi(uiLanguage, "Experience")}</Label>
               <Select value={embedMode} onValueChange={value => setEmbedMode(value as AgentEmbedMode)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="combined">Course finder + application form</SelectItem>
-                  <SelectItem value="course_finder">Program catalog + Apply</SelectItem>
-                  <SelectItem value="lead_form">Contact / Lead Form</SelectItem>
-                  {agentProfile?.effectiveFeatures?.embed_ai && <SelectItem value="ai_chatbot">AI study assistant</SelectItem>}
+                  <SelectItem value="combined">{translateUi(uiLanguage, "Course finder + application form")}</SelectItem>
+                  <SelectItem value="course_finder">{translateUi(uiLanguage, "Program catalog + Apply")}</SelectItem>
+                  <SelectItem value="lead_form">{translateUi(uiLanguage, "Contact / Lead Form")}</SelectItem>
+                  {agentProfile?.effectiveFeatures?.embed_ai && <SelectItem value="ai_chatbot">{translateUi(uiLanguage, "AI study assistant")}</SelectItem>}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                Let visitors browse programs and apply, use a focused program catalog, or collect a lead directly.
-              </p>
+              <p className="text-xs text-muted-foreground"> {translateUi(uiLanguage, "Let visitors browse programs and apply, use a focused program catalog, or collect a lead directly.")} </p>
             </div>
             <div className="space-y-1.5">
-              <Label>Allowed domains</Label>
-              <Input value={allowedDomains} onChange={event => setAllowedDomains(event.target.value)} placeholder="example.com, apply.example.com" />
-              <p className="text-xs text-muted-foreground">Leave empty to allow any website.</p>
+              <Label>{translateUi(uiLanguage, "Allowed domains")}</Label>
+              <Input value={allowedDomains} onChange={event => setAllowedDomains(event.target.value)} placeholder={translateUi(uiLanguage, "example.com, apply.example.com")} />
+              <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Leave empty to allow any website.")}</p>
             </div>
           </div>
           {catalogMode && (
             <div className="space-y-4 rounded-xl border bg-secondary/20 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h4 className="text-sm font-semibold">Program catalog filters</h4>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Selected values restrict this embed to matching programs. Empty fields remain available to visitors.
-                  </p>
+                  <h4 className="text-sm font-semibold">{translateUi(uiLanguage, "Program catalog filters")}</h4>
+                  <p className="mt-1 text-xs text-muted-foreground"> {translateUi(uiLanguage, "Selected values restrict this embed to matching programs. Empty fields remain available to visitors.")} </p>
                 </div>
                 <Button
                   type="button"
@@ -1225,55 +1220,48 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
                     setUniversityScope("all"); setPresetUniversityIds([]); setPresetLevel("");
                     setPresetLanguage(""); setPresetField("");
                   }}
-                >
-                  Clear filters
-                </Button>
+                > {translateUi(uiLanguage, "Clear filters")} </Button>
               </div>
               {filterOptionsLoading ? (
                 <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading catalog filters…
-                </div>
+                  <Loader2 className="h-4 w-4 animate-spin" /> {translateUi(uiLanguage, "Loading catalog filters…")} </div>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <div className="space-y-1.5">
-                    <Label>Country</Label>
+                    <Label>{translateUi(uiLanguage, "Country")}</Label>
                     <Select value={presetCountry || "__all__"} onValueChange={value => setPresetCountry(value === "__all__" ? "" : value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__all__">All Countries</SelectItem>
+                        <SelectItem value="__all__">{translateUi(uiLanguage, "All Countries")}</SelectItem>
                         {(filterOptions?.countries || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>City</Label>
+                    <Label>{translateUi(uiLanguage, "City")}</Label>
                     <Select value={presetCity || "__all__"} onValueChange={value => setPresetCity(value === "__all__" ? "" : value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__all__">All Cities</SelectItem>
+                        <SelectItem value="__all__">{translateUi(uiLanguage, "All Cities")}</SelectItem>
                         {(filterOptions?.cities || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>University type</Label>
+                    <Label>{translateUi(uiLanguage, "University type")}</Label>
                     <Select value={presetUniversityType || "__all__"} onValueChange={value => setPresetUniversityType(value === "__all__" ? "" : value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__all__">All Types</SelectItem>
+                        <SelectItem value="__all__">{translateUi(uiLanguage, "All Types")}</SelectItem>
                         {(filterOptions?.universityTypes || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
-                    <Label>University scope</Label>
+                    <Label>{translateUi(uiLanguage, "University scope")}</Label>
                     <div className="grid max-w-md grid-cols-2 rounded-lg border bg-background p-1">
-                      <Button type="button" size="sm" variant={universityScope === "all" ? "default" : "ghost"} onClick={() => setUniversityScope("all")}>
-                        All Universities
-                      </Button>
-                      <Button type="button" size="sm" variant={universityScope === "selected" ? "default" : "ghost"} onClick={() => setUniversityScope("selected")}>
-                        Selected Universities
-                      </Button>
+                      <Button type="button" size="sm" variant={universityScope === "all" ? "default" : "ghost"} onClick={() => setUniversityScope("all")}> {translateUi(uiLanguage, "All Universities")} </Button>
+                      <Button type="button" size="sm" variant={universityScope === "selected" ? "default" : "ghost"} onClick={() => setUniversityScope("selected")}> {translateUi(uiLanguage, "Selected Universities")} </Button>
                     </div>
                     {universityScope === "selected" && (
                       <MultiSelectFilter
@@ -1281,7 +1269,7 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
                         options={(filterOptions?.universities || []).map(university => ({ value: String(university.id), label: university.name }))}
                         value={presetUniversityIds}
                         onChange={setPresetUniversityIds}
-                        placeholder="Select universities"
+                        placeholder={translateUi(uiLanguage, "Select universities")}
                         searchPlaceholder="Search universities…"
                         emptyText="No universities found"
                         selectedText={count => `${count} ${count === 1 ? "university" : "universities"} selected`}
@@ -1289,31 +1277,31 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
                     )}
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Level</Label>
+                    <Label>{translateUi(uiLanguage, "Level")}</Label>
                     <Select value={presetLevel || "__all__"} onValueChange={value => setPresetLevel(value === "__all__" ? "" : value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__all__">All Levels</SelectItem>
+                        <SelectItem value="__all__">{translateUi(uiLanguage, "All Levels")}</SelectItem>
                         {(filterOptions?.degrees || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Language</Label>
+                    <Label>{translateUi(uiLanguage, "Language")}</Label>
                     <Select value={presetLanguage || "__all__"} onValueChange={value => setPresetLanguage(value === "__all__" ? "" : value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__all__">All Languages</SelectItem>
+                        <SelectItem value="__all__">{translateUi(uiLanguage, "All Languages")}</SelectItem>
                         {(filterOptions?.languages || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Field of study</Label>
+                    <Label>{translateUi(uiLanguage, "Field of study")}</Label>
                     <Select value={presetField || "__all__"} onValueChange={value => setPresetField(value === "__all__" ? "" : value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__all__">All Fields</SelectItem>
+                        <SelectItem value="__all__">{translateUi(uiLanguage, "All Fields")}</SelectItem>
                         {(filterOptions?.fields || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -1335,7 +1323,7 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
               <Button size="sm" variant="secondary" className="absolute right-3 top-3 z-10 gap-1.5" onClick={() => {
                 navigator.clipboard.writeText(embedCode);
                 toast({ title: "Embed code copied" });
-              }}><Copy className="h-3.5 w-3.5" /> Copy embed</Button>
+              }}><Copy className="h-3.5 w-3.5" /> {translateUi(uiLanguage, "Copy embed")}</Button>
               <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-xl border bg-secondary/50 p-4 pr-32 text-xs">{embedCode}</pre>
             </div>
           )}
@@ -1350,10 +1338,8 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
                   <Code className="w-4 h-4 text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="font-display font-semibold text-base">Legacy HTML Form</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Keep using this only for websites that already contain the older copied HTML form.
-                  </p>
+                  <h3 className="font-display font-semibold text-base">{translateUi(uiLanguage, "Legacy HTML Form")}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground"> {translateUi(uiLanguage, "Keep using this only for websites that already contain the older copied HTML form.")} </p>
                 </div>
               </div>
               <ChevronDown className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${legacyFormOpen ? "rotate-180" : ""}`} />
@@ -1386,7 +1372,7 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
               </div>
               <div className="bg-secondary/30 rounded-xl p-4">
                 <iframe
-                  title="Legacy HTML lead form preview"
+                  title={translateUi(uiLanguage, "Legacy HTML lead form preview")}
                   src={`${BASE_URL}/api/agents/me/web-to-lead-preview`}
                   sandbox=""
                   referrerPolicy="no-referrer"

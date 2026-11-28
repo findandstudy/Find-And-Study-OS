@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { fmtDate, fmtDateTime } from "@/lib/formatDate";
@@ -50,6 +51,7 @@ const SUBJECT_LABELS: Record<string, string> = {
 };
 
 export default function ContractsPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t } = useI18n();
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -519,16 +521,16 @@ export default function ContractsPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Signer name</Label>
-                <Input value={signerName} onChange={event => setSignerName(event.target.value)} placeholder="Name or company" />
+                <Label>{translateUi(uiLanguage, "Signer name")}</Label>
+                <Input value={signerName} onChange={event => setSignerName(event.target.value)} placeholder={translateUi(uiLanguage, "Name or company")} />
               </div>
               <div>
-                <Label>Signer email *</Label>
-                <Input type="email" value={signerEmail} onChange={event => setSignerEmail(event.target.value)} placeholder="name@example.com" />
+                <Label>{translateUi(uiLanguage, "Signer email *")}</Label>
+                <Input type="email" value={signerEmail} onChange={event => setSignerEmail(event.target.value)} placeholder={translateUi(uiLanguage, "name@example.com")} />
               </div>
             </div>
             <div>
-              <Label>Associate with (optional)</Label>
+              <Label>{translateUi(uiLanguage, "Associate with (optional)")}</Label>
               <Select value={subjectType || "none"} onValueChange={value => {
                 setSubjectType(value === "none" ? "" : value);
                 setSubjectId("");
@@ -536,16 +538,16 @@ export default function ContractsPage() {
               }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No association</SelectItem>
+                  <SelectItem value="none">{translateUi(uiLanguage, "No association")}</SelectItem>
                   {SUBJECT_TYPES.map(type => <SelectItem key={type} value={type}>{SUBJECT_LABELS[type]}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">Linking an agent, company or another record is optional.</p>
+              <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Linking an agent, company or another record is optional.")}</p>
             </div>
             {subjectType && <div>
               <Label>{subjectType === "other" ? "Association label" : `Select ${SUBJECT_LABELS[subjectType]}`}</Label>
               {subjectType === "other" ? (
-                <Input value={subjectLabel} onChange={event => setSubjectLabel(event.target.value)} placeholder="Name or reference" />
+                <Input value={subjectLabel} onChange={event => setSubjectLabel(event.target.value)} placeholder={translateUi(uiLanguage, "Name or reference")} />
               ) : (
                 <ContractSubjectPicker
                   subjectType={subjectType}
@@ -568,7 +570,7 @@ export default function ContractsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">Auto-match is available for linked agents. Otherwise select a template.</p>
+              <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Auto-match is available for linked agents. Otherwise select a template.")}</p>
               {selectedTemplate?.signingPageConfig?.requireEmailVerification === false && (
                 <div className="mt-2 flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -577,7 +579,7 @@ export default function ContractsPage() {
               )}
             </div>
             <div>
-              <Label>Link validity (days)</Label>
+              <Label>{translateUi(uiLanguage, "Link validity (days)")}</Label>
               <Input type="number" min={1} max={90} value={expiryDays} onChange={event => setExpiryDays(event.target.value)} />
             </div>
           </div>

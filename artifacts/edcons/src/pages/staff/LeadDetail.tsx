@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, Link } from "wouter";
 import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
@@ -79,6 +80,7 @@ interface Props {
 }
 
 export default function LeadDetail({ id, basePath = "/staff" }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, lang } = useI18n();
   const { stages: leadStages } = usePipelineStages("lead");
   const leadStageLabelByKey = useMemo(
@@ -629,11 +631,11 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                     )}
                     {(lead?.utmSource || lead?.utmMedium || lead?.utmCampaign || lead?.utmTerm || lead?.utmContent) && (
                       <div className="flex flex-wrap gap-1.5">
-                        {lead?.utmSource && <Badge variant="secondary" className="text-[10px]">utm_source: {lead.utmSource}</Badge>}
-                        {lead?.utmMedium && <Badge variant="secondary" className="text-[10px]">utm_medium: {lead.utmMedium}</Badge>}
-                        {lead?.utmCampaign && <Badge variant="secondary" className="text-[10px]">utm_campaign: {lead.utmCampaign}</Badge>}
-                        {lead?.utmTerm && <Badge variant="secondary" className="text-[10px]">utm_term: {lead.utmTerm}</Badge>}
-                        {lead?.utmContent && <Badge variant="secondary" className="text-[10px]">utm_content: {lead.utmContent}</Badge>}
+                        {lead?.utmSource && <Badge variant="secondary" className="text-[10px]">{translateUi(uiLanguage, "utm_source:")} {lead.utmSource}</Badge>}
+                        {lead?.utmMedium && <Badge variant="secondary" className="text-[10px]">{translateUi(uiLanguage, "utm_medium:")} {lead.utmMedium}</Badge>}
+                        {lead?.utmCampaign && <Badge variant="secondary" className="text-[10px]">{translateUi(uiLanguage, "utm_campaign:")} {lead.utmCampaign}</Badge>}
+                        {lead?.utmTerm && <Badge variant="secondary" className="text-[10px]">{translateUi(uiLanguage, "utm_term:")} {lead.utmTerm}</Badge>}
+                        {lead?.utmContent && <Badge variant="secondary" className="text-[10px]">{translateUi(uiLanguage, "utm_content:")} {lead.utmContent}</Badge>}
                       </div>
                     )}
                   </div>
@@ -662,9 +664,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   className="rounded-full"
                   onClick={() => setShowFollowUpForm(!showFollowUpForm)}
                 >
-                  <Plus className="w-3 h-3 mr-1" />
-                  Add
-                </Button>
+                  <Plus className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Add")} </Button>
               </div>
 
               {showFollowUpForm && (
@@ -708,7 +708,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
 
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {(followUps as any[]).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No follow-ups scheduled.</p>
+                  <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "No follow-ups scheduled.")}</p>
                 ) : (
                   (followUps as any[]).map((fu: any) => (
                     <div
@@ -759,7 +759,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                         {fu.notes && <p className="text-xs text-muted-foreground mt-1">{fu.notes}</p>}
                         <div className="flex items-center gap-3 mt-1 flex-wrap">
                           {fu.createdByName && (
-                            <span className="text-xs text-muted-foreground/60">by {fu.createdByName}</span>
+                            <span className="text-xs text-muted-foreground/60">{translateUi(uiLanguage, "by")} {fu.createdByName}</span>
                           )}
                           {fu.createdAt && (
                             <span className="text-xs text-muted-foreground/50">
@@ -769,8 +769,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                             </span>
                           )}
                           {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
-                            <span className="text-xs text-amber-500/70">
-                              (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {formatDate(fu.updatedAt, lang, { day: "2-digit", month: "2-digit", year: "numeric" }, dateFormat)}
+                            <span className="text-xs text-amber-500/70"> {translateUi(uiLanguage, "(edited")}{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {formatDate(fu.updatedAt, lang, { day: "2-digit", month: "2-digit", year: "numeric" }, dateFormat)}
                               {" "}
                               {new Date(fu.updatedAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })})
                             </span>
@@ -787,29 +786,27 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-muted-foreground" />
-                <h2 className="font-semibold text-foreground">Notes</h2>
+                <h2 className="font-semibold text-foreground">{translateUi(uiLanguage, "Notes")}</h2>
               </div>
 
               <div className="flex gap-1 border-b">
                 <button
                   onClick={() => setNoteTab("general")}
                   className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${noteTab === "general" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-                >
-                  General ({generalNotes.length})
+                > {translateUi(uiLanguage, "General (")}{generalNotes.length})
                 </button>
                 {isStaffUser && (
                   <button
                     onClick={() => setNoteTab("internal")}
                     className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${noteTab === "internal" ? "border-orange-500 text-orange-600" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-                  >
-                    🔒 Private ({internalNotes.length})
+                  > {translateUi(uiLanguage, "🔒 Private (")}{internalNotes.length})
                   </button>
                 )}
               </div>
 
               <div className="space-y-3 max-h-60 overflow-y-auto">
                 {activeNotes.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No notes yet.</p>
+                  <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "No notes yet.")}</p>
                 ) : (
                   activeNotes.map((note: any) => (
                     <div key={note.id} className={`group relative rounded-xl p-3 ${noteTab === "internal" ? "bg-orange-50 border border-orange-200" : "bg-secondary/50"}`}>
@@ -826,8 +823,8 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                             onClick={() => handleDeleteNote(note.id)}
                             disabled={deleteNote.isPending}
                             className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity disabled:opacity-50"
-                            aria-label="Delete note"
-                            title="Delete note"
+                            aria-label={translateUi(uiLanguage, "Delete note")}
+                            title={translateUi(uiLanguage, "Delete note")}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -850,9 +847,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                     onClick={handleAddNote}
                     disabled={!noteText.trim()}
                     className={`self-end ${noteTab === "internal" ? "bg-orange-500 hover:bg-orange-600" : ""}`}
-                  >
-                    Add
-                  </Button>
+                  > {translateUi(uiLanguage, "Add")} </Button>
                 </div>
               )}
             </div>
@@ -862,7 +857,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
           {/* Right: status card */}
           <div className="min-w-0 space-y-4">
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
-              <h2 className="font-semibold text-foreground">Status</h2>
+              <h2 className="font-semibold text-foreground">{translateUi(uiLanguage, "Status")}</h2>
               {isLoading ? (
                 <Skeleton className="h-8 w-24 rounded-full" />
               ) : (
@@ -903,8 +898,8 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 </Select>
               )}
               <div className="pt-2 border-t text-xs text-muted-foreground space-y-1">
-                <p>Created: {lead ? formatDate(lead.createdAt, lang) : "—"}</p>
-                <p>Updated: {lead ? formatDate(lead.updatedAt, lang) : "—"}</p>
+                <p>{translateUi(uiLanguage, "Created:")} {lead ? formatDate(lead.createdAt, lang) : "—"}</p>
+                <p>{translateUi(uiLanguage, "Updated:")} {lead ? formatDate(lead.updatedAt, lang) : "—"}</p>
               </div>
             </div>
 
@@ -958,9 +953,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
             {!isAgent && (
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
               <h2 className="font-semibold text-foreground flex items-center gap-2">
-                <Globe className="w-4 h-4" />
-                Origin
-              </h2>
+                <Globe className="w-4 h-4" /> {translateUi(uiLanguage, "Origin")} </h2>
               {isLoading ? (
                 <Skeleton className="h-8 w-32" />
               ) : (
@@ -995,7 +988,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                       <SelectContent>
                         <SelectItem value="direct">{t("leadDetailPage.direct")}</SelectItem>
                         <SelectItem value="agent">{t("leadDetailPage.agentLabel")}</SelectItem>
-                        <SelectItem value="sub_agent">Sub-Agent</SelectItem>
+                        <SelectItem value="sub_agent">{translateUi(uiLanguage, "Sub-Agent")}</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -1006,12 +999,10 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
 
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
               <h2 className="font-semibold text-foreground flex items-center gap-2">
-                <CalendarClock className="w-4 h-4" />
-                Next Follow-up
-              </h2>
+                <CalendarClock className="w-4 h-4" /> {translateUi(uiLanguage, "Next Follow-up")} </h2>
               {(() => {
                 const upcoming = (followUps as any[]).filter((f: any) => !f.completed).sort((a: any, b: any) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
-                if (upcoming.length === 0) return <p className="text-sm text-muted-foreground">None scheduled</p>;
+                if (upcoming.length === 0) return <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "None scheduled")}</p>;
                 const next = upcoming[0];
                 return (
                   <div>
@@ -1115,6 +1106,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
 }
 
 function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { data: cfFilters } = useQuery<{ countries: string[] }>({
     queryKey: ["course-finder-filters"],
     queryFn: () => customFetch("/api/course-finder/filters"),
@@ -1186,7 +1178,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
       )}
       {open && (
         <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {activeDestinations.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">No active destinations</div>}
+          {activeDestinations.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{translateUi(uiLanguage, "No active destinations")}</div>}
           {activeDestinations.map(c => (
             <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${localSelected.includes(c.name) ? "bg-primary/10 font-medium" : ""}`}
               onClick={e => { e.preventDefault(); e.stopPropagation(); toggle(c.name); }}>
@@ -1205,6 +1197,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
 function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
   open: boolean; onClose: () => void; lead: any; leadId: number;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { hasPermission } = useAuth();
   const canSeeRevenue = hasPermission("leads.view_commission");
@@ -1262,11 +1255,11 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
         <DialogHeader><DialogTitle>{t("leadDetailPage.editLead")}</DialogTitle></DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-1.5">
-            <Label>First Name *</Label>
+            <Label>{translateUi(uiLanguage, "First Name *")}</Label>
             <Input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} className="uppercase" />
           </div>
           <div className="space-y-1.5">
-            <Label>Last Name *</Label>
+            <Label>{translateUi(uiLanguage, "Last Name *")}</Label>
             <Input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} className="uppercase" />
           </div>
           <div className="space-y-1.5">
@@ -1307,7 +1300,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
           <div className="space-y-1.5 col-span-2">
             <Label>{t("studentsPage.interestedLevel")}</Label>
             <Select value={form.interestedLevel} onValueChange={v => setForm({ ...form, interestedLevel: v })}>
-              <SelectTrigger><SelectValue placeholder="Select level..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "Select level...")} /></SelectTrigger>
               <SelectContent>
                 {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
               </SelectContent>
@@ -1315,7 +1308,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
           </div>
           {canSeeRevenue && (
             <div className="space-y-1.5 col-span-2">
-              <Label>Estimated Value (USD)</Label>
+              <Label>{translateUi(uiLanguage, "Estimated Value (USD)")}</Label>
               <Input type="number" min="0" step="100" value={form.estimatedValue} onChange={e => setForm({ ...form, estimatedValue: e.target.value })} />
             </div>
           )}

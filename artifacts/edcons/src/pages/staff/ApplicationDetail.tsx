@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
@@ -68,6 +69,7 @@ interface Props {
 
 
 export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { labelOf: studyLabelOf } = useStudyLevels();
   const [, setLocation] = useLocation();
@@ -492,7 +494,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CalendarClock className="w-4 h-4 text-primary" />
-                    <h2 className="font-semibold text-foreground">Follow-ups</h2>
+                    <h2 className="font-semibold text-foreground">{translateUi(uiLanguage, "Follow-ups")}</h2>
                     <span className="text-xs text-muted-foreground">({(followUps as any[]).length})</span>
                   </div>
                   <Button
@@ -501,9 +503,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                     className="rounded-full"
                     onClick={() => { resetFollowUpForm(); setShowFollowUpForm(!showFollowUpForm); }}
                   >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Add
-                  </Button>
+                    <Plus className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Add")} </Button>
                 </div>
 
                 {showFollowUpForm && (
@@ -547,7 +547,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
 
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
                   {(followUps as any[]).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No follow-ups scheduled.</p>
+                    <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "No follow-ups scheduled.")}</p>
                   ) : (
                     (followUps as any[]).map((fu: any) => (
                       <div
@@ -598,7 +598,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                           {fu.notes && <p className="text-xs text-muted-foreground mt-1">{fu.notes}</p>}
                           <div className="flex items-center gap-3 mt-1 flex-wrap">
                             {fu.createdByName && (
-                              <span className="text-xs text-muted-foreground/60" data-testid="fu-created-by">by {fu.createdByName}</span>
+                              <span className="text-xs text-muted-foreground/60" data-testid="fu-created-by">{translateUi(uiLanguage, "by")} {fu.createdByName}</span>
                             )}
                             {fu.createdAt && (
                               <span className="text-xs text-muted-foreground/50">
@@ -608,8 +608,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                               </span>
                             )}
                             {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
-                              <span className="text-xs text-amber-500/70" data-testid="fu-edited-by">
-                                (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {formatDate(fu.updatedAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                              <span className="text-xs text-amber-500/70" data-testid="fu-edited-by"> {translateUi(uiLanguage, "(edited")}{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {formatDate(fu.updatedAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
                                 {" "}
                                 {new Date(fu.updatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })})
                               </span>
@@ -856,13 +855,9 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                   setLocation(`${basePath}/students/${app.studentId}`);
                 }}
               >
-                <User className="w-4 h-4 mr-2" />
-                Öğrenci Profiline Git
-              </Button>
+                <User className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Öğrenci Profiline Git")} </Button>
             )}
-            <Button variant="ghost" onClick={() => setStudentDocsMissing(null)}>
-              Kapat
-            </Button>
+            <Button variant="ghost" onClick={() => setStudentDocsMissing(null)}> {translateUi(uiLanguage, "Kapat")} </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

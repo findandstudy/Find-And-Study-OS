@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useState, useMemo } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
@@ -111,6 +112,7 @@ const EMPTY_SPC: SigningPageConfig = {
 };
 
 function FieldMappingPanel({ schema, bodyHtml, t }: { schema: IntakeField[]; bodyHtml: string; t: (k: string, p?: any) => string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   if (!schema.length) {
     return <p className="text-xs text-muted-foreground italic">{t("contractTemplates.fieldMappingEmpty")}</p>;
   }
@@ -126,8 +128,8 @@ function FieldMappingPanel({ schema, bodyHtml, t }: { schema: IntakeField[]; bod
             <div className="flex-1 min-w-0">
               <span className="font-medium text-foreground">{field.label}</span>
               <span className="text-muted-foreground ml-1.5">({field.key})</span>
-              {isAlias && <span className="ml-1.5 text-[10px] text-blue-500 uppercase tracking-wide">alias</span>}
-              {isOverride && <span className="ml-1.5 text-[10px] text-purple-500 uppercase tracking-wide">maps_to</span>}
+              {isAlias && <span className="ml-1.5 text-[10px] text-blue-500 uppercase tracking-wide">{translateUi(uiLanguage, "alias")}</span>}
+              {isOverride && <span className="ml-1.5 text-[10px] text-purple-500 uppercase tracking-wide">{translateUi(uiLanguage, "maps_to")}</span>}
             </div>
             <ArrowRight className="w-3 h-3 shrink-0 text-muted-foreground" />
             <div className="flex items-center gap-1 shrink-0">
@@ -146,6 +148,7 @@ function FieldMappingPanel({ schema, bodyHtml, t }: { schema: IntakeField[]; bod
 }
 
 export default function ContractTemplatesPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t, lang } = useI18n();
   const [rows, setRows] = useState<Template[]>([]);
@@ -377,7 +380,7 @@ export default function ContractTemplatesPage() {
           <p className="text-sm text-muted-foreground mt-1">{t("contractTemplates.subtitle")} <code className="text-xs">{`{{agent.field}}, {{intake.field}}, {{contract.date}}, {{contract.signerName}}`}</code></p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setBrandDialogOpen(true)}><Palette className="w-4 h-4 mr-2" /> Brand profiles</Button>
+          <Button variant="outline" onClick={() => setBrandDialogOpen(true)}><Palette className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Brand profiles")}</Button>
           <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> {t("contractTemplates.newTemplate")}</Button>
         </div>
       </div>
@@ -444,9 +447,9 @@ export default function ContractTemplatesPage() {
                   <td className="px-4 py-3 text-right space-x-2">
                     <Button size="sm" variant="outline" title={previewLabel} aria-label={`${previewLabel}: ${tpl.name}`} onClick={() => setPreviewTemplate(tpl)}><Eye className="w-4 h-4" /></Button>
                     <Button size="sm" variant="ghost" onClick={() => openEdit(tpl)}><Edit className="w-4 h-4" /></Button>
-                    {tpl.publicationStatus === "draft" && <Button size="sm" variant="outline" title="Submit for review" onClick={() => workflowAction(tpl, "submit-review")}><Send className="w-4 h-4" /></Button>}
-                    {(["draft", "review_pending"] as const).includes(tpl.publicationStatus as any) && <Button size="sm" variant="outline" title="Publish" onClick={() => workflowAction(tpl, "publish")}><CheckCircle2 className="w-4 h-4 mr-2" />Publish</Button>}
-                    {tpl.publicationStatus === "published" && <Button size="sm" variant="outline" title="Create new version" onClick={() => workflowAction(tpl, "new-version")}><Copy className="w-4 h-4" /></Button>}
+                    {tpl.publicationStatus === "draft" && <Button size="sm" variant="outline" title={translateUi(uiLanguage, "Submit for review")} onClick={() => workflowAction(tpl, "submit-review")}><Send className="w-4 h-4" /></Button>}
+                    {(["draft", "review_pending"] as const).includes(tpl.publicationStatus as any) && <Button size="sm" variant="outline" title={translateUi(uiLanguage, "Publish")} onClick={() => workflowAction(tpl, "publish")}><CheckCircle2 className="w-4 h-4 mr-2" />{translateUi(uiLanguage, "Publish")}</Button>}
+                    {tpl.publicationStatus === "published" && <Button size="sm" variant="outline" title={translateUi(uiLanguage, "Create new version")} onClick={() => workflowAction(tpl, "new-version")}><Copy className="w-4 h-4" /></Button>}
                     <Button size="sm" variant="ghost" onClick={() => remove(tpl.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
                   </td>
                 </tr>
@@ -463,9 +466,7 @@ export default function ContractTemplatesPage() {
           </DialogHeader>
           <div className="space-y-4">
             {editingPublished && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
-                This version is published and its contract content, fields and branding are locked. Create a new version to make changes without altering already-issued contracts.
-              </div>
+              <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-900 dark:text-amber-100"> {translateUi(uiLanguage, "This version is published and its contract content, fields and branding are locked. Create a new version to make changes without altering already-issued contracts.")} </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -502,12 +503,12 @@ export default function ContractTemplatesPage() {
             </div>
             <div>
               <Label>{t("contractTemplates.bodyLabel")}</Label>
-              <p className="text-xs text-muted-foreground mb-2">Write and format the agreement visually. HTML remains available in Advanced mode.</p>
+              <p className="text-xs text-muted-foreground mb-2">{translateUi(uiLanguage, "Write and format the agreement visually. HTML remains available in Advanced mode.")}</p>
               <ContractRichTextEditor value={form.bodyHtml} disabled={editingPublished} onChange={bodyHtml => setForm(current => ({ ...current, bodyHtml }))} />
             </div>
             <div>
               <Label>{t("contractTemplates.intakeSchemaLabel")}</Label>
-              <p className="text-xs text-muted-foreground mb-2">Build the counterparty form field by field. Reorder fields and mark required information without writing JSON.</p>
+              <p className="text-xs text-muted-foreground mb-2">{translateUi(uiLanguage, "Build the counterparty form field by field. Reorder fields and mark required information without writing JSON.")}</p>
               <ContractFieldBuilder value={parsedSchema} disabled={editingPublished} onChange={intakeSchema => setForm(current => ({ ...current, intakeSchema }))} />
 
               {/* Field → placeholder mapping panel */}
@@ -535,18 +536,18 @@ export default function ContractTemplatesPage() {
               {signingPageOpen && (
                 <div className="p-4 space-y-3 bg-background">
                   <div>
-                    <Label className="text-xs">Reusable brand profile</Label>
+                    <Label className="text-xs">{translateUi(uiLanguage, "Reusable brand profile")}</Label>
                     <div className="flex gap-2 mt-1">
                       <Select disabled={editingPublished} value={form.brandProfileId ? String(form.brandProfileId) : "none"} onValueChange={applyBrandProfile}>
-                        <SelectTrigger><SelectValue placeholder="Use template-specific branding" /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "Use template-specific branding")} /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">Template-specific branding</SelectItem>
+                          <SelectItem value="none">{translateUi(uiLanguage, "Template-specific branding")}</SelectItem>
                           {brands.filter(brand => brand.isActive).map(brand => <SelectItem key={brand.id} value={String(brand.id)}>{brand.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
                       <Button type="button" variant="outline" onClick={() => setBrandDialogOpen(true)}><Palette className="h-4 w-4" /></Button>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">The selected profile is the central source for the logo, colors and official signature. A contract receives an immutable snapshot when its signing link is issued.</p>
+                    <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "The selected profile is the central source for the logo, colors and official signature. A contract receives an immutable snapshot when its signing link is issued.")}</p>
                   </div>
                   {selectedBrand ? (
                     <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
@@ -558,32 +559,31 @@ export default function ContractTemplatesPage() {
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="font-medium">{selectedBrand.name}</div>
-                          <div className="text-xs text-muted-foreground">Managed centrally in Brand profiles</div>
+                          <div className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Managed centrally in Brand profiles")}</div>
                         </div>
                         <Badge variant={selectedBrand.hasCompanySignature ? "secondary" : "destructive"}>
                           {selectedBrand.hasCompanySignature ? "Signature ready" : "Signature required"}
                         </Badge>
                       </div>
-                      {selectedBrand.hasCompanySignature && <p className="text-xs text-muted-foreground">The official signature is stored privately and appears only on the final signed PDF.</p>}
+                      {selectedBrand.hasCompanySignature && <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "The official signature is stored privately and appears only on the final signed PDF.")}</p>}
                       <Button type="button" size="sm" variant="outline" onClick={() => setBrandDialogOpen(true)}>
-                        <Palette className="mr-2 h-4 w-4" /> Manage brand profile
-                      </Button>
+                        <Palette className="mr-2 h-4 w-4" /> {translateUi(uiLanguage, "Manage brand profile")} </Button>
                     </div>
                   ) : <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-xs">Brand name</Label>
+                      <Label className="text-xs">{translateUi(uiLanguage, "Brand name")}</Label>
                       <Input disabled={editingPublished} className="mt-1" placeholder="Find And Study" value={form.signingPageConfig.brandName}
                         onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, brandName: e.target.value } }))} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <Label className="text-xs">Primary color</Label>
+                        <Label className="text-xs">{translateUi(uiLanguage, "Primary color")}</Label>
                         <Input disabled={editingPublished} className="mt-1 h-10 p-1" type="color" value={form.signingPageConfig.primaryColor}
                           onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, primaryColor: e.target.value } }))} />
                       </div>
                       <div>
-                        <Label className="text-xs">Accent color</Label>
+                        <Label className="text-xs">{translateUi(uiLanguage, "Accent color")}</Label>
                         <Input disabled={editingPublished} className="mt-1 h-10 p-1" type="color" value={form.signingPageConfig.accentColor}
                           onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, accentColor: e.target.value } }))} />
                       </div>
@@ -602,7 +602,7 @@ export default function ContractTemplatesPage() {
                     {form.signingPageConfig.logoUrl && (
                       <img
                         src={form.signingPageConfig.logoUrl}
-                        alt="Logo preview"
+                        alt={translateUi(uiLanguage, "Logo preview")}
                         className="mt-2 h-10 max-w-[200px] object-contain border rounded bg-[#143591] p-1"
                         onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                         onLoad={e => { (e.currentTarget as HTMLImageElement).style.display = "block"; }}
@@ -633,26 +633,26 @@ export default function ContractTemplatesPage() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-xs">PDF header text</Label>
-                      <Input disabled={editingPublished} className="mt-1" placeholder="Official agreement" value={form.signingPageConfig.pdfHeaderText}
+                      <Label className="text-xs">{translateUi(uiLanguage, "PDF header text")}</Label>
+                      <Input disabled={editingPublished} className="mt-1" placeholder={translateUi(uiLanguage, "Official agreement")} value={form.signingPageConfig.pdfHeaderText}
                         onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, pdfHeaderText: e.target.value } }))} />
                     </div>
                     <div>
-                      <Label className="text-xs">PDF footer text</Label>
-                      <Input disabled={editingPublished} className="mt-1" placeholder="Company contact or legal text" value={form.signingPageConfig.pdfFooterText}
+                      <Label className="text-xs">{translateUi(uiLanguage, "PDF footer text")}</Label>
+                      <Input disabled={editingPublished} className="mt-1" placeholder={translateUi(uiLanguage, "Company contact or legal text")} value={form.signingPageConfig.pdfFooterText}
                         onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, pdfFooterText: e.target.value } }))} />
                     </div>
                   </div>
                   <div className="rounded-md border p-3 space-y-2">
                     <div>
-                      <Label className="text-xs">Company signature for final PDF</Label>
-                      <p className="text-xs text-muted-foreground">Hidden during details and review. It is added only after the counterparty signs.</p>
+                      <Label className="text-xs">{translateUi(uiLanguage, "Company signature for final PDF")}</Label>
+                      <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Hidden during details and review. It is added only after the counterparty signs.")}</p>
                     </div>
                     <Input disabled={editingPublished} type="file" accept="image/png,image/jpeg" onChange={e => loadCompanySignature(e.target.files?.[0])} />
                     {form.signingPageConfig.companySignatureDataUrl && (
                       <div className="flex items-center gap-3">
-                        <img src={form.signingPageConfig.companySignatureDataUrl} alt="Company signature preview" className="h-14 max-w-[220px] object-contain border rounded p-1" />
-                        <Button disabled={editingPublished} type="button" size="sm" variant="outline" onClick={() => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, companySignatureDataUrl: "" } }))}>Remove</Button>
+                        <img src={form.signingPageConfig.companySignatureDataUrl} alt={translateUi(uiLanguage, "Company signature preview")} className="h-14 max-w-[220px] object-contain border rounded p-1" />
+                        <Button disabled={editingPublished} type="button" size="sm" variant="outline" onClick={() => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, companySignatureDataUrl: "" } }))}>{translateUi(uiLanguage, "Remove")}</Button>
                       </div>
                     )}
                   </div>
@@ -695,7 +695,7 @@ export default function ContractTemplatesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>{t("contractTemplates.cancel")}</Button>
-            {editingPublished && editing && <Button variant="secondary" onClick={() => workflowAction(editing, "new-version")}><Copy className="h-4 w-4 mr-2" /> Create editable version</Button>}
+            {editingPublished && editing && <Button variant="secondary" onClick={() => workflowAction(editing, "new-version")}><Copy className="h-4 w-4 mr-2" /> {translateUi(uiLanguage, "Create editable version")}</Button>}
             <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} {t("contractTemplates.save")}</Button>
           </DialogFooter>
         </DialogContent>

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 // Sohbet Kalite Raporu — ranking, team trend, dimension breakdown,
 // coaching queue, topic analysis, Excel export, settings (Faz 1).
 import { useCallback, useEffect, useState } from "react";
@@ -57,9 +58,10 @@ export function overallColor(v: number): string {
 }
 
 export function TrendIcon({ trend }: { trend: "up" | "down" | "flat" }) {
-  if (trend === "up") return <TrendingUp className="w-4 h-4 text-green-600" aria-label="up" />;
-  if (trend === "down") return <TrendingDown className="w-4 h-4 text-red-600" aria-label="down" />;
-  return <Minus className="w-4 h-4 text-muted-foreground" aria-label="flat" />;
+  const { lang: uiLanguage } = useUiLanguage();
+  if (trend === "up") return <TrendingUp className="w-4 h-4 text-green-600" aria-label={translateUi(uiLanguage, "up")} />;
+  if (trend === "down") return <TrendingDown className="w-4 h-4 text-red-600" aria-label={translateUi(uiLanguage, "down")} />;
+  return <Minus className="w-4 h-4 text-muted-foreground" aria-label={translateUi(uiLanguage, "flat")} />;
 }
 
 export default function QualityReportPage() {

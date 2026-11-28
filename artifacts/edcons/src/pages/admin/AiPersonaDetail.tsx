@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
@@ -85,6 +86,7 @@ const EVENT_SUBSCRIPTIONS = [
 ];
 
 export default function AiPersonaDetail() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [, paramsNew] = useRoute("/admin/ai-personas/new");
   const [matchEdit, paramsEdit] = useRoute("/admin/ai-personas/:id");
@@ -331,7 +333,7 @@ export default function AiPersonaDetail() {
               </div>
               <div>
                 <Label>{t("aiPersona.model")}</Label>
-                <Input value={form.model} onChange={(e) => update("model", e.target.value)} placeholder="claude-sonnet-4-5" />
+                <Input value={form.model} onChange={(e) => update("model", e.target.value)} placeholder={translateUi(uiLanguage, "claude-sonnet-4-5")} />
               </div>
               <div>
                 <Label>{t("aiPersona.temperature", { value: form.temperature })}</Label>
@@ -531,7 +533,7 @@ export default function AiPersonaDetail() {
                   <div className="flex items-center gap-2">
                     <Badge variant={r.status === "success" ? "secondary" : "destructive"}>{r.status}</Badge>
                     <span className="text-xs text-muted-foreground">
-                      #{r.id} · {new Date(r.createdAt).toLocaleString()} · {r.latencyMs ?? "—"}ms · tokens {r.promptTokens ?? 0}/{r.completionTokens ?? 0}
+                      #{r.id} · {new Date(r.createdAt).toLocaleString()} · {r.latencyMs ?? "—"}{translateUi(uiLanguage, "ms · tokens")} {r.promptTokens ?? 0}/{r.completionTokens ?? 0}
                       {r.costUsd && ` · $${r.costUsd}`}
                     </span>
                   </div>

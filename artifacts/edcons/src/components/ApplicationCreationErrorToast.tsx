@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import type { ReactNode } from "react";
 import {
   applicationCreationErrorPresentation,
@@ -11,11 +12,12 @@ function ApplicationCreationErrorDescription({
 }: {
   details: ApplicationCreationErrorPresentation;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   return (
     <div className="space-y-2.5" data-testid="application-creation-error-details">
       <p>{details.intro}</p>
       {details.items.length > 0 && (
-        <ul className="grid gap-1.5" aria-label="Items requiring attention">
+        <ul className="grid gap-1.5" aria-label={translateUi(uiLanguage, "Items requiring attention")}>
           {details.items.map((item, index) => (
             <li
               key={`${item}-${index}`}
@@ -30,9 +32,7 @@ function ApplicationCreationErrorDescription({
       {details.guidance && (
         <p className="font-medium text-foreground/80">{details.guidance}</p>
       )}
-      <p className="border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
-        Close with × or this notification will disappear automatically in 30 seconds.
-      </p>
+      <p className="border-t border-border/60 pt-2 text-[11px] text-muted-foreground"> {translateUi(uiLanguage, "Close with × or this notification will disappear automatically in 30 seconds.")} </p>
     </div>
   );
 }

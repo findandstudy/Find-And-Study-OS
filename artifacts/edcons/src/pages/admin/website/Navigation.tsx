@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -77,6 +78,7 @@ const DEFAULT_MENUS = [
 ];
 
 export default function WebsiteNavigation() {
+  const { lang: uiLanguage } = useUiLanguage();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [activeMenuId, setActiveMenuId] = useState<string>("");
@@ -238,9 +240,9 @@ export default function WebsiteNavigation() {
             <div className="flex items-center gap-2">
               <span className="font-medium text-sm truncate">{item.label}</span>
               {item.target === "_blank" && <ExternalLink className="w-3 h-3 text-muted-foreground" />}
-              {!item.isVisible && <Badge variant="outline" className="text-xs gap-1"><EyeOff className="w-2.5 h-2.5" />Hidden</Badge>}
+              {!item.isVisible && <Badge variant="outline" className="text-xs gap-1"><EyeOff className="w-2.5 h-2.5" />{translateUi(uiLanguage, "Hidden")}</Badge>}
             </div>
-            {pageTitle && <p className="text-xs text-blue-500">Page: {pageTitle}</p>}
+            {pageTitle && <p className="text-xs text-blue-500">{translateUi(uiLanguage, "Page:")} {pageTitle}</p>}
             {item.url && <p className="text-xs text-muted-foreground truncate">{item.url}</p>}
           </div>
           <div className="flex items-center gap-1 shrink-0">
@@ -265,8 +267,8 @@ export default function WebsiteNavigation() {
         <div className="flex items-center gap-3">
           <Menu className="w-6 h-6 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Navigation</h1>
-            <p className="text-sm text-muted-foreground">Manage website navigation menus and their items.</p>
+            <h1 className="text-2xl font-bold">{translateUi(uiLanguage, "Navigation")}</h1>
+            <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "Manage website navigation menus and their items.")}</p>
           </div>
         </div>
 
@@ -274,8 +276,8 @@ export default function WebsiteNavigation() {
           <div className="flex items-start gap-3">
             <Link2 className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
             <div>
-              <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Quick Links</p>
-              <p className="text-xs text-blue-600 dark:text-blue-400">Social media links, phone numbers, and other Quick Links can be managed in Website &gt; Settings &gt; Quick Links section.</p>
+              <p className="text-sm font-medium text-blue-700 dark:text-blue-300">{translateUi(uiLanguage, "Quick Links")}</p>
+              <p className="text-xs text-blue-600 dark:text-blue-400">{translateUi(uiLanguage, "Social media links, phone numbers, and other Quick Links can be managed in Website > Settings > Quick Links section.")}</p>
             </div>
           </div>
         </Card>
@@ -300,16 +302,16 @@ export default function WebsiteNavigation() {
                     <p className="text-muted-foreground text-sm">
                       {m.location === "header" ? "Main navigation links in the website header." : "Links displayed in the website footer."}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-1">Location: <Badge variant="outline" className="text-[10px]">{m.location}</Badge></p>
+                    <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Location:")} <Badge variant="outline" className="text-[10px]">{m.location}</Badge></p>
                   </div>
-                  <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> Add Item</Button>
+                  <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> {translateUi(uiLanguage, "Add Item")}</Button>
                 </div>
 
                 <Card className="border-none shadow-lg shadow-black/5 overflow-hidden">
                   {topItems.length === 0 ? (
                     <div className="py-12 text-center text-muted-foreground">
                       <Menu className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      <p className="text-sm">No items in this menu yet</p>
+                      <p className="text-sm">{translateUi(uiLanguage, "No items in this menu yet")}</p>
                     </div>
                   ) : topItems.map(item => renderItem(item))}
                 </Card>
@@ -324,33 +326,33 @@ export default function WebsiteNavigation() {
           <DialogHeader><DialogTitle>{editItem ? "Edit Menu Item" : "Add Menu Item"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Label *</Label>
-              <Input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} className="rounded-xl" placeholder="e.g. About Us" />
+              <Label>{translateUi(uiLanguage, "Label *")}</Label>
+              <Input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} className="rounded-xl" placeholder={translateUi(uiLanguage, "e.g. About Us")} />
             </div>
 
             <div className="space-y-1.5">
-              <Label>Link Type</Label>
+              <Label>{translateUi(uiLanguage, "Link Type")}</Label>
               <Select value={form.linkType} onValueChange={(v: "url" | "page") => setForm(f => ({ ...f, linkType: v }))}>
                 <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="url">Custom URL</SelectItem>
-                  <SelectItem value="page">Internal Page</SelectItem>
+                  <SelectItem value="url">{translateUi(uiLanguage, "Custom URL")}</SelectItem>
+                  <SelectItem value="page">{translateUi(uiLanguage, "Internal Page")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {form.linkType === "url" ? (
               <div className="space-y-1.5">
-                <Label>URL</Label>
+                <Label>{translateUi(uiLanguage, "URL")}</Label>
                 <Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} className="rounded-xl" placeholder="/about or https://..." />
               </div>
             ) : (
               <div className="space-y-1.5">
-                <Label>Page</Label>
+                <Label>{translateUi(uiLanguage, "Page")}</Label>
                 <Select value={form.pageId || "__none__"} onValueChange={v => setForm(f => ({ ...f, pageId: v === "__none__" ? "" : v }))}>
-                  <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select page" /></SelectTrigger>
+                  <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "Select page")} /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">Select a page</SelectItem>
+                    <SelectItem value="__none__">{translateUi(uiLanguage, "Select a page")}</SelectItem>
                     {pages.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.title} (/{p.slug})</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -359,30 +361,30 @@ export default function WebsiteNavigation() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Open In</Label>
+                <Label>{translateUi(uiLanguage, "Open In")}</Label>
                 <Select value={form.target} onValueChange={v => setForm(f => ({ ...f, target: v }))}>
                   <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="_self">Same Tab</SelectItem>
-                    <SelectItem value="_blank">New Tab</SelectItem>
+                    <SelectItem value="_self">{translateUi(uiLanguage, "Same Tab")}</SelectItem>
+                    <SelectItem value="_blank">{translateUi(uiLanguage, "New Tab")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Sort Order</Label>
+                <Label>{translateUi(uiLanguage, "Sort Order")}</Label>
                 <Input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))} className="rounded-xl" />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Icon Class (optional)</Label>
-              <Input value={form.iconClass} onChange={e => setForm(f => ({ ...f, iconClass: e.target.value }))} className="rounded-xl" placeholder="e.g. lucide-globe" />
+              <Label>{translateUi(uiLanguage, "Icon Class (optional)")}</Label>
+              <Input value={form.iconClass} onChange={e => setForm(f => ({ ...f, iconClass: e.target.value }))} className="rounded-xl" placeholder={translateUi(uiLanguage, "e.g. lucide-globe")} />
             </div>
             <div className="space-y-1.5">
-              <Label>Parent Item (for dropdown)</Label>
+              <Label>{translateUi(uiLanguage, "Parent Item (for dropdown)")}</Label>
               <Select value={form.parentId || "__none__"} onValueChange={v => setForm(f => ({ ...f, parentId: v === "__none__" ? "" : v }))}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="None (top-level)" /></SelectTrigger>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "None (top-level)")} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">None (top-level)</SelectItem>
+                  <SelectItem value="__none__">{translateUi(uiLanguage, "None (top-level)")}</SelectItem>
                   {items.filter(i => !i.parentId && i.id !== editItem?.id).map(i => (
                     <SelectItem key={i.id} value={String(i.id)}>{i.label}</SelectItem>
                   ))}
@@ -391,10 +393,10 @@ export default function WebsiteNavigation() {
             </div>
             <div className="flex items-center gap-3">
               <Switch checked={form.isVisible} onCheckedChange={v => setForm(f => ({ ...f, isVisible: v }))} />
-              <Label>Visible</Label>
+              <Label>{translateUi(uiLanguage, "Visible")}</Label>
             </div>
             <div className="flex gap-3 justify-end pt-2">
-              <Button variant="outline" onClick={() => setItemDialog(false)} className="rounded-xl">Cancel</Button>
+              <Button variant="outline" onClick={() => setItemDialog(false)} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
               <Button onClick={handleSave} disabled={saveMut.isPending} className="rounded-xl">
                 {saveMut.isPending ? "Saving..." : editItem ? "Update" : "Add Item"}
               </Button>

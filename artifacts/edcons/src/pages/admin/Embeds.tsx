@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useRef, useDeferredValue } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -102,6 +103,7 @@ type Submission = {
 };
 
 export default function Embeds() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -280,8 +282,8 @@ export default function Embeds() {
               ) : widgets.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Code2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                  <p className="font-medium">No widgets yet</p>
-                  <p className="text-sm">Create your first embeddable widget to get started</p>
+                  <p className="font-medium">{translateUi(uiLanguage, "No widgets yet")}</p>
+                  <p className="text-sm">{translateUi(uiLanguage, "Create your first embeddable widget to get started")}</p>
                 </div>
               ) : (
                 <>
@@ -292,17 +294,17 @@ export default function Embeds() {
                           <Checkbox
                             checked={widgets.length > 0 && widgets.every((w: Widget) => selectedIds.includes(w.id))}
                             onCheckedChange={(c) => setSelectedIds(c ? widgets.map((w: Widget) => w.id) : [])}
-                            aria-label="Select all"
+                            aria-label={translateUi(uiLanguage, "Select all")}
                             data-testid="checkbox-select-all"
                           />
                         </TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Slug</TableHead>
-                        <TableHead>Mode</TableHead>
-                        <TableHead>Preset Filters</TableHead>
-                        <TableHead>Domains</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead>{translateUi(uiLanguage, "Name")}</TableHead>
+                        <TableHead>{translateUi(uiLanguage, "Slug")}</TableHead>
+                        <TableHead>{translateUi(uiLanguage, "Mode")}</TableHead>
+                        <TableHead>{translateUi(uiLanguage, "Preset Filters")}</TableHead>
+                        <TableHead>{translateUi(uiLanguage, "Domains")}</TableHead>
+                        <TableHead>{translateUi(uiLanguage, "Status")}</TableHead>
+                        <TableHead className="text-right">{translateUi(uiLanguage, "Actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -331,7 +333,7 @@ export default function Embeds() {
                                 </Badge>
                               ))}
                               {Object.keys(w.presetFilters || {}).length === 0 && (
-                                <span className="text-xs text-muted-foreground">None</span>
+                                <span className="text-xs text-muted-foreground">{translateUi(uiLanguage, "None")}</span>
                               )}
                             </div>
                           </TableCell>
@@ -345,7 +347,7 @@ export default function Embeds() {
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-xs text-muted-foreground">All domains</span>
+                              <span className="text-xs text-muted-foreground">{translateUi(uiLanguage, "All domains")}</span>
                             )}
                           </TableCell>
                           <TableCell>
@@ -355,15 +357,15 @@ export default function Embeds() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
-                              <Button size="icon" variant="ghost" title="View submissions"
+                              <Button size="icon" variant="ghost" title={translateUi(uiLanguage, "View submissions")}
                                 onClick={() => { setViewWidget(w); setSubPage(1); }}>
                                 <Eye className="w-4 h-4" />
                               </Button>
-                              <Button size="icon" variant="ghost" title="Embed code"
+                              <Button size="icon" variant="ghost" title={translateUi(uiLanguage, "Embed code")}
                                 onClick={() => setCodeDialog(w)}>
                                 <Code2 className="w-4 h-4" />
                               </Button>
-                              <Button size="icon" variant="ghost" title="Edit"
+                              <Button size="icon" variant="ghost" title={translateUi(uiLanguage, "Edit")}
                                 onClick={() => { setEditWidget(w); setDialogOpen(true); }}>
                                 <Edit2 className="w-4 h-4" />
                               </Button>
@@ -376,7 +378,7 @@ export default function Embeds() {
                   </Table>
                   {meta.totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4">
-                      <p className="text-sm text-muted-foreground">Page {meta.page} of {meta.totalPages}</p>
+                      <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "Page")} {meta.page} {translateUi(uiLanguage, "of")} {meta.totalPages}</p>
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
                           <ChevronLeft className="w-4 h-4" />
@@ -416,15 +418,15 @@ function WidgetDetail({ widget, submissions, subMeta, subPage, setSubPage, onBac
   setSubPage: (p: number | ((p: number) => number)) => void;
   onBack: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={onBack}>
-          <ChevronLeft className="w-4 h-4 mr-1" /> Back
-        </Button>
+          <ChevronLeft className="w-4 h-4 mr-1" /> {translateUi(uiLanguage, "Back")} </Button>
         <div>
           <h2 className="text-lg font-bold">{widget.name}</h2>
-          <p className="text-xs text-muted-foreground">Submissions from <code>{widget.slug}</code> widget</p>
+          <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Submissions from")} <code>{widget.slug}</code> {translateUi(uiLanguage, "widget")}</p>
         </div>
       </div>
 
@@ -433,7 +435,7 @@ function WidgetDetail({ widget, submissions, subMeta, subPage, setSubPage, onBac
           {submissions.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p>No submissions yet</p>
+              <p>{translateUi(uiLanguage, "No submissions yet")}</p>
             </div>
           ) : (
             <>
@@ -441,13 +443,13 @@ function WidgetDetail({ widget, submissions, subMeta, subPage, setSubPage, onBac
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Program / University</TableHead>
-                      <TableHead>Source</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>{translateUi(uiLanguage, "Date")}</TableHead>
+                      <TableHead>{translateUi(uiLanguage, "Name")}</TableHead>
+                      <TableHead>{translateUi(uiLanguage, "Email")}</TableHead>
+                      <TableHead>{translateUi(uiLanguage, "Phone")}</TableHead>
+                      <TableHead>{translateUi(uiLanguage, "Program / University")}</TableHead>
+                      <TableHead>{translateUi(uiLanguage, "Source")}</TableHead>
+                      <TableHead>{translateUi(uiLanguage, "Status")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -481,7 +483,7 @@ function WidgetDetail({ widget, submissions, subMeta, subPage, setSubPage, onBac
               </div>
               {subMeta.totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4">
-                  <p className="text-sm text-muted-foreground">Page {subMeta.page} of {subMeta.totalPages} ({subMeta.total} total)</p>
+                  <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "Page")} {subMeta.page} {translateUi(uiLanguage, "of")} {subMeta.totalPages} ({subMeta.total} {translateUi(uiLanguage, "total)")}</p>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" disabled={subPage <= 1} onClick={() => setSubPage((p: number) => p - 1)}>
                       <ChevronLeft className="w-4 h-4" />
@@ -507,6 +509,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
   initialMode: string;
   onSaved: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [name, setName] = useState("");
@@ -792,54 +795,49 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
 
           <TabsContent value="general" className="space-y-4 mt-4">
             <div>
-              <label className="text-sm font-medium">Widget Name</label>
+              <label className="text-sm font-medium">{translateUi(uiLanguage, "Widget Name")}</label>
               <Input
                 value={name}
                 onChange={e => {
                   setName(e.target.value);
                   if (!slugTouched) setSlug(widgetSlug(e.target.value));
                 }}
-                placeholder="e.g., Okan University Programs"
+                placeholder={translateUi(uiLanguage, "e.g., Okan University Programs")}
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Slug (URL identifier)</label>
+              <label className="text-sm font-medium">{translateUi(uiLanguage, "Slug (URL identifier)")}</label>
               <Input
                 value={slug}
                 onChange={e => { setSlug(widgetSlug(e.target.value)); setSlugTouched(true); }}
-                placeholder="e.g., okan-programs"
+                placeholder={translateUi(uiLanguage, "e.g., okan-programs")}
                 disabled={isEdit}
               />
-              <p className="text-xs text-muted-foreground mt-1">Used in embed code and URLs</p>
+              <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Used in embed code and URLs")}</p>
             </div>
             <div>
-              <label className="text-sm font-medium">Widget Mode</label>
+              <label className="text-sm font-medium">{translateUi(uiLanguage, "Widget Mode")}</label>
               <Select value={mode} onValueChange={setMode}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="combined">Combined (Course Finder + Application Form)</SelectItem>
-                  <SelectItem value="course_finder">Course Finder Only</SelectItem>
-                  <SelectItem value="application_only">Application Form Only</SelectItem>
-                  <SelectItem value="lead_form">Web to Lead Form</SelectItem>
-                  <SelectItem value="ai_chatbot">AI Chatbot (Messages + Lead)</SelectItem>
+                  <SelectItem value="combined">{translateUi(uiLanguage, "Combined (Course Finder + Application Form)")}</SelectItem>
+                  <SelectItem value="course_finder">{translateUi(uiLanguage, "Course Finder Only")}</SelectItem>
+                  <SelectItem value="application_only">{translateUi(uiLanguage, "Application Form Only")}</SelectItem>
+                  <SelectItem value="lead_form">{translateUi(uiLanguage, "Web to Lead Form")}</SelectItem>
+                  <SelectItem value="ai_chatbot">{translateUi(uiLanguage, "AI Chatbot (Messages + Lead)")}</SelectItem>
                 </SelectContent>
               </Select>
               {mode === "ai_chatbot" && (
                 <div className="mt-3 rounded-xl border border-cyan-200 bg-cyan-50/70 p-3 text-sm text-cyan-950">
                   <div className="flex items-center gap-2 font-semibold">
-                    <Bot className="h-4 w-4" />
-                    University-scoped AI assistant
-                  </div>
-                  <p className="mt-1 text-xs leading-5 text-cyan-900/80">
-                    Collects the visitor's contact details, matches or creates a lead, appears in Messages,
-                    and can hand the conversation to a human. Its answers and program suggestions follow the university scope selected in Filters.
-                  </p>
+                    <Bot className="h-4 w-4" /> {translateUi(uiLanguage, "University-scoped AI assistant")} </div>
+                  <p className="mt-1 text-xs leading-5 text-cyan-900/80"> {translateUi(uiLanguage, "Collects the visitor's contact details, matches or creates a lead, appears in Messages, and can hand the conversation to a human. Its answers and program suggestions follow the university scope selected in Filters.")} </p>
                 </div>
               )}
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="isActive" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="rounded" />
-              <label htmlFor="isActive" className="text-sm font-medium">Active</label>
+              <label htmlFor="isActive" className="text-sm font-medium">{translateUi(uiLanguage, "Active")}</label>
             </div>
           </TabsContent>
 
@@ -847,24 +845,20 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
             {mode === "ai_chatbot" && (
               <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-950">
                 <div className="flex items-center gap-2 font-semibold">
-                  <ShieldCheck className="h-4 w-4" />
-                  Choose the chatbot's university scope
-                </div>
-                <p className="mt-1 text-xs leading-5 text-amber-900/80">
-                  Use All Universities for general domains, or select one or more universities for a focused widget. Program results and AI answers use the same scope.
-                </p>
+                  <ShieldCheck className="h-4 w-4" /> {translateUi(uiLanguage, "Choose the chatbot's university scope")} </div>
+                <p className="mt-1 text-xs leading-5 text-amber-900/80"> {translateUi(uiLanguage, "Use All Universities for general domains, or select one or more universities for a focused widget. Program results and AI answers use the same scope.")} </p>
               </div>
             )}
             <div>
-              <h4 className="text-sm font-semibold mb-2">Preset Filters</h4>
-              <p className="text-xs text-muted-foreground mb-3">Set default filter values for this widget. Only matching programs will be shown.</p>
+              <h4 className="text-sm font-semibold mb-2">{translateUi(uiLanguage, "Preset Filters")}</h4>
+              <p className="text-xs text-muted-foreground mb-3">{translateUi(uiLanguage, "Set default filter values for this widget. Only matching programs will be shown.")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium">Country</label>
+                  <label className="text-xs font-medium">{translateUi(uiLanguage, "Country")}</label>
                   <Select value={presetCountry || "__none__"} onValueChange={v => setPresetCountry(v === "__none__" ? "" : v)}>
-                    <SelectTrigger><SelectValue placeholder="All Countries" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "All Countries")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">All Countries</SelectItem>
+                      <SelectItem value="__none__">{translateUi(uiLanguage, "All Countries")}</SelectItem>
                       {(filterOptions?.countries || []).map(c => (
                         <SelectItem key={c} value={c}>{c}</SelectItem>
                       ))}
@@ -872,11 +866,11 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium">City</label>
+                  <label className="text-xs font-medium">{translateUi(uiLanguage, "City")}</label>
                   <Select value={presetCity || "__none__"} onValueChange={v => setPresetCity(v === "__none__" ? "" : v)}>
-                    <SelectTrigger><SelectValue placeholder="All Cities" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "All Cities")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">All Cities</SelectItem>
+                      <SelectItem value="__none__">{translateUi(uiLanguage, "All Cities")}</SelectItem>
                       {(filterOptions?.cities || []).map(c => (
                         <SelectItem key={c} value={c}>{c}</SelectItem>
                       ))}
@@ -884,11 +878,11 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium">University Type</label>
+                  <label className="text-xs font-medium">{translateUi(uiLanguage, "University Type")}</label>
                   <Select value={presetUniversityType || "__none__"} onValueChange={v => setPresetUniversityType(v === "__none__" ? "" : v)}>
-                    <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "All Types")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">All Types</SelectItem>
+                      <SelectItem value="__none__">{translateUi(uiLanguage, "All Types")}</SelectItem>
                       {(filterOptions?.universityTypes || []).map(t => (
                         <SelectItem key={t} value={t}>{t}</SelectItem>
                       ))}
@@ -896,7 +890,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-medium">University scope</label>
+                  <label className="text-xs font-medium">{translateUi(uiLanguage, "University scope")}</label>
                   <div className="grid grid-cols-2 rounded-lg border bg-muted/40 p-1">
                     <Button
                       type="button"
@@ -904,18 +898,14 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                       variant={universityScopeMode === "all" ? "default" : "ghost"}
                       onClick={() => setUniversityScopeMode("all")}
                       className="h-8"
-                    >
-                      All Universities
-                    </Button>
+                    > {translateUi(uiLanguage, "All Universities")} </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant={universityScopeMode === "selected" ? "default" : "ghost"}
                       onClick={() => setUniversityScopeMode("selected")}
                       className="h-8"
-                    >
-                      Selected
-                    </Button>
+                    > {translateUi(uiLanguage, "Selected")} </Button>
                   </div>
                   {universityScopeMode === "selected" && (
                     <MultiSelectFilter
@@ -925,7 +915,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                       }))}
                       value={presetUniversityIds}
                       onChange={setPresetUniversityIds}
-                      placeholder="Select universities"
+                      placeholder={translateUi(uiLanguage, "Select universities")}
                       searchPlaceholder="Search universities..."
                       emptyText="No universities found"
                       selectedText={count => `${count} ${count === 1 ? "university" : "universities"} selected`}
@@ -933,7 +923,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                   )}
                   {universityScopeMode === "all" && (
                     <div className="space-y-1.5 rounded-lg border bg-background p-3">
-                      <label className="text-xs font-medium">Default university (optional)</label>
+                      <label className="text-xs font-medium">{translateUi(uiLanguage, "Default university (optional)")}</label>
                       <Select
                         value={presetDefaultUniversityId || "__none__"}
                         onValueChange={value => {
@@ -945,26 +935,24 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                           }
                         }}
                       >
-                        <SelectTrigger><SelectValue placeholder="All Universities on first load" /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "All Universities on first load")} /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="__none__">All Universities on first load</SelectItem>
+                          <SelectItem value="__none__">{translateUi(uiLanguage, "All Universities on first load")}</SelectItem>
                           {(filterOptions?.universities || []).map(university => (
                             <SelectItem key={university.id} value={String(university.id)}>{university.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <p className="text-[11px] leading-4 text-muted-foreground">
-                        The widget opens with this university selected. Visitors can still switch to any university or All Universities.
-                      </p>
+                      <p className="text-[11px] leading-4 text-muted-foreground"> {translateUi(uiLanguage, "The widget opens with this university selected. Visitors can still switch to any university or All Universities.")} </p>
                     </div>
                   )}
                 </div>
                 <div>
-                  <label className="text-xs font-medium">Level</label>
+                  <label className="text-xs font-medium">{translateUi(uiLanguage, "Level")}</label>
                   <Select value={presetLevel || "__none__"} onValueChange={v => setPresetLevel(v === "__none__" ? "" : v)}>
-                    <SelectTrigger><SelectValue placeholder="All Levels" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "All Levels")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">All Levels</SelectItem>
+                      <SelectItem value="__none__">{translateUi(uiLanguage, "All Levels")}</SelectItem>
                       {(filterOptions?.degrees || []).map(d => (
                         <SelectItem key={d} value={d}>{d}</SelectItem>
                       ))}
@@ -972,11 +960,11 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium">Language</label>
+                  <label className="text-xs font-medium">{translateUi(uiLanguage, "Language")}</label>
                   <Select value={presetLanguage || "__none__"} onValueChange={v => setPresetLanguage(v === "__none__" ? "" : v)}>
-                    <SelectTrigger><SelectValue placeholder="All Languages" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "All Languages")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">All Languages</SelectItem>
+                      <SelectItem value="__none__">{translateUi(uiLanguage, "All Languages")}</SelectItem>
                       {(filterOptions?.languages || []).map(l => (
                         <SelectItem key={l} value={l}>{l}</SelectItem>
                       ))}
@@ -984,11 +972,11 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium">Field of study</label>
+                  <label className="text-xs font-medium">{translateUi(uiLanguage, "Field of study")}</label>
                   <Select value={presetField || "__none__"} onValueChange={v => setPresetField(v === "__none__" ? "" : v)}>
-                    <SelectTrigger><SelectValue placeholder="All Fields" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "All Fields")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">All Fields</SelectItem>
+                      <SelectItem value="__none__">{translateUi(uiLanguage, "All Fields")}</SelectItem>
                       {(filterOptions?.fields || []).map(f => (
                         <SelectItem key={f} value={f}>{f}</SelectItem>
                       ))}
@@ -999,8 +987,8 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold mb-2">Locked Filters</h4>
-              <p className="text-xs text-muted-foreground mb-2">Visitors cannot change these filters</p>
+              <h4 className="text-sm font-semibold mb-2">{translateUi(uiLanguage, "Locked Filters")}</h4>
+              <p className="text-xs text-muted-foreground mb-2">{translateUi(uiLanguage, "Visitors cannot change these filters")}</p>
               <div className="flex flex-wrap gap-2">
                 {FILTER_KEYS.map(k => {
                   const keepsDefaultChangeable = k === "universityId" && universityScopeMode === "all" && !!presetDefaultUniversityId;
@@ -1020,8 +1008,8 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold mb-2">Hidden Filters</h4>
-              <p className="text-xs text-muted-foreground mb-2">These filters won't be shown to visitors</p>
+              <h4 className="text-sm font-semibold mb-2">{translateUi(uiLanguage, "Hidden Filters")}</h4>
+              <p className="text-xs text-muted-foreground mb-2">{translateUi(uiLanguage, "These filters won't be shown to visitors")}</p>
               <div className="flex flex-wrap gap-2">
                 {FILTER_KEYS.map(k => {
                   const keepsDefaultChangeable = k === "universityId" && universityScopeMode === "all" && !!presetDefaultUniversityId;
@@ -1044,28 +1032,28 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
           <TabsContent value="theme" className="space-y-4 mt-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium">Primary Color</label>
+                <label className="text-sm font-medium">{translateUi(uiLanguage, "Primary Color")}</label>
                 <div className="flex gap-2 items-center">
                   <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="w-10 h-10 rounded cursor-pointer" />
                   <Input value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="flex-1" />
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium">Button Color</label>
+                <label className="text-sm font-medium">{translateUi(uiLanguage, "Button Color")}</label>
                 <div className="flex gap-2 items-center">
                   <input type="color" value={buttonColor} onChange={e => setButtonColor(e.target.value)} className="w-10 h-10 rounded cursor-pointer" />
                   <Input value={buttonColor} onChange={e => setButtonColor(e.target.value)} className="flex-1" />
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium">Border Radius</label>
-                <Input value={borderRadius} onChange={e => setBorderRadius(e.target.value)} placeholder="8px" />
+                <label className="text-sm font-medium">{translateUi(uiLanguage, "Border Radius")}</label>
+                <Input value={borderRadius} onChange={e => setBorderRadius(e.target.value)} placeholder={translateUi(uiLanguage, "8px")} />
               </div>
             </div>
             {mode === "ai_chatbot" && (
               <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
                 <div>
-                  <label className="text-sm font-medium">Assistant Logo</label>
+                  <label className="text-sm font-medium">{translateUi(uiLanguage, "Assistant Logo")}</label>
                   <div className="mt-2 flex items-center gap-3">
                     <button
                       type="button"
@@ -1076,12 +1064,10 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                       {logoUploading ? (
                         <Loader2 className="h-6 w-6 animate-spin" />
                       ) : logoUrl ? (
-                        <img src={logoUrl} alt="Assistant logo" className="h-full w-full object-contain p-2" />
+                        <img src={logoUrl} alt={translateUi(uiLanguage, "Assistant logo")} className="h-full w-full object-contain p-2" />
                       ) : (
                         <span className="flex flex-col items-center gap-1 text-xs">
-                          <Upload className="h-5 w-5" />
-                          Upload
-                        </span>
+                          <Upload className="h-5 w-5" /> {translateUi(uiLanguage, "Upload")} </span>
                       )}
                     </button>
                     <div className="space-y-2">
@@ -1091,9 +1077,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                       </Button>
                       {logoUrl && (
                         <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setLogoUrl("")}>
-                          <X className="mr-2 h-4 w-4" />
-                          Use university logo
-                        </Button>
+                          <X className="mr-2 h-4 w-4" /> {translateUi(uiLanguage, "Use university logo")} </Button>
                       )}
                     </div>
                   </div>
@@ -1108,27 +1092,25 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                       event.target.value = "";
                     }}
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    PNG, JPG or WebP, up to 5 MB. If empty, the selected university logo from Catalog is used automatically.
-                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground"> {translateUi(uiLanguage, "PNG, JPG or WebP, up to 5 MB. If empty, the selected university logo from Catalog is used automatically.")} </p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Assistant Name</label>
+                  <label className="text-sm font-medium">{translateUi(uiLanguage, "Assistant Name")}</label>
                   <Input
                     value={assistantName}
                     onChange={e => setAssistantName(e.target.value)}
-                    placeholder="X University Authorized Representative Application Assistant"
+                    placeholder={translateUi(uiLanguage, "X University Authorized Representative Application Assistant")}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Welcome Message</label>
+                  <label className="text-sm font-medium">{translateUi(uiLanguage, "Welcome Message")}</label>
                   <textarea
                     value={welcomeMessage}
                     onChange={e => setWelcomeMessage(e.target.value)}
                     rows={4}
                     maxLength={400}
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    placeholder="Leave empty to generate the university-specific welcome message automatically"
+                    placeholder={translateUi(uiLanguage, "Leave empty to generate the university-specific welcome message automatically")}
                   />
                   <p className="mt-1 text-right text-xs text-muted-foreground">{welcomeMessage.length}/400</p>
                 </div>
@@ -1138,10 +1120,10 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
 
           <TabsContent value="security" className="space-y-4 mt-4">
             <div>
-              <label className="text-sm font-medium">Allowed Domains</label>
+              <label className="text-sm font-medium">{translateUi(uiLanguage, "Allowed Domains")}</label>
               <Input value={domains} onChange={e => setDomains(e.target.value)}
-                placeholder="e.g., example.com, masterstudyinturkey.com" />
-              <p className="text-xs text-muted-foreground mt-1">Comma-separated. Leave empty to allow all domains.</p>
+                placeholder={translateUi(uiLanguage, "e.g., example.com, masterstudyinturkey.com")} />
+              <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Comma-separated. Leave empty to allow all domains.")}</p>
             </div>
           </TabsContent>
 
@@ -1226,13 +1208,13 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
               </Select>
             </div>
             <div className="text-xs text-muted-foreground">
-              {t("adminEmbeds.laneLabel")}: <code>widget:{widget?.id || "new"}</code> · {t("adminEmbeds.laneHelp")}
+              {t("adminEmbeds.laneLabel")}: <code>{translateUi(uiLanguage, "widget:")}{widget?.id || "new"}</code> · {t("adminEmbeds.laneHelp")}
             </div>
           </TabsContent>
         </Tabs>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? "Saving..." : isEdit ? "Update Widget" : "Create Widget"}
           </Button>
@@ -1243,6 +1225,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
 }
 
 function EmbedCodeDialog({ widget, onClose }: { widget: Widget; onClose: () => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const domain = window.location.origin;
   const apiUrl = `${domain}${API_BASE}`;
@@ -1341,29 +1324,24 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
     <Dialog open={true} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Embed Code: {widget.name}</DialogTitle>
+          <DialogTitle>{translateUi(uiLanguage, "Embed Code:")} {widget.name}</DialogTitle>
         </DialogHeader>
 
         <Tabs defaultValue="script">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="script">JavaScript Embed</TabsTrigger>
-            <TabsTrigger value="iframe">Iframe Embed</TabsTrigger>
+            <TabsTrigger value="script">{translateUi(uiLanguage, "JavaScript Embed")}</TabsTrigger>
+            <TabsTrigger value="iframe">{translateUi(uiLanguage, "Iframe Embed")}</TabsTrigger>
             <TabsTrigger value="api">API</TabsTrigger>
           </TabsList>
 
           <TabsContent value="script" className="mt-4">
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Paste this code into a WordPress Custom HTML block or anywhere in your HTML page.
-                The widget will auto-resize to fit its content.
-              </p>
+              <p className="text-sm text-muted-foreground"> {translateUi(uiLanguage, "Paste this code into a WordPress Custom HTML block or anywhere in your HTML page. The widget will auto-resize to fit its content.")} </p>
               {isRestricted && (
                 <div className="rounded-md border border-blue-200 bg-blue-50 p-3 space-y-3">
-                  <p className="text-xs font-medium text-blue-900">
-                    This widget is restricted to specific domains. Partners integrate using a server-side API key — the key is stored on their backend and never placed in HTML.
-                  </p>
+                  <p className="text-xs font-medium text-blue-900"> {translateUi(uiLanguage, "This widget is restricted to specific domains. Partners integrate using a server-side API key — the key is stored on their backend and never placed in HTML.")} </p>
                   <div className="space-y-2">
-                    <p className="text-xs font-medium text-blue-800">Widget API Key (keep this secret — share with partner's backend team only):</p>
+                    <p className="text-xs font-medium text-blue-800">{translateUi(uiLanguage, "Widget API Key (keep this secret — share with partner's backend team only):")}</p>
                     <div className="flex items-center gap-2">
                       <code className="flex-1 text-xs bg-white border border-blue-200 rounded px-2 py-1 font-mono truncate">
                         {currentApiKey
@@ -1386,12 +1364,10 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
                     <Button size="sm" variant="outline" onClick={rotateKey} disabled={rotating} className="text-xs">
                       {rotating ? "Rotating…" : "Rotate API Key"}
                     </Button>
-                    <p className="text-xs text-blue-700">
-                      Rotate only if the key is compromised — partners must update their backend immediately after rotation.
-                    </p>
+                    <p className="text-xs text-blue-700"> {translateUi(uiLanguage, "Rotate only if the key is compromised — partners must update their backend immediately after rotation.")} </p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-xs font-medium text-blue-800">Backend integration (add to your server — not your HTML):</p>
+                    <p className="text-xs font-medium text-blue-800">{translateUi(uiLanguage, "Backend integration (add to your server — not your HTML):")}</p>
                     <div className="relative">
                       <pre className="bg-white border border-blue-100 rounded text-xs overflow-x-auto p-2 font-mono whitespace-pre-wrap">{partnerBackendExample}</pre>
                       <Button size="sm" variant="ghost" className="absolute top-1 right-1 h-6 px-2 text-xs"
@@ -1408,69 +1384,61 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
                 </pre>
                 <Button size="sm" variant="secondary" className="absolute top-2 right-2"
                   onClick={() => copy(scriptCode, "Script embed code")}>
-                  <Copy className="w-3 h-3 mr-1" /> Copy
-                </Button>
+                  <Copy className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Copy")} </Button>
               </div>
               {isRestricted && (
-                <p className="text-xs text-muted-foreground">Replace <code>/your-backend/edcons-token</code> with your actual backend endpoint URL.</p>
+                <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Replace")} <code>/your-backend/edcons-token</code> {translateUi(uiLanguage, "with your actual backend endpoint URL.")}</p>
               )}
             </div>
           </TabsContent>
 
           <TabsContent value="iframe" className="mt-4">
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Use this iframe code as a fallback if JavaScript embed doesn't work.
-                Note: iframe won't auto-resize.
-              </p>
+              <p className="text-sm text-muted-foreground"> {translateUi(uiLanguage, "Use this iframe code as a fallback if JavaScript embed doesn't work. Note: iframe won't auto-resize.")} </p>
               <div className="relative">
                 <pre className="bg-muted rounded-lg p-4 text-xs overflow-x-auto whitespace-pre-wrap break-all font-mono">
                   {iframeCode}
                 </pre>
                 <Button size="sm" variant="secondary" className="absolute top-2 right-2"
                   onClick={() => copy(iframeCode, "Iframe embed code")}>
-                  <Copy className="w-3 h-3 mr-1" /> Copy
-                </Button>
+                  <Copy className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Copy")} </Button>
               </div>
             </div>
           </TabsContent>
 
           <TabsContent value="api" className="mt-4">
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Use the REST API to fetch program data directly and build your own custom UI.
-                All endpoints are public and return JSON.
-              </p>
+              <p className="text-sm text-muted-foreground"> {translateUi(uiLanguage, "Use the REST API to fetch program data directly and build your own custom UI. All endpoints are public and return JSON.")} </p>
 
               <div className="space-y-2">
-                <h4 className="text-sm font-semibold">Endpoints</h4>
+                <h4 className="text-sm font-semibold">{translateUi(uiLanguage, "Endpoints")}</h4>
                 <div className="space-y-1.5">
                   <div className="flex items-start gap-2 p-2 bg-muted/50 rounded-md">
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800 shrink-0 mt-0.5">GET</Badge>
                     <div className="min-w-0">
                       <code className="text-xs font-mono break-all">/public/embed/{widget.slug}/programs</code>
-                      <p className="text-xs text-muted-foreground mt-0.5">List programs with pagination & filters</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{translateUi(uiLanguage, "List programs with pagination & filters")}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-2 p-2 bg-muted/50 rounded-md">
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800 shrink-0 mt-0.5">GET</Badge>
                     <div className="min-w-0">
                       <code className="text-xs font-mono break-all">/public/embed/{widget.slug}/filters</code>
-                      <p className="text-xs text-muted-foreground mt-0.5">Available filter options (countries, cities, levels, languages)</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{translateUi(uiLanguage, "Available filter options (countries, cities, levels, languages)")}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-2 p-2 bg-muted/50 rounded-md">
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800 shrink-0 mt-0.5">GET</Badge>
                     <div className="min-w-0">
                       <code className="text-xs font-mono break-all">/public/embed/{widget.slug}/config</code>
-                      <p className="text-xs text-muted-foreground mt-0.5">Widget configuration (name, mode, theme, filters)</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{translateUi(uiLanguage, "Widget configuration (name, mode, theme, filters)")}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <h4 className="text-sm font-semibold">Query Parameters (programs)</h4>
+                <h4 className="text-sm font-semibold">{translateUi(uiLanguage, "Query Parameters (programs)")}</h4>
                 <div className="grid grid-cols-2 gap-1.5 text-xs">
                   {[
                     ["page", "Page number (default: 1)"],
@@ -1493,11 +1461,10 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold">JavaScript Example</h4>
+                  <h4 className="text-sm font-semibold">{translateUi(uiLanguage, "JavaScript Example")}</h4>
                   <Button size="sm" variant="secondary" className="h-6 text-[10px] px-2"
                     onClick={() => copy(apiExample, "JavaScript API example")}>
-                    <Copy className="w-3 h-3 mr-1" /> Copy
-                  </Button>
+                    <Copy className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Copy")} </Button>
                 </div>
                 <pre className="bg-muted rounded-lg p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all font-mono max-h-48 overflow-y-auto">
                   {apiExample}
@@ -1506,11 +1473,10 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold">cURL Example</h4>
+                  <h4 className="text-sm font-semibold">{translateUi(uiLanguage, "cURL Example")}</h4>
                   <Button size="sm" variant="secondary" className="h-6 text-[10px] px-2"
                     onClick={() => copy(curlExample, "cURL API example")}>
-                    <Copy className="w-3 h-3 mr-1" /> Copy
-                  </Button>
+                    <Copy className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Copy")} </Button>
                 </div>
                 <pre className="bg-muted rounded-lg p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all font-mono max-h-36 overflow-y-auto">
                   {curlExample}
@@ -1521,20 +1487,19 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
         </Tabs>
 
         <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-          <h4 className="font-semibold text-sm mb-2">WordPress Instructions</h4>
+          <h4 className="font-semibold text-sm mb-2">{translateUi(uiLanguage, "WordPress Instructions")}</h4>
           <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-            <li>Go to the page/post where you want the widget</li>
-            <li>Add a "Custom HTML" block</li>
-            <li>Paste the embed code (JavaScript or iframe)</li>
-            <li>Preview/publish the page</li>
+            <li>{translateUi(uiLanguage, "Go to the page/post where you want the widget")}</li>
+            <li>{translateUi(uiLanguage, "Add a \"Custom HTML\" block")}</li>
+            <li>{translateUi(uiLanguage, "Paste the embed code (JavaScript or iframe)")}</li>
+            <li>{translateUi(uiLanguage, "Preview/publish the page")}</li>
           </ol>
         </div>
 
         <div className="mt-2 flex gap-2">
           <Button variant="outline" size="sm" asChild>
             <a href={`${apiUrl}/public/embed/${widget.slug}/widget`} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="w-3 h-3 mr-1" /> Preview Widget
-            </a>
+              <ExternalLink className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Preview Widget")} </a>
           </Button>
         </div>
       </DialogContent>
@@ -1543,6 +1508,7 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
 }
 
 function DeleteWidgetBtn({ id, name, onDone }: { id: number; name: string; onDone: () => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
   const del = useMutation({
@@ -1558,13 +1524,11 @@ function DeleteWidgetBtn({ id, name, onDone }: { id: number; name: string; onDon
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Widget</DialogTitle>
+            <DialogTitle>{translateUi(uiLanguage, "Delete Widget")}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Are you sure you want to delete <strong>{name}</strong>? This cannot be undone.
-          </p>
+          <p className="text-sm text-muted-foreground"> {translateUi(uiLanguage, "Are you sure you want to delete")} <strong>{name}</strong>{translateUi(uiLanguage, "? This cannot be undone.")} </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{translateUi(uiLanguage, "Cancel")}</Button>
             <Button variant="destructive" onClick={() => del.mutate()} disabled={del.isPending}>
               {del.isPending ? "Deleting..." : "Delete"}
             </Button>

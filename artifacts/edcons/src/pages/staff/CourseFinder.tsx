@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -212,6 +213,7 @@ function getInitialCourseFinderViewMode(): "grid" | "list" {
 }
 
 export default function CourseFinder() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, lang } = useI18n();
   const { user, hasAgentStaffPermission } = useAuth(true);
   const { toast } = useToast();
@@ -931,7 +933,7 @@ export default function CourseFinder() {
               <div
                 className="inline-flex h-9 items-center overflow-hidden rounded-xl border border-border/70 bg-muted/50 p-0.5 shadow-sm"
                 role="group"
-                aria-label="Sort programs"
+                aria-label={translateUi(uiLanguage, "Sort programs")}
               >
                 <button
                   type="button"
@@ -942,8 +944,8 @@ export default function CourseFinder() {
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
                   )}
-                  aria-label="Recommended order"
-                  title="Recommended order"
+                  aria-label={translateUi(uiLanguage, "Recommended order")}
+                  title={translateUi(uiLanguage, "Recommended order")}
                 >
                   <ArrowUpDown className="h-4 w-4" />
                 </button>
@@ -956,8 +958,8 @@ export default function CourseFinder() {
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
                   )}
-                  aria-label="Price from low to high"
-                  title="Price from low to high"
+                  aria-label={translateUi(uiLanguage, "Price from low to high")}
+                  title={translateUi(uiLanguage, "Price from low to high")}
                 >
                   <ArrowUp className="h-4 w-4" />
                 </button>
@@ -970,8 +972,8 @@ export default function CourseFinder() {
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
                   )}
-                  aria-label="Price from high to low"
-                  title="Price from high to low"
+                  aria-label={translateUi(uiLanguage, "Price from high to low")}
+                  title={translateUi(uiLanguage, "Price from high to low")}
                 >
                   <ArrowDown className="h-4 w-4" />
                 </button>
@@ -983,8 +985,7 @@ export default function CourseFinder() {
             <div className="flex items-center gap-2">
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs text-muted-foreground">
-                  <X className="w-3 h-3 mr-1" /> Clear Filters
-                </Button>
+                  <X className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Clear Filters")} </Button>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
@@ -1020,9 +1021,7 @@ export default function CourseFinder() {
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           ) : (
                             <DollarSign className="w-3.5 h-3.5" />
-                          )}
-                          PDF Fee Adjustment
-                          {pdfMarkup !== 0 && (
+                          )} {translateUi(uiLanguage, "PDF Fee Adjustment")} {pdfMarkup !== 0 && (
                             <Badge variant="secondary" className={`ml-1 text-[10px] px-1.5 py-0 h-4 ${pdfMarkup > 0 ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"}`}>
                               {pdfMarkup > 0 ? "+" : ""}{pdfMarkup.toLocaleString()} {pdfFeeContext.currency}
                             </Badge>
@@ -1040,9 +1039,7 @@ export default function CourseFinder() {
                               if (checked) setPdfMarkup(0);
                             }}
                             className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
-                          />
-                          Hide Service Fee
-                        </label>
+                          /> {translateUi(uiLanguage, "Hide Service Fee")} </label>
                       )}
                       <Button
                         size="sm"
@@ -1054,8 +1051,7 @@ export default function CourseFinder() {
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         ) : (
                           <FileDown className="w-3.5 h-3.5" />
-                        )}
-                        Download Proposal ({selectedIds.size})
+                        )} {translateUi(uiLanguage, "Download Proposal (")}{selectedIds.size})
                       </Button>
                     </>
                   )}
@@ -1068,36 +1064,31 @@ export default function CourseFinder() {
                   onClick={exportToExcel}
                   className="h-8 text-xs gap-1.5 rounded-lg"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  Export Excel
-                </Button>
+                  <Download className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Export Excel")} </Button>
               )}
               <div className="flex items-center border rounded-lg overflow-hidden">
                 <button
                   onClick={() => setViewMode("grid")}
                   className={`p-1.5 transition-colors ${viewMode === "grid" ? "bg-primary text-white" : "bg-card text-muted-foreground hover:text-foreground"}`}
-                  title="Grid view"
+                  title={translateUi(uiLanguage, "Grid view")}
                 >
                   <LayoutGrid className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setViewMode("list")}
                   className={`p-1.5 transition-colors ${viewMode === "list" ? "bg-primary text-white" : "bg-card text-muted-foreground hover:text-foreground"}`}
-                  title="List view"
+                  title={translateUi(uiLanguage, "List view")}
                 >
                   <List className="w-4 h-4" />
                 </button>
               </div>
               {isFetching && !isPending && !isError && (
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground" role="status">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Updating results...
-                </div>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> {translateUi(uiLanguage, "Updating results...")} </div>
               )}
               {meta && !isError && (
                 <div className="text-sm text-muted-foreground">
-                  {meta.total} program{meta.total !== 1 ? "s" : ""} found
-                </div>
+                  {meta.total} {translateUi(uiLanguage, "program")}{meta.total !== 1 ? "s" : ""} {translateUi(uiLanguage, "found")} </div>
               )}
             </div>
           </div>
@@ -1134,10 +1125,8 @@ export default function CourseFinder() {
         ) : isError ? (
           <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-6 py-12 text-center" role="alert">
             <AlertCircle className="mx-auto mb-3 h-10 w-10 text-destructive" />
-            <p className="text-lg font-semibold">Programs could not be loaded</p>
-            <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
-              The selected filters were not applied. No previous results are being shown.
-            </p>
+            <p className="text-lg font-semibold">{translateUi(uiLanguage, "Programs could not be loaded")}</p>
+            <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground"> {translateUi(uiLanguage, "The selected filters were not applied. No previous results are being shown.")} </p>
             <Button variant="outline" className="mt-4" onClick={() => void refetch()}>
               {t("common.retry")}
             </Button>
@@ -1145,8 +1134,8 @@ export default function CourseFinder() {
         ) : programs.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p className="text-lg font-medium">No programs found</p>
-            <p className="text-sm">Try adjusting your filters or search terms</p>
+            <p className="text-lg font-medium">{translateUi(uiLanguage, "No programs found")}</p>
+            <p className="text-sm">{translateUi(uiLanguage, "Try adjusting your filters or search terms")}</p>
           </div>
         ) : viewMode === "grid" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -1201,8 +1190,7 @@ export default function CourseFinder() {
             <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => { setPage(p => p - 1); setSelectedIds(new Set()); }}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <span className="text-sm text-muted-foreground px-3">
-              Page {meta.page} of {meta.totalPages}
+            <span className="text-sm text-muted-foreground px-3"> {translateUi(uiLanguage, "Page")} {meta.page} {translateUi(uiLanguage, "of")} {meta.totalPages}
             </span>
             <Button variant="outline" size="sm" disabled={page >= meta.totalPages} onClick={() => { setPage(p => p + 1); setSelectedIds(new Set()); }}>
               <ChevronRight className="w-4 h-4" />
@@ -1300,6 +1288,7 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
   onResetPage: () => void;
   t: (k: string) => string;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   // Convert ColumnHeader's single-select API to the array-based server filters.
   const setSingle = (key: keyof Filters, v: string) => {
     setFilters(prev => ({ ...prev, [key]: v ? [v] : [] } as Filters));
@@ -1386,7 +1375,7 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
                 }}
               />
               {(showCommission || showServiceFee) && (
-                <th className="p-3 text-right">Internal Fees</th>
+                <th className="p-3 text-right">{translateUi(uiLanguage, "Internal Fees")}</th>
               )}
               <ColumnHeader
                 asTh
@@ -1569,14 +1558,14 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
                       <button
                         onClick={() => onInfo(p)}
                         className="p-1.5 rounded-lg hover:bg-muted/80 transition-colors"
-                        title="Details"
+                        title={translateUi(uiLanguage, "Details")}
                       >
                         <Info className="w-3.5 h-3.5 text-muted-foreground" />
                       </button>
                       <button
                         onClick={() => onApply(p)}
                         className="p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
-                        title="Apply"
+                        title={translateUi(uiLanguage, "Apply")}
                       >
                         <Send className="w-3.5 h-3.5 text-primary" />
                       </button>
@@ -1609,6 +1598,7 @@ function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, o
   onToggleSelect: () => void;
   t: (k: string, vars?: Record<string, string>) => string;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
   const commissionAmount = calcCommissionAmount(p, agentShareRate);
   const cur = p.currency ?? "USD";
@@ -1681,7 +1671,7 @@ function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, o
                 <span className="text-sm text-muted-foreground/50 line-through leading-none">{formatCurrency(p.tuitionFee, cur)}</span>
               )}
               {hasDiscount && (
-                <Badge className="bg-emerald-500 text-white text-[10px] font-bold rounded-full border-0 px-2 py-0 h-[18px]">{pct}% OFF</Badge>
+                <Badge className="bg-emerald-500 text-white text-[10px] font-bold rounded-full border-0 px-2 py-0 h-[18px]">{pct}{translateUi(uiLanguage, "% OFF")}</Badge>
               )}
             </div>
           </div>
@@ -1798,7 +1788,7 @@ function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, o
         <button
           onClick={onInfo}
           className="w-9 h-9 rounded-full border-2 border-border/60 flex items-center justify-center text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all shrink-0"
-          aria-label="Details"
+          aria-label={translateUi(uiLanguage, "Details")}
         >
           <Info className="w-4 h-4" />
         </button>
@@ -1818,6 +1808,7 @@ function UniversityInfoDialog({ program: p, onClose }: {
   program: Program | null;
   onClose: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { user } = useAuth(true);
   const canSeeContacts = !!user && ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"].includes(user.role);
   if (!p) return null;
@@ -1872,31 +1863,30 @@ function UniversityInfoDialog({ program: p, onClose }: {
           {(p.universityQsRanking || p.universityTimesRanking || p.universityShanghaiRanking || p.universityCwtsLeidenRanking) && (
             <div>
               <h4 className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium flex items-center gap-1.5 mb-2">
-                <Award className="w-3.5 h-3.5" /> World Rankings
-              </h4>
+                <Award className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "World Rankings")} </h4>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {p.universityQsRanking && (
                   <div className="bg-muted/40 border rounded-lg px-3 py-2">
                     <p className="text-base font-bold text-primary leading-none">#{p.universityQsRanking}</p>
-                    <p className="text-[10px] text-muted-foreground font-medium mt-1">QS World</p>
+                    <p className="text-[10px] text-muted-foreground font-medium mt-1">{translateUi(uiLanguage, "QS World")}</p>
                   </div>
                 )}
                 {p.universityTimesRanking && (
                   <div className="bg-muted/40 border rounded-lg px-3 py-2">
                     <p className="text-base font-bold text-primary leading-none">#{p.universityTimesRanking}</p>
-                    <p className="text-[10px] text-muted-foreground font-medium mt-1">Times HE</p>
+                    <p className="text-[10px] text-muted-foreground font-medium mt-1">{translateUi(uiLanguage, "Times HE")}</p>
                   </div>
                 )}
                 {p.universityShanghaiRanking && (
                   <div className="bg-muted/40 border rounded-lg px-3 py-2">
                     <p className="text-base font-bold text-primary leading-none">#{p.universityShanghaiRanking}</p>
-                    <p className="text-[10px] text-muted-foreground font-medium mt-1">Shanghai</p>
+                    <p className="text-[10px] text-muted-foreground font-medium mt-1">{translateUi(uiLanguage, "Shanghai")}</p>
                   </div>
                 )}
                 {p.universityCwtsLeidenRanking && (
                   <div className="bg-muted/40 border rounded-lg px-3 py-2">
                     <p className="text-base font-bold text-primary leading-none">#{p.universityCwtsLeidenRanking}</p>
-                    <p className="text-[10px] text-muted-foreground font-medium mt-1">CWTS Leiden</p>
+                    <p className="text-[10px] text-muted-foreground font-medium mt-1">{translateUi(uiLanguage, "CWTS Leiden")}</p>
                   </div>
                 )}
               </div>
@@ -1907,8 +1897,7 @@ function UniversityInfoDialog({ program: p, onClose }: {
           {canSeeContacts && (p.universityContactName || p.universityContactEmail || p.universityContactPhone) && (
             <div>
               <h4 className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium flex items-center gap-1.5 mb-2">
-                <User className="w-3.5 h-3.5" /> Contact Person
-              </h4>
+                <User className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Contact Person")} </h4>
               <div className="bg-muted/40 border rounded-lg p-3 space-y-1.5">
                 {p.universityContactName && (
                   <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -1942,8 +1931,7 @@ function UniversityInfoDialog({ program: p, onClose }: {
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 w-full py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
             >
-              <ExternalLink className="w-4 h-4" /> Visit University Website
-            </a>
+              <ExternalLink className="w-4 h-4" /> {translateUi(uiLanguage, "Visit University Website")} </a>
           </div>
         )}
       </DialogContent>
@@ -1960,6 +1948,7 @@ function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate
   showApplicationFee?: boolean;
   showServiceFee?: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   if (!p) return null;
   const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
@@ -2027,7 +2016,7 @@ function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate
               <DialogTitle className="text-lg">{p.name}</DialogTitle>
               <div className="flex gap-1.5 mt-1.5">
                 {p.degree && <Badge variant="secondary" className="text-xs">{p.degree}</Badge>}
-                {hasDiscount && <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700/60">Discounted</Badge>}
+                {hasDiscount && <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700/60">{translateUi(uiLanguage, "Discounted")}</Badge>}
                 {p.universityStatus && (
                   <Badge variant="outline" className={`text-xs ${p.universityStatus === "open" ? "border-emerald-300 text-emerald-700" : "border-amber-300 text-amber-700"}`}>
                     {p.universityStatus}
@@ -2072,7 +2061,7 @@ function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-sm">Requirements</h3>
+                <h3 className="font-semibold text-sm">{translateUi(uiLanguage, "Requirements")}</h3>
               </div>
               <div className="bg-muted/30 rounded-xl p-3">
                 <p className="text-sm text-muted-foreground whitespace-pre-wrap">{p.requirements}</p>
@@ -2081,7 +2070,7 @@ function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate
           )}
           {p.refundProcess && (
             <div className="rounded-xl border bg-muted/20 p-4">
-              <h3 className="font-semibold text-sm">Refund Process</h3>
+              <h3 className="font-semibold text-sm">{translateUi(uiLanguage, "Refund Process")}</h3>
               <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">{p.refundProcess}</p>
             </div>
           )}
@@ -2192,6 +2181,7 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
   docType: LevelDoc; uploaded?: UploadedDoc; onFile?: boolean;
   onUpload: (doc: UploadedDoc) => void; onRemove: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -2253,14 +2243,14 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
         </button>
         <CheckCircle2 className="w-5 h-5 text-green-500" />
         <p className="text-[10px] font-semibold text-foreground truncate max-w-[80px]">{uploaded.file.name}</p>
-        {(uploaded.partCount || 1) > 1 && <p className="text-[9px] font-medium text-green-700">{uploaded.partCount} parts combined</p>}
+        {(uploaded.partCount || 1) > 1 && <p className="text-[9px] font-medium text-green-700">{uploaded.partCount} {translateUi(uiLanguage, "parts combined")}</p>}
         <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">{docType.label}</span>
         {!isSingleImageDocumentType(docType.key) && (
           <div className="flex items-center gap-2">
             <button type="button" disabled={merging} onClick={() => inputRef.current?.click()} className="text-[9px] font-semibold text-primary hover:underline disabled:opacity-50">
               {merging ? "Combining..." : "+ Add part"}
             </button>
-            <button type="button" disabled={merging} onClick={() => setScannerOpen(true)} className="text-[9px] font-semibold text-primary hover:underline disabled:opacity-50">Scan</button>
+            <button type="button" disabled={merging} onClick={() => setScannerOpen(true)} className="text-[9px] font-semibold text-primary hover:underline disabled:opacity-50">{translateUi(uiLanguage, "Scan")}</button>
           </div>
         )}
         <input ref={inputRef} type="file" multiple={!isSingleImageDocumentType(docType.key)} accept={docType.accept} className="hidden"
@@ -2276,10 +2266,10 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
   }
 
   const requiredBadge = onFile
-    ? <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold border border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60">On file</span>
+    ? <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold border border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60">{translateUi(uiLanguage, "On file")}</span>
     : docType.required
-    ? <span className="text-[9px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/60">Required</span>
-    : <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50">Optional</span>;
+    ? <span className="text-[9px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/60">{translateUi(uiLanguage, "Required")}</span>
+    : <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50">{translateUi(uiLanguage, "Optional")}</span>;
 
   return (
     <>
@@ -2325,6 +2315,7 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
 }
 
 function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideServiceFee = false, showCommission = false }: { program: Program | null; onClose: () => void; currentUser: any; agentShareRate?: number | null | undefined; hideServiceFee?: boolean; showCommission?: boolean }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const isStudentUser = currentUser?.role === "student";
   const { toast } = useToast();
@@ -2602,12 +2593,12 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
             <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
               <Check className="w-8 h-8 text-emerald-600" />
             </div>
-            <p className="text-lg font-semibold text-emerald-700">Application Created!</p>
+            <p className="text-lg font-semibold text-emerald-700">{translateUi(uiLanguage, "Application Created!")}</p>
             <p className="text-sm text-muted-foreground text-center">
               {isStudentUser ? "Your application has been submitted for review." : "Application, commission and service fee records have been created automatically."}
             </p>
             {submittedDocumentCount > 0 && (
-              <p className="text-xs text-muted-foreground">{submittedDocumentCount} document{submittedDocumentCount !== 1 ? "s" : ""} uploaded successfully.</p>
+              <p className="text-xs text-muted-foreground">{submittedDocumentCount} {translateUi(uiLanguage, "document")}{submittedDocumentCount !== 1 ? "s" : ""} {translateUi(uiLanguage, "uploaded successfully.")}</p>
             )}
           </div>
         ) : (
@@ -2623,13 +2614,13 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
                   <Badge variant="outline" className="text-xs">{p.feeType}</Badge>
                 )}
                 {p.scholarship != null && p.scholarship > 0 && (
-                  <Badge className="text-xs bg-emerald-100 text-emerald-700 border-0 dark:bg-emerald-900/40 dark:text-emerald-300">Scholarship: {formatCurrency(p.scholarship, cur)}</Badge>
+                  <Badge className="text-xs bg-emerald-100 text-emerald-700 border-0 dark:bg-emerald-900/40 dark:text-emerald-300">{translateUi(uiLanguage, "Scholarship:")} {formatCurrency(p.scholarship, cur)}</Badge>
                 )}
                 {!isStudentUser && showCommission && commissionAmount != null && (
-                  <Badge className="text-xs bg-indigo-100 text-indigo-700 border-0 dark:bg-indigo-900/40 dark:text-indigo-300">Commission: {formatCurrency(commissionAmount, cur)}</Badge>
+                  <Badge className="text-xs bg-indigo-100 text-indigo-700 border-0 dark:bg-indigo-900/40 dark:text-indigo-300">{translateUi(uiLanguage, "Commission:")} {formatCurrency(commissionAmount, cur)}</Badge>
                 )}
                 {!isStudentUser && !hideServiceFee && p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
-                  <Badge className="text-xs bg-amber-100 text-amber-700 border-0 dark:bg-amber-900/40 dark:text-amber-300">Service Fee: {formatCurrency(p.serviceFeeAmount, cur)}</Badge>
+                  <Badge className="text-xs bg-amber-100 text-amber-700 border-0 dark:bg-amber-900/40 dark:text-amber-300">{translateUi(uiLanguage, "Service Fee:")} {formatCurrency(p.serviceFeeAmount, cur)}</Badge>
                 )}
               </div>
             </div>
@@ -2666,7 +2657,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
                       {isSearching ? (
                         <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span className="text-sm">Searching...</span>
+                          <span className="text-sm">{translateUi(uiLanguage, "Searching...")}</span>
                         </div>
                       ) : studentsToShow.length === 0 ? (
                         <div className="text-center py-6 text-muted-foreground">
@@ -2705,20 +2696,18 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
                   </div>
                 )}
                 <Button onClick={handleNextToDocuments} disabled={!selectedStudent} className="w-full rounded-xl h-11">
-                  <FileText className="w-4 h-4 mr-2" /> Continue to Documents
-                </Button>
+                  <FileText className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Continue to Documents")} </Button>
 
                 <div className="relative my-1">
                   <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
-                  <div className="relative flex justify-center"><span className="bg-background px-2 text-[11px] text-muted-foreground uppercase tracking-wide">or</span></div>
+                  <div className="relative flex justify-center"><span className="bg-background px-2 text-[11px] text-muted-foreground uppercase tracking-wide">{translateUi(uiLanguage, "or")}</span></div>
                 </div>
                 <Button
                   variant="outline"
                   className="w-full rounded-xl h-10 text-sm"
                   onClick={() => { setSelectedStudent(null); setSearchTerm(""); setStep("new_student"); }}
                 >
-                  <UserPlus className="w-4 h-4 mr-2" /> Register New Student
-                </Button>
+                  <UserPlus className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Register New Student")} </Button>
               </>
             )}
 
@@ -2729,59 +2718,59 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
                     <UserPlus className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Register New Student</p>
-                    <p className="text-xs text-muted-foreground">They will be registered and applied to this course immediately.</p>
+                    <p className="text-sm font-semibold text-foreground">{translateUi(uiLanguage, "Register New Student")}</p>
+                    <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "They will be registered and applied to this course immediately.")}</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label className="text-xs font-medium mb-1 block">First Name <span className="text-destructive">*</span></Label>
+                    <Label className="text-xs font-medium mb-1 block">{translateUi(uiLanguage, "First Name")} <span className="text-destructive">*</span></Label>
                     <Input
                       value={newStudentForm.firstName}
                       onChange={e => setNewStudentForm(s => ({ ...s, firstName: e.target.value }))}
-                      placeholder="First name"
+                      placeholder={translateUi(uiLanguage, "First name")}
                       className="rounded-lg h-9"
                     />
                   </div>
                   <div>
-                    <Label className="text-xs font-medium mb-1 block">Last Name <span className="text-destructive">*</span></Label>
+                    <Label className="text-xs font-medium mb-1 block">{translateUi(uiLanguage, "Last Name")} <span className="text-destructive">*</span></Label>
                     <Input
                       value={newStudentForm.lastName}
                       onChange={e => setNewStudentForm(s => ({ ...s, lastName: e.target.value }))}
-                      placeholder="Last name"
+                      placeholder={translateUi(uiLanguage, "Last name")}
                       className="rounded-lg h-9"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <Label className="text-xs font-medium mb-1 block">Email</Label>
+                  <Label className="text-xs font-medium mb-1 block">{translateUi(uiLanguage, "Email")}</Label>
                   <Input
                     type="email"
                     value={newStudentForm.email}
                     onChange={e => setNewStudentForm(s => ({ ...s, email: e.target.value }))}
-                    placeholder="student@example.com"
+                    placeholder={translateUi(uiLanguage, "student@example.com")}
                     className="rounded-lg h-9"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label className="text-xs font-medium mb-1 block">Phone</Label>
+                    <Label className="text-xs font-medium mb-1 block">{translateUi(uiLanguage, "Phone")}</Label>
                     <Input
                       value={newStudentForm.phone}
                       onChange={e => setNewStudentForm(s => ({ ...s, phone: e.target.value }))}
-                      placeholder="+90 5xx xxx xx xx"
+                      placeholder={translateUi(uiLanguage, "+90 5xx xxx xx xx")}
                       className="rounded-lg h-9"
                     />
                   </div>
                   <div>
-                    <Label className="text-xs font-medium mb-1 block">Nationality</Label>
+                    <Label className="text-xs font-medium mb-1 block">{translateUi(uiLanguage, "Nationality")}</Label>
                     <Input
                       value={newStudentForm.nationality}
                       onChange={e => setNewStudentForm(s => ({ ...s, nationality: e.target.value }))}
-                      placeholder="e.g. Turkish"
+                      placeholder={translateUi(uiLanguage, "e.g. Turkish")}
                       className="rounded-lg h-9"
                     />
                   </div>
@@ -2789,16 +2778,15 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
 
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep("select")} className="rounded-xl h-11">
-                    <ChevronLeft className="w-4 h-4 mr-1" /> Back
-                  </Button>
+                    <ChevronLeft className="w-4 h-4 mr-1" /> {translateUi(uiLanguage, "Back")} </Button>
                   <Button
                     onClick={handleCreateAndContinue}
                     disabled={!newStudentForm.firstName.trim() || !newStudentForm.lastName.trim() || creatingStudent}
                     className="flex-1 rounded-xl h-11"
                   >
                     {creatingStudent
-                      ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Registering...</>
-                      : <><UserPlus className="w-4 h-4 mr-2" /> Register &amp; Continue to Documents</>
+                      ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {translateUi(uiLanguage, "Registering...")}</>
+                      : <><UserPlus className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Register & Continue to Documents")}</>
                     }
                   </Button>
                 </div>
@@ -2824,7 +2812,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
                   </div>
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900/60 dark:bg-amber-950/20">
                     <p className="text-[11px] text-amber-900 dark:text-amber-200">{APPLICATION_DOCUMENT_HELP_TEXT}</p>
-                    <Badge variant="outline" className="border-amber-500 bg-background text-[10px] font-bold text-amber-800 dark:text-amber-200">MAX 5 MB / FILE</Badge>
+                    <Badge variant="outline" className="border-amber-500 bg-background text-[10px] font-bold text-amber-800 dark:text-amber-200">{translateUi(uiLanguage, "MAX 5 MB / FILE")}</Badge>
                   </div>
                   <div className={cn(
                     "grid gap-2",
@@ -2855,8 +2843,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
 
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep("select")} className="rounded-xl h-11">
-                    <ChevronLeft className="w-4 h-4 mr-1" /> Back
-                  </Button>
+                    <ChevronLeft className="w-4 h-4 mr-1" /> {translateUi(uiLanguage, "Back")} </Button>
                   <Button
                     onClick={handleSubmit}
                     disabled={submitting || !allRequiredUploaded}

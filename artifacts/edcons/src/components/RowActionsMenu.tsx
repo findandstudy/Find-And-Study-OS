@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -47,6 +48,7 @@ export function RowActionsMenu({
   userId,
   onEdit, onDelete, onAssign, onRefresh,
 }: RowActionsMenuProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [linkAgentOpen, setLinkAgentOpen] = useState(false);
@@ -106,8 +108,7 @@ export function RowActionsMenu({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuItem onClick={onEdit}>
-            <Pencil className="w-3.5 h-3.5 mr-2" /> Edit
-          </DropdownMenuItem>
+            <Pencil className="w-3.5 h-3.5 mr-2" /> {translateUi(uiLanguage, "Edit")} </DropdownMenuItem>
 
           {onAssign && staffUsersList && (currentAssignedToId ? (canReassign || currentAssignedToId === currentUserId) : canAssign) && (
             <DropdownMenuItem onClick={() => setAssignOpen(true)}>
@@ -120,16 +121,13 @@ export function RowActionsMenu({
 
           {!currentAgentId ? (
             <DropdownMenuItem onClick={() => setLinkAgentOpen(true)}>
-              <Building2 className="w-3.5 h-3.5 mr-2" /> Link to Agent
-            </DropdownMenuItem>
+              <Building2 className="w-3.5 h-3.5 mr-2" /> {translateUi(uiLanguage, "Link to Agent")} </DropdownMenuItem>
           ) : (
             <>
               <DropdownMenuItem onClick={() => setLinkAgentOpen(true)}>
-                <Building2 className="w-3.5 h-3.5 mr-2" /> Change Agent
-              </DropdownMenuItem>
+                <Building2 className="w-3.5 h-3.5 mr-2" /> {translateUi(uiLanguage, "Change Agent")} </DropdownMenuItem>
               <DropdownMenuItem onClick={handleUnlinkAgent} className="text-amber-600 focus:text-amber-600">
-                <Unlink className="w-3.5 h-3.5 mr-2" /> Unlink Agent
-                {currentAgentName && <span className="ml-auto text-[10px] text-muted-foreground truncate max-w-[80px]">{currentAgentName}</span>}
+                <Unlink className="w-3.5 h-3.5 mr-2" /> {translateUi(uiLanguage, "Unlink Agent")} {currentAgentName && <span className="ml-auto text-[10px] text-muted-foreground truncate max-w-[80px]">{currentAgentName}</span>}
               </DropdownMenuItem>
             </>
           )}
@@ -138,12 +136,10 @@ export function RowActionsMenu({
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setSetPasswordOpen(true)}>
-                <KeyRound className="w-3.5 h-3.5 mr-2" /> Set Password
-              </DropdownMenuItem>
+                <KeyRound className="w-3.5 h-3.5 mr-2" /> {translateUi(uiLanguage, "Set Password")} </DropdownMenuItem>
               {userId && (
                 <DropdownMenuItem onClick={handleImpersonate} disabled={impersonating}>
-                  <LogIn className="w-3.5 h-3.5 mr-2" /> Login as Student
-                </DropdownMenuItem>
+                  <LogIn className="w-3.5 h-3.5 mr-2" /> {translateUi(uiLanguage, "Login as Student")} </DropdownMenuItem>
               )}
             </>
           )}
@@ -199,6 +195,7 @@ function LinkAgentDialog({ open, onClose, entityType, entityId, entityName, onRe
   entityName: string;
   onRefresh?: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
@@ -246,7 +243,7 @@ function LinkAgentDialog({ open, onClose, entityType, entityId, entityName, onRe
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Building2 className="w-5 h-5" /> Link Agent to {entityName}
+            <Building2 className="w-5 h-5" /> {translateUi(uiLanguage, "Link Agent to")} {entityName}
           </DialogTitle>
         </DialogHeader>
 
@@ -254,7 +251,7 @@ function LinkAgentDialog({ open, onClose, entityType, entityId, entityName, onRe
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="Search agents..."
+            placeholder={translateUi(uiLanguage, "Search agents...")}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -266,7 +263,7 @@ function LinkAgentDialog({ open, onClose, entityType, entityId, entityName, onRe
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             </div>
           ) : agents.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-8">No agents found</p>
+            <p className="text-center text-sm text-muted-foreground py-8">{translateUi(uiLanguage, "No agents found")}</p>
           ) : (
             agents.map((agent: any) => (
               <button
@@ -291,7 +288,7 @@ function LinkAgentDialog({ open, onClose, entityType, entityId, entityName, onRe
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => { onClose(); setSearch(""); }}>Cancel</Button>
+          <Button variant="outline" onClick={() => { onClose(); setSearch(""); }}>{translateUi(uiLanguage, "Cancel")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -306,6 +303,7 @@ function AssignStaffDialog({ open, onClose, staffUsersList, currentAssignedToId,
   currentUserId?: number;
   onAssign: (userId: number) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [search, setSearch] = useState("");
 
   const filtered = staffUsersList.filter(u =>
@@ -317,15 +315,14 @@ function AssignStaffDialog({ open, onClose, staffUsersList, currentAssignedToId,
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5" /> Assign Staff
-          </DialogTitle>
+            <UserPlus className="w-5 h-5" /> {translateUi(uiLanguage, "Assign Staff")} </DialogTitle>
         </DialogHeader>
 
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="Search staff..."
+            placeholder={translateUi(uiLanguage, "Search staff...")}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -333,7 +330,7 @@ function AssignStaffDialog({ open, onClose, staffUsersList, currentAssignedToId,
 
         <div className="max-h-[300px] overflow-y-auto space-y-1">
           {filtered.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-8">No staff found</p>
+            <p className="text-center text-sm text-muted-foreground py-8">{translateUi(uiLanguage, "No staff found")}</p>
           ) : (
             filtered.map(u => (
               <button
@@ -345,15 +342,15 @@ function AssignStaffDialog({ open, onClose, staffUsersList, currentAssignedToId,
                   {u.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                 </div>
                 <span className="text-sm font-medium">{u.name}</span>
-                {currentAssignedToId === u.id && <Badge variant="outline" className="ml-auto text-[10px]">Current</Badge>}
-                {u.id === currentUserId && currentAssignedToId !== u.id && <span className="ml-auto text-[10px] text-muted-foreground">Me</span>}
+                {currentAssignedToId === u.id && <Badge variant="outline" className="ml-auto text-[10px]">{translateUi(uiLanguage, "Current")}</Badge>}
+                {u.id === currentUserId && currentAssignedToId !== u.id && <span className="ml-auto text-[10px] text-muted-foreground">{translateUi(uiLanguage, "Me")}</span>}
               </button>
             ))
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => { onClose(); setSearch(""); }}>Cancel</Button>
+          <Button variant="outline" onClick={() => { onClose(); setSearch(""); }}>{translateUi(uiLanguage, "Cancel")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -366,6 +363,7 @@ function SetPasswordDialog({ open, onClose, studentId, entityName }: {
   studentId: number;
   entityName: string;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -415,20 +413,19 @@ function SetPasswordDialog({ open, onClose, studentId, entityName }: {
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <KeyRound className="w-5 h-5" /> Set Password
-          </DialogTitle>
+            <KeyRound className="w-5 h-5" /> {translateUi(uiLanguage, "Set Password")} </DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">Set a new password for <strong>{entityName}</strong></p>
+        <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "Set a new password for")} <strong>{entityName}</strong></p>
         <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">New Password *</Label>
+            <Label className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "New Password *")}</Label>
             <div className="relative">
               <Input
                 type={showPw ? "text" : "password"}
                 autoComplete="new-password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="Min 6 characters"
+                placeholder={translateUi(uiLanguage, "Min 6 characters")}
                 className="h-9 pr-10"
               />
               <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -437,22 +434,20 @@ function SetPasswordDialog({ open, onClose, studentId, entityName }: {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Confirm Password *</Label>
+            <Label className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "Confirm Password *")}</Label>
             <Input
               type={showPw ? "text" : "password"}
               autoComplete="new-password"
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
-              placeholder="Re-enter password"
+              placeholder={translateUi(uiLanguage, "Re-enter password")}
               className="h-9"
             />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleClose} disabled={saving}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={handleClose} disabled={saving}>{translateUi(uiLanguage, "Cancel")}</Button>
             <Button type="submit" disabled={saving} className="gap-2">
-              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Set Password
-            </Button>
+              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} {translateUi(uiLanguage, "Set Password")} </Button>
           </DialogFooter>
         </form>
       </DialogContent>

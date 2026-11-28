@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Cookie } from "lucide-react";
@@ -16,6 +17,7 @@ function getConsent(): CookieConsent {
 }
 
 export function CookieBanner() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   // Read consent in the lazy initializer so a first-visit banner is part of
   // the initial React render. Mounting it from an effect made the banner a
@@ -36,7 +38,7 @@ export function CookieBanner() {
         <div
           className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t border-border shadow-2xl"
           role="region"
-          aria-label="Cookie consent"
+          aria-label={translateUi(uiLanguage, "Cookie consent")}
         >
           <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="flex items-start gap-3 flex-1 min-w-0">

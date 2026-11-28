@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { useCreateStudent, customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
@@ -49,6 +50,7 @@ export function InboxSubmitTab({
   data,
   onCreated,
 }: InboxSubmitTabProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const createStudent = useCreateStudent();
@@ -403,17 +405,13 @@ export function InboxSubmitTab({
 
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
-            <Label className="text-xs flex items-center">
-              Residence City
-              <AiTag field="addressCity" aiFields={data.aiFields} />
+            <Label className="text-xs flex items-center"> {translateUi(uiLanguage, "Residence City")} <AiTag field="addressCity" aiFields={data.aiFields} />
             </Label>
             <Input className="h-7 text-sm uppercase" value={form.addressCity}
               onChange={(e) => latinField("addressCity")(e.target.value)} />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs flex items-center">
-              Postal Code
-              <AiTag field="postalCode" aiFields={data.aiFields} />
+            <Label className="text-xs flex items-center"> {translateUi(uiLanguage, "Postal Code")} <AiTag field="postalCode" aiFields={data.aiFields} />
             </Label>
             <Input className="h-7 text-sm" value={form.postalCode}
               onChange={(e) => field("postalCode")(e.target.value)} />

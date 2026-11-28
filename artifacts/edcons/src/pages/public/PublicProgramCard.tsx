@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import type { ReactNode } from "react";
 import { Link } from "wouter";
 import { Award, BookOpen, Building2, Calendar, Check, Clock, DollarSign, Globe2, GraduationCap, Info, Languages, MapPin, Shield } from "lucide-react";
@@ -89,6 +90,7 @@ const detailsClassName = "w-9 h-9 rounded-full border-2 border-border/60 flex it
 const applyClassName = "flex-1 min-w-0 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300";
 
 export function PublicProgramCard({ program: prog, index: _index, onApply, onDetails, applyHref, applyDisabled = false, tuitionContent, omitLegacyTiming = false, selectedForProposal = false, onToggleProposalSelection }: PublicProgramCardProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, lang } = useI18n();
   const effectiveFee = prog.discountedFee ?? prog.tuitionFee;
   const hasDiscount = !!(prog.discountedFee && prog.tuitionFee && prog.discountedFee < prog.tuitionFee);
@@ -174,7 +176,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
                 )}
                 {hasDiscount && (
                   <Badge className="bg-emerald-500 text-white text-[10px] font-bold rounded-full border-0 px-2 py-0 h-[18px]">
-                    <bdi>{Math.round(((prog.tuitionFee! - prog.discountedFee!) / prog.tuitionFee!) * 100)}% OFF</bdi>
+                    <bdi>{Math.round(((prog.tuitionFee! - prog.discountedFee!) / prog.tuitionFee!) * 100)}{translateUi(uiLanguage, "% OFF")}</bdi>
                   </Badge>
                 )}
               </div>

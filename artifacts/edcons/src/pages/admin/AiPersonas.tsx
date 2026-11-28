@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
@@ -50,8 +51,9 @@ const PERSONA_DEFAULT_FIELDS: DefaultFieldDef[] = [
 ];
 
 export default function AiPersonas() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, lang } = useI18n();
-  const copy = (english: string, turkish: string) => lang === "tr" ? turkish : english;
+  const copy = (english: string, turkish: string) => translateUi(lang, english, turkish);
   const [, setLocation] = useLocation();
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,10 +182,10 @@ export default function AiPersonas() {
               {p.description && <div className="text-sm">{p.description}</div>}
               <div className="flex flex-wrap gap-1">
                 {(p.allowedDataScopes || []).map((s) => (
-                  <Badge key={s} variant="outline" className="text-xs">scope:{s}</Badge>
+                  <Badge key={s} variant="outline" className="text-xs">{translateUi(uiLanguage, "scope:")}{s}</Badge>
                 ))}
                 {(p.toolsEnabled || []).map((tl) => (
-                  <Badge key={tl} variant="outline" className="text-xs">tool:{tl}</Badge>
+                  <Badge key={tl} variant="outline" className="text-xs">{translateUi(uiLanguage, "tool:")}{tl}</Badge>
                 ))}
               </div>
               <div className="flex items-center justify-between pt-2 border-t">

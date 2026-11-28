@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -55,8 +56,9 @@ const TEMPLATE_ICONS: Record<string, string> = {
 };
 
 export default function WebsitePages() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang, t } = useI18n();
-  const copy = (en: string, tr: string) => lang === "tr" ? tr : en;
+  const copy = (en: string, tr: string) => translateUi(lang, en, tr);
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const templates = useRef<DetailTemplatesHandle>(null);
@@ -200,7 +202,7 @@ export default function WebsitePages() {
             </DialogHeader>
             <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!createMutation.isPending) createMutation.mutate(); }}>
               <div className="space-y-2"><Label htmlFor="new-page-title">{copy("Title", "Başlık")}</Label><Input id="new-page-title" required maxLength={200} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /></div>
-              <div className="space-y-2"><Label htmlFor="new-page-slug">{copy("Page address", "Sayfa adresi")}</Label><Input id="new-page-slug" required maxLength={150} pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="study-in-turkiye" value={draft.slug} onChange={event => setDraft({ ...draft, slug: event.target.value })} aria-describedby="new-page-url" /><p id="new-page-url" className="text-xs text-muted-foreground"><span dir="ltr">/{draft.locale}/{draft.slug || "your-page"}</span> — {copy("existing system addresses cannot be replaced.", "mevcut sistem adresleri değiştirilemez.")}</p></div>
+              <div className="space-y-2"><Label htmlFor="new-page-slug">{copy("Page address", "Sayfa adresi")}</Label><Input id="new-page-slug" required maxLength={150} pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder={translateUi(uiLanguage, "study-in-turkiye")} value={draft.slug} onChange={event => setDraft({ ...draft, slug: event.target.value })} aria-describedby="new-page-url" /><p id="new-page-url" className="text-xs text-muted-foreground"><span dir="ltr">/{draft.locale}/{draft.slug || "your-page"}</span> — {copy("existing system addresses cannot be replaced.", "mevcut sistem adresleri değiştirilemez.")}</p></div>
               <div className="space-y-2"><Label htmlFor="new-page-locale">{copy("Source language", "Kaynak dil")}</Label><Select value={draft.locale} onValueChange={locale => setDraft({ ...draft, locale })}><SelectTrigger id="new-page-locale"><SelectValue /></SelectTrigger><SelectContent>{SUPPORTED_LANGUAGES.map(locale => <SelectItem key={locale} value={locale}>{LANGUAGE_META[locale].nativeName}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label htmlFor="new-page-starter">{copy("Starting layout", "Başlangıç düzeni")}</Label><Select value={draft.starter} onValueChange={starter => setDraft({ ...draft, starter })}><SelectTrigger id="new-page-starter"><SelectValue /></SelectTrigger><SelectContent>{[["blank", copy("Blank page", "Boş sayfa")], ["programs", copy("Live programs", "Güncel programlar")], ["universities", copy("Live universities", "Güncel üniversiteler")], ["destinations", copy("Live destinations", "Güncel destinasyonlar")], ["cities", copy("Live cities", "Güncel şehirler")]].map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
               {draft.starter !== "blank" && <>
@@ -222,7 +224,7 @@ export default function WebsitePages() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <button type="button" onClick={() => setArea("dynamic")} className="rounded-xl border bg-card p-4 text-start hover:border-primary"><span className="text-sm text-muted-foreground">{copy("Catalogue-driven", "Katalog kaynaklı")}</span><strong className="mt-1 block text-2xl">4</strong><span className="text-xs text-muted-foreground">{copy("page types", "sayfa türü")}</span></button>
           <button type="button" onClick={() => { setArea("managed"); setStatusFilter("in_review"); }} className="rounded-xl border bg-card p-4 text-start hover:border-primary"><span className="text-sm text-muted-foreground">{copy("Managed pages", "Yönetilen sayfalar")}</span><strong className="mt-1 block text-2xl">{cmsPages.length}</strong><span className="text-xs text-muted-foreground">{pages.filter(value => value.status === "in_review").length} {copy("awaiting review — open queue", "inceleme bekliyor — kuyruğu aç")}</span></button>
-          <button type="button" onClick={() => setArea("blog")} className="rounded-xl border bg-card p-4 text-start hover:border-primary"><span className="text-sm text-muted-foreground">{copy("Blog workspace", "Blog çalışma alanı")}</span><strong className="mt-1 block text-2xl">CMS</strong><span className="text-xs text-muted-foreground">{copy("articles, translations and SEO", "yazılar, çeviriler ve SEO")}</span></button>
+          <button type="button" onClick={() => setArea("blog")} className="rounded-xl border bg-card p-4 text-start hover:border-primary"><span className="text-sm text-muted-foreground">{copy("Blog workspace", "Blog çalışma alanı")}</span><strong className="mt-1 block text-2xl">{translateUi(uiLanguage, "CMS")}</strong><span className="text-xs text-muted-foreground">{copy("articles, translations and SEO", "yazılar, çeviriler ve SEO")}</span></button>
           <button type="button" onClick={() => setArea("templates")} className="rounded-xl border bg-card p-4 text-start hover:border-primary"><span className="text-sm text-muted-foreground">{copy("Shared templates", "Ortak şablonlar")}</span><strong className="mt-1 block text-2xl">4</strong><span className="text-xs text-muted-foreground">{copy("governed detail layouts", "kontrollü detay düzeni")}</span></button>
         </div>
 

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 // Staff card "Quality" tab — 30-day average with trend arrow, dimension
 // breakdown, and the list of scored conversations (clickable → inbox).
 import { useCallback, useEffect, useState } from "react";
@@ -19,9 +20,10 @@ function overallColor(v: number): string {
 }
 
 function TrendIcon({ trend }: { trend: "up" | "down" | "flat" }) {
-  if (trend === "up") return <TrendingUp className="w-5 h-5 text-green-600" aria-label="up" />;
-  if (trend === "down") return <TrendingDown className="w-5 h-5 text-red-600" aria-label="down" />;
-  return <Minus className="w-5 h-5 text-muted-foreground" aria-label="flat" />;
+  const { lang: uiLanguage } = useUiLanguage();
+  if (trend === "up") return <TrendingUp className="w-5 h-5 text-green-600" aria-label={translateUi(uiLanguage, "up")} />;
+  if (trend === "down") return <TrendingDown className="w-5 h-5 text-red-600" aria-label={translateUi(uiLanguage, "down")} />;
+  return <Minus className="w-5 h-5 text-muted-foreground" aria-label={translateUi(uiLanguage, "flat")} />;
 }
 
 interface Summary {

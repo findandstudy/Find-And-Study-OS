@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -89,6 +90,7 @@ const RADIUS_OPTIONS = [
 ];
 
 export default function WebsiteThemeBuilder() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [localTokens, setLocalTokens] = useState<Record<string, string>>({});
@@ -202,10 +204,8 @@ export default function WebsiteThemeBuilder() {
           <div className="flex items-center gap-3">
             <Palette className="w-6 h-6 text-primary" />
             <div>
-              <h1 className="text-2xl font-bold">Theme Builder</h1>
-              <p className="text-sm text-muted-foreground">
-                Customize your website appearance. Inherits from Settings &gt; Branding as defaults.
-              </p>
+              <h1 className="text-2xl font-bold">{translateUi(uiLanguage, "Theme Builder")}</h1>
+              <p className="text-sm text-muted-foreground"> {translateUi(uiLanguage, "Customize your website appearance. Inherits from Settings > Branding as defaults.")} </p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -219,14 +219,12 @@ export default function WebsiteThemeBuilder() {
         </div>
 
         {dirty && (
-          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-2 text-sm text-amber-700 dark:text-amber-300">
-            You have unsaved changes.
-          </div>
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-2 text-sm text-amber-700 dark:text-amber-300"> {translateUi(uiLanguage, "You have unsaved changes.")} </div>
         )}
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Colors</CardTitle>
+            <CardTitle className="text-lg">{translateUi(uiLanguage, "Colors")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -255,8 +253,7 @@ export default function WebsiteThemeBuilder() {
                       />
                     </div>
                     {branding && (token.key === "primary" || token.key === "secondary" || token.key === "accent") && (
-                      <p className="text-[10px] text-muted-foreground">
-                        Branding default: {(branding as unknown as Record<string, string | null>)[`theme${token.key.charAt(0).toUpperCase() + token.key.slice(1)}`] || "—"}
+                      <p className="text-[10px] text-muted-foreground"> {translateUi(uiLanguage, "Branding default:")} {(branding as unknown as Record<string, string | null>)[`theme${token.key.charAt(0).toUpperCase() + token.key.slice(1)}`] || "—"}
                       </p>
                     )}
                   </div>
@@ -268,7 +265,7 @@ export default function WebsiteThemeBuilder() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Typography</CardTitle>
+            <CardTitle className="text-lg">{translateUi(uiLanguage, "Typography")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -277,7 +274,7 @@ export default function WebsiteThemeBuilder() {
                   <Label className="text-xs font-medium">{token.label}</Label>
                   {token.type === "font" ? (
                     <Select value={selectVal(token.group, token.key)} onValueChange={v => setVal(token.group, token.key, v)}>
-                      <SelectTrigger className="h-9"><SelectValue placeholder="Select font..." /></SelectTrigger>
+                      <SelectTrigger className="h-9"><SelectValue placeholder={translateUi(uiLanguage, "Select font...")} /></SelectTrigger>
                       <SelectContent>
                         {FONT_OPTIONS.map(f => (
                           <SelectItem key={f} value={f}><span style={{ fontFamily: f }}>{f}</span></SelectItem>
@@ -286,7 +283,7 @@ export default function WebsiteThemeBuilder() {
                     </Select>
                   ) : (
                     <Select value={selectVal(token.group, token.key)} onValueChange={v => setVal(token.group, token.key, v)}>
-                      <SelectTrigger className="h-9"><SelectValue placeholder="Select scale..." /></SelectTrigger>
+                      <SelectTrigger className="h-9"><SelectValue placeholder={translateUi(uiLanguage, "Select scale...")} /></SelectTrigger>
                       <SelectContent>
                         {FONT_SCALE_OPTIONS.map(o => (
                           <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
@@ -295,9 +292,7 @@ export default function WebsiteThemeBuilder() {
                     </Select>
                   )}
                   {getVal(token.group, token.key) && token.type === "font" && (
-                    <p className="text-sm" style={{ fontFamily: getVal(token.group, token.key) }}>
-                      The quick brown fox jumps over the lazy dog.
-                    </p>
+                    <p className="text-sm" style={{ fontFamily: getVal(token.group, token.key) }}> {translateUi(uiLanguage, "The quick brown fox jumps over the lazy dog.")} </p>
                   )}
                 </div>
               ))}
@@ -307,7 +302,7 @@ export default function WebsiteThemeBuilder() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Buttons</CardTitle>
+            <CardTitle className="text-lg">{translateUi(uiLanguage, "Buttons")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -331,14 +326,14 @@ export default function WebsiteThemeBuilder() {
                     </div>
                   ) : token.type === "radius" ? (
                     <Select value={selectVal(token.group, token.key)} onValueChange={v => setVal(token.group, token.key, v)}>
-                      <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
+                      <SelectTrigger className="h-9"><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
                       <SelectContent>
                         {RADIUS_OPTIONS.map(o => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}
                       </SelectContent>
                     </Select>
                   ) : (
                     <Select value={selectVal(token.group, token.key)} onValueChange={v => setVal(token.group, token.key, v)}>
-                      <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
+                      <SelectTrigger className="h-9"><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
                       <SelectContent>
                         {WEIGHT_OPTIONS.map(o => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}
                       </SelectContent>
@@ -358,9 +353,7 @@ export default function WebsiteThemeBuilder() {
                     borderRadius: `${getVal("buttons", "borderRadius") || 8}px`,
                     fontWeight: getVal("buttons", "fontWeight") || "600",
                   }}
-                >
-                  Preview Button
-                </Button>
+                > {translateUi(uiLanguage, "Preview Button")} </Button>
               </div>
             )}
           </CardContent>
@@ -368,7 +361,7 @@ export default function WebsiteThemeBuilder() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Spacing</CardTitle>
+            <CardTitle className="text-lg">{translateUi(uiLanguage, "Spacing")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -380,10 +373,10 @@ export default function WebsiteThemeBuilder() {
                       type="number"
                       value={getVal(token.group, token.key)}
                       onChange={e => setVal(token.group, token.key, e.target.value)}
-                      placeholder="px"
+                      placeholder={translateUi(uiLanguage, "px")}
                       className="h-8 text-xs"
                     />
-                    <span className="text-xs text-muted-foreground">px</span>
+                    <span className="text-xs text-muted-foreground">{translateUi(uiLanguage, "px")}</span>
                   </div>
                 </div>
               ))}

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -183,6 +184,7 @@ const generationErrorText = (code: string | undefined, tr: boolean) => {
 };
 
 export default function CatalogPagesInventory() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang, t } = useI18n();
   const { toast } = useToast();
   const client = useQueryClient();
@@ -1305,7 +1307,7 @@ export default function CatalogPagesInventory() {
                           {statusBadges(item)}
                         </td>
                         <td className="hidden p-3.5 align-top xl:table-cell">
-                          <p className="font-medium">SEO · {label(item.seo)}</p>
+                          <p className="font-medium">{translateUi(uiLanguage, "SEO ·")} {label(item.seo)}</p>
                           <p className="mt-1 text-xs text-muted-foreground">
                             {label(item.contentDelivery)}
                           </p>
@@ -1400,7 +1402,7 @@ export default function CatalogPagesInventory() {
                         </strong>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">SEO</span>
+                        <span className="text-muted-foreground">{translateUi(uiLanguage, "SEO")}</span>
                         <strong className="mt-1 block">
                           {label(item.seo)}
                         </strong>

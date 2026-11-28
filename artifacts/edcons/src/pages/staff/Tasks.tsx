@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -207,6 +208,7 @@ const EMPTY_FORM: TaskFormState = {
 };
 
 function TasksTabContent() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { user } = useAuth(true);
   const { t } = useI18n();
   const { toast } = useToast();
@@ -871,7 +873,7 @@ function TasksTabContent() {
             <Input
               value={searchQuery}
               onChange={event => setSearchQuery(event.target.value)}
-              placeholder="Search title, description or assignee..."
+              placeholder={translateUi(uiLanguage, "Search title, description or assignee...")}
               className="xl:max-w-sm"
               data-testid="input-task-search"
             />
@@ -879,7 +881,7 @@ function TasksTabContent() {
               <Select value={statusFilter} onValueChange={value => setStatusFilter(value as typeof statusFilter)}>
                 <SelectTrigger data-testid="filter-task-status"><SelectValue placeholder={t("tasks.fields.status")} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="all">{translateUi(uiLanguage, "All statuses")}</SelectItem>
                   <SelectItem value="todo">{t("tasks.col.todo")}</SelectItem>
                   <SelectItem value="in_progress">{t("tasks.col.in_progress")}</SelectItem>
                   <SelectItem value="done">{t("tasks.col.done")}</SelectItem>
@@ -888,7 +890,7 @@ function TasksTabContent() {
               <Select value={priorityFilter} onValueChange={value => setPriorityFilter(value as typeof priorityFilter)}>
                 <SelectTrigger data-testid="filter-task-priority"><SelectValue placeholder={t("tasks.fields.priority")} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All priorities</SelectItem>
+                  <SelectItem value="all">{translateUi(uiLanguage, "All priorities")}</SelectItem>
                   <SelectItem value="high">{t("tasks.priority.high")}</SelectItem>
                   <SelectItem value="medium">{t("tasks.priority.medium")}</SelectItem>
                   <SelectItem value="low">{t("tasks.priority.low")}</SelectItem>
@@ -897,7 +899,7 @@ function TasksTabContent() {
               <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
                 <SelectTrigger data-testid="filter-task-assignee"><SelectValue placeholder={t("tasks.fields.assignTo")} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All assignees</SelectItem>
+                  <SelectItem value="all">{translateUi(uiLanguage, "All assignees")}</SelectItem>
                   <SelectItem value="unassigned">{t("tasks.unassigned")}</SelectItem>
                   {assignees.map(assignee => (
                     <SelectItem key={assignee.id} value={String(assignee.id)}>{displayName(assignee)}</SelectItem>
@@ -911,9 +913,7 @@ function TasksTabContent() {
                 variant="ghost"
                 size="sm"
                 onClick={() => { setSearchQuery(""); setStatusFilter("all"); setPriorityFilter("all"); setAssigneeFilter("all"); }}
-              >
-                Clear filters
-              </Button>
+              > {translateUi(uiLanguage, "Clear filters")} </Button>
             )}
           </div>
         )}
@@ -924,13 +924,12 @@ function TasksTabContent() {
               <Checkbox
                 checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
                 onCheckedChange={value => toggleVisibleSelection(value === true)}
-                aria-label="Select all filtered tasks"
+                aria-label={translateUi(uiLanguage, "Select all filtered tasks")}
                 data-testid="checkbox-select-all-tasks"
-              />
-              Select all filtered ({visibleCount})
+              /> {translateUi(uiLanguage, "Select all filtered (")}{visibleCount})
             </label>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">{selectedIds.size} selected</span>
+              <span className="text-sm text-muted-foreground">{selectedIds.size} {translateUi(uiLanguage, "selected")}</span>
               <Button
                 type="button"
                 variant="destructive"
@@ -1188,7 +1187,7 @@ function TasksTabContent() {
                         <Checkbox
                           checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
                           onCheckedChange={value => toggleVisibleSelection(value === true)}
-                          aria-label="Select all filtered tasks"
+                          aria-label={translateUi(uiLanguage, "Select all filtered tasks")}
                         />
                       </TableHead>
                     )}

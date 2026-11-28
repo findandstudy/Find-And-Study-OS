@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { WorkPipelineInboxSidebar, type WorkConversationState } from "@/components/inbox/WorkPipelineInboxSidebar";
 import { whilePageVisible } from "@/lib/visibleSubscription";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
@@ -500,6 +501,7 @@ function readPinnedInboxTab(): InboxTabKey | null {
 }
 
 function InboxTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, isRTL } = useI18n();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -2514,7 +2516,7 @@ function InboxTab() {
                           </span>
                         )}
                       </div>
-                      {c.unmatched && <Badge variant="outline" className="text-[9px] h-4 border-amber-300 text-amber-700 px-1">unmatched</Badge>}
+                      {c.unmatched && <Badge variant="outline" className="text-[9px] h-4 border-amber-300 text-amber-700 px-1">{translateUi(uiLanguage, "unmatched")}</Badge>}
                     </div>
                     <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                       {lineBrand && (
@@ -2660,7 +2662,7 @@ function InboxTab() {
                     {conv.assignedTo && (
                       <>
                         {(ext?.phone || ext?.email) && <span aria-hidden>•</span>}
-                        <span>assigned to</span>
+                        <span>{translateUi(uiLanguage, "assigned to")}</span>
                         <Avatar className="h-4 w-4">
                           {conv.assignedTo.avatarUrl ? (
                             <AvatarImage
@@ -2771,9 +2773,7 @@ function InboxTab() {
                     <p className="font-semibold">{t("messagesPage.unmatchedContact")}</p>
                     <p>{t("messagesPage.notLinkedYet")}</p>
                   </div>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={loadSuggestions}>
-                    Match
-                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={loadSuggestions}> {translateUi(uiLanguage, "Match")} </Button>
                 </div>
               )}
 
@@ -3204,9 +3204,7 @@ function InboxTab() {
                         {slashQuery !== null && (
                           <div className="absolute bottom-[calc(100%+0.4rem)] left-0 right-0 z-30 max-h-72 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl">
                             {slashTemplates.length === 0 ? (
-                              <p className="px-3 py-2 text-xs text-muted-foreground">
-                                No matching active template
-                              </p>
+                              <p className="px-3 py-2 text-xs text-muted-foreground"> {translateUi(uiLanguage, "No matching active template")} </p>
                             ) : (
                               slashTemplates.map((template, index) => (
                                 <button
@@ -3328,8 +3326,7 @@ function InboxTab() {
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-[10px] text-muted-foreground">
-                        {t("inbox.compose.enterToSend")} · Type / for templates · Paste files with Ctrl/Cmd+V
-                      </p>
+                        {t("inbox.compose.enterToSend")} {translateUi(uiLanguage, "· Type / for templates · Paste files with Ctrl/Cmd+V")} </p>
                       {voiceRecorder.isRecording && (
                         <div className="flex items-center gap-2 text-xs font-medium text-red-600">
                           <span className="h-2 w-2 animate-pulse rounded-full bg-red-600" />
@@ -3339,9 +3336,7 @@ function InboxTab() {
                             type="button"
                             onClick={voiceRecorder.cancel}
                             className="underline underline-offset-2"
-                          >
-                            Cancel
-                          </button>
+                          > {translateUi(uiLanguage, "Cancel")} </button>
                         </div>
                       )}
                     </div>
@@ -3949,6 +3944,7 @@ function ConversationList({
   archivedFilter: boolean;
   setArchivedFilter: (value: boolean) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { user } = useAuth();
   const { t } = useI18n();
   const canDeleteConversations = ["super_admin", "admin"].includes(user?.role || "");
@@ -3960,8 +3956,7 @@ function ConversationList({
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-foreground">{t("messagesPage.messages")}</h2>
           <Button size="sm" variant="outline" onClick={onNewConversation} className="h-8 gap-1.5 rounded-lg">
-            <Plus className="w-3.5 h-3.5" /> New
-          </Button>
+            <Plus className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "New")} </Button>
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -3972,24 +3967,24 @@ function ConversationList({
           <Select value={audienceFilter} onValueChange={value => setAudienceFilter(value as "all" | "agent" | "student")}>
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All people</SelectItem>
-              <SelectItem value="agent">Agents</SelectItem>
-              <SelectItem value="student">Students</SelectItem>
+              <SelectItem value="all">{translateUi(uiLanguage, "All people")}</SelectItem>
+              <SelectItem value="agent">{translateUi(uiLanguage, "Agents")}</SelectItem>
+              <SelectItem value="student">{translateUi(uiLanguage, "Students")}</SelectItem>
             </SelectContent>
           </Select>
           <Select value={readFilter} onValueChange={value => setReadFilter(value as "all" | "read" | "unread")}>
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All states</SelectItem>
-              <SelectItem value="unread">Unread</SelectItem>
-              <SelectItem value="read">Read</SelectItem>
+              <SelectItem value="all">{translateUi(uiLanguage, "All states")}</SelectItem>
+              <SelectItem value="unread">{translateUi(uiLanguage, "Unread")}</SelectItem>
+              <SelectItem value="read">{translateUi(uiLanguage, "Read")}</SelectItem>
             </SelectContent>
           </Select>
           <Select value={archivedFilter ? "archived" : "active"} onValueChange={value => setArchivedFilter(value === "archived")}>
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
+              <SelectItem value="active">{translateUi(uiLanguage, "Active")}</SelectItem>
+              <SelectItem value="archived">{translateUi(uiLanguage, "Archived")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -4147,6 +4142,7 @@ function MessageThread({
   conversationId: number;
   onBack: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { user } = useAuth();
   const { toast } = useToast();
   const { t } = useI18n();
@@ -4397,7 +4393,7 @@ function MessageThread({
         </Button>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{threadTitle}</p>
-          <p className="text-xs text-muted-foreground">{participants.length} participants</p>
+          <p className="text-xs text-muted-foreground">{participants.length} {translateUi(uiLanguage, "participants")}</p>
         </div>
         {needsHuman && (
           <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 gap-1">
@@ -4539,7 +4535,7 @@ function MessageThread({
                   <span className={`flex items-center gap-1 text-[10px] text-muted-foreground mt-1 ${isMe ? "justify-end" : ""}`}>
                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     {msg.channel !== "internal" && (
-                      <span className="ml-1 opacity-70">via {msg.channel}</span>
+                      <span className="ml-1 opacity-70">{translateUi(uiLanguage, "via")} {msg.channel}</span>
                     )}
                     {isMe && readReceiptsEnabled && (() => {
                       const isSeen = others.some(p => p.lastReadAt && new Date(p.lastReadAt) >= new Date(msg.createdAt));
@@ -4591,9 +4587,7 @@ function MessageThread({
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
           />
           <Button onClick={sendMessage} disabled={sending || uploading || (!newMessage.trim() && !pendingFile)} className="rounded-xl gap-1.5">
-            {(sending || uploading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            Send
-          </Button>
+            {(sending || uploading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} {translateUi(uiLanguage, "Send")} </Button>
         </div>
       </div>
     </div>
@@ -4602,6 +4596,7 @@ function MessageThread({
 }
 
 function BroadcastTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -4764,11 +4759,8 @@ function BroadcastTab() {
       <Card className="p-6 border-none shadow-lg shadow-black/5">
         <div className="mb-4">
           <h3 className="font-semibold text-foreground flex items-center gap-2">
-            <Megaphone className="w-5 h-5 text-primary" /> Internal Announcements
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Send an in-app announcement to Find And Study OS users. This does not contact CRM leads or students.
-          </p>
+            <Megaphone className="w-5 h-5 text-primary" /> {translateUi(uiLanguage, "Internal Announcements")} </h3>
+          <p className="mt-1 text-sm text-muted-foreground"> {translateUi(uiLanguage, "Send an in-app announcement to Find And Study OS users. This does not contact CRM leads or students.")} </p>
         </div>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -4781,10 +4773,9 @@ function BroadcastTab() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Delivery</Label>
+              <Label>{translateUi(uiLanguage, "Delivery")}</Label>
               <div className="flex h-10 items-center gap-2 rounded-xl border bg-muted/30 px-3 text-sm">
-                <MessageSquare className="h-4 w-4 text-primary" /> Internal · in app
-              </div>
+                <MessageSquare className="h-4 w-4 text-primary" /> {translateUi(uiLanguage, "Internal · in app")} </div>
             </div>
             <div className="space-y-2">
               <Label>{t("messagesPage.targetAudience")}</Label>
@@ -4818,7 +4809,7 @@ function BroadcastTab() {
 
       <Card className="border-none shadow-lg shadow-black/5 overflow-hidden">
         <div className="px-6 py-4 border-b border-border/50">
-          <h3 className="font-semibold text-foreground">Internal Announcement History</h3>
+          <h3 className="font-semibold text-foreground">{translateUi(uiLanguage, "Internal Announcement History")}</h3>
         </div>
         {loading ? (
           <div className="p-8 text-center"><div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" /></div>
@@ -4844,8 +4835,7 @@ function BroadcastTab() {
                       </Badge>
                     </div>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-2">
-                    Sent by {b.senderFirstName} {b.senderLastName} • {new Date(b.sentAt || b.createdAt).toLocaleString()}
+                  <p className="text-[11px] text-muted-foreground mt-2"> {translateUi(uiLanguage, "Sent by")} {b.senderFirstName} {b.senderLastName} • {new Date(b.sentAt || b.createdAt).toLocaleString()}
                   </p>
                 </div>
               );
@@ -4858,17 +4848,14 @@ function BroadcastTab() {
         <div className="flex flex-col gap-4 border-b border-border/50 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 className="flex items-center gap-2 font-semibold text-foreground">
-              <MessageCircle className="h-5 w-5 text-emerald-600" /> CRM Campaigns
-            </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Approved WhatsApp templates sent to snapshotted Leads, Students or Applications, with one delivery record per recipient.
-            </p>
+              <MessageCircle className="h-5 w-5 text-emerald-600" /> {translateUi(uiLanguage, "CRM Campaigns")} </h3>
+            <p className="mt-1 text-sm text-muted-foreground"> {translateUi(uiLanguage, "Approved WhatsApp templates sent to snapshotted Leads, Students or Applications, with one delivery record per recipient.")} </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => setLocation("/staff/leads")}>Select Leads</Button>
-            <Button variant="outline" size="sm" onClick={() => setLocation("/staff/students")}>Select Students</Button>
-            <Button variant="outline" size="sm" onClick={() => setLocation("/staff/applications")}>Select Applications</Button>
-            <Button variant="ghost" size="icon" onClick={() => void loadCampaigns()} aria-label="Refresh campaigns">
+            <Button variant="outline" size="sm" onClick={() => setLocation("/staff/leads")}>{translateUi(uiLanguage, "Select Leads")}</Button>
+            <Button variant="outline" size="sm" onClick={() => setLocation("/staff/students")}>{translateUi(uiLanguage, "Select Students")}</Button>
+            <Button variant="outline" size="sm" onClick={() => setLocation("/staff/applications")}>{translateUi(uiLanguage, "Select Applications")}</Button>
+            <Button variant="ghost" size="icon" onClick={() => void loadCampaigns()} aria-label={translateUi(uiLanguage, "Refresh campaigns")}>
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
@@ -4878,10 +4865,8 @@ function BroadcastTab() {
           <div className="p-8 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /></div>
         ) : campaigns.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-sm font-medium">No CRM campaign yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Select records on Leads, Students or Applications and choose “Send Template”.
-            </p>
+            <p className="text-sm font-medium">{translateUi(uiLanguage, "No CRM campaign yet")}</p>
+            <p className="mt-1 text-sm text-muted-foreground"> {translateUi(uiLanguage, "Select records on Leads, Students or Applications and choose “Send Template”.")} </p>
           </div>
         ) : (
           <div className="divide-y divide-border/50">
@@ -4900,18 +4885,17 @@ function BroadcastTab() {
                         <Badge className={`border-0 text-[10px] ${campaignStatusClass(campaign.status)}`}>{campaign.status}</Badge>
                         <Badge variant="outline" className="text-[10px] capitalize">{campaign.sourceEntityType}</Badge>
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Template: {campaign.externalTemplateName || campaign.templateName} · Created {new Date(campaign.createdAt).toLocaleString()}
+                      <p className="mt-1 text-xs text-muted-foreground"> {translateUi(uiLanguage, "Template:")} {campaign.externalTemplateName || campaign.templateName} {translateUi(uiLanguage, "· Created")} {new Date(campaign.createdAt).toLocaleString()}
                       </p>
                       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
                         <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
                       </div>
                       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                        <span>{campaign.totalCount || 0} total</span>
-                        <span className="text-emerald-700">{campaign.sentCount || 0} sent</span>
-                        <span>{campaign.queuedCount || 0} queued</span>
-                        <span className={campaign.failedCount ? "text-destructive" : ""}>{campaign.failedCount || 0} failed</span>
-                        <span>{campaign.skippedCount || 0} skipped</span>
+                        <span>{campaign.totalCount || 0} {translateUi(uiLanguage, "total")}</span>
+                        <span className="text-emerald-700">{campaign.sentCount || 0} {translateUi(uiLanguage, "sent")}</span>
+                        <span>{campaign.queuedCount || 0} {translateUi(uiLanguage, "queued")}</span>
+                        <span className={campaign.failedCount ? "text-destructive" : ""}>{campaign.failedCount || 0} {translateUi(uiLanguage, "failed")}</span>
+                        <span>{campaign.skippedCount || 0} {translateUi(uiLanguage, "skipped")}</span>
                       </div>
                     </div>
                     <div className="flex shrink-0 gap-2">
@@ -4923,9 +4907,7 @@ function BroadcastTab() {
                       </Button>
                       {Number(campaign.failedCount || 0) > 0 && (
                         <Button variant="outline" size="sm" onClick={() => void retryFailedCampaign(campaign.id)} disabled={retryingCampaignId === campaign.id}>
-                          {retryingCampaignId === campaign.id ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
-                          Retry safe failures
-                        </Button>
+                          {retryingCampaignId === campaign.id ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />} {translateUi(uiLanguage, "Retry safe failures")} </Button>
                       )}
                     </div>
                   </div>
@@ -4935,7 +4917,7 @@ function BroadcastTab() {
                       {campaignDetailLoading === campaign.id ? (
                         <div className="p-5 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>
                       ) : recipients.length === 0 ? (
-                        <div className="p-4 text-sm text-muted-foreground">No recipient record found.</div>
+                        <div className="p-4 text-sm text-muted-foreground">{translateUi(uiLanguage, "No recipient record found.")}</div>
                       ) : (
                         <div className="max-h-72 divide-y overflow-y-auto">
                           {recipients.map((recipient: any) => (
@@ -4945,7 +4927,7 @@ function BroadcastTab() {
                                 <p className="mt-0.5 text-muted-foreground">{maskCampaignPhone(recipient.phoneE164)}</p>
                                 {recipient.errorDetail && <p className="mt-1 text-destructive">{recipient.errorDetail}</p>}
                               </div>
-                              <span className="hidden self-start text-muted-foreground sm:block">Attempt {recipient.attempts || 0}/3</span>
+                              <span className="hidden self-start text-muted-foreground sm:block">{translateUi(uiLanguage, "Attempt")} {recipient.attempts || 0}/3</span>
                               <Badge variant="outline" className="h-fit justify-self-end capitalize">{recipient.status}</Badge>
                             </div>
                           ))}
@@ -5026,6 +5008,7 @@ interface Template {
 }
 
 function TemplatesTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t: tx, lang } = useI18n();
   const { user: templateUser } = useAuth();
   const { toast } = useToast();
@@ -5357,16 +5340,12 @@ function TemplatesTab() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div>
             <h3 className="font-semibold text-foreground flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary" /> Message Templates
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Create and manage reusable message templates for quick communication.
-            </p>
+              <FileText className="w-5 h-5 text-primary" /> {translateUi(uiLanguage, "Message Templates")} </h3>
+            <p className="text-sm text-muted-foreground mt-1"> {translateUi(uiLanguage, "Create and manage reusable message templates for quick communication.")} </p>
             {["admin", "super_admin"].includes(templateUser?.role ?? "") && <a className="block mt-2 text-sm text-primary underline" href={EMAIL_AUTOMATION_PATH}>{emailAutomationCopy(lang).libraryLink}</a>}
           </div>
           <Button onClick={openNew} className="rounded-xl gap-2">
-            <Plus className="w-4 h-4" /> New Template
-          </Button>
+            <Plus className="w-4 h-4" /> {translateUi(uiLanguage, "New Template")} </Button>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -5422,7 +5401,7 @@ function TemplatesTab() {
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-sm text-foreground truncate">{t.name}</p>
                             {t.subject && (
-                              <p className="text-xs text-muted-foreground mt-0.5 truncate">Subject: {t.subject}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5 truncate">{translateUi(uiLanguage, "Subject:")} {t.subject}</p>
                             )}
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
@@ -5630,7 +5609,7 @@ function TemplatesTab() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>{tx("messagesPage.templateNameRequired")}</Label>
-                <Input value={waName} onChange={e => setWaName(e.target.value)} placeholder="order_update" className="rounded-xl" />
+                <Input value={waName} onChange={e => setWaName(e.target.value)} placeholder={translateUi(uiLanguage, "order_update")} className="rounded-xl" />
               </div>
               <div className="space-y-2">
                 <Label>{tx("messagesPage.language")}</Label>
@@ -5650,9 +5629,9 @@ function TemplatesTab() {
               <Select value={waCategory} onValueChange={setWaCategory}>
                 <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="utility">Utility</SelectItem>
-                  <SelectItem value="marketing">Marketing</SelectItem>
-                  <SelectItem value="authentication">Authentication</SelectItem>
+                  <SelectItem value="utility">{translateUi(uiLanguage, "Utility")}</SelectItem>
+                  <SelectItem value="marketing">{translateUi(uiLanguage, "Marketing")}</SelectItem>
+                  <SelectItem value="authentication">{translateUi(uiLanguage, "Authentication")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -5865,8 +5844,7 @@ function TemplatesTab() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>{tx("messagesPage.contentRequired")}</Label>
-                <p className="text-[10px] text-muted-foreground">
-                  Use {"{{variable}}"} for dynamic placeholders, e.g. {"{{studentName}}"}, {"{{programName}}"}
+                <p className="text-[10px] text-muted-foreground"> {translateUi(uiLanguage, "Use")} {"{{variable}}"} {translateUi(uiLanguage, "for dynamic placeholders, e.g.")} {"{{studentName}}"}, {"{{programName}}"}
                 </p>
               </div>
               <Textarea
@@ -5909,6 +5887,7 @@ function MessageConvTracker({ convId }: { convId: number | null }) {
 }
 
 export default function MessagesPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, isRTL } = useI18n();
   const initialInternalConversation = (() => {
     try {
@@ -6103,19 +6082,15 @@ export default function MessagesPage() {
         <Tabs value={activeMessageTab} onValueChange={setActiveMessageTab} className="space-y-3">
           <TabsList className="h-10 max-w-full justify-start overflow-x-auto rounded-xl p-1 sm:w-fit">
             <TabsTrigger value="inbox" className="shrink-0 gap-2 px-3 sm:px-4">
-              <InboxIcon className="w-4 h-4" /> Inbox
-            </TabsTrigger>
+              <InboxIcon className="w-4 h-4" /> {translateUi(uiLanguage, "Inbox")} </TabsTrigger>
             <TabsTrigger value="messages" className="shrink-0 gap-2 px-3 sm:px-4">
-              <MessageCircle className="w-4 h-4" /> Internal
-            </TabsTrigger>
+              <MessageCircle className="w-4 h-4" /> {translateUi(uiLanguage, "Internal")} </TabsTrigger>
             {canBroadcast && (
               <TabsTrigger value="broadcast" className="shrink-0 gap-2 px-3 sm:px-4">
-                <Megaphone className="w-4 h-4" /> Broadcast
-              </TabsTrigger>
+                <Megaphone className="w-4 h-4" /> {translateUi(uiLanguage, "Broadcast")} </TabsTrigger>
             )}
             <TabsTrigger value="templates" className="shrink-0 gap-2 px-3 sm:px-4">
-              <FileText className="w-4 h-4" /> Templates
-            </TabsTrigger>
+              <FileText className="w-4 h-4" /> {translateUi(uiLanguage, "Templates")} </TabsTrigger>
           </TabsList>
 
           <TabsContent value="inbox">
@@ -6218,8 +6193,7 @@ export default function MessagesPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Plus className="w-5 h-5" /> New Conversation
-            </DialogTitle>
+              <Plus className="w-5 h-5" /> {translateUi(uiLanguage, "New Conversation")} </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -6249,7 +6223,7 @@ export default function MessagesPage() {
             )}
             {selectedUsers.length > 0 && (
               <div className="space-y-2">
-                <Label>Selected ({selectedUsers.length})</Label>
+                <Label>{translateUi(uiLanguage, "Selected (")}{selectedUsers.length})</Label>
                 <div className="flex flex-wrap gap-2">
                   {selectedUsers.map(u => (
                     <Badge key={u.id} variant="secondary" className="gap-1 cursor-pointer hover:bg-destructive/10" onClick={() => toggleUserSelect(u)}>

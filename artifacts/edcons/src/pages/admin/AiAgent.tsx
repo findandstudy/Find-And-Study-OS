@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useCallback } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import type {
@@ -123,6 +124,7 @@ function parseKeywords(raw: string): string[] {
 }
 
 export default function AiAgent() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, lang } = useI18n();
   const { toast } = useToast();
 
@@ -558,7 +560,7 @@ export default function AiAgent() {
             <Input
               value={newBotSlug}
               onChange={(event) => setNewBotSlug(toBotSlug(event.target.value))}
-              placeholder="dorm-booking"
+              placeholder={translateUi(uiLanguage, "dorm-booking")}
             />
             <Button onClick={createBot} disabled={creatingBot || newBotName.trim().length < 2}>
               <Plus className="mr-2 h-4 w-4" />
@@ -681,7 +683,7 @@ export default function AiAgent() {
               <Input
                 value={newBotSlug}
                 onChange={(event) => setNewBotSlug(toBotSlug(event.target.value))}
-                placeholder="dorm-booking"
+                placeholder={translateUi(uiLanguage, "dorm-booking")}
               />
               <Button
                 type="button"
@@ -815,8 +817,8 @@ export default function AiAgent() {
                   className="shrink-0"
                   onClick={loadModels}
                   disabled={modelsLoading}
-                  title="Refresh available models"
-                  aria-label="Refresh available models"
+                  title={translateUi(uiLanguage, "Refresh available models")}
+                  aria-label={translateUi(uiLanguage, "Refresh available models")}
                 >
                   <RefreshCw
                     className={`h-4 w-4 ${modelsLoading ? "animate-spin" : ""}`}
@@ -824,9 +826,7 @@ export default function AiAgent() {
                 </Button>
               </div>
               {modelsFallback && (
-                <p className="text-xs text-amber-700">
-                  Live model list is unavailable; the saved model remains selected.
-                </p>
+                <p className="text-xs text-amber-700"> {translateUi(uiLanguage, "Live model list is unavailable; the saved model remains selected.")} </p>
               )}
             </div>
             <div className="space-y-1.5">

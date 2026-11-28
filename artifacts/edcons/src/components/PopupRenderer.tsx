@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -58,6 +59,7 @@ function clearLoginSeenIfNewSession(userId: number) {
 }
 
 export function PopupRenderer() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { user } = useAuth();
   const [location] = useLocation();
   const queryClient = useQueryClient();
@@ -197,13 +199,9 @@ export function PopupRenderer() {
                     checked={dontShow}
                     onCheckedChange={(checked) => setDontShow(!!checked)}
                     data-testid="popup-dont-show-checkbox"
-                  />
-                  Don&apos;t show again
-                </label>
+                  /> {translateUi(uiLanguage, "Don't show again")} </label>
               ) : <span />}
-              <Button onClick={handleClose} size="default" data-testid="popup-close-btn">
-                Close
-              </Button>
+              <Button onClick={handleClose} size="default" data-testid="popup-close-btn"> {translateUi(uiLanguage, "Close")} </Button>
             </div>
           </div>
         </div>

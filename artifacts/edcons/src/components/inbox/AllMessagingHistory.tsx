@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useCallback, useEffect, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
@@ -101,6 +102,7 @@ function AllMessagingHistoryList({
   conversations: any[];
   messages: any[];
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   // Start each conversation's scroll area at the bottom (chat-like), without
   // touching the page-level scroll position.
   const scrollToBottom = useCallback((el: HTMLDivElement | null) => {
@@ -128,13 +130,11 @@ function AllMessagingHistoryList({
               <a
                 href={`/staff/messages?conversation=${conv.id}`}
                 className="text-xs text-primary hover:underline"
-              >
-                Open
-              </a>
+              > {translateUi(uiLanguage, "Open")} </a>
             </div>
             <div ref={scrollToBottom} className="p-4 space-y-2 max-h-72 overflow-y-auto">
               {convMessages.length === 0 && (
-                <p className="text-xs text-muted-foreground">No messages.</p>
+                <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "No messages.")}</p>
               )}
               {convMessages.map((m) => {
                 const out = m.direction === "outbound";

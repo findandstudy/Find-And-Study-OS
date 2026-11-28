@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
@@ -96,6 +97,7 @@ function allPermissionKeys(options: PermissionOption[]): string[] {
 }
 
 export default function AgentTeam() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, isRTL } = useI18n();
   const { user } = useAuth(true);
   const { toast } = useToast();
@@ -198,7 +200,7 @@ export default function AgentTeam() {
                             </div>
                             <div>
                               <p className="font-medium text-foreground text-sm">{s.firstName} {s.lastName}</p>
-                              <p className="text-xs text-muted-foreground">ID #{s.id}</p>
+                              <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "ID #")}{s.id}</p>
                             </div>
                           </div>
                         </td>

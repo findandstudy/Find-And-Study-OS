@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 /**
  * PortalAdaptersTab.tsx — SUB-STEP F + H (Declarative Builder)
  *
@@ -99,6 +100,7 @@ const EMPTY_FORM = {
 };
 
 function AdapterFormDialog({ open, editing, onClose, onSaved }: FormDialogProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -238,7 +240,7 @@ function AdapterFormDialog({ open, editing, onClose, onSaved }: FormDialogProps)
                 id="adp-key"
                 value={form.key}
                 onChange={(e) => set("key", e.target.value)}
-                placeholder="my_portal"
+                placeholder={translateUi(uiLanguage, "my_portal")}
                 className="font-mono text-sm"
                 autoFocus
               />
@@ -255,7 +257,7 @@ function AdapterFormDialog({ open, editing, onClose, onSaved }: FormDialogProps)
               id="adp-label"
               value={form.label}
               onChange={(e) => set("label", e.target.value)}
-              placeholder="My University Portal"
+              placeholder={translateUi(uiLanguage, "My University Portal")}
               autoFocus={!isNew}
             />
           </div>
@@ -278,7 +280,7 @@ function AdapterFormDialog({ open, editing, onClose, onSaved }: FormDialogProps)
               id="adp-match"
               value={form.matchNames}
               onChange={(e) => set("matchNames", e.target.value)}
-              placeholder="my university, myuni"
+              placeholder={translateUi(uiLanguage, "my university, myuni")}
             />
             <p className="text-xs text-muted-foreground">
               {t("portalAutomation.adapters.addDialog.matchNamesHint")}
@@ -322,7 +324,7 @@ function AdapterFormDialog({ open, editing, onClose, onSaved }: FormDialogProps)
                     size="sm"
                     className="h-7 gap-1.5 px-2 text-xs"
                     onClick={() => fileInputRef.current?.click()}
-                    aria-label="Upload JSON file"
+                    aria-label={translateUi(uiLanguage, "Upload JSON file")}
                   >
                     <Upload className="h-3.5 w-3.5" />
                   </Button>
@@ -381,6 +383,7 @@ type DbSortField = "label" | "key" | "createdAt";
 type SortDir = PortalSortDir;
 
 export default function PortalAdaptersTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -662,7 +665,7 @@ export default function PortalAdaptersTab() {
                     <Button
                       variant="ghost" size="icon" className="w-8 h-8"
                       onClick={() => { setEditing(a); setFormOpen(true); }}
-                      aria-label="Edit"
+                      aria-label={translateUi(uiLanguage, "Edit")}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </Button>

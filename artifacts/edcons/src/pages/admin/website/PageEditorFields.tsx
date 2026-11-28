@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -273,6 +274,7 @@ export function GlobalBlockSelector({
   content: Record<string, unknown>;
   onChange: (key: string, value: unknown) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { data: globalComponents = [] } = useQuery<{ id: number; name: string; slug: string; componentType: string; isActive: boolean }[]>({
     queryKey: ["website-global-components"],
     queryFn: () => customFetch("/api/website/global-components"),
@@ -285,11 +287,9 @@ export function GlobalBlockSelector({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label className="text-xs font-medium">Global Component</Label>
+        <Label className="text-xs font-medium">{translateUi(uiLanguage, "Global Component")}</Label>
         {activeComponents.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-2">
-            No active global components. Create one in Website &gt; Global Components first.
-          </p>
+          <p className="text-xs text-muted-foreground py-2"> {translateUi(uiLanguage, "No active global components. Create one in Website > Global Components first.")} </p>
         ) : (
           <Select
             value={selectedId ? String(selectedId) : ""}
@@ -302,7 +302,7 @@ export function GlobalBlockSelector({
             }}
           >
             <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select a component..." />
+              <SelectValue placeholder={translateUi(uiLanguage, "Select a component...")} />
             </SelectTrigger>
             <SelectContent>
               {activeComponents.map(c => (
@@ -317,8 +317,7 @@ export function GlobalBlockSelector({
       {selectedComp && (
         <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800">
           <p className="text-xs font-medium text-purple-700 dark:text-purple-300">{selectedComp.name}</p>
-          <p className="text-[10px] text-purple-500 dark:text-purple-400 mt-0.5">
-            Type: {selectedComp.componentType.replace(/_/g, " ")} | Slug: {selectedComp.slug}
+          <p className="text-[10px] text-purple-500 dark:text-purple-400 mt-0.5"> {translateUi(uiLanguage, "Type:")} {selectedComp.componentType.replace(/_/g, " ")} {translateUi(uiLanguage, "| Slug:")} {selectedComp.slug}
           </p>
         </div>
       )}

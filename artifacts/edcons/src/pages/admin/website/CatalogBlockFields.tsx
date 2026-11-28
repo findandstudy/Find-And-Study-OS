@@ -1,3 +1,4 @@
+import { translateUi } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -31,7 +32,7 @@ function validFields(value: unknown): value is Field[] {
 const normalizedName = (value: unknown) => String(value).trim().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 function Filter({ field, value, onChange }: { field: Field; value: string; onChange: (value: string) => void }) {
   const { lang } = useI18n();
-  const copy = (en: string, tr: string) => lang === "tr" ? tr : en;
+  const copy = (en: string, tr: string) => translateUi(lang, en, tr);
   const [search, setSearch] = useState("");
   return <div className="space-y-1"><label className="text-xs" htmlFor={`catalog-${field.key}`}>{field.label}</label>
     <input aria-label={copy(`Search ${field.label}`, `${field.label} seçeneklerinde ara`)} className="w-full rounded border bg-background p-2 text-xs" value={search} onChange={e => setSearch(e.target.value)} placeholder={copy("Search options…", "Seçeneklerde ara…")} />
@@ -43,7 +44,7 @@ function Filter({ field, value, onChange }: { field: Field; value: string; onCha
 }
 export function CatalogBlockFields({ content, locale, onChange }: { content: Record<string, unknown>; locale: string; onChange: (key: string, value: unknown) => void }) {
   const { lang } = useI18n();
-  const copy = (en: string, tr: string) => lang === "tr" ? tr : en;
+  const copy = (en: string, tr: string) => translateUi(lang, en, tr);
   const parameters = catalogParameters(content, locale);
   const { data = EMPTY_FIELDS, isPending, isFetching, isError, refetch } = useQuery<Field[]>({ queryKey: ["catalog-filter-options", parameters], queryFn: async ({ signal }) => {
     const result: unknown = await customFetch(`/api/website/catalog-filters?${parameters}`, { signal });

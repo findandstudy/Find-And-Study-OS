@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { DetailContent } from "@/lib/website/detailContentContract";
@@ -36,6 +37,7 @@ export default function DetailFullPreview({
   layoutOverride?: DetailLayout;
   payloadOverride?: Record<string, unknown> | null;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [device, setDevice] = useState<keyof typeof widths>(() =>
     typeof window !== "undefined" && window.innerWidth < 640
       ? "mobile"
@@ -270,8 +272,7 @@ export default function DetailFullPreview({
                       : value === "tablet"
                         ? copy("Tablet", "Tablet")
                         : copy("Mobile", "Mobil")}{" "}
-                    · {widths[value]}px
-                  </Button>
+                    · {widths[value]}{translateUi(uiLanguage, "px")} </Button>
                 ),
               )}
             </div>

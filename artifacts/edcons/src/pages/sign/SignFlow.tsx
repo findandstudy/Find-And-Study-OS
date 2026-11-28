@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -890,6 +891,7 @@ function EmailVerify({
   onVerify: () => void;
   emailLocked?: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   return (
     <div>
       <FieldLabel required>{label}</FieldLabel>
@@ -898,7 +900,7 @@ function EmailVerify({
         value={email}
         disabled={verified || emailLocked}
         onChange={e => onChangeEmail(e.target.value)}
-        placeholder="name@example.com"
+        placeholder={translateUi(uiLanguage, "name@example.com")}
         className="mt-1.5"
       />
       <div className="mt-2 rounded-lg border bg-muted/40 px-3 py-2.5">
@@ -966,6 +968,7 @@ function SignaturePad({ onSubmit, submitRef, onReady, signerName, onChangeName, 
   t: Tfn;
   showNameInput: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<"draw" | "upload">("draw");
@@ -1124,7 +1127,7 @@ function SignaturePad({ onSubmit, submitRef, onReady, signerName, onChangeName, 
           <>
             {uploaded ? (
               <div className="border rounded-lg bg-white relative flex items-center justify-center p-3" style={{ minHeight: 200 }}>
-                <img src={uploaded} alt="signature" className="max-h-[180px] max-w-full object-contain" />
+                <img src={uploaded} alt={translateUi(uiLanguage, "signature")} className="max-h-[180px] max-w-full object-contain" />
                 <button type="button" onClick={removeUpload} className="absolute top-2 right-2 text-xs text-muted-foreground flex items-center gap-1 bg-white/80 px-2 py-1 rounded">
                   <X className="w-3 h-3" /> {t("sigRemove")}
                 </button>

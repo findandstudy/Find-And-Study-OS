@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,7 @@ export function PdfMarkupModal({
   allowNegative = false,
   hasMultipleCurrencies = false,
 }: PdfMarkupModalProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [amount, setAmount] = useState("");
 
   useEffect(() => {
@@ -74,25 +76,19 @@ export function PdfMarkupModal({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-primary" />
-            PDF Fee Adjustment
-          </DialogTitle>
+            <DollarSign className="w-5 h-5 text-primary" /> {translateUi(uiLanguage, "PDF Fee Adjustment")} </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-5 pt-2">
           <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
             <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
-              This adjustment applies <strong>only to the PDF export</strong>. On-screen prices and database records remain unchanged.
-            </p>
+            <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed"> {translateUi(uiLanguage, "This adjustment applies")} <strong>{translateUi(uiLanguage, "only to the PDF export")}</strong>{translateUi(uiLanguage, ". On-screen prices and database records remain unchanged.")} </p>
           </div>
 
           {hasMultipleCurrencies && (
             <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
               <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-              <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
-                Selected programs use different currencies. A flat fee adjustment can only be applied when all selected programs use the same currency.
-              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed"> {translateUi(uiLanguage, "Selected programs use different currencies. A flat fee adjustment can only be applied when all selected programs use the same currency.")} </p>
             </div>
           )}
 
@@ -134,10 +130,10 @@ export function PdfMarkupModal({
 
           {numericAmount !== 0 && !hasMultipleCurrencies && (
             <div className="p-4 bg-muted/50 rounded-xl border space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preview (per program)</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{translateUi(uiLanguage, "Preview (per program)")}</p>
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Original Fee</p>
+                  <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Original Fee")}</p>
                   <p className="text-sm font-semibold">{formatCurrency(preview, currency)}</p>
                 </div>
                 <div className={`flex items-center gap-1 ${isNegative ? "text-red-600 dark:text-red-400" : "text-primary"}`}>
@@ -145,7 +141,7 @@ export function PdfMarkupModal({
                 </div>
                 <ArrowRight className="w-4 h-4 text-muted-foreground" />
                 <div className="text-center">
-                  <p className="text-xs text-muted-foreground">PDF Fee</p>
+                  <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "PDF Fee")}</p>
                   <p className={`text-sm font-bold ${isNegative ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
                     {formatCurrency(adjustedPreview, currency)}
                   </p>
@@ -157,17 +153,13 @@ export function PdfMarkupModal({
           <div className="flex items-center justify-between pt-2">
             {currentMarkup !== 0 ? (
               <Button variant="ghost" size="sm" onClick={handleClear} className="text-destructive hover:text-destructive gap-1.5">
-                <Eraser className="w-3.5 h-3.5" />
-                Clear Adjustment
-              </Button>
+                <Eraser className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Clear Adjustment")} </Button>
             ) : (
               <div />
             )}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button onClick={handleApply} disabled={!canApply} className="gap-1.5">
-                Apply to PDF
-              </Button>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>{translateUi(uiLanguage, "Cancel")}</Button>
+              <Button onClick={handleApply} disabled={!canApply} className="gap-1.5"> {translateUi(uiLanguage, "Apply to PDF")} </Button>
             </div>
           </div>
         </div>

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import { Link, useLocation } from "wouter";
@@ -775,6 +776,7 @@ function EditLeadDialog(props: any) { const { t } = useI18n(); return <EditLeadD
 function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: {
   open: boolean; onClose: () => void; lead: any; canSeeRevenue: boolean; columns: ColDef[]; t: (k: string) => string;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [form, setForm] = useState({ ...EMPTY_FORM, status: "new" });
   const updateLead = useUpdateLead();
   const queryClient = useQueryClient();
@@ -907,7 +909,7 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
           <div className="space-y-1.5 col-span-2">
             <Label>{t("studentsPage.interestedLevel")}</Label>
             <Select value={form.interestedLevel} onValueChange={v => setForm({ ...form, interestedLevel: v })}>
-              <SelectTrigger className="rounded-xl h-9"><SelectValue placeholder="Select level..." /></SelectTrigger>
+              <SelectTrigger className="rounded-xl h-9"><SelectValue placeholder={translateUi(uiLanguage, "Select level...")} /></SelectTrigger>
               <SelectContent>
                 {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
               </SelectContent>
@@ -931,7 +933,7 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
                   <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduStartYear")}</Label><Input type="number" className="h-8 text-sm" value={form.eduStartYear} onChange={e => setForm({ ...form, eduStartYear: e.target.value })} placeholder="2018" /></div>
                   <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduEndYear")}</Label><Input type="number" className="h-8 text-sm" value={form.eduEndYear} onChange={e => setForm({ ...form, eduEndYear: e.target.value })} placeholder="2022" /></div>
                   <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduGpa")}</Label><Input className="h-8 text-sm" value={form.eduGpa} onChange={e => setForm({ ...form, eduGpa: e.target.value })} placeholder="3.50 / 85" /></div>
-                  <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduLanguageScore")}</Label><Input className="h-8 text-sm" value={form.eduLanguageScore} onChange={e => setForm({ ...form, eduLanguageScore: e.target.value })} placeholder="IELTS 6.5" /></div>
+                  <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduLanguageScore")}</Label><Input className="h-8 text-sm" value={form.eduLanguageScore} onChange={e => setForm({ ...form, eduLanguageScore: e.target.value })} placeholder={translateUi(uiLanguage, "IELTS 6.5")} /></div>
                 </div>
               </div>
             );
@@ -1282,6 +1284,7 @@ function LeadBulkImportModal({ open, onClose, onSuccess }: { open: boolean; onCl
 }
 
 export default function LeadsPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const dateFormat = useDateFormat();
   const [, setLocation] = useLocation();
@@ -2145,7 +2148,7 @@ export default function LeadsPage() {
             </div>
             <div className="space-y-1.5">
               <Label>{t("leadsPage.emailRequired")}</Label>
-              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" />
+              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder={translateUi(uiLanguage, "email@example.com")} />
             </div>
             <div className="space-y-1.5">
               <Label>{t("leadsPage.phoneRequired")}</Label>
@@ -2181,7 +2184,7 @@ export default function LeadsPage() {
             <div className="space-y-1.5 col-span-2">
               <Label>{t("studentsPage.interestedLevel")}</Label>
               <Select value={form.interestedLevel} onValueChange={v => setForm({ ...form, interestedLevel: v })}>
-                <SelectTrigger><SelectValue placeholder="Select level..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "Select level...")} /></SelectTrigger>
                 <SelectContent>
                   {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
                 </SelectContent>
@@ -2205,7 +2208,7 @@ export default function LeadsPage() {
                     <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduStartYear")}</Label><Input type="number" className="h-8 text-sm" value={form.eduStartYear} onChange={e => setForm({ ...form, eduStartYear: e.target.value })} placeholder="2018" /></div>
                     <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduEndYear")}</Label><Input type="number" className="h-8 text-sm" value={form.eduEndYear} onChange={e => setForm({ ...form, eduEndYear: e.target.value })} placeholder="2022" /></div>
                     <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduGpa")}</Label><Input className="h-8 text-sm" value={form.eduGpa} onChange={e => setForm({ ...form, eduGpa: e.target.value })} placeholder="3.50 / 85" /></div>
-                    <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduLanguageScore")}</Label><Input className="h-8 text-sm" value={form.eduLanguageScore} onChange={e => setForm({ ...form, eduLanguageScore: e.target.value })} placeholder="IELTS 6.5" /></div>
+                    <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduLanguageScore")}</Label><Input className="h-8 text-sm" value={form.eduLanguageScore} onChange={e => setForm({ ...form, eduLanguageScore: e.target.value })} placeholder={translateUi(uiLanguage, "IELTS 6.5")} /></div>
                   </div>
                 </div>
               );

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
@@ -71,6 +72,7 @@ function toBrowserSignUrl(serverUrl?: string | null): string {
 }
 
 export default function SelfFillLinksPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t, lang } = useI18n();
   const [rows, setRows] = useState<Session[]>([]);
@@ -262,9 +264,9 @@ export default function SelfFillLinksPage() {
                   <input type="checkbox" checked={allDeletableSelected} onChange={toggleAll} className="cursor-pointer" title={t("common.selectAll")} />
                 </th>
                 <th className="text-left px-4 py-3">{t("selfFill.columns.signer")}</th>
-                <th className="text-left px-4 py-3">Association</th>
+                <th className="text-left px-4 py-3">{translateUi(uiLanguage, "Association")}</th>
                 <th className="text-left px-4 py-3">{t("common.status")}</th>
-                <th className="text-left px-4 py-3">Delivery</th>
+                <th className="text-left px-4 py-3">{translateUi(uiLanguage, "Delivery")}</th>
                 <th className="text-left px-4 py-3">{t("selfFill.columns.expires")}</th>
                 <th className="text-right px-4 py-3">{t("common.actions")}</th>
               </tr>
@@ -286,7 +288,7 @@ export default function SelfFillLinksPage() {
                   </td>
                   <td className="px-4 py-3"><Badge variant={STATUS_TONE[s.status]}>{t(`selfFill.status.${s.status}`)}</Badge></td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">
-                    <div>{s.sendCount || 0} send{s.sendCount === 1 ? "" : "s"}</div>
+                    <div>{s.sendCount || 0} {translateUi(uiLanguage, "send")}{s.sendCount === 1 ? "" : "s"}</div>
                     <div>{s.lastReminderAt ? `Reminder ${formatDateTime(lang, s.lastReminderAt)}` : s.lastSentAt ? formatDateTime(lang, s.lastSentAt) : "Not sent"}</div>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{formatDateTime(lang, s.expiresAt)}</td>
@@ -294,7 +296,7 @@ export default function SelfFillLinksPage() {
                     {s.status !== "signed" && s.status !== "revoked" && (
                       <>
                         <Button size="sm" variant="ghost" title={t("selfFill.actions.resend")} onClick={() => resend(s.id)}><RotateCw className="w-4 h-4" /></Button>
-                        <Button size="sm" variant="ghost" title="Send reminder" onClick={() => remind(s.id)}><BellRing className="w-4 h-4" /></Button>
+                        <Button size="sm" variant="ghost" title={translateUi(uiLanguage, "Send reminder")} onClick={() => remind(s.id)}><BellRing className="w-4 h-4" /></Button>
                         <Button size="sm" variant="ghost" title={t("selfFill.actions.revoke")} onClick={() => revoke(s.id)}><Ban className="w-4 h-4 text-red-500" /></Button>
                       </>
                     )}
@@ -337,9 +339,8 @@ export default function SelfFillLinksPage() {
                 </SelectContent>
               </Select>
               {templates.length === 0 && (
-                <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-                  No published contract template is available. Save the template, then publish it before creating a signing link.{" "}
-                  <a className="font-medium underline underline-offset-2" href="/admin/contract-templates">Open Contract Templates</a>
+                <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"> {translateUi(uiLanguage, "No published contract template is available. Save the template, then publish it before creating a signing link.")}{" "}
+                  <a className="font-medium underline underline-offset-2" href="/admin/contract-templates">{translateUi(uiLanguage, "Open Contract Templates")}</a>
                 </div>
               )}
               {selectedTemplate?.signingPageConfig?.requireEmailVerification === false && (
@@ -351,15 +352,15 @@ export default function SelfFillLinksPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Link validity (days)</Label>
+                <Label>{translateUi(uiLanguage, "Link validity (days)")}</Label>
                 <Input type="number" min={1} max={90} value={form.expiryDays} onChange={e => setForm(f => ({ ...f, expiryDays: e.target.value }))} />
               </div>
               <div>
-                <Label>Associate with</Label>
+                <Label>{translateUi(uiLanguage, "Associate with")}</Label>
                 <Select value={form.subjectType || "none"} onValueChange={v => setForm(f => ({ ...f, subjectType: v === "none" ? "" : v, subjectId: "", subjectLabel: "" }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No association</SelectItem>
+                    <SelectItem value="none">{translateUi(uiLanguage, "No association")}</SelectItem>
                     {SUBJECT_TYPES.map(type => <SelectItem key={type} value={type}>{SUBJECT_LABELS[type]}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -368,7 +369,7 @@ export default function SelfFillLinksPage() {
             {form.subjectType && <div>
               <Label>{form.subjectType === "other" ? "Association label" : `Select ${SUBJECT_LABELS[form.subjectType]}`}</Label>
               {form.subjectType === "other" ? (
-                <Input value={form.subjectLabel} onChange={e => setForm(f => ({ ...f, subjectLabel: e.target.value }))} placeholder="Name or reference" />
+                <Input value={form.subjectLabel} onChange={e => setForm(f => ({ ...f, subjectLabel: e.target.value }))} placeholder={translateUi(uiLanguage, "Name or reference")} />
               ) : (
                 <ContractSubjectPicker
                   subjectType={form.subjectType}
@@ -405,11 +406,11 @@ export default function SelfFillLinksPage() {
               <Input type="email" value={editForm.signerEmail} onChange={e => setEditForm(f => ({ ...f, signerEmail: e.target.value }))} />
             </div>
             <div>
-              <Label>Associate with</Label>
+              <Label>{translateUi(uiLanguage, "Associate with")}</Label>
               <Select value={editForm.subjectType || "none"} onValueChange={v => setEditForm(f => ({ ...f, subjectType: v === "none" ? "" : v, subjectId: "", subjectLabel: "" }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No association</SelectItem>
+                  <SelectItem value="none">{translateUi(uiLanguage, "No association")}</SelectItem>
                   {SUBJECT_TYPES.map(type => <SelectItem key={type} value={type}>{SUBJECT_LABELS[type]}</SelectItem>)}
                 </SelectContent>
               </Select>

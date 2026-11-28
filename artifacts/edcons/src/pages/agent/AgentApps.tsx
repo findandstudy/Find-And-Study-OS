@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -160,6 +161,7 @@ function AppStudentAvatar({ app, size = "sm" }: { app: any; size?: "sm" | "md" }
 
 /* ── StudentSearchInput ──────────────────────────────────── */
 function StudentSearchInput({ value, onChange }: { value: Student | null; onChange: (s: Student | null) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -202,11 +204,11 @@ function StudentSearchInput({ value, onChange }: { value: Student | null; onChan
       <PopoverTrigger asChild>
         <div className="relative cursor-text" onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <Input ref={inputRef} placeholder="Search student..." value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} className="pl-9 rounded-xl" autoComplete="off" />
+          <Input ref={inputRef} placeholder={translateUi(uiLanguage, "Search student...")} value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} className="pl-9 rounded-xl" autoComplete="off" />
         </div>
       </PopoverTrigger>
       <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-64 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
-        {isLoading && <div className="p-3 text-sm text-muted-foreground text-center">Searching...</div>}
+        {isLoading && <div className="p-3 text-sm text-muted-foreground text-center">{translateUi(uiLanguage, "Searching...")}</div>}
         {!isLoading && students.length === 0 && <div className="p-4 text-sm text-muted-foreground text-center">{query.length === 0 ? "Start typing to search" : "No students found"}</div>}
         {students.map(student => (
           <button key={student.id} type="button" className="w-full flex items-center gap-3 p-3 hover:bg-secondary/70 transition-colors text-left border-b border-border/50 last:border-0" onMouseDown={e => { e.preventDefault(); onChange(student); setQuery(""); setOpen(false); }}>
@@ -227,6 +229,7 @@ type ColVariant = "won" | "lost" | undefined;
 
 /* ── DraggableAppCard ─────────────────────────────────────── */
 function DraggableAppCard({ app, onView, variant }: { app: any; onView: (id: number) => void; variant?: ColVariant }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const showCommission = useCanViewAgentCommission();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -269,8 +272,7 @@ function DraggableAppCard({ app, onView, variant }: { app: any; onView: (id: num
           onClick={() => onView(app.id)}
           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
         >
-          <Eye className="w-3 h-3" /> View
-        </button>
+          <Eye className="w-3 h-3" /> {translateUi(uiLanguage, "View")} </button>
       </div>
     </div>
     </>
@@ -281,6 +283,7 @@ function DraggableAppCard({ app, onView, variant }: { app: any; onView: (id: num
 function DroppableAppColumn({ stage, label, variant, apps, onView }: {
   stage: string; label: string; variant?: string | null; apps: any[]; onView: (id: number) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { setNodeRef, isOver } = useDroppable({ id: stage });
   const showCommission = useCanViewAgentCommission();
   const v = variant as ColVariant;
@@ -340,9 +343,7 @@ function DroppableAppColumn({ stage, label, variant, apps, onView }: {
             <DraggableAppCard key={app.id} app={app} onView={onView} variant={v} />
           ))}
           {apps.length === 0 && (
-            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
-              Drop here
-            </div>
+            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}> {translateUi(uiLanguage, "Drop here")} </div>
           )}
         </SortableContext>
       </div>
@@ -373,6 +374,7 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
 
 /* ── EditApplicationDialog ───────────────────────────────── */
 function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; onClose: () => void; app: any; stages: PipelineStage[] }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { levels: studyLevels } = useStudyLevels();
   const [form, setForm] = useState({
     stage: "", level: "", country: "", universityId: "", universityName: "",
@@ -482,24 +484,24 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Edit Application</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{translateUi(uiLanguage, "Edit Application")}</DialogTitle></DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-1.5">
-            <Label>Stage</Label>
+            <Label>{translateUi(uiLanguage, "Stage")}</Label>
             <Select value={form.stage} onValueChange={v => setForm({ ...form, stage: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Country</Label>
+            <Label>{translateUi(uiLanguage, "Country")}</Label>
             <Select value={form.country} onValueChange={handleCountryChange}>
-              <SelectTrigger><SelectValue placeholder="Select country..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "Select country...")} /></SelectTrigger>
               <SelectContent className="max-h-60">{activeDestinations.map(c => <SelectItem key={c.id} value={c.name}><span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span></SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5 col-span-2">
-            <Label>University</Label>
+            <Label>{translateUi(uiLanguage, "University")}</Label>
             <Select value={form.universityId} onValueChange={handleUniversityChange} disabled={!form.country}>
               <SelectTrigger>
                 <SelectValue placeholder={!form.country ? "Select country first..." : universities.length === 0 ? "No universities found" : "Select university..."} />
@@ -509,18 +511,18 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
               </SelectContent>
             </Select>
             {form.universityName && !form.universityId && (
-              <p className="text-xs text-muted-foreground mt-1">Current: {form.universityName}</p>
+              <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Current:")} {form.universityName}</p>
             )}
           </div>
           <div className="space-y-1.5">
-            <Label>Level</Label>
+            <Label>{translateUi(uiLanguage, "Level")}</Label>
             <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
               <SelectContent>{studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Program</Label>
+            <Label>{translateUi(uiLanguage, "Program")}</Label>
             <Select value={form.programId} onValueChange={handleProgramChange} disabled={!form.universityId}>
               <SelectTrigger>
                 <SelectValue placeholder={!form.universityId ? "Select university first..." : programs.length === 0 ? "No programs found" : "Select program..."} />
@@ -534,40 +536,38 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
               </SelectContent>
             </Select>
             {form.programName && !form.programId && (
-              <p className="text-xs text-muted-foreground mt-1">Current: {form.programName}</p>
+              <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Current:")} {form.programName}</p>
             )}
           </div>
           <div className="space-y-1.5">
-            <Label>Language</Label>
+            <Label>{translateUi(uiLanguage, "Language")}</Label>
             <Select value={form.instructionLanguage} onValueChange={v => setForm({ ...form, instructionLanguage: v })}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
               <SelectContent>{INSTRUCTION_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Intake</Label>
+            <Label>{translateUi(uiLanguage, "Intake")}</Label>
             <Select value={form.intake} onValueChange={v => setForm({ ...form, intake: v })}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
               <SelectContent>{INTAKES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5 col-span-2">
             <Label className="flex items-center gap-2">
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-              Tuition Fee (USD)
-              {hasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">Discounted</span>}
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-500" /> {translateUi(uiLanguage, "Tuition Fee (USD)")} {hasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">{translateUi(uiLanguage, "Discounted")}</span>}
             </Label>
             <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} />
             {selectedProgForFee && (selectedProgForFee.tuitionFee != null || selectedProgForFee.discountedFee != null || (showCommission && selectedProgForFee.commissionRate != null)) && (
               <div className="flex flex-wrap gap-3 text-xs mt-1">
-                {selectedProgForFee.tuitionFee != null && <span className="text-muted-foreground">Standard: <strong>${selectedProgForFee.tuitionFee.toLocaleString()}</strong></span>}
-                {selectedProgForFee.discountedFee != null && <span className="text-amber-600">Discounted: <strong>${selectedProgForFee.discountedFee.toLocaleString()}</strong></span>}
-                {showCommission && selectedProgForFee.commissionRate != null && <span className="text-indigo-600">Commission: <strong>{selectedProgForFee.commissionRate}%</strong></span>}
+                {selectedProgForFee.tuitionFee != null && <span className="text-muted-foreground">{translateUi(uiLanguage, "Standard:")} <strong>${selectedProgForFee.tuitionFee.toLocaleString()}</strong></span>}
+                {selectedProgForFee.discountedFee != null && <span className="text-amber-600">{translateUi(uiLanguage, "Discounted:")} <strong>${selectedProgForFee.discountedFee.toLocaleString()}</strong></span>}
+                {showCommission && selectedProgForFee.commissionRate != null && <span className="text-indigo-600">{translateUi(uiLanguage, "Commission:")} <strong>{selectedProgForFee.commissionRate}%</strong></span>}
               </div>
             )}
           </div>
           <div className="space-y-1.5 col-span-2">
-            <Label>Notes</Label>
+            <Label>{translateUi(uiLanguage, "Notes")}</Label>
             <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
           </div>
         </div>
@@ -589,7 +589,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
           </>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleSave} disabled={updateApp.isPending}>{updateApp.isPending ? "Saving..." : "Save Changes"}</Button>
         </DialogFooter>
       </DialogContent>
@@ -602,14 +602,15 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
 function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
   open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   return (
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Delete {count} Application{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
-        <p className="text-sm text-muted-foreground py-2">This action cannot be undone.</p>
+        <DialogHeader><DialogTitle>Delete {count} {translateUi(uiLanguage, "Application")}{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground py-2">{translateUi(uiLanguage, "This action cannot be undone.")}</p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? "Deleting..." : `Delete ${count}`}</Button>
         </DialogFooter>
       </DialogContent>
@@ -624,6 +625,7 @@ function FilterPopover({ filters, onChange, stages }: {
   filters: { stage: string; country: string };
   onChange: (f: { stage: string; country: string }) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [open, setOpen] = useState(false);
   const hasActive = filters.stage !== "all" || filters.country !== "all";
   const { data: allCountries = [] } = useCountries();
@@ -640,30 +642,30 @@ function FilterPopover({ filters, onChange, stages }: {
       </PopoverTrigger>
       <PopoverContent className="w-64 p-4 space-y-4" align="end">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Filters</p>
-          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ stage: "all", country: "all" })}>Clear</Button>}
+          <p className="text-sm font-semibold">{translateUi(uiLanguage, "Filters")}</p>
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ stage: "all", country: "all" })}>{translateUi(uiLanguage, "Clear")}</Button>}
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Stage</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "Stage")}</Label>
           <Select value={filters.stage} onValueChange={v => onChange({ ...filters, stage: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{translateUi(uiLanguage, "All")}</SelectItem>
               {stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Country</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "Country")}</Label>
           <Select value={filters.country} onValueChange={v => onChange({ ...filters, country: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{translateUi(uiLanguage, "All")}</SelectItem>
               {activeDestinations.map(c => <SelectItem key={c.id} value={c.name}><span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span></SelectItem>)}
             </SelectContent>
           </Select>
         </div>
-        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>Apply</Button>
+        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>{translateUi(uiLanguage, "Apply")}</Button>
       </PopoverContent>
     </Popover>
     </>
@@ -672,6 +674,7 @@ function FilterPopover({ filters, onChange, stages }: {
 
 /* ── AddApplicationModal ─────────────────────────────────── */
 function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open: boolean; onClose: () => void; onSuccess: () => void; defaultStage?: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { season } = useSeason();
   const { levels: studyLevels } = useStudyLevels();
@@ -752,78 +755,76 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
     <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle className="text-xl font-display">New Application</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="text-xl font-display">{translateUi(uiLanguage, "New Application")}</DialogTitle></DialogHeader>
         <div className="space-y-5 py-2">
           <div className="space-y-2">
-            <Label className="font-semibold flex items-center gap-1.5"><User className="w-4 h-4 text-primary" /> Student <span className="text-destructive">*</span></Label>
+            <Label className="font-semibold flex items-center gap-1.5"><User className="w-4 h-4 text-primary" /> {translateUi(uiLanguage, "Student")} <span className="text-destructive">*</span></Label>
             <StudentSearchInput value={selectedStudent} onChange={setSelectedStudent} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="font-semibold">Country <span className="text-destructive">*</span></Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "Country")} <span className="text-destructive">*</span></Label>
               <Select value={form.country} onValueChange={v => setForm({ ...form, country: v, universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "" })}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
                 <SelectContent className="max-h-60">{activeDestinations.map(c => <SelectItem key={c.id} value={c.name}><span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span></SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="font-semibold">University</Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "University")}</Label>
               <Select value={form.universityId} onValueChange={v => { const uni = universities.find(u => String(u.id) === v); setForm({ ...form, universityId: v, universityName: uni?.name ?? "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "" }); }} disabled={!form.country || universities.length === 0}>
                 <SelectTrigger className="rounded-xl"><SelectValue placeholder={!form.country ? "Select country first..." : universities.length === 0 ? "No universities" : "Select..."} /></SelectTrigger>
                 <SelectContent className="max-h-60">{universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="font-semibold">Level <span className="text-destructive">*</span></Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "Level")} <span className="text-destructive">*</span></Label>
               <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
                 <SelectContent>{studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="font-semibold">Program</Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "Program")}</Label>
               <Select value={form.programId} onValueChange={handleProgramSelect} disabled={!form.universityId || programs.length === 0}>
                 <SelectTrigger className="rounded-xl"><SelectValue placeholder={!form.universityId ? "Select uni first..." : programs.length === 0 ? "No programs" : "Select..."} /></SelectTrigger>
                 <SelectContent className="max-h-60">{programs.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}{p.degree && <span className="text-muted-foreground ml-1 text-xs">({p.degree})</span>}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="font-semibold">Language</Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "Language")}</Label>
               <Select value={form.instructionLanguage} onValueChange={v => setForm({ ...form, instructionLanguage: v })}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
                 <SelectContent>{INSTRUCTION_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="font-semibold">Intake</Label>
+              <Label className="font-semibold">{translateUi(uiLanguage, "Intake")}</Label>
               <Select value={form.intake} onValueChange={v => setForm({ ...form, intake: v })}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "Select...")} /></SelectTrigger>
                 <SelectContent>{INTAKES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2 col-span-2">
               <Label className="font-semibold flex items-center gap-2">
-                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                Tuition Fee (USD)
-                {addHasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">Discounted</span>}
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" /> {translateUi(uiLanguage, "Tuition Fee (USD)")} {addHasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">{translateUi(uiLanguage, "Discounted")}</span>}
               </Label>
               <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} placeholder="e.g. 15000" className="rounded-xl" />
               {addSelProgForFee && (addSelProgForFee.tuitionFee != null || addSelProgForFee.discountedFee != null || (showCommission && addSelProgForFee.commissionRate != null)) && (
                 <div className="flex flex-wrap gap-3 text-xs">
-                  {addSelProgForFee.tuitionFee != null && <span className="text-muted-foreground">Standard: <strong>${addSelProgForFee.tuitionFee.toLocaleString()}</strong></span>}
-                  {addSelProgForFee.discountedFee != null && <span className="text-amber-600">Discounted: <strong>${addSelProgForFee.discountedFee.toLocaleString()}</strong></span>}
-                  {showCommission && addSelProgForFee.commissionRate != null && <span className="text-indigo-600">Commission: <strong>{addSelProgForFee.commissionRate}%</strong></span>}
+                  {addSelProgForFee.tuitionFee != null && <span className="text-muted-foreground">{translateUi(uiLanguage, "Standard:")} <strong>${addSelProgForFee.tuitionFee.toLocaleString()}</strong></span>}
+                  {addSelProgForFee.discountedFee != null && <span className="text-amber-600">{translateUi(uiLanguage, "Discounted:")} <strong>${addSelProgForFee.discountedFee.toLocaleString()}</strong></span>}
+                  {showCommission && addSelProgForFee.commissionRate != null && <span className="text-indigo-600">{translateUi(uiLanguage, "Commission:")} <strong>{addSelProgForFee.commissionRate}%</strong></span>}
                 </div>
               )}
             </div>
             <div className="space-y-2 col-span-2">
-              <Label className="font-semibold">Notes</Label>
-              <textarea placeholder="Notes..." value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
+              <Label className="font-semibold">{translateUi(uiLanguage, "Notes")}</Label>
+              <textarea placeholder={translateUi(uiLanguage, "Notes...")} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
             </div>
           </div>
         </div>
         <DialogFooter className="gap-2 pt-2">
-          <Button variant="outline" onClick={handleClose} className="rounded-xl">Cancel</Button>
+          <Button variant="outline" onClick={handleClose} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleSubmit} disabled={createApplication.isPending || !selectedStudent || !form.country || !form.level} className="rounded-xl">{createApplication.isPending ? "Creating..." : "Create Application"}</Button>
         </DialogFooter>
       </DialogContent>
@@ -834,6 +835,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
 
 /* ── ApplicationsPage ────────────────────────────────────── */
 export default function AgentAppsPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -977,16 +979,15 @@ export default function AgentAppsPage() {
           <div className="flex items-center gap-3">
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search applications..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
+              <Input placeholder={translateUi(uiLanguage, "Search applications...")} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
             <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} />
             <div className="flex items-center border rounded-full overflow-hidden">
-              <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
-              <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
+              <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title={translateUi(uiLanguage, "Pipeline view")}><LayoutGrid className="w-4 h-4" /></button>
+              <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title={translateUi(uiLanguage, "List view")}><List className="w-4 h-4" /></button>
             </div>
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" /> New Application
-            </Button>
+              <Plus className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "New Application")} </Button>
           </div>
         </div>
 
@@ -1055,9 +1056,9 @@ export default function AgentAppsPage() {
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    <TableRow><TableCell colSpan={showCommission ? 9 : 8} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={showCommission ? 9 : 8} className="text-center py-12 text-muted-foreground">{translateUi(uiLanguage, "Loading...")}</TableCell></TableRow>
                   ) : pagedApps.length === 0 ? (
-                    <TableRow><TableCell colSpan={showCommission ? 9 : 8} className="text-center py-12 text-muted-foreground">No applications found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={showCommission ? 9 : 8} className="text-center py-12 text-muted-foreground">{translateUi(uiLanguage, "No applications found")}</TableCell></TableRow>
                   ) : pagedApps.map((app: any) => {
                     const sm = stageMap[app.stage];
                     const stageColor = sm ? getStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200";

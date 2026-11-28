@@ -1,3 +1,4 @@
+import { translateUi } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -18,7 +19,7 @@ function validPreview(value: unknown): value is { items: PreviewItem[] } {
 
 export function CatalogBlockPreview({ content, locale }: { content: Record<string, unknown>; locale: string }) {
   const { lang } = useI18n();
-  const copy = (en: string, tr: string) => lang === "tr" ? tr : en;
+  const copy = (en: string, tr: string) => translateUi(lang, en, tr);
   const parameters = catalogParameters(content, locale);
   const [settled, setSettled] = useState(parameters);
   useEffect(() => {

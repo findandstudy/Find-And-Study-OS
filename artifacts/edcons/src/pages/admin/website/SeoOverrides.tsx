@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -80,11 +81,12 @@ function seoReadiness(page: PageSeo): { level: "ready" | "warning" | "blocked"; 
 }
 
 function GooglePreview({ title, description, slug, baseUrl }: { title: string; description: string; slug: string; baseUrl: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const displayUrl = `${baseUrl}/${slug}`;
   return (
     <>
     <div className="bg-white rounded-xl border border-border p-4 space-y-1">
-      <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1"><Search className="w-3 h-3" /> Google Search Preview</p>
+      <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1"><Search className="w-3 h-3" /> {translateUi(uiLanguage, "Google Search Preview")}</p>
       <p className="text-sm text-green-700 truncate">{displayUrl}</p>
       <p className="text-lg text-blue-700 hover:underline cursor-pointer truncate">{title || "Page Title"}</p>
       <p className="text-sm text-gray-600 line-clamp-2">{description || "No meta description set. Search engines will use page content."}</p>
@@ -94,15 +96,16 @@ function GooglePreview({ title, description, slug, baseUrl }: { title: string; d
 }
 
 function SocialPreview({ title, description, image, siteName }: { title: string; description: string; image: string; siteName: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   return (
     <>
     <div className="bg-white rounded-xl border border-border overflow-hidden">
-      <p className="text-xs text-muted-foreground font-medium px-4 pt-3 pb-2 flex items-center gap-1"><Globe className="w-3 h-3" /> Social Share Preview</p>
+      <p className="text-xs text-muted-foreground font-medium px-4 pt-3 pb-2 flex items-center gap-1"><Globe className="w-3 h-3" /> {translateUi(uiLanguage, "Social Share Preview")}</p>
       <div className="bg-gray-100 dark:bg-gray-800/60 h-36 flex items-center justify-center">
         {image ? (
-          <img src={image} alt="OG" className="w-full h-full object-cover" />
+          <img src={image} alt={translateUi(uiLanguage, "OG")} className="w-full h-full object-cover" />
         ) : (
-          <div className="text-muted-foreground text-sm flex items-center gap-2"><Image className="w-5 h-5" /> No image set</div>
+          <div className="text-muted-foreground text-sm flex items-center gap-2"><Image className="w-5 h-5" /> {translateUi(uiLanguage, "No image set")}</div>
         )}
       </div>
       <div className="p-3 border-t">
@@ -116,6 +119,7 @@ function SocialPreview({ title, description, image, siteName }: { title: string;
 }
 
 export default function WebsiteSeoOverrides() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [editing, setEditing] = useState<PageSeo | null>(null);
@@ -182,41 +186,41 @@ export default function WebsiteSeoOverrides() {
       <div className="p-6 max-w-6xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2"><Search className="w-6 h-6 text-primary" /> SEO & AI Discovery</h1>
-            <p className="text-sm text-muted-foreground mt-1">Manage page metadata and review technical search, schema and answer-engine readiness.</p>
+            <h1 className="text-2xl font-bold flex items-center gap-2"><Search className="w-6 h-6 text-primary" /> {translateUi(uiLanguage, "SEO & AI Discovery")}</h1>
+            <p className="text-sm text-muted-foreground mt-1">{translateUi(uiLanguage, "Manage page metadata and review technical search, schema and answer-engine readiness.")}</p>
           </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Card className="p-4">
-            <p className="text-xs font-medium text-muted-foreground">Answer-engine readiness</p>
+            <p className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "Answer-engine readiness")}</p>
             <div className="mt-2 flex items-center gap-2">
               {healthLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : health?.readiness === "ELIGIBLE" ? <CheckCircle2 className="h-5 w-5 text-green-600" /> : <AlertTriangle className="h-5 w-5 text-amber-600" />}
               <p className="text-xl font-bold">{health?.readiness ?? "Unknown"}</p>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Technical eligibility only; not a ranking guarantee.</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Technical eligibility only; not a ranking guarantee.")}</p>
           </Card>
           <Card className="p-4">
-            <p className="text-xs font-medium text-muted-foreground">Published dynamic pages</p>
+            <p className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "Published dynamic pages")}</p>
             <p className="mt-2 text-xl font-bold">{health?.dynamic.published ?? "—"}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">{health?.dynamic.indexable ?? 0} indexable · {health?.dynamic.seoFail ?? 0} SEO failures</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{health?.dynamic.indexable ?? 0} {translateUi(uiLanguage, "indexable ·")} {health?.dynamic.seoFail ?? 0} {translateUi(uiLanguage, "SEO failures")}</p>
           </Card>
           <Card className="p-4">
-            <p className="text-xs font-medium text-muted-foreground">Structured data</p>
-            <p className="mt-2 text-xl font-bold">{health?.dynamic.schemaPass ?? "—"} pass</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">{health?.dynamic.schemaFail ?? 0} fail · visible-content parity required</p>
+            <p className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "Structured data")}</p>
+            <p className="mt-2 text-xl font-bold">{health?.dynamic.schemaPass ?? "—"} {translateUi(uiLanguage, "pass")}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{health?.dynamic.schemaFail ?? 0} {translateUi(uiLanguage, "fail · visible-content parity required")}</p>
           </Card>
           <Card className="p-4">
-            <p className="text-xs font-medium text-muted-foreground">AI crawler policy</p>
-            <p className="mt-2 text-sm font-semibold">Search: {health?.discovery.oaiSearchBot ?? "—"}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">Training: {health?.discovery.gptBot ?? "—"} · llms.txt {health?.discovery.llmsTxtAvailable ? "available" : "off"}</p>
+            <p className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "AI crawler policy")}</p>
+            <p className="mt-2 text-sm font-semibold">{translateUi(uiLanguage, "Search:")} {health?.discovery.oaiSearchBot ?? "—"}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Training:")} {health?.discovery.gptBot ?? "—"} {translateUi(uiLanguage, "· llms.txt")} {health?.discovery.llmsTxtAvailable ? "available" : "off"}</p>
           </Card>
         </div>
 
         {health && (health.dynamic.duplicateTitles > 0 || health.dynamic.duplicateDescriptions > 0 || health.dynamic.schemaFail > 0) && (
           <Card className="border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <p className="font-semibold">Technical issues require attention</p>
-            <p className="mt-1">{health.dynamic.duplicateTitles} duplicate titles · {health.dynamic.duplicateDescriptions} duplicate descriptions · {health.dynamic.schemaFail} structured-data failures.</p>
+            <p className="font-semibold">{translateUi(uiLanguage, "Technical issues require attention")}</p>
+            <p className="mt-1">{health.dynamic.duplicateTitles} {translateUi(uiLanguage, "duplicate titles ·")} {health.dynamic.duplicateDescriptions} {translateUi(uiLanguage, "duplicate descriptions ·")} {health.dynamic.schemaFail} {translateUi(uiLanguage, "structured-data failures.")}</p>
           </Card>
         )}
 
@@ -224,8 +228,8 @@ export default function WebsiteSeoOverrides() {
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
             <div className="text-sm text-blue-800">
-              <p className="font-medium">How SEO overrides work</p>
-              <p className="mt-1">Each page can override global SEO defaults. If a field is empty, the global default from Settings &gt; SEO &amp; Social is used. Page-level values always take priority over global defaults.</p>
+              <p className="font-medium">{translateUi(uiLanguage, "How SEO overrides work")}</p>
+              <p className="mt-1">{translateUi(uiLanguage, "Each page can override global SEO defaults. If a field is empty, the global default from Settings > SEO & Social is used. Page-level values always take priority over global defaults.")}</p>
             </div>
           </div>
         </Card>
@@ -235,8 +239,8 @@ export default function WebsiteSeoOverrides() {
         ) : pages.length === 0 ? (
           <Card className="p-10 text-center">
             <Globe className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-lg font-semibold">No pages found</p>
-            <p className="text-muted-foreground text-sm">Create pages in Website &gt; Pages first.</p>
+            <p className="text-lg font-semibold">{translateUi(uiLanguage, "No pages found")}</p>
+            <p className="text-muted-foreground text-sm">{translateUi(uiLanguage, "Create pages in Website > Pages first.")}</p>
           </Card>
         ) : (
           <div className="space-y-3">
@@ -262,10 +266,10 @@ export default function WebsiteSeoOverrides() {
                       <div className="text-right">
                         <p className={`text-xs font-semibold ${readiness.color}`}>{readiness.label}</p>
                         <div className="flex gap-1 mt-1">
-                          <div className={`h-1 w-6 rounded-full ${page.metaTitle ? "bg-green-500" : "bg-gray-200"}`} title="Meta Title" />
-                          <div className={`h-1 w-6 rounded-full ${page.metaDescription ? "bg-green-500" : "bg-gray-200"}`} title="Meta Description" />
-                          <div className={`h-1 w-6 rounded-full ${page.ogTitle || page.ogDescription ? "bg-green-500" : "bg-gray-200"}`} title="OG Tags" />
-                          <div className={`h-1 w-6 rounded-full ${page.ogImageUrl ? "bg-green-500" : "bg-gray-200"}`} title="OG Image" />
+                          <div className={`h-1 w-6 rounded-full ${page.metaTitle ? "bg-green-500" : "bg-gray-200"}`} title={translateUi(uiLanguage, "Meta Title")} />
+                          <div className={`h-1 w-6 rounded-full ${page.metaDescription ? "bg-green-500" : "bg-gray-200"}`} title={translateUi(uiLanguage, "Meta Description")} />
+                          <div className={`h-1 w-6 rounded-full ${page.ogTitle || page.ogDescription ? "bg-green-500" : "bg-gray-200"}`} title={translateUi(uiLanguage, "OG Tags")} />
+                          <div className={`h-1 w-6 rounded-full ${page.ogImageUrl ? "bg-green-500" : "bg-gray-200"}`} title={translateUi(uiLanguage, "OG Image")} />
                         </div>
                       </div>
                       <Button variant="ghost" size="sm"><Pencil className="w-4 h-4" /></Button>
@@ -282,79 +286,79 @@ export default function WebsiteSeoOverrides() {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Search className="w-5 h-5" /> SEO Settings: {editing?.title}
+              <Search className="w-5 h-5" /> {translateUi(uiLanguage, "SEO Settings:")} {editing?.title}
             </DialogTitle>
           </DialogHeader>
 
           <div className="grid lg:grid-cols-2 gap-6">
             <div className="space-y-5">
               <div className="space-y-3">
-                <h3 className="font-semibold text-sm flex items-center gap-1.5">Search Engine</h3>
+                <h3 className="font-semibold text-sm flex items-center gap-1.5">{translateUi(uiLanguage, "Search Engine")}</h3>
                 <div>
-                  <Label className="text-xs">SEO Title <span className="text-muted-foreground">({form.metaTitle.length}/60)</span></Label>
+                  <Label className="text-xs">{translateUi(uiLanguage, "SEO Title")} <span className="text-muted-foreground">({form.metaTitle.length}/60)</span></Label>
                   <Input value={form.metaTitle} onChange={e => setForm(f => ({ ...f, metaTitle: e.target.value }))}
                     placeholder={globalSeo?.seoMetaTitle || "Uses global default"} maxLength={70} className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-xs">Meta Description <span className="text-muted-foreground">({form.metaDescription.length}/160)</span></Label>
+                  <Label className="text-xs">{translateUi(uiLanguage, "Meta Description")} <span className="text-muted-foreground">({form.metaDescription.length}/160)</span></Label>
                   <Textarea value={form.metaDescription} onChange={e => setForm(f => ({ ...f, metaDescription: e.target.value }))}
                     placeholder={globalSeo?.seoMetaDescription || "Uses global default"} maxLength={170} rows={3} className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-xs">URL Slug</Label>
+                  <Label className="text-xs">{translateUi(uiLanguage, "URL Slug")}</Label>
                   <Input value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") }))}
                     className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-xs">Canonical URL</Label>
+                  <Label className="text-xs">{translateUi(uiLanguage, "Canonical URL")}</Label>
                   <Input value={form.canonicalUrl} onChange={e => setForm(f => ({ ...f, canonicalUrl: e.target.value }))}
                     placeholder={`${baseUrl}/${form.slug}`} className="mt-1" />
                 </div>
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
                     <Switch checked={form.robotsIndex} onCheckedChange={v => setForm(f => ({ ...f, robotsIndex: v }))} />
-                    <Label className="text-xs">Index</Label>
+                    <Label className="text-xs">{translateUi(uiLanguage, "Index")}</Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <Switch checked={form.robotsFollow} onCheckedChange={v => setForm(f => ({ ...f, robotsFollow: v }))} />
-                    <Label className="text-xs">Follow</Label>
+                    <Label className="text-xs">{translateUi(uiLanguage, "Follow")}</Label>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-3">
-                <h3 className="font-semibold text-sm">Open Graph</h3>
+                <h3 className="font-semibold text-sm">{translateUi(uiLanguage, "Open Graph")}</h3>
                 <div>
-                  <Label className="text-xs">OG Title</Label>
+                  <Label className="text-xs">{translateUi(uiLanguage, "OG Title")}</Label>
                   <Input value={form.ogTitle} onChange={e => setForm(f => ({ ...f, ogTitle: e.target.value }))}
                     placeholder={form.metaTitle || globalSeo?.ogTitle || "Falls back to SEO title"} className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-xs">OG Description</Label>
+                  <Label className="text-xs">{translateUi(uiLanguage, "OG Description")}</Label>
                   <Textarea value={form.ogDescription} onChange={e => setForm(f => ({ ...f, ogDescription: e.target.value }))}
                     placeholder={form.metaDescription || globalSeo?.ogDescription || "Falls back to meta description"} rows={2} className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-xs">OG Image URL</Label>
+                  <Label className="text-xs">{translateUi(uiLanguage, "OG Image URL")}</Label>
                   <Input value={form.ogImageUrl} onChange={e => setForm(f => ({ ...f, ogImageUrl: e.target.value }))}
                     placeholder={globalSeo?.ogImageUrl || "https://..."} className="mt-1" />
                 </div>
               </div>
 
               <div className="space-y-3">
-                <h3 className="font-semibold text-sm">Twitter Card</h3>
+                <h3 className="font-semibold text-sm">{translateUi(uiLanguage, "Twitter Card")}</h3>
                 <div>
-                  <Label className="text-xs">Twitter Title</Label>
+                  <Label className="text-xs">{translateUi(uiLanguage, "Twitter Title")}</Label>
                   <Input value={form.twitterTitle} onChange={e => setForm(f => ({ ...f, twitterTitle: e.target.value }))}
                     placeholder={form.ogTitle || "Falls back to OG title"} className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-xs">Twitter Description</Label>
+                  <Label className="text-xs">{translateUi(uiLanguage, "Twitter Description")}</Label>
                   <Textarea value={form.twitterDescription} onChange={e => setForm(f => ({ ...f, twitterDescription: e.target.value }))}
                     placeholder={form.ogDescription || "Falls back to OG description"} rows={2} className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-xs">Twitter Image URL</Label>
+                  <Label className="text-xs">{translateUi(uiLanguage, "Twitter Image URL")}</Label>
                   <Input value={form.twitterImageUrl} onChange={e => setForm(f => ({ ...f, twitterImageUrl: e.target.value }))}
                     placeholder={form.ogImageUrl || "Falls back to OG image"} className="mt-1" />
                 </div>
@@ -375,14 +379,14 @@ export default function WebsiteSeoOverrides() {
                 siteName={siteName}
               />
               <Card className="p-3 bg-muted/30">
-                <p className="text-xs font-medium text-muted-foreground mb-1">Robots Directive</p>
+                <p className="text-xs font-medium text-muted-foreground mb-1">{translateUi(uiLanguage, "Robots Directive")}</p>
                 <code className="text-xs font-mono">
                   {form.robotsIndex ? "index" : "noindex"}, {form.robotsFollow ? "follow" : "nofollow"}
                 </code>
               </Card>
               {form.canonicalUrl && (
                 <Card className="p-3 bg-muted/30">
-                  <p className="text-xs font-medium text-muted-foreground mb-1">Canonical URL</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">{translateUi(uiLanguage, "Canonical URL")}</p>
                   <p className="text-xs font-mono truncate">{form.canonicalUrl}</p>
                 </Card>
               )}
@@ -390,11 +394,9 @@ export default function WebsiteSeoOverrides() {
           </div>
 
           <div className="flex justify-end gap-3 mt-4 pt-4 border-t">
-            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditing(null)}>{translateUi(uiLanguage, "Cancel")}</Button>
             <Button onClick={() => editing && saveMutation.mutate({ id: editing.id, data: form })} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
-              Save SEO Settings
-            </Button>
+              {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />} {translateUi(uiLanguage, "Save SEO Settings")} </Button>
           </div>
         </DialogContent>
       </Dialog>

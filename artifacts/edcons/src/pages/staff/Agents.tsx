@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
@@ -180,6 +181,7 @@ function splitPhone(phone: string | null) {
 }
 
 export default function AgentsPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { user } = useAuth(true);
   const { toast } = useToast();
@@ -689,6 +691,7 @@ export default function AgentsPage() {
   }
 
   function AgentTable({ data, showParent }: { data: Agent[]; showParent?: boolean }) {
+  const { lang: uiLanguage } = useUiLanguage();
     const selected = showParent ? subSelectedIds : selectedIds;
     const setSelected = showParent ? setSubSelectedIds : setSelectedIds;
     const [agentSort, setAgentSort] = useState<{ key: AgentSortKey; dir: AgentSortDir }>({ key: "agent", dir: "asc" });
@@ -754,7 +757,7 @@ export default function AgentsPage() {
       <div className="overflow-x-auto">
         {isManager && someChecked && (
           <div className="flex items-center gap-3 mb-3 p-3 rounded-xl bg-primary/5 border border-primary/20 flex-wrap">
-            <span className="text-sm font-medium text-foreground">{selected.size} selected</span>
+            <span className="text-sm font-medium text-foreground">{selected.size} {translateUi(uiLanguage, "selected")}</span>
             <Select onValueChange={v => handleBulkAssignStaff(selected, v === "none" ? null : Number(v))}>
               <SelectTrigger className="h-8 text-xs w-[180px] rounded-lg">
                 <UserPlus className="w-3.5 h-3.5 mr-1.5" />
@@ -770,11 +773,8 @@ export default function AgentsPage() {
               </SelectContent>
             </Select>
             <Button size="sm" variant="destructive" className="rounded-lg gap-1.5 h-8" onClick={() => handleBulkDelete(selected)}>
-              <Trash2 className="w-3.5 h-3.5" /> Delete Selected
-            </Button>
-            <Button size="sm" variant="outline" className="rounded-lg h-8" onClick={() => setSelected(new Set())}>
-              Clear Selection
-            </Button>
+              <Trash2 className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Delete Selected")} </Button>
+            <Button size="sm" variant="outline" className="rounded-lg h-8" onClick={() => setSelected(new Set())}> {translateUi(uiLanguage, "Clear Selection")} </Button>
           </div>
         )}
         <table className="w-full text-sm">
@@ -833,13 +833,13 @@ export default function AgentsPage() {
                 sort={{ sortKey: "status", current: agentSort, onSort: handleAgentSort }}
                 filter={{ type: "select", value: agentColFilters.status, onChange: v => setAgentColFilters(f => ({ ...f, status: v })), options: uniqueAgentStatuses.map(s => ({ value: s, label: s })), label: "Status" }}
               />
-              <th className="py-3 px-3 font-semibold text-muted-foreground">Contract</th>
-              {isManager && <th className="py-3 px-3 font-semibold text-muted-foreground text-right">Actions</th>}
+              <th className="py-3 px-3 font-semibold text-muted-foreground">{translateUi(uiLanguage, "Contract")}</th>
+              {isManager && <th className="py-3 px-3 font-semibold text-muted-foreground text-right">{translateUi(uiLanguage, "Actions")}</th>}
             </tr>
           </thead>
           <tbody>
             {sortedData.length === 0 ? (
-              <tr><td colSpan={showParent ? 11 : 10} className="py-12 text-center text-muted-foreground">No agents found</td></tr>
+              <tr><td colSpan={showParent ? 11 : 10} className="py-12 text-center text-muted-foreground">{translateUi(uiLanguage, "No agents found")}</td></tr>
             ) : sortedData.map(a => (
               <tr key={a.id} className={`border-b border-border/30 hover:bg-secondary/30 transition-colors ${selected.has(a.id) ? "bg-primary/5" : ""}`}>
                 {isManager && (
@@ -938,7 +938,7 @@ export default function AgentsPage() {
                       <div className="space-y-0.5">
                         <Badge variant="outline" className={`text-xs ${cs.color}`}>{cs.label}</Badge>
                         {cs.daysLeft !== null && cs.daysLeft > 0 && (
-                          <p className="text-xs text-muted-foreground">{cs.daysLeft}d left</p>
+                          <p className="text-xs text-muted-foreground">{cs.daysLeft}{translateUi(uiLanguage, "d left")}</p>
                         )}
                       </div>
                     );
@@ -958,8 +958,7 @@ export default function AgentsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-52">
                           <DropdownMenuItem onClick={() => { setPasswordDialog({ agentId: a.id, agentName: `${a.firstName} ${a.lastName}` }); setNewPassword(""); }}>
-                            <KeyRound className="w-4 h-4 mr-2" /> Set Password
-                          </DropdownMenuItem>
+                            <KeyRound className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Set Password")} </DropdownMenuItem>
                           <DropdownMenuItem
                             disabled={resendingCredentials.has(a.id)}
                             onClick={() => handleResendCredentials(a)}
@@ -968,14 +967,14 @@ export default function AgentsPage() {
                             {resendingCredentials.has(a.id) ? "..." : t("staffAgents.resendCredentials")}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleImpersonate(a)}>
-                            <LogIn className="w-4 h-4 mr-2" /> Login as {a.firstName} {a.lastName}
+                            <LogIn className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Login as")} {a.firstName} {a.lastName}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleToggleStatus(a)}>
                             {a.status === "active" ? (
-                              <><ShieldOff className="w-4 h-4 mr-2" /> Deactivate</>
+                              <><ShieldOff className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Deactivate")}</>
                             ) : (
-                              <><ShieldCheck className="w-4 h-4 mr-2" /> Activate</>
+                              <><ShieldCheck className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Activate")}</>
                             )}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -1042,7 +1041,7 @@ export default function AgentsPage() {
                 <div className="flex items-center gap-3 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
                   <div className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
                   <p className="text-sm text-red-700 dark:text-red-400">
-                    <span className="font-semibold">{expired.length} agent(s)</span> with expired contracts:{" "}
+                    <span className="font-semibold">{expired.length} {translateUi(uiLanguage, "agent(s)")}</span> {translateUi(uiLanguage, "with expired contracts:")}{" "}
                     {expired.slice(0, 3).map(a => `${a.firstName} ${a.lastName}`).join(", ")}
                     {expired.length > 3 ? ` +${expired.length - 3} more` : ""}
                   </p>
@@ -1052,7 +1051,7 @@ export default function AgentsPage() {
                 <div className="flex items-center gap-3 p-3 rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
                   <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse shrink-0" />
                   <p className="text-sm text-orange-700 dark:text-orange-400">
-                    <span className="font-semibold">{expiring.length} agent(s)</span> with contracts expiring within 60 days:{" "}
+                    <span className="font-semibold">{expiring.length} {translateUi(uiLanguage, "agent(s)")}</span> {translateUi(uiLanguage, "with contracts expiring within 60 days:")}{" "}
                     {expiring.slice(0, 3).map(a => {
                       const d = Math.ceil((new Date(a.contractEndDate!).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                       return `${a.firstName} ${a.lastName} (${d}d)`;
@@ -1067,8 +1066,8 @@ export default function AgentsPage() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="rounded-xl bg-secondary/50 p-1">
-            <TabsTrigger value="agents" className="rounded-lg gap-2"><Users className="w-4 h-4" /> Agent List ({total})</TabsTrigger>
-            <TabsTrigger value="sub-agents" className="rounded-lg gap-2"><Network className="w-4 h-4" /> Sub Agents ({subTotal})</TabsTrigger>
+            <TabsTrigger value="agents" className="rounded-lg gap-2"><Users className="w-4 h-4" /> {translateUi(uiLanguage, "Agent List (")}{total})</TabsTrigger>
+            <TabsTrigger value="sub-agents" className="rounded-lg gap-2"><Network className="w-4 h-4" /> {translateUi(uiLanguage, "Sub Agents (")}{subTotal})</TabsTrigger>
           </TabsList>
 
           {/* ── Agent List ── */}
@@ -1085,10 +1084,10 @@ export default function AgentsPage() {
                   <Select value={countryFilter} onValueChange={v => { setCountryFilter(v); setPage(1); }}>
                     <SelectTrigger className="w-[160px] h-9 text-sm rounded-xl">
                       <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
-                      <SelectValue placeholder="Country" />
+                      <SelectValue placeholder={translateUi(uiLanguage, "Country")} />
                     </SelectTrigger>
                     <SelectContent className="max-h-60">
-                      <SelectItem value="all">All Countries</SelectItem>
+                      <SelectItem value="all">{translateUi(uiLanguage, "All Countries")}</SelectItem>
                       {countries.map(c => (
                         <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
                       ))}
@@ -1134,10 +1133,10 @@ export default function AgentsPage() {
                   <Select value={subCountryFilter} onValueChange={v => { setSubCountryFilter(v); setSubPage(1); }}>
                     <SelectTrigger className="w-[160px] h-9 text-sm rounded-xl">
                       <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
-                      <SelectValue placeholder="Country" />
+                      <SelectValue placeholder={translateUi(uiLanguage, "Country")} />
                     </SelectTrigger>
                     <SelectContent className="max-h-60">
-                      <SelectItem value="all">All Countries</SelectItem>
+                      <SelectItem value="all">{translateUi(uiLanguage, "All Countries")}</SelectItem>
                       {countries.map(c => (
                         <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
                       ))}
@@ -1152,12 +1151,12 @@ export default function AgentsPage() {
               </div>
 
               <div className="mb-4 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-400">
-                <p className="font-semibold mb-1">How Sub-Agents work:</p>
+                <p className="font-semibold mb-1">{translateUi(uiLanguage, "How Sub-Agents work:")}</p>
                 <ul className="list-disc list-inside space-y-0.5">
-                  <li>Sub-agents are linked to a parent agent and operate under them.</li>
-                  <li>Students & applications submitted by sub-agents flow to the parent agent first, then to you.</li>
-                  <li>Sub-agents earn commission based on the rate set by their parent agent.</li>
-                  <li>Parent agents can choose to hide service fee visibility from their sub-agents.</li>
+                  <li>{translateUi(uiLanguage, "Sub-agents are linked to a parent agent and operate under them.")}</li>
+                  <li>{translateUi(uiLanguage, "Students & applications submitted by sub-agents flow to the parent agent first, then to you.")}</li>
+                  <li>{translateUi(uiLanguage, "Sub-agents earn commission based on the rate set by their parent agent.")}</li>
+                  <li>{translateUi(uiLanguage, "Parent agents can choose to hide service fee visibility from their sub-agents.")}</li>
                 </ul>
               </div>
 
@@ -1174,25 +1173,22 @@ export default function AgentsPage() {
           <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md">
             <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between">
               <h2 className="font-display font-bold text-lg text-foreground flex items-center gap-2">
-                <KeyRound className="w-5 h-5" /> Set Password
-              </h2>
+                <KeyRound className="w-5 h-5" /> {translateUi(uiLanguage, "Set Password")} </h2>
               <Button size="icon" variant="ghost" onClick={() => setPasswordDialog(null)} className="w-8 h-8 rounded-lg">
                 <X className="w-4 h-4" />
               </Button>
             </div>
             <div className="p-6 space-y-4">
-              <p className="text-sm text-muted-foreground">Set a new password for <strong>{passwordDialog.agentName}</strong></p>
+              <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "Set a new password for")} <strong>{passwordDialog.agentName}</strong></p>
               <div className="space-y-1.5">
                 <Label>{t("agentsPage.newPassword")}</Label>
-                <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="rounded-xl" placeholder="Min. 6 characters" />
+                <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="rounded-xl" placeholder={translateUi(uiLanguage, "Min. 6 characters")} />
               </div>
             </div>
             <div className="px-6 py-4 border-t border-border/50 flex justify-end gap-3">
               <Button variant="outline" onClick={() => setPasswordDialog(null)} className="rounded-xl">{t("staffAgents.cancel")}</Button>
               <Button onClick={handleSetPassword} disabled={passwordSaving || newPassword.length < 6} className="rounded-xl gap-2">
-                {passwordSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Password
-              </Button>
+                {passwordSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {translateUi(uiLanguage, "Save Password")} </Button>
             </div>
           </div>
         </div>
@@ -1215,7 +1211,7 @@ export default function AgentsPage() {
               {/* Sub-Agent Parent */}
               {isSubAgent && (
                 <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-                  <Label className="text-sm font-semibold mb-2 block">Parent Agent <span className="text-red-500">*</span></Label>
+                  <Label className="text-sm font-semibold mb-2 block">{translateUi(uiLanguage, "Parent Agent")} <span className="text-red-500">*</span></Label>
                   <Select value={form.parentAgentId} onValueChange={v => setForm(f => ({ ...f, parentAgentId: v }))}>
                     <SelectTrigger className="rounded-xl">
                       <SelectValue placeholder={t("agentsPage.selectParentAgent")} />
@@ -1232,17 +1228,17 @@ export default function AgentsPage() {
               {/* Agency Code */}
               <div className="space-y-1.5">
                 <Label>{t("agentsPage.agencyCode")}</Label>
-                <Input value={form.agencyCode} readOnly disabled className="rounded-xl font-mono" placeholder="Generated as FAS-YYYYMMDD-NNNNNN" />
+                <Input value={form.agencyCode} readOnly disabled className="rounded-xl font-mono" placeholder={translateUi(uiLanguage, "Generated as FAS-YYYYMMDD-NNNNNN")} />
               </div>
 
               {/* Name */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label>First Name <span className="text-red-500">*</span></Label>
+                  <Label>{translateUi(uiLanguage, "First Name")} <span className="text-red-500">*</span></Label>
                   <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="rounded-xl" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Last Name <span className="text-red-500">*</span></Label>
+                  <Label>{translateUi(uiLanguage, "Last Name")} <span className="text-red-500">*</span></Label>
                   <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="rounded-xl" />
                 </div>
               </div>
@@ -1250,14 +1246,14 @@ export default function AgentsPage() {
               {/* Contact */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" /> Email <span className="text-red-500">*</span></Label>
+                  <Label className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Email")} <span className="text-red-500">*</span></Label>
                   <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="rounded-xl" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> Mobile No. <span className="text-red-500">*</span></Label>
+                  <Label className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Mobile No.")} <span className="text-red-500">*</span></Label>
                   <div className="flex gap-2">
                     <PhoneCodePicker value={form.phoneCode} onChange={v => setForm(f => ({ ...f, phoneCode: v }))} triggerClassName="w-28 shrink-0" />
-                    <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="Mobile No." className="rounded-xl" />
+                    <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder={translateUi(uiLanguage, "Mobile No.")} className="rounded-xl" />
                   </div>
                 </div>
               </div>
@@ -1265,14 +1261,14 @@ export default function AgentsPage() {
               {/* Location */}
               <div className="grid sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> Country</Label>
+                  <Label className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Country")}</Label>
                   <Select value={form.country} onValueChange={v => {
                     setForm(f => ({ ...f, country: v, city: "" }));
                     const c = countries.find(ct => ct.name === v);
                     if (c) fetchCities(c.id);
                     else setCities([]);
                   }}>
-                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select Country" /></SelectTrigger>
+                    <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "Select Country")} /></SelectTrigger>
                     <SelectContent className="max-h-60">
                       {countries.map(c => (
                         <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
@@ -1285,10 +1281,10 @@ export default function AgentsPage() {
                   <Input value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} className="rounded-xl" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>City / Location</Label>
+                  <Label>{translateUi(uiLanguage, "City / Location")}</Label>
                   {cities.length > 0 ? (
                     <Select value={form.city} onValueChange={v => setForm(f => ({ ...f, city: v }))}>
-                      <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select City" /></SelectTrigger>
+                      <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "Select City")} /></SelectTrigger>
                       <SelectContent className="max-h-60">
                         {cities.map(c => (
                           <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
@@ -1309,13 +1305,13 @@ export default function AgentsPage() {
               {/* Business */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" /> Business Name</Label>
+                  <Label className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Business Name")}</Label>
                   <Input value={form.businessName} onChange={e => setForm(f => ({ ...f, businessName: e.target.value }))} className="rounded-xl" />
                 </div>
                 <div className="space-y-1.5">
                   <Label>{t("agentsPage.category")}</Label>
                   <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
-                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "Select")} /></SelectTrigger>
                     <SelectContent>
                       {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                     </SelectContent>
@@ -1326,17 +1322,17 @@ export default function AgentsPage() {
               {!isSubAgent && (
                 <div className="space-y-4 rounded-xl border border-border/60 p-4">
                   <div>
-                    <h3 className="font-display font-semibold text-sm">Agency package and capabilities</h3>
-                    <p className="text-xs text-muted-foreground mt-1">The package provides defaults. Individual switches below override those defaults for this agency only.</p>
+                    <h3 className="font-display font-semibold text-sm">{translateUi(uiLanguage, "Agency package and capabilities")}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "The package provides defaults. Individual switches below override those defaults for this agency only.")}</p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Package</Label>
+                    <Label>{translateUi(uiLanguage, "Package")}</Label>
                     <Select value={form.planTier} onValueChange={value => setForm(f => ({ ...f, planTier: value }))}>
                       <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="standard">Standard</SelectItem>
-                        <SelectItem value="premium">Premium</SelectItem>
-                        <SelectItem value="enterprise">Enterprise</SelectItem>
+                        <SelectItem value="standard">{translateUi(uiLanguage, "Standard")}</SelectItem>
+                        <SelectItem value="premium">{translateUi(uiLanguage, "Premium")}</SelectItem>
+                        <SelectItem value="enterprise">{translateUi(uiLanguage, "Enterprise")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1369,9 +1365,7 @@ export default function AgentsPage() {
                                   return { ...f, featureOverrides: next };
                                 });
                               }}
-                            >
-                              Default
-                            </button>
+                            > {translateUi(uiLanguage, "Default")} </button>
                           )}
                         </label>
                       );
@@ -1379,14 +1373,14 @@ export default function AgentsPage() {
                   </div>
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label>Primary brand color</Label>
+                      <Label>{translateUi(uiLanguage, "Primary brand color")}</Label>
                       <div className="flex gap-2">
                         <input type="color" value={form.primaryBrandColor} onChange={e => setForm(f => ({ ...f, primaryBrandColor: e.target.value.toUpperCase() }))} className="h-10 w-12 rounded border p-1" />
                         <Input value={form.primaryBrandColor} onChange={e => setForm(f => ({ ...f, primaryBrandColor: e.target.value.toUpperCase() }))} className="rounded-xl font-mono" />
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Secondary brand color</Label>
+                      <Label>{translateUi(uiLanguage, "Secondary brand color")}</Label>
                       <div className="flex gap-2">
                         <input type="color" value={form.secondaryBrandColor} onChange={e => setForm(f => ({ ...f, secondaryBrandColor: e.target.value.toUpperCase() }))} className="h-10 w-12 rounded border p-1" />
                         <Input value={form.secondaryBrandColor} onChange={e => setForm(f => ({ ...f, secondaryBrandColor: e.target.value.toUpperCase() }))} className="rounded-xl font-mono" />
@@ -1408,25 +1402,25 @@ export default function AgentsPage() {
                   }))}
                 />
                 <div className="space-y-1.5">
-                  <Label>Tax / ID Number</Label>
-                  <Input value={form.taxNumber} onChange={e => setForm(f => ({ ...f, taxNumber: e.target.value }))} className="rounded-xl" placeholder="VKN / TCKN" />
+                  <Label>{translateUi(uiLanguage, "Tax / ID Number")}</Label>
+                  <Input value={form.taxNumber} onChange={e => setForm(f => ({ ...f, taxNumber: e.target.value }))} className="rounded-xl" placeholder={translateUi(uiLanguage, "VKN / TCKN")} />
                 </div>
               </div>
 
               {/* Commission */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label>Commission Percent <span className="text-red-500">*</span></Label>
+                  <Label>{translateUi(uiLanguage, "Commission Percent")} <span className="text-red-500">*</span></Label>
                   <Input type="number" min="0" max="100" step="0.5" value={form.commissionRate}
                     onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value }))}
                     className="rounded-xl" placeholder="e.g. 15" />
                 </div>
                 {!isSubAgent && (
                   <div className="space-y-1.5">
-                    <Label>Sub-Agent Commission Rate (%)</Label>
+                    <Label>{translateUi(uiLanguage, "Sub-Agent Commission Rate (%)")}</Label>
                     <Input type="number" min="0" max="100" step="0.5" value={form.subAgentCommissionRate}
                       onChange={e => setForm(f => ({ ...f, subAgentCommissionRate: e.target.value }))}
-                      className="rounded-xl" placeholder="Commission for sub-agents" />
+                      className="rounded-xl" placeholder={translateUi(uiLanguage, "Commission for sub-agents")} />
                   </div>
                 )}
               </div>
@@ -1434,7 +1428,7 @@ export default function AgentsPage() {
               {/* Assigned Staff (multi + primary) */}
               {!isSubAgent && (
                 <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1"><UserPlus className="w-3.5 h-3.5" /> Assigned Staff</Label>
+                  <Label className="flex items-center gap-1"><UserPlus className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Assigned Staff")}</Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button type="button" variant="outline" className="w-full justify-between rounded-xl">
@@ -1447,7 +1441,7 @@ export default function AgentsPage() {
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[320px] p-2 max-h-72 overflow-auto">
-                      {staffMembers.length === 0 && <p className="text-xs text-muted-foreground p-2">No staff found</p>}
+                      {staffMembers.length === 0 && <p className="text-xs text-muted-foreground p-2">{translateUi(uiLanguage, "No staff found")}</p>}
                       {staffMembers.map(s => {
                         const entry = form.assignedStaff.find(e => e.userId === s.id);
                         const checked = !!entry;
@@ -1499,9 +1493,7 @@ export default function AgentsPage() {
                       })}
                     </PopoverContent>
                   </Popover>
-                  <p className="text-xs text-muted-foreground">
-                    The staff marked with a star is shown as the "Primary contact". When at least one staff is selected, exactly one must be primary.
-                  </p>
+                  <p className="text-xs text-muted-foreground"> {translateUi(uiLanguage, "The staff marked with a star is shown as the \"Primary contact\". When at least one staff is selected, exactly one must be primary.")} </p>
                   {form.assignedStaff.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
                       {form.assignedStaff.map(e => {
@@ -1529,21 +1521,19 @@ export default function AgentsPage() {
                   </button>
                   <div>
                     <p className="font-semibold text-sm text-foreground flex items-center gap-1.5">
-                      {form.hideServiceFees ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      Hide Service Fees from Sub-Agents
-                    </p>
-                    <p className="text-xs text-muted-foreground">When enabled, sub-agents under this agent won't see service fee details.</p>
+                      {form.hideServiceFees ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />} {translateUi(uiLanguage, "Hide Service Fees from Sub-Agents")} </p>
+                    <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "When enabled, sub-agents under this agent won't see service fee details.")}</p>
                   </div>
                 </div>
               )}
 
               {/* File Uploads */}
               <div className="space-y-4">
-                <h3 className="font-display font-semibold text-foreground">Documents</h3>
+                <h3 className="font-display font-semibold text-foreground">{translateUi(uiLanguage, "Documents")}</h3>
                 <div className="grid sm:grid-cols-3 gap-4">
                   {/* Logo */}
                   <div className="space-y-2">
-                    <Label className="text-xs">Logo for Agent Panel</Label>
+                    <Label className="text-xs">{translateUi(uiLanguage, "Logo for Agent Panel")}</Label>
                     <div className="relative h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
                       {form.logoUrl ? (
                         <>
@@ -1562,11 +1552,11 @@ export default function AgentsPage() {
 
                   {/* ID Proof */}
                   <div className="space-y-2">
-                    <Label className="text-xs">Agent ID Proof</Label>
+                    <Label className="text-xs">{translateUi(uiLanguage, "Agent ID Proof")}</Label>
                     <div className="relative h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
                       {form.agentIdProofUrl ? (
                         <>
-                          <p className="text-xs text-green-600 font-medium px-2 text-center">Uploaded</p>
+                          <p className="text-xs text-green-600 font-medium px-2 text-center">{translateUi(uiLanguage, "Uploaded")}</p>
                           <button onClick={() => setForm(f => ({ ...f, agentIdProofUrl: "" }))} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-destructive/90 text-white flex items-center justify-center"><X className="w-3 h-3" /></button>
                         </>
                       ) : (
@@ -1581,11 +1571,11 @@ export default function AgentsPage() {
 
                   {/* Business Cert */}
                   <div className="space-y-2">
-                    <Label className="text-xs">Business Certificate</Label>
+                    <Label className="text-xs">{translateUi(uiLanguage, "Business Certificate")}</Label>
                     <div className="relative h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
                       {form.businessCertUrl ? (
                         <>
-                          <p className="text-xs text-green-600 font-medium px-2 text-center">Uploaded</p>
+                          <p className="text-xs text-green-600 font-medium px-2 text-center">{translateUi(uiLanguage, "Uploaded")}</p>
                           <button onClick={() => setForm(f => ({ ...f, businessCertUrl: "" }))} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-destructive/90 text-white flex items-center justify-center"><X className="w-3 h-3" /></button>
                         </>
                       ) : (
@@ -1746,6 +1736,7 @@ function ContractTemplatePicker({ value, onChange, showCreateNote }: {
   onChange: (id: string, tpl?: { entityType: string; language: string }) => void;
   showCreateNote: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [templates, setTemplates] = useState<Array<{ id: number; name: string; language: string; entityType: string; version: number; isActive: boolean }>>([]);
   const [loading, setLoading] = useState(true);
 
@@ -1762,9 +1753,9 @@ function ContractTemplatePicker({ value, onChange, showCreateNote }: {
 
   return (
     <div className="space-y-1.5">
-      <Label>Contract Template <span className="text-muted-foreground font-normal">(optional)</span></Label>
+      <Label>{translateUi(uiLanguage, "Contract Template")} <span className="text-muted-foreground font-normal">{translateUi(uiLanguage, "(optional)")}</span></Label>
       {loading ? (
-        <div className="text-xs text-muted-foreground">Loading templates…</div>
+        <div className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Loading templates…")}</div>
       ) : (
         <Select
           value={value || NO_CONTRACT}
@@ -1774,9 +1765,9 @@ function ContractTemplatePicker({ value, onChange, showCreateNote }: {
             onChange(v, tpl ? { entityType: tpl.entityType, language: tpl.language } : undefined);
           }}
         >
-          <SelectTrigger className="rounded-xl"><SelectValue placeholder="No contract" /></SelectTrigger>
+          <SelectTrigger className="rounded-xl"><SelectValue placeholder={translateUi(uiLanguage, "No contract")} /></SelectTrigger>
           <SelectContent>
-            <SelectItem value={NO_CONTRACT}>No contract</SelectItem>
+            <SelectItem value={NO_CONTRACT}>{translateUi(uiLanguage, "No contract")}</SelectItem>
             {active.map(t => (
               <SelectItem key={t.id} value={String(t.id)}>
                 {t.name} — {t.language.toUpperCase()} · {t.entityType === "individual" ? "Individual" : "Company"} v{t.version}
@@ -1786,14 +1777,10 @@ function ContractTemplatePicker({ value, onChange, showCreateNote }: {
         </Select>
       )}
       {!loading && active.length === 0 && (
-        <p className="text-xs text-muted-foreground">
-          No active templates available. Leave this as "No contract", or create one in the Contract Templates section.
-        </p>
+        <p className="text-xs text-muted-foreground"> {translateUi(uiLanguage, "No active templates available. Leave this as \"No contract\", or create one in the Contract Templates section.")} </p>
       )}
       {showCreateNote && (
-        <p className="text-xs text-muted-foreground">
-          If a template is selected, the agent is emailed login credentials and an admin-driven signing session is opened — they must sign before the deadline. Choose "No contract" to let the agent use the system without signing.
-        </p>
+        <p className="text-xs text-muted-foreground"> {translateUi(uiLanguage, "If a template is selected, the agent is emailed login credentials and an admin-driven signing session is opened — they must sign before the deadline. Choose \"No contract\" to let the agent use the system without signing.")} </p>
       )}
     </div>
   );

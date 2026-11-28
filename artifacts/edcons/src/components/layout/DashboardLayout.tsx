@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { whilePageVisible } from "@/lib/visibleSubscription";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -243,7 +244,7 @@ function getMenuForRole(
     ];
 
     const automationIntegrationItems: MenuItem[] = [
-      ...(isAdmin && isPersonaWorkspaceLocation(window.location.protocol, window.location.hostname) ? [{ title: 'Takım çalışma alanı', icon: Sparkles, url: '/admin/agent-team-workspace' }] : []),
+      ...(isAdmin && isPersonaWorkspaceLocation(window.location.protocol, window.location.hostname) ? [{ title: t('dashboard.teamWorkspace'), icon: Sparkles, url: '/admin/agent-team-workspace' }] : []),
       ...(isAdmin ? [{ title: t("dashboard.portalAutomation"), icon: Bot, url: '/admin/portal-automation' }] : []),
       ...(isAdmin ? [{ title: t("dashboard.portalCredentials"), icon: KeyRound, url: '/admin/portal-credentials' }] : []),
       ...aiItems,
@@ -419,6 +420,7 @@ function getInitialPanelDensity(): PanelDensity {
 }
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
+  const { lang: uiLanguage } = useUiLanguage();
   // useAuth returns liveUser ?? getStickyUser() — never undefined after first
   // authentication. prevUserRef adds one more layer of defense.
   const { user: liveUser, isLoading, hasPermission } = useAuth(true);
@@ -1033,7 +1035,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 className="w-8 h-8 rounded-lg text-foreground/75 hover:bg-secondary hover:text-foreground"
                 onClick={() => setPanelDensity(current => current === "compact" ? "comfortable" : "compact")}
                 title={panelDensity === "compact" ? "Switch to comfortable view" : "Switch to compact view"}
-                aria-label="Compact panel view"
+                aria-label={translateUi(uiLanguage, "Compact panel view")}
                 aria-pressed={panelDensity === "compact"}
                 data-testid="panel-density-toggle"
               >

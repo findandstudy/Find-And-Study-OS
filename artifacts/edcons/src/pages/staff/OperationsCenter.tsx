@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -187,6 +188,7 @@ function QueueTable({
   pendingAction: string | null;
   onTaskAction: (row: OperationsQueueItem, action: OperationsTaskAction) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-dashed p-10 text-center">
@@ -200,14 +202,14 @@ function QueueTable({
       <table className="w-full min-w-[1240px] text-sm">
         <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
           <tr>
-            <th className="px-3 py-2.5 font-medium">Kimlik / kayıt</th>
-            <th className="px-3 py-2.5 font-medium">Durum</th>
-            <th className="px-3 py-2.5 font-medium">Sonraki aksiyon</th>
-            <th className="px-3 py-2.5 font-medium">Sahip / kuyruk</th>
-            <th className="px-3 py-2.5 font-medium">Tarih</th>
-            <th className="px-3 py-2.5 font-medium">Risk / engel</th>
-            <th className="px-3 py-2.5 font-medium">Son hareket</th>
-            <th className="w-[190px] px-3 py-2.5 text-right">Aksiyon</th>
+            <th className="px-3 py-2.5 font-medium">{translateUi(uiLanguage, "Kimlik / kayıt")}</th>
+            <th className="px-3 py-2.5 font-medium">{translateUi(uiLanguage, "Durum")}</th>
+            <th className="px-3 py-2.5 font-medium">{translateUi(uiLanguage, "Sonraki aksiyon")}</th>
+            <th className="px-3 py-2.5 font-medium">{translateUi(uiLanguage, "Sahip / kuyruk")}</th>
+            <th className="px-3 py-2.5 font-medium">{translateUi(uiLanguage, "Tarih")}</th>
+            <th className="px-3 py-2.5 font-medium">{translateUi(uiLanguage, "Risk / engel")}</th>
+            <th className="px-3 py-2.5 font-medium">{translateUi(uiLanguage, "Son hareket")}</th>
+            <th className="w-[190px] px-3 py-2.5 text-right">{translateUi(uiLanguage, "Aksiyon")}</th>
           </tr>
         </thead>
         <tbody className="divide-y">
@@ -257,11 +259,9 @@ function QueueTable({
                         className="h-8 gap-1 px-2 text-xs text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
                         onClick={() => onTaskAction(row, "complete")}
                         disabled={pendingAction === row.id + ":complete"}
-                        title="Görevi tamamlandı olarak işaretle"
+                        title={translateUi(uiLanguage, "Görevi tamamlandı olarak işaretle")}
                       >
-                        <CheckCircle2 className="size-3.5" />
-                        Tamamla
-                      </Button>
+                        <CheckCircle2 className="size-3.5" /> {translateUi(uiLanguage, "Tamamla")} </Button>
                       <Button
                         type="button"
                         variant="ghost"
@@ -269,16 +269,14 @@ function QueueTable({
                         className="h-8 gap-1 px-2 text-xs text-amber-700 hover:bg-amber-50 hover:text-amber-800"
                         onClick={() => onTaskAction(row, "snooze")}
                         disabled={pendingAction === row.id + ":snooze"}
-                        title="Görevi 3 gün ertele"
+                        title={translateUi(uiLanguage, "Görevi 3 gün ertele")}
                       >
-                        <Clock3 className="size-3.5" />
-                        +3 gün
-                      </Button>
+                        <Clock3 className="size-3.5" /> {translateUi(uiLanguage, "+3 gün")} </Button>
                     </div>
                   )}
                   <a
                     href={taskId !== null ? "/staff/tasks?taskId=" + taskId : row.href}
-                    aria-label="Kaydı aç"
+                    aria-label={translateUi(uiLanguage, "Kaydı aç")}
                     className="inline-flex rounded-md p-2 text-primary hover:bg-primary/10"
                   >
                     <ArrowRight className="size-4" />
@@ -294,6 +292,7 @@ function QueueTable({
 }
 
 export default function OperationsCenter() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { user } = useAuth(true);
   const { lang } = useI18n();
   const { toast } = useToast();
@@ -735,10 +734,10 @@ export default function OperationsCenter() {
                     <option value="all">
                       {tr ? "Tüm önemler" : "All severities"}
                     </option>
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
+                    <option value="critical">{translateUi(uiLanguage, "Critical")}</option>
+                    <option value="high">{translateUi(uiLanguage, "High")}</option>
+                    <option value="medium">{translateUi(uiLanguage, "Medium")}</option>
+                    <option value="low">{translateUi(uiLanguage, "Low")}</option>
                   </select>
                   <select
                     value={source}
@@ -750,11 +749,11 @@ export default function OperationsCenter() {
                     <option value="all">
                       {tr ? "Tüm kaynaklar" : "All sources"}
                     </option>
-                    <option value="application">Application</option>
-                    <option value="task">Task</option>
-                    <option value="document">Document</option>
-                    <option value="portal">Portal</option>
-                    <option value="offer">Offer</option>
+                    <option value="application">{translateUi(uiLanguage, "Application")}</option>
+                    <option value="task">{translateUi(uiLanguage, "Task")}</option>
+                    <option value="document">{translateUi(uiLanguage, "Document")}</option>
+                    <option value="portal">{translateUi(uiLanguage, "Portal")}</option>
+                    <option value="offer">{translateUi(uiLanguage, "Offer")}</option>
                   </select>
                 </div>
               </div>
@@ -844,7 +843,7 @@ export default function OperationsCenter() {
                         <th className="px-3 py-2.5">
                           {tr ? "Durum" : "Status"}
                         </th>
-                        <th className="px-3 py-2.5">Case</th>
+                        <th className="px-3 py-2.5">{translateUi(uiLanguage, "Case")}</th>
                         <th className="px-3 py-2.5">
                           {tr ? "Güncellendi" : "Updated"}
                         </th>
@@ -983,8 +982,8 @@ export default function OperationsCenter() {
                           <th className="px-3 py-2.5">
                             {tr ? "Kategori" : "Category"}
                           </th>
-                          <th className="px-3 py-2.5">Config</th>
-                          <th className="px-3 py-2.5">Health</th>
+                          <th className="px-3 py-2.5">{translateUi(uiLanguage, "Config")}</th>
+                          <th className="px-3 py-2.5">{translateUi(uiLanguage, "Health")}</th>
                           <th />
                         </tr>
                       </thead>
@@ -1059,14 +1058,11 @@ export default function OperationsCenter() {
                             <p className="font-medium">{lane.universityKey}</p>
                             {Number(lane.suspended) > 0 && (
                               <Badge variant="destructive">
-                                {lane.suspended} suspended
-                              </Badge>
+                                {lane.suspended} {translateUi(uiLanguage, "suspended")} </Badge>
                             )}
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {lane.adapterKey} · {lane.due} due · {lane.retrying}{" "}
-                            retrying
-                          </p>
+                            {lane.adapterKey} · {lane.due} {translateUi(uiLanguage, "due ·")} {lane.retrying}{" "} {translateUi(uiLanguage, "retrying")} </p>
                         </div>
                       ))}
                     </div>
@@ -1186,9 +1182,7 @@ export default function OperationsCenter() {
                   <p className="mt-3 font-medium">
                     {tr ? "Birleşik Inbox" : "Unified Inbox"}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    WhatsApp, Messenger, Instagram
-                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground"> {translateUi(uiLanguage, "WhatsApp, Messenger, Instagram")} </p>
                 </a>
                 <a
                   href="/admin/settings"
@@ -1206,7 +1200,7 @@ export default function OperationsCenter() {
                 </a>
                 <div className="rounded-xl border p-4">
                   <Users className="size-5 text-primary" />
-                  <p className="mt-3 font-medium">Guardian / Sponsor</p>
+                  <p className="mt-3 font-medium">{translateUi(uiLanguage, "Guardian / Sponsor")}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {tr
                       ? "Purpose-limited ilişki ve paylaşım kapsamı foundation üzerinde; mutating UI henüz kapalı."

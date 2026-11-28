@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
@@ -158,6 +159,7 @@ function LeadAvatar({ lead, size = "sm" }: { lead: any; size?: "sm" | "md" }) {
 function LeadCard({ lead, onView, showRevenue, variant }: {
   lead: any; onView: (id: number) => void; showRevenue: boolean; variant?: ColVariant;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
 
@@ -209,8 +211,7 @@ function LeadCard({ lead, onView, showRevenue, variant }: {
           onClick={() => onView(lead.id)}
           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
         >
-          <Eye className="w-3 h-3" /> View
-        </button>
+          <Eye className="w-3 h-3" /> {translateUi(uiLanguage, "View")} </button>
       </div>
     </div>
     </>
@@ -221,6 +222,7 @@ function LeadCard({ lead, onView, showRevenue, variant }: {
 function DroppableColumn({ col, leads, showRevenue, onView }: {
   col: ColDef; leads: any[]; showRevenue: boolean; onView: (id: number) => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { setNodeRef, isOver } = useDroppable({ id: col.id });
   const totalRevenue = showRevenue ? leads.reduce((sum, l) => sum + (parseFloat(l.estimatedValue) || 0), 0) : 0;
   const v = col.variant ?? "default";
@@ -283,9 +285,7 @@ function DroppableColumn({ col, leads, showRevenue, onView }: {
             <LeadCard key={lead.id} lead={lead} onView={onView} showRevenue={showRevenue} variant={v} />
           ))}
           {leads.length === 0 && (
-            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
-              Drop here
-            </div>
+            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}> {translateUi(uiLanguage, "Drop here")} </div>
           )}
         </SortableContext>
       </div>
@@ -302,6 +302,7 @@ function FilterPopover({ filters, onChange, columns, sourceOptions }: {
   columns: ColDef[];
   sourceOptions: LeadSourceOption[];
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [open, setOpen] = useState(false);
   const hasActive = filters.source !== "all" || filters.status !== "all";
 
@@ -322,25 +323,23 @@ function FilterPopover({ filters, onChange, columns, sourceOptions }: {
       </PopoverTrigger>
       <PopoverContent className="w-64 p-4 space-y-4" align="end">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Filtreler</p>
+          <p className="text-sm font-semibold">{translateUi(uiLanguage, "Filtreler")}</p>
           {hasActive && (
             <Button
               variant="ghost"
               size="sm"
               className="h-6 text-xs text-muted-foreground"
               onClick={() => onChange({ source: "all", status: "all" })}
-            >
-              Temizle
-            </Button>
+            > {translateUi(uiLanguage, "Temizle")} </Button>
           )}
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Source</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "Source")}</Label>
           <Select value={filters.source} onValueChange={v => onChange({ ...filters, source: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{translateUi(uiLanguage, "All")}</SelectItem>
               {sourceOptions.map(source => (
                 <SelectItem key={source.value} value={source.value}>{source.label}</SelectItem>
               ))}
@@ -349,11 +348,11 @@ function FilterPopover({ filters, onChange, columns, sourceOptions }: {
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Stage</Label>
+          <Label className="text-xs">{translateUi(uiLanguage, "Stage")}</Label>
           <Select value={filters.status} onValueChange={v => onChange({ ...filters, status: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{translateUi(uiLanguage, "All")}</SelectItem>
               {columns.map(c => (
                 <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
               ))}
@@ -361,9 +360,7 @@ function FilterPopover({ filters, onChange, columns, sourceOptions }: {
           </Select>
         </div>
 
-        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>
-          Uygula
-        </Button>
+        <Button size="sm" className="w-full" onClick={() => setOpen(false)}> {translateUi(uiLanguage, "Uygula")} </Button>
       </PopoverContent>
     </Popover>
     </>
@@ -420,6 +417,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
 
 /* ── MultiCountrySelect (countries from Course Finder – universities with active programs) ── */
 function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { data: cfFilters } = useQuery<{ countries: string[] }>({
     queryKey: ["course-finder-filters"],
     queryFn: async () => {
@@ -494,7 +492,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
       )}
       {open && (
         <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {activeDestinations.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">No active destinations</div>}
+          {activeDestinations.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{translateUi(uiLanguage, "No active destinations")}</div>}
           {activeDestinations.map(c => (
             <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${localSelected.includes(c.name) ? "bg-primary/10 font-medium" : ""}`}
               onClick={e => { e.preventDefault(); e.stopPropagation(); toggle(c.name); }}>
@@ -514,6 +512,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
 function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns, sourceOptions }: {
   open: boolean; onClose: () => void; lead: any; canSeeRevenue: boolean; columns: ColDef[]; sourceOptions: LeadSourceOption[];
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [form, setForm] = useState({ ...EMPTY_FORM, status: "new" });
   const updateLead = useUpdateLead();
   const queryClient = useQueryClient();
@@ -565,33 +564,33 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns, sourceOpt
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader><DialogTitle>Edit Lead</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{translateUi(uiLanguage, "Edit Lead")}</DialogTitle></DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-1.5">
-            <Label>First Name *</Label>
+            <Label>{translateUi(uiLanguage, "First Name *")}</Label>
             <Input value={form.firstName} onChange={e => setForm({ ...form, firstName: toLatinUpper(e.target.value) })} className="uppercase" />
           </div>
           <div className="space-y-1.5">
-            <Label>Last Name *</Label>
+            <Label>{translateUi(uiLanguage, "Last Name *")}</Label>
             <Input value={form.lastName} onChange={e => setForm({ ...form, lastName: toLatinUpper(e.target.value) })} className="uppercase" />
           </div>
           <div className="space-y-1.5">
-            <Label>Email *</Label>
+            <Label>{translateUi(uiLanguage, "Email *")}</Label>
             <Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Phone *</Label>
+            <Label>{translateUi(uiLanguage, "Phone *")}</Label>
             <div className="flex gap-1">
               <PhoneCodePicker value={form.phoneCode} onChange={v => setForm({ ...form, phoneCode: v })} triggerClassName="w-[90px] shrink-0 px-2" />
               <Input className="flex-1 min-w-0" value={form.phone} onChange={e => setForm({ ...form, phone: digitsOnly(e.target.value) })} placeholder="555 000 0000" />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Nationality</Label>
+            <Label>{translateUi(uiLanguage, "Nationality")}</Label>
             <NationalityCombobox value={form.nationality} onChange={v => setForm({ ...form, nationality: v })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Source</Label>
+            <Label>{translateUi(uiLanguage, "Source")}</Label>
             <Select value={form.source} onValueChange={v => setForm({ ...form, source: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -602,7 +601,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns, sourceOpt
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Status</Label>
+            <Label>{translateUi(uiLanguage, "Status")}</Label>
             <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -613,25 +612,23 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns, sourceOpt
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Interested Program</Label>
+            <Label>{translateUi(uiLanguage, "Interested Program")}</Label>
             <Input value={form.interestedProgram} onChange={e => setForm({ ...form, interestedProgram: e.target.value })} />
           </div>
           <div className="space-y-1.5 col-span-2">
-            <Label>Interested Country</Label>
+            <Label>{translateUi(uiLanguage, "Interested Country")}</Label>
             <MultiCountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
           </div>
           {canSeeRevenue && (
             <div className="space-y-1.5 col-span-2">
               <Label className="flex items-center gap-1.5">
-                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                Estimated Value (USD)
-              </Label>
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" /> {translateUi(uiLanguage, "Estimated Value (USD)")} </Label>
               <Input type="number" min="0" step="100" value={form.estimatedValue} onChange={e => setForm({ ...form, estimatedValue: e.target.value })} />
             </div>
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleSave} disabled={updateLead.isPending || !form.firstName || !form.lastName}>
             {updateLead.isPending ? "Saving…" : "Save Changes"}
           </Button>
@@ -646,18 +643,17 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns, sourceOpt
 function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
   open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   return (
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Delete {count} Lead{count > 1 ? "s" : ""}?</DialogTitle>
+          <DialogTitle>Delete {count} {translateUi(uiLanguage, "Lead")}{count > 1 ? "s" : ""}?</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground py-2">
-          This action cannot be undone. The selected lead{count > 1 ? "s" : ""} and all associated data will be permanently removed.
-        </p>
+        <p className="text-sm text-muted-foreground py-2"> {translateUi(uiLanguage, "This action cannot be undone. The selected lead")}{count > 1 ? "s" : ""} {translateUi(uiLanguage, "and all associated data will be permanently removed.")} </p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending}>
             {isPending ? "Deleting…" : `Delete ${count} Lead${count > 1 ? "s" : ""}`}
           </Button>
@@ -774,6 +770,7 @@ const EMPTY_FORM = {
 
 /* ── LeadsPage ────────────────────────────────────────────── */
 export default function AgentLeadsPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -1056,7 +1053,7 @@ export default function AgentLeadsPage() {
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search leads..."
+                placeholder={translateUi(uiLanguage, "Search leads...")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 bg-white dark:bg-black/20 border-border rounded-full"
@@ -1072,14 +1069,14 @@ export default function AgentLeadsPage() {
               <button
                 onClick={() => toggleView("pipeline")}
                 className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
-                title="Pipeline view"
+                title={translateUi(uiLanguage, "Pipeline view")}
               >
                 <LayoutGrid className="w-4 h-4" />
               </button>
               <button
                 onClick={() => toggleView("list")}
                 className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
-                title="List view"
+                title={translateUi(uiLanguage, "List view")}
               >
                 <List className="w-4 h-4" />
               </button>
@@ -1094,14 +1091,12 @@ export default function AgentLeadsPage() {
 
             {selectedIds.size > 0 && (
               <Button variant="destructive" size="sm" className="rounded-full" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="w-4 h-4 mr-1" />
-                Delete ({selectedIds.size})
+                <Trash2 className="w-4 h-4 mr-1" /> {translateUi(uiLanguage, "Delete (")}{selectedIds.size})
               </Button>
             )}
 
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setCreateOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" /> Add Lead
-            </Button>
+              <Plus className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Add Lead")} </Button>
           </div>
         </div>
 
@@ -1183,21 +1178,17 @@ export default function AgentLeadsPage() {
                       <SortHeader label="Value" sortKey="value" currentSort={sort} onSort={handleSort} />
                     )}
                     <SortHeader label="Created" sortKey="date" currentSort={sort} onSort={handleSort} />
-                    <TableHead className="w-20 text-right">Actions</TableHead>
+                    <TableHead className="w-20 text-right">{translateUi(uiLanguage, "Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={canSeeRevenue ? 10 : 9} className="text-center py-12 text-muted-foreground">
-                        Loading...
-                      </TableCell>
+                      <TableCell colSpan={canSeeRevenue ? 10 : 9} className="text-center py-12 text-muted-foreground"> {translateUi(uiLanguage, "Loading...")} </TableCell>
                     </TableRow>
                   ) : pagedLeads.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={canSeeRevenue ? 10 : 9} className="text-center py-12 text-muted-foreground">
-                        No leads found
-                      </TableCell>
+                      <TableCell colSpan={canSeeRevenue ? 10 : 9} className="text-center py-12 text-muted-foreground"> {translateUi(uiLanguage, "No leads found")} </TableCell>
                     </TableRow>
                   ) : pagedLeads.map((lead: any) => (
                     <TableRow
@@ -1265,14 +1256,14 @@ export default function AgentLeadsPage() {
                           <button
                             onClick={() => setEditLead(lead)}
                             className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            title="Edit lead"
+                            title={translateUi(uiLanguage, "Edit lead")}
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => { setSelectedIds(new Set([lead.id])); setDeleteOpen(true); }}
                             className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                            title="Delete lead"
+                            title={translateUi(uiLanguage, "Delete lead")}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

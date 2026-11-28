@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,6 +24,7 @@ export function TablePagination({
   onPageSizeChange,
   pageSizeOptions = [...TABLE_PAGE_SIZE_OPTIONS],
 }: TablePaginationProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const from = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const to = Math.min(currentPage * pageSize, totalItems);
@@ -47,14 +49,14 @@ export function TablePagination({
         {totalItems > 0 ? (
           <span>{from}–{to} / {totalItems}</span>
         ) : (
-          <span>No records</span>
+          <span>{translateUi(uiLanguage, "No records")}</span>
         )}
       </div>
 
       <div className="flex items-center gap-2">
         {onPageSizeChange && (
           <div className="flex items-center gap-1.5 mr-4">
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Rows:</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">{translateUi(uiLanguage, "Rows:")}</span>
             <Select value={String(pageSize)} onValueChange={v => onPageSizeChange(Number(v))}>
               <SelectTrigger className="h-8 w-[70px] text-sm">
                 <SelectValue />

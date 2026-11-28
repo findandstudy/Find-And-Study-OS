@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { Paperclip, Download, Loader2, AlertTriangle } from "lucide-react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -40,6 +41,7 @@ export function StageBadgeWithDocs({
   stageColor,
   baseUrl,
 }: StageBadgeWithDocsProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [docs, setDocs] = useState<StageDoc[] | null>(null);
@@ -155,7 +157,7 @@ export function StageBadgeWithDocs({
             </a>
           ))
         ) : (
-          <p className="text-xs text-muted-foreground px-2 py-1">No documents</p>
+          <p className="text-xs text-muted-foreground px-2 py-1">{translateUi(uiLanguage, "No documents")}</p>
         )}
       </PopoverContent>
     </Popover>

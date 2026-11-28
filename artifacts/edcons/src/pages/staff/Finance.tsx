@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { Fragment, useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSeason } from "@/contexts/SeasonContext";
 import {
@@ -193,6 +194,7 @@ function CommissionModal({
 }: {
   open: boolean; onClose: () => void; initial?: CommissionForm; editId?: number;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -472,7 +474,7 @@ function CommissionModal({
             <Input
               value={form.universityName}
               onChange={set("universityName")}
-              placeholder="University"
+              placeholder={translateUi(uiLanguage, "University")}
               readOnly={!!form.applicationId}
               className={form.applicationId ? "bg-slate-50 dark:bg-slate-800/40" : ""}
             />
@@ -482,7 +484,7 @@ function CommissionModal({
             <Input
               value={form.programName}
               onChange={set("programName")}
-              placeholder="Program name"
+              placeholder={translateUi(uiLanguage, "Program name")}
               readOnly={!!form.applicationId}
               className={form.applicationId ? "bg-slate-50 dark:bg-slate-800/40" : ""}
             />
@@ -540,15 +542,15 @@ function CommissionModal({
           {/* Commission calculation box */}
           <div className="col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 grid grid-cols-4 gap-3 dark:border-slate-700/60 dark:bg-slate-800/50">
             <div>
-              <Label>Program Fee ({form.currency})</Label>
+              <Label>{translateUi(uiLanguage, "Program Fee (")}{form.currency})</Label>
               <Input type="number" value={form.programFee} onChange={set("programFee")} placeholder="0" />
             </div>
             <div>
-              <Label>University Rate (%)</Label>
+              <Label>{translateUi(uiLanguage, "University Rate (%)")}</Label>
               <Input type="number" value={form.universityCommissionRate} onChange={set("universityCommissionRate")} placeholder="20" />
             </div>
             <div>
-              <Label>Agent Rate (%)</Label>
+              <Label>{translateUi(uiLanguage, "Agent Rate (%)")}</Label>
               <Input type="number" value={form.agentCommissionRate} onChange={set("agentCommissionRate")} placeholder="70" />
             </div>
             <div />
@@ -569,7 +571,7 @@ function CommissionModal({
                   </Select>
                 </div>
                 <div className="col-span-2">
-                  <Label>Sub Agent Rate (%)</Label>
+                  <Label>{translateUi(uiLanguage, "Sub Agent Rate (%)")}</Label>
                   <Input type="number" value={form.subAgentCommissionRate} onChange={set("subAgentCommissionRate")} placeholder="0" />
                 </div>
               </>
@@ -661,7 +663,7 @@ function CommissionModal({
           </div>
           {form.isStateUniversity && (
             <div>
-              <Label>Offset Amount (Art. 6) — max {fmt(maxOffset, form.currency)}</Label>
+              <Label>{translateUi(uiLanguage, "Offset Amount (Art. 6) — max")} {fmt(maxOffset, form.currency)}</Label>
               <Input
                 type="number"
                 value={form.offsetAmount}
@@ -721,6 +723,7 @@ function ServiceFeeModal({
 }: {
   open: boolean; onClose: () => void; initial?: ServiceFeeForm; editId?: number;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -887,7 +890,7 @@ function ServiceFeeModal({
           {form.applicationId && (
             <div className="col-span-2 rounded-lg border bg-slate-50 dark:bg-slate-900/40 px-3 py-2 text-sm">
               <span className="font-medium">{form.universityName || "—"}</span>
-              <span className="text-slate-500 ml-2">Linked to application #{form.applicationId}</span>
+              <span className="text-slate-500 ml-2">{translateUi(uiLanguage, "Linked to application #")}{form.applicationId}</span>
             </div>
           )}
           <div>
@@ -937,14 +940,14 @@ function ServiceFeeModal({
               disabled={usesLinkedServiceFeeAmount}
             />
             {usesLinkedServiceFeeAmount && (
-              <p className="mt-1 text-xs text-slate-500">Amount linked from the selected application.</p>
+              <p className="mt-1 text-xs text-slate-500">{translateUi(uiLanguage, "Amount linked from the selected application.")}</p>
             )}
           </div>
 
           {total > 0 && (
             <div className="col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">1st Installment ({fmt(half, form.currency)})</Label>
+                <Label className="text-xs">{translateUi(uiLanguage, "1st Installment (")}{fmt(half, form.currency)})</Label>
                 <Input
                   type="date"
                   value={form.firstInstallmentPaidAt}
@@ -954,7 +957,7 @@ function ServiceFeeModal({
                 <p className="text-xs text-slate-400 mt-1">{t("financePage.leaveBlankIfUnpaid")}</p>
               </div>
               <div>
-                <Label className="text-xs">2nd Installment ({fmt(half, form.currency)})</Label>
+                <Label className="text-xs">{translateUi(uiLanguage, "2nd Installment (")}{fmt(half, form.currency)})</Label>
                 <Input
                   type="date"
                   value={form.secondInstallmentPaidAt}
@@ -1000,6 +1003,7 @@ function TransactionModal({
   commissionId?: number;
   commissionLabel?: string;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -1093,7 +1097,7 @@ function TransactionModal({
           </DialogTitle>
         </DialogHeader>
         {commissionLabel && (
-          <p className="text-sm text-slate-500 -mt-2">For: <span className="font-medium text-slate-700">{commissionLabel}</span></p>
+          <p className="text-sm text-slate-500 -mt-2">{translateUi(uiLanguage, "For:")} <span className="font-medium text-slate-700">{commissionLabel}</span></p>
         )}
         <div className="grid grid-cols-2 gap-3 py-2">
           <div>
@@ -1106,7 +1110,7 @@ function TransactionModal({
           </div>
           <div className="col-span-2">
             <Label>{t("financePage.referenceLabel")}</Label>
-            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="INV-2025-001" />
+            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder={translateUi(uiLanguage, "INV-2025-001")} />
           </div>
           <div className="col-span-2">
             <Label>{t("financePage.attachDocument")}</Label>
@@ -1125,13 +1129,11 @@ function TransactionModal({
                 <div className="flex items-center justify-center gap-2 text-sm">
                   <FileText className="w-4 h-4 text-blue-600" />
                   <span className="font-medium text-slate-700">{file.name}</span>
-                  <span className="text-slate-400">({(file.size / 1024).toFixed(0)} KB)</span>
+                  <span className="text-slate-400">({(file.size / 1024).toFixed(0)} {translateUi(uiLanguage, "KB)")}</span>
                 </div>
               ) : (
                 <div className="text-slate-400 text-sm">
-                  <Upload className="w-5 h-5 mx-auto mb-1" />
-                  Click to upload PDF, image, or document
-                </div>
+                  <Upload className="w-5 h-5 mx-auto mb-1" /> {translateUi(uiLanguage, "Click to upload PDF, image, or document")} </div>
               )}
             </div>
           </div>
@@ -1154,6 +1156,7 @@ function TransactionModal({
 }
 
 function TransactionHistory({ commissionId }: { commissionId: number }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useQuery({
@@ -1178,7 +1181,7 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
   return (
     <>
     <>
-      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setOpen(true)} title="View transactions">
+      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setOpen(true)} title={translateUi(uiLanguage, "View transactions")}>
         <Eye className="w-3.5 h-3.5" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -1205,7 +1208,7 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
                     <p className="text-xs text-slate-500">
                       {tx.type === "collection" ? t("financePage.recordCollection") : tx.type === "sub_agent_payment" ? `${t("financePage.recordSubAgentPayment")}${tx.agentName ? ` — ${tx.agentName}` : ""}` : `${t("financePage.recordAgentPayment")}${tx.agentName ? ` — ${tx.agentName}` : ""}`}
                     </p>
-                    {tx.reference && <p className="text-xs text-slate-400">Ref: {tx.reference}</p>}
+                    {tx.reference && <p className="text-xs text-slate-400">{translateUi(uiLanguage, "Ref:")} {tx.reference}</p>}
                     {tx.fileName && (
                       <a
                         href={tx.fileUrl}
@@ -1232,6 +1235,7 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
 }
 
 function StaffCommissionModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -1415,7 +1419,7 @@ function StaffCommissionModal({ open, onClose }: { open: boolean; onClose: () =>
 
           <div className="col-span-2">
             <Label>{t("financePage.referenceLabel")}</Label>
-            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="PAY-2025-001" />
+            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder={translateUi(uiLanguage, "PAY-2025-001")} />
           </div>
           <div className="col-span-2">
             <Label>{t("financePage.attachDocumentUrl")}</Label>
@@ -1439,6 +1443,7 @@ function StaffCommissionModal({ open, onClose }: { open: boolean; onClose: () =>
 }
 
 function AgentPaymentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -1623,7 +1628,7 @@ function AgentPaymentModal({ open, onClose }: { open: boolean; onClose: () => vo
 
           <div className="col-span-2">
             <Label>{t("financePage.referenceLabel")}</Label>
-            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="PAY-2025-001" />
+            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder={translateUi(uiLanguage, "PAY-2025-001")} />
           </div>
           <div className="col-span-2">
             <Label>{t("financePage.notes")}</Label>
@@ -1839,6 +1844,7 @@ function UniversityCollectionModal({ open, onClose }: { open: boolean; onClose: 
 }
 
 export default function FinancePage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -2248,8 +2254,7 @@ export default function FinancePage() {
           </div>
           <div className="flex items-center gap-2">
             <CurrencySelector value={currency} onChange={setCurrency} />
-            <div className="text-sm text-muted-foreground font-medium bg-primary/8 border border-primary/20 px-3 py-1.5 rounded-lg">
-              Season: <span className="font-bold text-primary">{season}</span>
+            <div className="text-sm text-muted-foreground font-medium bg-primary/8 border border-primary/20 px-3 py-1.5 rounded-lg"> {translateUi(uiLanguage, "Season:")} <span className="font-bold text-primary">{season}</span>
             </div>
             <Button variant="outline" size="icon" onClick={() => { refetchComm(); refetchFees(); }}>
               <RefreshCw className="w-4 h-4" />
@@ -2328,11 +2333,8 @@ export default function FinancePage() {
           <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 flex items-start gap-3 dark:bg-violet-900/20 dark:border-violet-700/40">
             <ArrowUpRight className="w-5 h-5 text-violet-600 mt-0.5 shrink-0 dark:text-violet-400" />
             <div>
-              <p className="font-semibold text-violet-800 text-sm dark:text-violet-200">Article 6 Commission Offset Available</p>
-              <p className="text-violet-600 text-sm mt-0.5 dark:text-violet-400">
-                Up to <strong>{fmt(offSummary.availableForOffset)}</strong> of confirmed commissions can offset service fees
-                for state universities ({offSummary.maxOffsetRate}% max).
-                Already used: {fmt(offSummary.totalOffsetUsed)}.
+              <p className="font-semibold text-violet-800 text-sm dark:text-violet-200">{translateUi(uiLanguage, "Article 6 Commission Offset Available")}</p>
+              <p className="text-violet-600 text-sm mt-0.5 dark:text-violet-400"> {translateUi(uiLanguage, "Up to")} <strong>{fmt(offSummary.availableForOffset)}</strong> {translateUi(uiLanguage, "of confirmed commissions can offset service fees for state universities (")}{offSummary.maxOffsetRate}{translateUi(uiLanguage, "% max). Already used:")} {fmt(offSummary.totalOffsetUsed)}.
               </p>
             </div>
           </div>
@@ -2343,10 +2345,8 @@ export default function FinancePage() {
             <AlertTriangle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0 dark:text-rose-400" />
             <div>
               <p className="font-semibold text-rose-800 text-sm dark:text-rose-200">
-                {overdueCommissions.length} Overdue Collection{overdueCommissions.length > 1 ? "s" : ""} (90+ days)
-              </p>
-              <p className="text-rose-600 text-sm mt-0.5 dark:text-rose-400">
-                Total overdue: <strong>{fmt(overdueCommissions.reduce((s, c) => s + toNum(c.universityCommissionAmount) - toNum(c.universityCollected), 0))}</strong>
+                {overdueCommissions.length} {translateUi(uiLanguage, "Overdue Collection")}{overdueCommissions.length > 1 ? "s" : ""} {translateUi(uiLanguage, "(90+ days)")} </p>
+              <p className="text-rose-600 text-sm mt-0.5 dark:text-rose-400"> {translateUi(uiLanguage, "Total overdue:")} <strong>{fmt(overdueCommissions.reduce((s, c) => s + toNum(c.universityCommissionAmount) - toNum(c.universityCollected), 0))}</strong>
                 {" "} — {overdueCommissions.map(c => c.universityName).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(", ")}
               </p>
             </div>
@@ -2355,21 +2355,13 @@ export default function FinancePage() {
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value="commissions">
-              Commissions
-              <Badge className="ml-2 bg-slate-200 text-slate-600 text-xs">{commissions.length}</Badge>
+            <TabsTrigger value="commissions"> {translateUi(uiLanguage, "Commissions")} <Badge className="ml-2 bg-slate-200 text-slate-600 text-xs">{commissions.length}</Badge>
             </TabsTrigger>
-            <TabsTrigger value="universities">
-              University Breakdown
-              <Badge className="ml-2 bg-slate-200 text-slate-600 text-xs">{uniBreakdown.length}</Badge>
+            <TabsTrigger value="universities"> {translateUi(uiLanguage, "University Breakdown")} <Badge className="ml-2 bg-slate-200 text-slate-600 text-xs">{uniBreakdown.length}</Badge>
             </TabsTrigger>
-            <TabsTrigger value="fees">
-              Service Fees
-              <Badge className="ml-2 bg-slate-200 text-slate-600 text-xs">{fees.length}</Badge>
+            <TabsTrigger value="fees"> {translateUi(uiLanguage, "Service Fees")} <Badge className="ml-2 bg-slate-200 text-slate-600 text-xs">{fees.length}</Badge>
             </TabsTrigger>
-            <TabsTrigger value="analytics">
-              Analytics
-            </TabsTrigger>
+            <TabsTrigger value="analytics"> {translateUi(uiLanguage, "Analytics")} </TabsTrigger>
           </TabsList>
 
           {/* COMMISSIONS TAB */}
@@ -2436,16 +2428,14 @@ export default function FinancePage() {
                   <Users className="w-4 h-4 mr-1" /> {t("financePage.recordStaffCommission")}
                 </Button>
                 <Button onClick={() => setCommModal({ open: true })}>
-                  <Plus className="w-4 h-4 mr-1" /> New Commission
-                </Button>
+                  <Plus className="w-4 h-4 mr-1" /> {translateUi(uiLanguage, "New Commission")} </Button>
               </div>
             </div>
 
             {commSelected.size > 0 && (
               <div className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
                 <span className="text-sm font-medium text-foreground">
-                  {commSelected.size} commission{commSelected.size > 1 ? "s" : ""} selected
-                </span>
+                  {commSelected.size} {translateUi(uiLanguage, "commission")}{commSelected.size > 1 ? "s" : ""} {translateUi(uiLanguage, "selected")} </span>
                 <Button
                   variant="destructive"
                   size="sm"
@@ -2456,20 +2446,16 @@ export default function FinancePage() {
                   <Trash2 className="w-4 h-4 mr-1.5" />
                   {bulkDeleting ? "Deleting..." : `Delete Selected (${commSelected.size})`}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setCommSelected(new Set())}>
-                  Clear Selection
-                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setCommSelected(new Set())}> {translateUi(uiLanguage, "Clear Selection")} </Button>
               </div>
             )}
 
             {commLoading ? (
               <div className="text-center py-12 text-slate-400">
-                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />Loading...
-              </div>
+                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />{translateUi(uiLanguage, "Loading...")} </div>
             ) : commissions.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
-                <DollarSign className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                No commission records for {season}
+                <DollarSign className="w-10 h-10 mx-auto mb-2 opacity-30" /> {translateUi(uiLanguage, "No commission records for")} {season}
               </div>
             ) : (
               <div className="rounded-xl border border-slate-200 overflow-hidden">
@@ -2480,7 +2466,7 @@ export default function FinancePage() {
                         <Checkbox
                           checked={pagedCommissions.length > 0 && pagedCommissions.every((c: any) => commSelected.has(c.id)) ? true : pagedCommissions.some((c: any) => commSelected.has(c.id)) ? ("indeterminate" as any) : false}
                           onCheckedChange={() => toggleCommSelectAll(pagedCommissions.map((c: any) => c.id))}
-                          aria-label="Select all"
+                          aria-label={translateUi(uiLanguage, "Select all")}
                         />
                       </th>
                       {([
@@ -2677,13 +2663,13 @@ export default function FinancePage() {
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums">
                             <div className="font-medium text-amber-700">{fmt(aAmt, c.currency)}</div>
-                            <div className="text-xs text-slate-400">{c.agentCommissionRate || "—"}% · {fmt(aPaid, c.currency)} paid</div>
+                            <div className="text-xs text-slate-400">{c.agentCommissionRate || "—"}% · {fmt(aPaid, c.currency)} {translateUi(uiLanguage, "paid")}</div>
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums">
                             {toNum(c.subAgentCommissionAmount) > 0 ? (
                               <>
                                 <div className="font-medium text-purple-700">{fmt(c.subAgentCommissionAmount, c.currency)}</div>
-                                <div className="text-xs text-slate-400">{c.subAgentCommissionRate || "—"}% · {fmt(c.subAgentPaid, c.currency)} paid</div>
+                                <div className="text-xs text-slate-400">{c.subAgentCommissionRate || "—"}% · {fmt(c.subAgentPaid, c.currency)} {translateUi(uiLanguage, "paid")}</div>
                               </>
                             ) : (
                               <span className="text-slate-300">—</span>
@@ -2699,7 +2685,7 @@ export default function FinancePage() {
                           <td className="px-4 py-3 text-right tabular-nums">
                             <div className="font-semibold text-emerald-700">{fmt(net, c.currency)}</div>
                             {c.offsetAmount && toNum(c.offsetAmount) > 0 && (
-                              <div className="text-xs text-violet-600">Offset: {fmt(c.offsetAmount, c.currency)}</div>
+                              <div className="text-xs text-violet-600">{translateUi(uiLanguage, "Offset:")} {fmt(c.offsetAmount, c.currency)}</div>
                             )}
                           </td>
                           <td className="px-4 py-3">
@@ -2710,7 +2696,7 @@ export default function FinancePage() {
                               </div>
                               <ProgressBar value={uCollected} max={uAmt} color={uCollected >= uAmt ? "bg-green-500" : "bg-blue-500"} />
                               {uRemaining > 0 && (
-                                <div className="text-xs text-slate-400 mt-0.5 text-center">{fmt(uRemaining, c.currency)} left</div>
+                                <div className="text-xs text-slate-400 mt-0.5 text-center">{fmt(uRemaining, c.currency)} {translateUi(uiLanguage, "left")}</div>
                               )}
                             </div>
                           </td>
@@ -2729,8 +2715,7 @@ export default function FinancePage() {
                                     commissionLabel: `${c.studentName || "—"} — ${c.universityName || "—"}`,
                                   })}
                                 >
-                                  <Landmark className="w-3 h-3 mr-1" /> Collect
-                                </Button>
+                                  <Landmark className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Collect")} </Button>
                               )}
                               {c.status !== "potential" && aPaid < aAmt && (
                                 <Button
@@ -2742,8 +2727,7 @@ export default function FinancePage() {
                                     commissionLabel: `${c.studentName || "—"} — ${c.universityName || "—"}`,
                                   })}
                                 >
-                                  <CreditCard className="w-3 h-3 mr-1" /> Pay Agent
-                                </Button>
+                                  <CreditCard className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Pay Agent")} </Button>
                               )}
                               {c.status !== "potential" && toNum(c.subAgentCommissionAmount) > 0 && toNum(c.subAgentPaid) < toNum(c.subAgentCommissionAmount) && (
                                 <Button
@@ -2755,8 +2739,7 @@ export default function FinancePage() {
                                     commissionLabel: `${c.studentName || "—"} — ${c.universityName || "—"}`,
                                   })}
                                 >
-                                  <CreditCard className="w-3 h-3 mr-1" /> Pay Sub Agent
-                                </Button>
+                                  <CreditCard className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Pay Sub Agent")} </Button>
                               )}
                               <TransactionHistory commissionId={c.id} />
                               <Button
@@ -2810,7 +2793,7 @@ export default function FinancePage() {
                   <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
                     <tr>
                       <td className="px-3 py-3" />
-                      <td className="px-4 py-3 text-slate-600">Totals ({totalCommissions})</td>
+                      <td className="px-4 py-3 text-slate-600">{translateUi(uiLanguage, "Totals (")}{totalCommissions})</td>
                       <td className="px-4 py-3 text-right text-slate-600 tabular-nums">
                         {fmt(commissions.reduce((s: number, c: any) => s + toNum(c.programFee), 0))}
                       </td>
@@ -2868,8 +2851,7 @@ export default function FinancePage() {
             {uniSelected.size > 0 && (
               <div className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
                 <span className="text-sm font-medium text-foreground">
-                  {uniSelected.size} universit{uniSelected.size > 1 ? "ies" : "y"} selected
-                </span>
+                  {uniSelected.size} {translateUi(uiLanguage, "universit")}{uniSelected.size > 1 ? "ies" : "y"} {translateUi(uiLanguage, "selected")} </span>
                 <Button
                   variant="destructive"
                   size="sm"
@@ -2880,15 +2862,12 @@ export default function FinancePage() {
                   <Trash2 className="w-4 h-4 mr-1.5" />
                   {uniBulkDeleting ? "Deleting..." : `Delete All Commissions (${uniSelected.size})`}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setUniSelected(new Set())}>
-                  Clear Selection
-                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setUniSelected(new Set())}> {translateUi(uiLanguage, "Clear Selection")} </Button>
               </div>
             )}
             {uniBreakdown.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
-                <Building2 className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                No university data for {season}
+                <Building2 className="w-10 h-10 mx-auto mb-2 opacity-30" /> {translateUi(uiLanguage, "No university data for")} {season}
               </div>
             ) : (
               <>
@@ -2926,7 +2905,7 @@ export default function FinancePage() {
                           <Checkbox
                             checked={sortedUniBreakdown.length > 0 && sortedUniBreakdown.every((u: any) => uniSelected.has(u.universityName)) ? true : sortedUniBreakdown.some((u: any) => uniSelected.has(u.universityName)) ? ("indeterminate" as any) : false}
                             onCheckedChange={() => toggleUniSelectAll(sortedUniBreakdown.map((u: any) => u.universityName))}
-                            aria-label="Select all"
+                            aria-label={translateUi(uiLanguage, "Select all")}
                           />
                         </th>
                         {([
@@ -2977,13 +2956,12 @@ export default function FinancePage() {
                                           <Label className="text-xs font-semibold">{t("financePage.university")}</Label>
                                           {uniFilterActive && (
                                             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setUniFilter("")}>
-                                              <X className="w-3 h-3 mr-1" /> Clear
-                                            </Button>
+                                              <X className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Clear")} </Button>
                                           )}
                                         </div>
                                         <Input
                                           className="h-8 text-sm"
-                                          placeholder="Search university..."
+                                          placeholder={translateUi(uiLanguage, "Search university...")}
                                           value={uniFilter}
                                           onChange={e => setUniFilter(e.target.value)}
                                           autoFocus
@@ -3022,7 +3000,7 @@ export default function FinancePage() {
                                   <Badge className="text-xs bg-rose-100 text-rose-700 border-rose-200">{t("financePage.overdue")}</Badge>
                                 )}
                               </div>
-                              <div className="text-xs text-slate-400 mt-0.5">{u.commissionCount} confirmed commission{u.commissionCount !== 1 ? "s" : ""} · {u.currency}</div>
+                              <div className="text-xs text-slate-400 mt-0.5">{u.commissionCount} {translateUi(uiLanguage, "confirmed commission")}{u.commissionCount !== 1 ? "s" : ""} · {u.currency}</div>
                             </td>
                             <td className="px-4 py-3 text-right font-medium text-blue-700 tabular-nums">
                               {fmt(u.totalCommission, u.currency)}
@@ -3038,7 +3016,7 @@ export default function FinancePage() {
                             <td className="px-4 py-3 text-right text-amber-700 tabular-nums">
                               <div>{fmt(u.totalAgentPaid, u.currency)}</div>
                               {u.totalAgentRemaining > 0 && (
-                                <div className="text-xs text-slate-400">{fmt(u.totalAgentRemaining, u.currency)} unpaid</div>
+                                <div className="text-xs text-slate-400">{fmt(u.totalAgentRemaining, u.currency)} {translateUi(uiLanguage, "unpaid")}</div>
                               )}
                             </td>
                             <td className="px-4 py-3 text-right text-violet-700 tabular-nums">
@@ -3080,8 +3058,8 @@ export default function FinancePage() {
                                 <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
                                   <div className="flex items-center justify-between gap-3 px-4 py-3 border-b bg-slate-50">
                                     <div>
-                                      <p className="font-semibold text-slate-800">Confirmed students · {u.universityName}</p>
-                                      <p className="text-xs text-slate-500">Passport and programme details for university reconciliation</p>
+                                      <p className="font-semibold text-slate-800">{translateUi(uiLanguage, "Confirmed students ·")} {u.universityName}</p>
+                                      <p className="text-xs text-slate-500">{translateUi(uiLanguage, "Passport and programme details for university reconciliation")}</p>
                                     </div>
                                     <Button variant="outline" size="sm" onClick={async () => {
                                       try {
@@ -3094,19 +3072,18 @@ export default function FinancePage() {
                                         toast({ title: "Student list export failed", variant: "destructive" });
                                       }
                                     }}>
-                                      <Download className="w-4 h-4 mr-1" /> Export students
-                                    </Button>
+                                      <Download className="w-4 h-4 mr-1" /> {translateUi(uiLanguage, "Export students")} </Button>
                                   </div>
                                   <div className="overflow-x-auto">
                                     <table className="w-full text-xs">
                                       <thead className="bg-slate-50 text-slate-500">
                                         <tr>
-                                          <th className="text-left px-4 py-2">First name</th>
-                                          <th className="text-left px-4 py-2">Last name</th>
-                                          <th className="text-left px-4 py-2">Passport number</th>
-                                          <th className="text-left px-4 py-2">Program / Department</th>
-                                          <th className="text-right px-4 py-2">Confirmed commission</th>
-                                          <th className="text-right px-4 py-2">Remaining</th>
+                                          <th className="text-left px-4 py-2">{translateUi(uiLanguage, "First name")}</th>
+                                          <th className="text-left px-4 py-2">{translateUi(uiLanguage, "Last name")}</th>
+                                          <th className="text-left px-4 py-2">{translateUi(uiLanguage, "Passport number")}</th>
+                                          <th className="text-left px-4 py-2">{translateUi(uiLanguage, "Program / Department")}</th>
+                                          <th className="text-right px-4 py-2">{translateUi(uiLanguage, "Confirmed commission")}</th>
+                                          <th className="text-right px-4 py-2">{translateUi(uiLanguage, "Remaining")}</th>
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-slate-100">
@@ -3134,7 +3111,7 @@ export default function FinancePage() {
                     <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
                       <tr>
                         <td className="px-3 py-3" />
-                        <td className="px-4 py-3 text-slate-600">{sortedUniBreakdown.length} Universities{uniFilter ? ` (filtered from ${uniBreakdown.length})` : ""}</td>
+                        <td className="px-4 py-3 text-slate-600">{sortedUniBreakdown.length} {translateUi(uiLanguage, "Universities")}{uniFilter ? ` (filtered from ${uniBreakdown.length})` : ""}</td>
                         <td className="px-4 py-3 text-right text-blue-700 tabular-nums">{universityCurrencyRows("totalCommission").map(row => <div key={row.code}>{fmt(row.value, row.code)}</div>)}</td>
                         <td className="px-4 py-3 text-right text-green-700 tabular-nums">{universityCurrencyRows("totalCollected").map(row => <div key={row.code}>{fmt(row.value, row.code)}</div>)}</td>
                         <td className="px-4 py-3 text-right text-rose-600 tabular-nums">{universityCurrencyRows("totalRemaining").map(row => <div key={row.code}>{fmt(row.value, row.code)}</div>)}</td>
@@ -3157,11 +3134,9 @@ export default function FinancePage() {
           <TabsContent value="fees" className="mt-4 space-y-4">
             <div className="flex items-center gap-2 flex-wrap">
               <div className="text-sm text-slate-500">
-                {feeSummary.potentialCount ?? 0} potential · {feeSummary.confirmedCount ?? 0} confirmed · {feeSummary.pendingCount ?? 0} pending · {feeSummary.partialCount ?? 0} partial · {feeSummary.paidCount ?? 0} paid
-              </div>
+                {feeSummary.potentialCount ?? 0} {translateUi(uiLanguage, "potential ·")} {feeSummary.confirmedCount ?? 0} {translateUi(uiLanguage, "confirmed ·")} {feeSummary.pendingCount ?? 0} {translateUi(uiLanguage, "pending ·")} {feeSummary.partialCount ?? 0} {translateUi(uiLanguage, "partial ·")} {feeSummary.paidCount ?? 0} {translateUi(uiLanguage, "paid")} </div>
               {(feeSummary.potentialTotal > 0 || feeSummary.confirmedTotal > 0) && (
-                <div className="text-sm text-slate-500">
-                  | Potential: {fmt(feeSummary.potentialTotal)} · Confirmed: {fmt(feeSummary.confirmedTotal)}
+                <div className="text-sm text-slate-500"> {translateUi(uiLanguage, "| Potential:")} {fmt(feeSummary.potentialTotal)} {translateUi(uiLanguage, "· Confirmed:")} {fmt(feeSummary.confirmedTotal)}
                 </div>
               )}
               <Select value={feeAgentId} onValueChange={setFeeAgentId}>
@@ -3200,16 +3175,14 @@ export default function FinancePage() {
                   {t("financePage.exportExcel")}
                 </Button>
                 <Button onClick={() => setFeeModal({ open: true })}>
-                  <Plus className="w-4 h-4 mr-1" /> New Service Fee
-                </Button>
+                  <Plus className="w-4 h-4 mr-1" /> {translateUi(uiLanguage, "New Service Fee")} </Button>
               </div>
             </div>
 
             {feeSelected.size > 0 && (
               <div className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
                 <span className="text-sm font-medium text-foreground">
-                  {feeSelected.size} service fee{feeSelected.size > 1 ? "s" : ""} selected
-                </span>
+                  {feeSelected.size} {translateUi(uiLanguage, "service fee")}{feeSelected.size > 1 ? "s" : ""} {translateUi(uiLanguage, "selected")} </span>
                 <Button
                   variant="destructive"
                   size="sm"
@@ -3220,20 +3193,16 @@ export default function FinancePage() {
                   <Trash2 className="w-4 h-4 mr-1.5" />
                   {feeBulkDeleting ? "Deleting..." : `Delete Selected (${feeSelected.size})`}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setFeeSelected(new Set())}>
-                  Clear Selection
-                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setFeeSelected(new Set())}> {translateUi(uiLanguage, "Clear Selection")} </Button>
               </div>
             )}
 
             {feeLoading ? (
               <div className="text-center py-12 text-slate-400">
-                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />Loading...
-              </div>
+                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />{translateUi(uiLanguage, "Loading...")} </div>
             ) : fees.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
-                <DollarSign className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                No service fees for {season}
+                <DollarSign className="w-10 h-10 mx-auto mb-2 opacity-30" /> {translateUi(uiLanguage, "No service fees for")} {season}
               </div>
             ) : (
               <div className="rounded-xl border border-slate-200 overflow-hidden">
@@ -3244,7 +3213,7 @@ export default function FinancePage() {
                         <Checkbox
                           checked={pagedFees.length > 0 && pagedFees.every((f: any) => feeSelected.has(f.id)) ? true : pagedFees.some((f: any) => feeSelected.has(f.id)) ? ("indeterminate" as any) : false}
                           onCheckedChange={() => toggleFeeSelectAll(pagedFees.map((f: any) => f.id))}
-                          aria-label="Select all"
+                          aria-label={translateUi(uiLanguage, "Select all")}
                         />
                       </th>
                       {([
@@ -3295,13 +3264,12 @@ export default function FinancePage() {
                                         <Label className="text-xs font-semibold">{t("financePage.university")}</Label>
                                         {feeUniActive && (
                                           <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setFeeUniFilter("")}>
-                                            <X className="w-3 h-3 mr-1" /> Clear
-                                          </Button>
+                                            <X className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Clear")} </Button>
                                         )}
                                       </div>
                                       <Input
                                         className="h-8 text-sm"
-                                        placeholder="Search university..."
+                                        placeholder={translateUi(uiLanguage, "Search university...")}
                                         value={feeUniFilter}
                                         onChange={e => setFeeUniFilter(e.target.value)}
                                         autoFocus
@@ -3328,8 +3296,7 @@ export default function FinancePage() {
                                         <Label className="text-xs font-semibold">{t("financePage.statusLabel")}</Label>
                                         {feeStatusActive && (
                                           <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setFeeStatusFilter("all")}>
-                                            <X className="w-3 h-3 mr-1" /> Clear
-                                          </Button>
+                                            <X className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Clear")} </Button>
                                         )}
                                       </div>
                                       <Select value={feeStatusFilter} onValueChange={setFeeStatusFilter}>
@@ -3536,12 +3503,11 @@ export default function FinancePage() {
                   <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
                     <tr>
                       <td className="px-3 py-3" />
-                      <td colSpan={3} className="px-4 py-3 text-slate-600">Totals ({sortedFilteredFees.length}{sortedFilteredFees.length !== fees.length ? ` of ${fees.length}` : ""})</td>
+                      <td colSpan={3} className="px-4 py-3 text-slate-600">{translateUi(uiLanguage, "Totals (")}{sortedFilteredFees.length}{sortedFilteredFees.length !== fees.length ? ` of ${fees.length}` : ""})</td>
                       <td className="px-4 py-3 text-right text-slate-800 tabular-nums">
                         {fmt(feeSummary.totalServiceFees || 0)}
                       </td>
-                      <td colSpan={4} className="px-4 py-3 text-right text-emerald-700 tabular-nums">
-                        Collected: {fmt(feeSummary.totalCollected || 0)}
+                      <td colSpan={4} className="px-4 py-3 text-right text-emerald-700 tabular-nums"> {translateUi(uiLanguage, "Collected:")} {fmt(feeSummary.totalCollected || 0)}
                       </td>
                     </tr>
                   </tfoot>
@@ -3563,8 +3529,7 @@ export default function FinancePage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-blue-600" /> Receivables Aging
-                  </CardTitle>
+                    <BarChart3 className="w-4 h-4 text-blue-600" /> {translateUi(uiLanguage, "Receivables Aging")} </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
@@ -3609,7 +3574,7 @@ export default function FinancePage() {
                         {cashFlowRows.map(row => <p key={row.code} className="text-lg font-bold text-blue-700">{fmt(row.universityCollected, row.code)}</p>)}
                       </div>
                       <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-center">
-                        <p className="text-xs text-emerald-600 font-medium uppercase">Service Fee Income</p>
+                        <p className="text-xs text-emerald-600 font-medium uppercase">{translateUi(uiLanguage, "Service Fee Income")}</p>
                         {cashFlowRows.map(row => <p key={row.code} className="text-lg font-bold text-emerald-700">{fmt(row.serviceFeeCollected, row.code)}</p>)}
                       </div>
                       <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-center">
@@ -3711,8 +3676,7 @@ export default function FinancePage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-violet-600" /> Commission Status Breakdown
-                  </CardTitle>
+                    <Calendar className="w-4 h-4 text-violet-600" /> {translateUi(uiLanguage, "Commission Status Breakdown")} </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">

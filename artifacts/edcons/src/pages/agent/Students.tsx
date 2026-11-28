@@ -1,3 +1,4 @@
+import { translateUi, UiText, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useListStudents, useCreateStudent, customFetch } from "@workspace/api-client-react";
@@ -285,6 +286,7 @@ function DropZone({
   onUpload: (doc: UploadedDoc) => void;
   onRemove: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const { toast } = useToast();
@@ -311,8 +313,8 @@ function DropZone({
   );
 
   const requiredBadge = docType.required
-    ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/60">Required</span>
-    : <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50">Optional</span>;
+    ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/60">{translateUi(uiLanguage, "Required")}</span>
+    : <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50">{translateUi(uiLanguage, "Optional")}</span>;
 
   if (uploaded) {
     return (
@@ -794,7 +796,7 @@ function _AddStudentModalInline_REMOVED({
         onEscapeKeyDown={(e) => { if (step === "analyzing") e.preventDefault(); }}
       >
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/50 shrink-0">
-          <DialogTitle className="text-xl font-display">Add New Student</DialogTitle>
+          <DialogTitle className="text-xl font-display"><UiText text={"Add New Student"} /></DialogTitle>
           <div className="mt-3 space-y-2">
             <Progress value={stepProgress} className="h-1.5" />
             <div className="flex items-center gap-6 text-xs font-medium">
@@ -818,7 +820,7 @@ function _AddStudentModalInline_REMOVED({
           {step === "upload" && (
             <div className="space-y-4">
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Application Level</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2"><UiText text={"Application Level"} /></p>
                 <div className="grid grid-cols-4 gap-2">
                   {LEVELS.map(lv => (
                     <button
@@ -842,19 +844,16 @@ function _AddStudentModalInline_REMOVED({
               <div className="bg-gradient-to-br from-violet-50 to-blue-50 border border-violet-100 rounded-2xl p-3 flex items-start gap-3">
                 <Sparkles className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-foreground">AI Auto-Fill</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Upload documents — AI will read and fill the form. <span className="font-medium text-rose-600">Required</span> documents take priority.
-                  </p>
+                  <p className="text-sm font-semibold text-foreground"><UiText text={"AI Auto-Fill"} /></p>
+                  <p className="text-xs text-muted-foreground mt-0.5"> <UiText text={"Upload documents — AI will read and fill the form."} /> <span className="font-medium text-rose-600"><UiText text={"Required"} /></span> <UiText text={"documents take priority."} /> </p>
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-semibold text-foreground">Required Documents</p>
+                  <p className="text-sm font-semibold text-foreground"><UiText text={"Required Documents"} /></p>
                   <p className="text-xs text-muted-foreground">
-                    {uploadedCount}/{currentDocs.length} uploaded
-                  </p>
+                    {uploadedCount}/{currentDocs.length} <UiText text={"uploaded"} /> </p>
                 </div>
                 <p className="text-[11px] text-muted-foreground mb-2">{FILE_UPLOAD_HELP_TEXT}</p>
                 <div className={cn(
@@ -875,9 +874,7 @@ function _AddStudentModalInline_REMOVED({
 
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                <p className="text-xs text-amber-700">
-                  No documents? Use <strong>"Skip to Form"</strong> to fill the form manually.
-                </p>
+                <p className="text-xs text-amber-700"> <UiText text={"No documents? Use"} /> <strong><UiText text={"\"Skip to Form\""} /></strong> <UiText text={"to fill the form manually."} /> </p>
               </div>
             </div>
           )}
@@ -891,16 +888,15 @@ function _AddStudentModalInline_REMOVED({
                 <div className="absolute inset-0 rounded-full border-4 border-violet-200 animate-ping opacity-40" />
               </div>
               <div className="text-center space-y-1">
-                <p className="text-lg font-display font-semibold">AI is reading your documents…</p>
-                <p className="text-sm text-muted-foreground">
-                  Extracting information from {uploadedCount} document{uploadedCount !== 1 ? "s" : ""}
+                <p className="text-lg font-display font-semibold"><UiText text={"AI is reading your documents…"} /></p>
+                <p className="text-sm text-muted-foreground"> <UiText text={"Extracting information from"} /> {uploadedCount} <UiText text={"document"} />{uploadedCount !== 1 ? "s" : ""}
                 </p>
               </div>
               <div className="flex flex-col gap-2 w-full max-w-xs">
                 {Object.values(docs).map((d) => (
                   <div key={d.key} className="flex items-center gap-2 text-sm bg-secondary/50 rounded-lg px-3 py-2">
                     <Loader2 className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
-                    <span className="text-sm text-muted-foreground">Analyzing {d.label}…</span>
+                    <span className="text-sm text-muted-foreground"><UiText text={"Analyzing"} /> {d.label}…</span>
                   </div>
                 ))}
               </div>
@@ -913,33 +909,28 @@ function _AddStudentModalInline_REMOVED({
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2 dark:bg-emerald-900/20 dark:border-emerald-700/40">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                   <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                    <strong>AI extracted {ef.size} field{ef.size !== 1 ? "s" : ""} automatically.</strong>{" "}
-                    Fields marked <span className="bg-emerald-100 text-emerald-700 px-1 rounded font-semibold text-[10px] dark:bg-emerald-900/40 dark:text-emerald-300">AI ✓</span> were filled from documents. Review and complete any missing fields below.
-                  </p>
+                    <strong><UiText text={"AI extracted"} /> {ef.size} <UiText text={"field"} />{ef.size !== 1 ? "s" : ""} <UiText text={"automatically."} /></strong>{" "} <UiText text={"Fields marked"} /> <span className="bg-emerald-100 text-emerald-700 px-1 rounded font-semibold text-[10px] dark:bg-emerald-900/40 dark:text-emerald-300">AI ✓</span> <UiText text={"were filled from documents. Review and complete any missing fields below."} /> </p>
                 </div>
               )}
 
               {analysisError && (
                 <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center gap-2 dark:bg-rose-900/20 dark:border-rose-700/40">
                   <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-                  <p className="text-xs text-rose-700 dark:text-rose-300">
-                    AI could not read the documents: {analysisError}. Please fill the form manually.
-                  </p>
+                  <p className="text-xs text-rose-700 dark:text-rose-300"> <UiText text={"AI could not read the documents:"} /> {analysisError}<UiText text={". Please fill the form manually."} /> </p>
                 </div>
               )}
 
               <section className="space-y-4">
                 <div className="flex items-center gap-2 border-b border-border/50 pb-2">
                   <User className="w-4 h-4 text-primary" />
-                  <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Personal Information</h3>
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-foreground"><UiText text={"Personal Information"} /></h3>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <FormField required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" aiExtracted={ef.has("firstName")} latinUppercase />
                   <FormField required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" aiExtracted={ef.has("lastName")} latinUppercase />
                   <FormField required label="Email" value={form.email} onChange={field("email")} placeholder="email@example.com" type="email" aiExtracted={ef.has("email")} />
                   <div className="space-y-1.5">
-                    <Label className="font-semibold text-sm flex items-center">
-                      Phone<span className="text-destructive ml-0.5">*</span>
+                    <Label className="font-semibold text-sm flex items-center"> <UiText text={"Phone"} /><span className="text-destructive ml-0.5">*</span>
                       {ef.has("phone") && <AiBadge />}
                     </Label>
                     <div className="flex gap-1.5">
@@ -957,19 +948,19 @@ function _AddStudentModalInline_REMOVED({
                   </div>
                   <FormField required label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" aiExtracted={ef.has("dateOfBirth")} />
                   <div>
-                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Gender<span className="text-destructive ml-0.5">*</span></Label>
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><UiText text={"Gender"} /><span className="text-destructive ml-0.5">*</span></Label>
                     <select
                       value={form.gender}
                       onChange={(e) => field("gender")(e.target.value)}
                       className="mt-1 flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
                     >
-                      <option value="">Select…</option>
-                      <option value="female">Female</option>
-                      <option value="male">Male</option>
+                      <option value=""><UiText text={"Select…"} /></option>
+                      <option value="female"><UiText text={"Female"} /></option>
+                      <option value="male"><UiText text={"Male"} /></option>
                     </select>
                   </div>
                   <div>
-                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Nationality<span className="text-destructive ml-0.5">*</span>{ef.has("nationality") && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI ✓</span>}</Label>
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><UiText text={"Nationality"} /><span className="text-destructive ml-0.5">*</span>{ef.has("nationality") && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI ✓</span>}</Label>
                     <div className="mt-1">
                       <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
                     </div>
@@ -985,7 +976,7 @@ function _AddStudentModalInline_REMOVED({
               <section className="space-y-4">
                 <div className="flex items-center gap-2 border-b border-border/50 pb-2">
                   <span className="text-base leading-none">{"\u{1F6C2}"}</span>
-                  <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Passport / Identity</h3>
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-foreground"><UiText text={"Passport / Identity"} /></h3>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
@@ -999,7 +990,7 @@ function _AddStudentModalInline_REMOVED({
               <section className="space-y-4">
                 <div className="flex items-center gap-2 border-b border-border/50 pb-2">
                   <GraduationCap className="w-4 h-4 text-primary" />
-                  <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Education</h3>
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-foreground"><UiText text={"Education"} /></h3>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
@@ -1017,8 +1008,7 @@ function _AddStudentModalInline_REMOVED({
                   )}
                   <FormField label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" aiExtracted={ef.has("graduationYear")} />
                   <div className="space-y-1.5">
-                    <Label className="font-semibold text-sm flex items-center">
-                      GPA{ef.has("gpa") && <AiBadge />}
+                    <Label className="font-semibold text-sm flex items-center"> <UiText text={"GPA"} />{ef.has("gpa") && <AiBadge />}
                     </Label>
                     <div className="flex gap-1.5">
                       <Input
@@ -1057,12 +1047,11 @@ function _AddStudentModalInline_REMOVED({
               <section className="space-y-4">
                 <div className="flex items-center gap-2 border-b border-border/50 pb-2">
                   <FileUp className="w-4 h-4 text-primary" />
-                  <h3 className="text-sm font-bold text-foreground uppercase tracking-wide">Documents</h3>
+                  <h3 className="text-sm font-bold text-foreground uppercase tracking-wide"><UiText text={"Documents"} /></h3>
                 </div>
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">
-                    {Object.keys(docs).length}/{currentDocs.length} uploaded
-                  </p>
+                    {Object.keys(docs).length}/{currentDocs.length} <UiText text={"uploaded"} /> </p>
                 </div>
                 <p className="text-[11px] text-muted-foreground mb-1">{FILE_UPLOAD_HELP_TEXT}</p>
                 <div className={cn(
@@ -1082,7 +1071,7 @@ function _AddStudentModalInline_REMOVED({
               </section>
 
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Notes</Label>
+                <Label className="font-semibold text-sm"><UiText text={"Notes"} /></Label>
                 <textarea
                   value={form.notes}
                   onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
@@ -1098,18 +1087,15 @@ function _AddStudentModalInline_REMOVED({
         <div className="px-6 pb-5 pt-3 border-t border-border/50 flex items-center justify-between shrink-0 gap-3">
           {step === "upload" && (
             <>
-              <Button variant="ghost" onClick={handleClose} className="rounded-xl">Cancel</Button>
+              <Button variant="ghost" onClick={handleClose} className="rounded-xl"><UiText text={"Cancel"} /></Button>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setStep("review")} className="rounded-xl text-muted-foreground">
-                  Skip to Form
-                </Button>
+                <Button variant="outline" onClick={() => setStep("review")} className="rounded-xl text-muted-foreground"> <UiText text={"Skip to Form"} /> </Button>
                 <Button
                   onClick={analyzeDocuments}
                   disabled={uploadedCount === 0}
                   className="rounded-xl gap-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white border-0"
                 >
-                  <Sparkles className="w-4 h-4" />
-                  Analyze {uploadedCount > 0 ? `${uploadedCount} Doc${uploadedCount !== 1 ? "s" : ""}` : "Documents"}
+                  <Sparkles className="w-4 h-4" /> <UiText text={"Analyze"} /> {uploadedCount > 0 ? `${uploadedCount} Doc${uploadedCount !== 1 ? "s" : ""}` : "Documents"}
                 </Button>
               </div>
             </>
@@ -1124,16 +1110,13 @@ function _AddStudentModalInline_REMOVED({
           {step === "review" && (
             <>
               <Button variant="outline" onClick={() => setStep("upload")} className="rounded-xl gap-2">
-                <ChevronLeft className="w-4 h-4" /> Back
-              </Button>
+                <ChevronLeft className="w-4 h-4" /> <UiText text={"Back"} /> </Button>
               <Button
                 onClick={handleSubmit}
                 disabled={createStudent.isPending || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.phone.trim() || !form.dateOfBirth.trim() || !form.nationality.trim() || !form.motherName.trim() || !form.fatherName.trim() || !form.passportNumber.trim() || !form.passportIssueDate.trim() || !form.passportExpiry.trim()}
                 className="rounded-xl gap-2"
               >
-                {createStudent.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                Create Student
-              </Button>
+                {createStudent.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} <UiText text={"Create Student"} /> </Button>
             </>
           )}
         </div>
@@ -1194,6 +1177,7 @@ function StudentAvatar({ student, size = "sm" }: { student: any; size?: "sm" | "
 }
 
 function DraggableStudentCard({ student, onView, variant }: { student: any; onView: (id: number) => void; variant?: StuColVariant }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: student.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
 
@@ -1224,8 +1208,7 @@ function DraggableStudentCard({ student, onView, variant }: { student: any; onVi
           onClick={() => onView(student.id)}
           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
         >
-          <Eye className="w-3 h-3" /> View
-        </button>
+          <Eye className="w-3 h-3" /> {translateUi(uiLanguage, "View")} </button>
       </div>
     </div>
     </>
@@ -1233,6 +1216,7 @@ function DraggableStudentCard({ student, onView, variant }: { student: any; onVi
 }
 
 function DroppableStuColumn({ status, label, variant, students, onView }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const v = variant as StuColVariant;
 
@@ -1273,7 +1257,7 @@ function DroppableStuColumn({ status, label, variant, students, onView }: { stat
             <DraggableStudentCard key={s.id} student={s} onView={onView} variant={v} />
           ))}
           {students.length === 0 && (
-            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>Drop here</div>
+            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>{translateUi(uiLanguage, "Drop here")}</div>
           )}
         </SortableContext>
       </div>
@@ -1283,6 +1267,7 @@ function DroppableStuColumn({ status, label, variant, students, onView }: { stat
 }
 
 function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; onClose: () => void; student: any; stages: PipelineStage[] }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phone: "", phoneCode: "",
     nationality: "", status: "active", dateOfBirth: "", gender: "",
@@ -1398,19 +1383,19 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader><DialogTitle>Edit Student</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{translateUi(uiLanguage, "Edit Student")}</DialogTitle></DialogHeader>
         <div className="overflow-y-auto flex-1 space-y-6 pr-1 py-2">
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-border/50 pb-2">
               <User className="w-4 h-4 text-primary" />
-              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Personal Information</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Personal Information")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" latinUppercase />
-              <F required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" latinUppercase />
-              <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder="email@example.com" />
+              <F required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder={translateUi(uiLanguage, "First name")} latinUppercase />
+              <F required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder={translateUi(uiLanguage, "Last name")} latinUppercase />
+              <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder={translateUi(uiLanguage, "email@example.com")} />
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Phone</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Phone")}</Label>
                 <div className="flex gap-1.5">
                   <PhoneCodePicker value={form.phoneCode} onChange={field("phoneCode")} triggerClassName="w-[100px] h-9 text-sm rounded-xl shrink-0" />
                   <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 000 0000" className="rounded-xl flex-1 h-9" />
@@ -1418,31 +1403,31 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               </div>
               <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Gender</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Gender")}</Label>
                 <select
                   value={form.gender}
                   onChange={(e) => field("gender")(e.target.value)}
                   className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">Select…</option>
-                  <option value="female">Female</option>
-                  <option value="male">Male</option>
+                  <option value="">{translateUi(uiLanguage, "Select…")}</option>
+                  <option value="female">{translateUi(uiLanguage, "Female")}</option>
+                  <option value="male">{translateUi(uiLanguage, "Male")}</option>
                 </select>
               </div>
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Nationality</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Nationality")}</Label>
                 <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
               </div>
-              <F label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" latinUppercase />
-              <F label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" latinUppercase />
-              <F label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" className="col-span-2" />
+              <F label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder={translateUi(uiLanguage, "Mother's name")} latinUppercase />
+              <F label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder={translateUi(uiLanguage, "Father's name")} latinUppercase />
+              <F label="Address" value={form.address} onChange={field("address")} placeholder={translateUi(uiLanguage, "Full home address")} className="col-span-2" />
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Status</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Status")}</Label>
                 <Select value={form.status} disabled>
                   <SelectTrigger className="h-9 text-sm rounded-xl opacity-60 cursor-not-allowed"><SelectValue /></SelectTrigger>
                   <SelectContent>{stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
                 </Select>
-                <p className="text-[10px] text-muted-foreground">Only admin & staff can change status</p>
+                <p className="text-[10px] text-muted-foreground">{translateUi(uiLanguage, "Only admin & staff can change status")}</p>
               </div>
             </div>
           </section>
@@ -1450,10 +1435,10 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-border/50 pb-2">
               <span className="text-base leading-none">{"\u{1F6C2}"}</span>
-              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Passport / Identity</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Passport / Identity")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder="e.g. AB1234567" className="col-span-2" />
+              <F label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder={translateUi(uiLanguage, "e.g. AB1234567")} className="col-span-2" />
               <F label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" />
               <F label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" />
             </div>
@@ -1462,15 +1447,15 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-border/50 pb-2">
               <GraduationCap className="w-4 h-4 text-primary" />
-              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Education</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Education")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" className="col-span-2" />
-              <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. Istanbul University" className="col-span-2" />
-              <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. Bogazici University" className="col-span-2" />
+              <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder={translateUi(uiLanguage, "e.g. Ankara Fen Lisesi")} className="col-span-2" />
+              <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder={translateUi(uiLanguage, "e.g. Istanbul University")} className="col-span-2" />
+              <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder={translateUi(uiLanguage, "e.g. Bogazici University")} className="col-span-2" />
               <F label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">GPA</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "GPA")}</Label>
                 <div className="flex gap-1.5">
                   <Input
                     type="number" step="0.01" min="0"
@@ -1492,25 +1477,25 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                   </Select>
                 </div>
               </div>
-              <F label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder="e.g. IELTS 7.0, TOEFL 100" className="col-span-2" />
+              <F label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder={translateUi(uiLanguage, "e.g. IELTS 7.0, TOEFL 100")} className="col-span-2" />
             </div>
           </section>
 
           <div className="space-y-1.5">
-            <Label className="font-semibold text-sm">Notes</Label>
+            <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Notes")}</Label>
             <textarea
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              placeholder="Any additional notes about this student..."
+              placeholder={translateUi(uiLanguage, "Any additional notes about this student...")}
               rows={2}
               className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
             />
           </div>
         </div>
         <DialogFooter className="pt-3 border-t border-border/50">
-          <Button variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
+          <Button variant="outline" onClick={onClose} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleSave} disabled={!form.firstName || !form.lastName || saving} className="rounded-xl">
-            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Saving...</> : "Save Changes"}
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{translateUi(uiLanguage, "Saving...")}</> : "Save Changes"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1522,14 +1507,15 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
 function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
   open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   return (
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Delete {count} Student{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
-        <p className="text-sm text-muted-foreground py-2">This action cannot be undone.</p>
+        <DialogHeader><DialogTitle>Delete {count} {translateUi(uiLanguage, "Student")}{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground py-2">{translateUi(uiLanguage, "This action cannot be undone.")}</p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? "Deleting..." : `Delete ${count}`}</Button>
         </DialogFooter>
       </DialogContent>
@@ -1710,6 +1696,7 @@ function TransferToSubAgentDialog({ open, onClose, student, subAgents, onSuccess
 }
 
 export default function AgentStudentsPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -1914,24 +1901,23 @@ export default function AgentStudentsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">{t("agentStudents.title")}</h1>
-            <p className="text-muted-foreground text-sm mt-1">{data?.meta?.total ?? 0} total students</p>
+            <p className="text-muted-foreground text-sm mt-1">{data?.meta?.total ?? 0} {translateUi(uiLanguage, "total students")}</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search students..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
+              <Input placeholder={translateUi(uiLanguage, "Search students...")} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
             <StuFilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} nationalities={nationalityOptions} />
             <Button variant="outline" className="rounded-full gap-2" onClick={() => handleExport("all")} title={t("agentStudents.export.button")}>
               <Download className="w-4 h-4" /> {t("agentStudents.export.button")}
             </Button>
             <div className="flex items-center border rounded-full overflow-hidden">
-              <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
-              <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
+              <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title={translateUi(uiLanguage, "Pipeline view")}><LayoutGrid className="w-4 h-4" /></button>
+              <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title={translateUi(uiLanguage, "List view")}><List className="w-4 h-4" /></button>
             </div>
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" /> Add Student
-            </Button>
+              <Plus className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Add Student")} </Button>
           </div>
         </div>
 
@@ -1976,14 +1962,14 @@ export default function AgentStudentsPage() {
                     <StuSortHeader label="Passport" sortKey="passport" currentSort={sort} onSort={handleSort} />
                     <StuSortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
                     <StuSortHeader label="Joined" sortKey="date" currentSort={sort} onSort={handleSort} />
-                    <TableHead className="w-20 text-right">Actions</TableHead>
+                    <TableHead className="w-20 text-right">{translateUi(uiLanguage, "Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">{translateUi(uiLanguage, "Loading...")}</TableCell></TableRow>
                   ) : pagedStudents.length === 0 ? (
-                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No students found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">{translateUi(uiLanguage, "No students found")}</TableCell></TableRow>
                   ) : pagedStudents.map((student: any) => (
                     <TableRow key={student.id} className={cn("cursor-pointer hover:bg-muted/30 transition-colors", selectedIds.has(student.id) && "bg-primary/5")}>
                       <TableCell onClick={e => e.stopPropagation()}>
@@ -2011,7 +1997,7 @@ export default function AgentStudentsPage() {
                       <TableCell className="text-muted-foreground text-xs cursor-pointer" onClick={() => setLocation(`/agent/students/${student.id}`)}>{formatDate(student.createdAt)}</TableCell>
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => setEditStudent(student)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => setEditStudent(student)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title={translateUi(uiLanguage, "Edit")}><Pencil className="w-3.5 h-3.5" /></button>
                           {canTransfer && (
                             <button onClick={() => setTransferStudent(student)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title={t("agentStudents.transfer.title")}><ArrowRightLeft className="w-3.5 h-3.5" /></button>
                           )}

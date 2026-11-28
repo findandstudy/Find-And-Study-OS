@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
@@ -72,6 +73,7 @@ const EMPTY: Extractor = {
 };
 
 export default function AiExtractorDetail() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/admin/ai-extractors/:id");
@@ -212,7 +214,7 @@ export default function AiExtractorDetail() {
               </div>
               <div>
                 <Label>{t("aiExtractor.fSlug")}</Label>
-                <Input value={data.slug} onChange={(e) => update("slug", e.target.value)} placeholder="passport-diploma-extractor" />
+                <Input value={data.slug} onChange={(e) => update("slug", e.target.value)} placeholder={translateUi(uiLanguage, "passport-diploma-extractor")} />
               </div>
               <div>
                 <Label>{t("aiExtractor.fDescription")}</Label>
@@ -359,7 +361,7 @@ export default function AiExtractorDetail() {
                       <Input
                         value={(f.enumValues || []).join(", ")}
                         onChange={(e) => setField(i, { enumValues: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-                        placeholder="passport, diploma, transcript"
+                        placeholder={translateUi(uiLanguage, "passport, diploma, transcript")}
                       />
                     </div>
                   )}
@@ -424,7 +426,7 @@ export default function AiExtractorDetail() {
                 <Input
                   value={data.documentTypes.join(", ")}
                   onChange={(e) => update("documentTypes", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
-                  placeholder="passport, diploma, transcript"
+                  placeholder={translateUi(uiLanguage, "passport, diploma, transcript")}
                 />
               </div>
             </CardContent>

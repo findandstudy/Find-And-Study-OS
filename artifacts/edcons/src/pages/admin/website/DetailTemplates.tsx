@@ -1,3 +1,4 @@
+import { translateUi } from "@/lib/ui-localization";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -39,7 +40,7 @@ const textToReplacements = (value: string) => Object.fromEntries(value.split(/\r
 
 const DetailTemplates = forwardRef<DetailTemplatesHandle>(function DetailTemplates(_props, ref) {
   const { lang, t } = useI18n();
-  const copy = (en: string, tr: string) => lang === "tr" ? tr : en;
+  const copy = (en: string, tr: string) => translateUi(lang, en, tr);
   const label = (key: string) => detailTemplateLabel(key, lang);
   const client = useQueryClient();
   const [edits, setEdits] = useState<Record<string, Edit>>({});

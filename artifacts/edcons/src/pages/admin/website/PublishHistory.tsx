@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -90,6 +91,7 @@ function formatDate(value: string, tr: boolean) {
 }
 
 export default function WebsitePublishHistory() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang } = useI18n();
   const tr = lang === "tr";
   const [search, setSearch] = useState("");
@@ -223,7 +225,7 @@ export default function WebsitePublishHistory() {
                       </div>
                       <div className="grid min-w-52 grid-cols-2 gap-3 text-xs">
                         <div>
-                          <div className="mb-1 flex justify-between"><span>SEO</span><b>{item.seoScore}%</b></div>
+                          <div className="mb-1 flex justify-between"><span>{translateUi(uiLanguage, "SEO")}</span><b>{item.seoScore}%</b></div>
                           <Progress value={item.seoScore} />
                         </div>
                         <div>

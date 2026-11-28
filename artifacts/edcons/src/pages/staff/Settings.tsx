@@ -1,3 +1,4 @@
+import { translateUi, UiText, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -131,6 +132,7 @@ function ColorField({ label, description, value, onChange, defaultColor }: { lab
 }
 
 function LogoUploader({ label, description, value, onChange, bgClass, dims }: { label: string; description?: string; value: string; onChange: (v: string) => void; bgClass?: string; dims?: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
@@ -156,7 +158,7 @@ function LogoUploader({ label, description, value, onChange, bgClass, dims }: { 
   return (
     <div className="space-y-2">
       <Label className="text-xs font-semibold">{label}</Label>
-      {dims && <p className="text-[11px] text-muted-foreground">Recommended: {dims}</p>}
+      {dims && <p className="text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Recommended:")} {dims}</p>}
       <div className={`relative w-full h-28 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden ${bgClass || "bg-secondary/20"}`}>
         {value ? (
           <>
@@ -460,6 +462,7 @@ export default function SettingsPage() {
   }
 
   function ProfileTab() {
+  const { lang: uiLanguage } = useUiLanguage();
     return (<>
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <SectionHeader title={t("settingsPage.personalInformation")} description={t("settingsPage.personalInformationDesc")} />
@@ -488,7 +491,7 @@ export default function SettingsPage() {
             <p className="font-display font-bold text-lg text-foreground">{user?.firstName} {user?.lastName}</p>
             <p className="text-muted-foreground text-sm">{user?.email}</p>
             <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs mt-2 capitalize">{ROLE_LABELS[user?.role || ""] || user?.role}</Badge>
-            <p className="text-xs text-muted-foreground mt-1">Hover to change photo</p>
+            <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "Hover to change photo")}</p>
           </div>
         </div>
         <div className="grid sm:grid-cols-2 gap-5">
@@ -512,22 +515,22 @@ export default function SettingsPage() {
             <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} className="rounded-xl" />
           </FieldGroup>
           <FieldGroup label="Passport Number">
-            <Input value={form.passportNumber} onChange={e => setForm(f => ({ ...f, passportNumber: e.target.value }))} placeholder="Enter passport number" className="rounded-xl" />
+            <Input value={form.passportNumber} onChange={e => setForm(f => ({ ...f, passportNumber: e.target.value }))} placeholder={translateUi(uiLanguage, "Enter passport number")} className="rounded-xl" />
           </FieldGroup>
           <FieldGroup label="Home Address" className="sm:col-span-2">
-            <Input value={form.homeAddress} onChange={e => setForm(f => ({ ...f, homeAddress: e.target.value }))} placeholder="Enter your home address" className="rounded-xl" />
+            <Input value={form.homeAddress} onChange={e => setForm(f => ({ ...f, homeAddress: e.target.value }))} placeholder={translateUi(uiLanguage, "Enter your home address")} className="rounded-xl" />
           </FieldGroup>
           <FieldGroup label="Employment Contract">
             <div className="flex items-center gap-3">
               {form.contractUrl ? (
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <a href={form.contractUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate">View Contract</a>
+                  <a href={form.contractUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate">{translateUi(uiLanguage, "View Contract")}</a>
                   <Button variant="ghost" size="sm" onClick={() => setForm(f => ({ ...f, contractUrl: "" }))}>
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No contract uploaded</p>
+                <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "No contract uploaded")}</p>
               )}
               <Button variant="outline" size="sm" onClick={() => contractInputRef.current?.click()} disabled={contractUploading}>
                 {contractUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
@@ -540,13 +543,13 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3">
               {form.passportUrl ? (
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <a href={form.passportUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate">View Passport</a>
+                  <a href={form.passportUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate">{translateUi(uiLanguage, "View Passport")}</a>
                   <Button variant="ghost" size="sm" onClick={() => setForm(f => ({ ...f, passportUrl: "" }))}>
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No passport uploaded</p>
+                <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "No passport uploaded")}</p>
               )}
               <Button variant="outline" size="sm" onClick={() => passportInputRef.current?.click()} disabled={passportUploading}>
                 {passportUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
@@ -562,7 +565,7 @@ export default function SettingsPage() {
         <SectionHeader title={t("settingsPage.emergencyContact")} description={t("settingsPage.emergencyContactDesc")} />
         <div className="grid sm:grid-cols-3 gap-5">
           <FieldGroup label="Full Name" className="sm:col-span-2">
-            <Input value={form.emergencyContactName} onChange={e => setForm(f => ({ ...f, emergencyContactName: e.target.value }))} placeholder="Enter emergency contact name" className="rounded-xl" />
+            <Input value={form.emergencyContactName} onChange={e => setForm(f => ({ ...f, emergencyContactName: e.target.value }))} placeholder={translateUi(uiLanguage, "Enter emergency contact name")} className="rounded-xl" />
           </FieldGroup>
           <FieldGroup label="Phone Number">
             <div className="flex gap-2">
@@ -577,20 +580,18 @@ export default function SettingsPage() {
         <SectionHeader title={t("settingsPage.changePassword")} description={t("settingsPage.changePasswordDesc")} />
         <div className="space-y-4 max-w-md">
           <FieldGroup label="Current Password">
-            <Input type="password" value={pwForm.currentPassword} onChange={e => setPwForm(f => ({ ...f, currentPassword: e.target.value }))} placeholder="Enter current password" className="rounded-xl" />
+            <Input type="password" value={pwForm.currentPassword} onChange={e => setPwForm(f => ({ ...f, currentPassword: e.target.value }))} placeholder={translateUi(uiLanguage, "Enter current password")} className="rounded-xl" />
           </FieldGroup>
           <FieldGroup label="New Password">
-            <Input type="password" value={pwForm.newPassword} onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Enter new password" className="rounded-xl" />
+            <Input type="password" value={pwForm.newPassword} onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))} placeholder={translateUi(uiLanguage, "Enter new password")} className="rounded-xl" />
           </FieldGroup>
           <FieldGroup label="Confirm New Password">
-            <Input type="password" value={pwForm.confirmPassword} onChange={e => setPwForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="Confirm new password" className="rounded-xl" />
+            <Input type="password" value={pwForm.confirmPassword} onChange={e => setPwForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder={translateUi(uiLanguage, "Confirm new password")} className="rounded-xl" />
           </FieldGroup>
         </div>
         <div className="mt-6">
           <Button onClick={handleChangePassword} disabled={pwSaving || !pwForm.currentPassword || !pwForm.newPassword || !pwForm.confirmPassword} className="rounded-xl gap-2">
-            {pwSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
-            Change Password
-          </Button>
+            {pwSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />} {translateUi(uiLanguage, "Change Password")} </Button>
         </div>
       </Card>
     </>);
@@ -682,18 +683,19 @@ export default function SettingsPage() {
   }
 
   function SecurityTab() {
+  const { lang: uiLanguage } = useUiLanguage();
     return (
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <SectionHeader title={t("settingsPage.securityAccess")} description={t("settingsPage.securityAccessDesc")} />
         <div className="space-y-4">
           <div className="p-5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-            <p className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-2"><Shield className="w-5 h-5" /> Secure Authentication</p>
-            <p className="text-sm text-blue-700 dark:text-blue-400 mt-2">Your account is secured with email and password authentication.</p>
+            <p className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-2"><Shield className="w-5 h-5" /> {translateUi(uiLanguage, "Secure Authentication")}</p>
+            <p className="text-sm text-blue-700 dark:text-blue-400 mt-2">{translateUi(uiLanguage, "Your account is secured with email and password authentication.")}</p>
           </div>
           <div className="p-5 rounded-xl border border-border/50 space-y-2">
-            <p className="font-semibold text-foreground">Account Details</p>
-            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Role</span><Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs capitalize">{ROLE_LABELS[user?.role || ""] || user?.role}</Badge></div>
-            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Account ID</span><span className="font-mono text-foreground">#{user?.id}</span></div>
+            <p className="font-semibold text-foreground">{translateUi(uiLanguage, "Account Details")}</p>
+            <div className="flex justify-between text-sm"><span className="text-muted-foreground">{translateUi(uiLanguage, "Role")}</span><Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs capitalize">{ROLE_LABELS[user?.role || ""] || user?.role}</Badge></div>
+            <div className="flex justify-between text-sm"><span className="text-muted-foreground">{translateUi(uiLanguage, "Account ID")}</span><span className="font-mono text-foreground">#{user?.id}</span></div>
           </div>
           <div className="p-5 rounded-xl border border-border/50">
             <p className="font-semibold text-foreground mb-3">{t("settingsPage.activeSessions")}</p>
@@ -719,6 +721,7 @@ export default function SettingsPage() {
   }
 
   function BrandingTab() {
+  const { lang: uiLanguage } = useUiLanguage();
     const s = settings;
     return (
       <div className="space-y-6">
@@ -772,23 +775,23 @@ export default function SettingsPage() {
           <SectionHeader title={t("settingsPage.brandPreview")} description={t("settingsPage.brandPreviewDesc")} />
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="p-4 rounded-xl border border-border/50 bg-background">
-              <p className="text-xs font-semibold text-muted-foreground mb-3">Sidebar Logo</p>
+              <p className="text-xs font-semibold text-muted-foreground mb-3">{translateUi(uiLanguage, "Sidebar Logo")}</p>
               <div className="h-12 bg-secondary/30 rounded-lg flex items-center px-4">
-                {s.logoUrl ? <img src={s.logoUrl} className="max-h-8 object-contain" alt="" /> : <span className="text-sm font-bold text-muted-foreground">Your Logo</span>}
+                {s.logoUrl ? <img src={s.logoUrl} className="max-h-8 object-contain" alt="" /> : <span className="text-sm font-bold text-muted-foreground">{translateUi(uiLanguage, "Your Logo")}</span>}
               </div>
             </div>
             <div className="p-4 rounded-xl border border-border/50 bg-background">
-              <p className="text-xs font-semibold text-muted-foreground mb-3">Button Preview</p>
+              <p className="text-xs font-semibold text-muted-foreground mb-3">{translateUi(uiLanguage, "Button Preview")}</p>
               <div className="flex gap-2">
-                <button className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: s.themeButton || s.themePrimary || "#3B82F6" }}>Primary</button>
-                <button className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: s.themeSuccess || "#22C55E" }}>Success</button>
-                <button className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: s.themeDanger || "#EF4444" }}>Danger</button>
+                <button className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: s.themeButton || s.themePrimary || "#3B82F6" }}>{translateUi(uiLanguage, "Primary")}</button>
+                <button className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: s.themeSuccess || "#22C55E" }}>{translateUi(uiLanguage, "Success")}</button>
+                <button className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: s.themeDanger || "#EF4444" }}>{translateUi(uiLanguage, "Danger")}</button>
               </div>
             </div>
             <div className="p-4 rounded-xl border border-border/50 bg-gray-900 sm:col-span-2">
-              <p className="text-xs font-semibold text-gray-400 mb-3">Dark Mode Logo</p>
+              <p className="text-xs font-semibold text-gray-400 mb-3">{translateUi(uiLanguage, "Dark Mode Logo")}</p>
               <div className="h-12 bg-gray-800 rounded-lg flex items-center px-4">
-                {s.logoDarkUrl ? <img src={s.logoDarkUrl} className="max-h-8 object-contain" alt="" /> : <span className="text-sm font-bold text-gray-500">Dark Logo</span>}
+                {s.logoDarkUrl ? <img src={s.logoDarkUrl} className="max-h-8 object-contain" alt="" /> : <span className="text-sm font-bold text-gray-500">{translateUi(uiLanguage, "Dark Logo")}</span>}
               </div>
             </div>
           </div>
@@ -809,6 +812,7 @@ export default function SettingsPage() {
   }
 
   function CompanyTab() {
+  const { lang: uiLanguage } = useUiLanguage();
     const s = settings;
     return (
       <div className="space-y-6">
@@ -823,7 +827,7 @@ export default function SettingsPage() {
             <FieldGroup label="Phone"><Input value={s.companyPhone || ""} onChange={e => updateSettings({ companyPhone: e.target.value })} className="rounded-xl" /></FieldGroup>
             <FieldGroup label="Website"><Input value={s.companyWebsite || ""} onChange={e => updateSettings({ companyWebsite: e.target.value })} placeholder="https://findandstudy.com" className="rounded-xl" /></FieldGroup>
             <FieldGroup label="WhatsApp Number"><Input value={s.whatsappNumber || ""} onChange={e => updateSettings({ whatsappNumber: e.target.value })} placeholder="+90 555 123 4567" className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Working Hours"><Input value={s.workingHours || ""} onChange={e => updateSettings({ workingHours: e.target.value })} placeholder="Mon-Fri 9:00-18:00" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Working Hours"><Input value={s.workingHours || ""} onChange={e => updateSettings({ workingHours: e.target.value })} placeholder={translateUi(uiLanguage, "Mon-Fri 9:00-18:00")} className="rounded-xl" /></FieldGroup>
             <FieldGroup label="Address" className="sm:col-span-2"><Input value={s.companyAddress || ""} onChange={e => updateSettings({ companyAddress: e.target.value })} className="rounded-xl" /></FieldGroup>
             <FieldGroup label="City"><Input value={s.companyCity || ""} onChange={e => updateSettings({ companyCity: e.target.value })} className="rounded-xl" /></FieldGroup>
             <FieldGroup label="Country"><Input value={s.companyCountry || ""} onChange={e => updateSettings({ companyCountry: e.target.value })} className="rounded-xl" /></FieldGroup>
@@ -840,7 +844,7 @@ export default function SettingsPage() {
               <Input value={s.footerCopyright || ""} onChange={e => updateSettings({ footerCopyright: e.target.value })} className="rounded-xl" />
             </FieldGroup>
             <FieldGroup label="Contact CTA Text" description="Call-to-action text on contact sections">
-              <Input value={s.contactCtaText || ""} onChange={e => updateSettings({ contactCtaText: e.target.value })} placeholder="Get in touch with us today!" className="rounded-xl" />
+              <Input value={s.contactCtaText || ""} onChange={e => updateSettings({ contactCtaText: e.target.value })} placeholder={translateUi(uiLanguage, "Get in touch with us today!")} className="rounded-xl" />
             </FieldGroup>
           </div>
         </Card>
@@ -885,6 +889,7 @@ export default function SettingsPage() {
   }
 
   function SeoTab() {
+  const { lang: uiLanguage } = useUiLanguage();
     const s = settings;
     const titleLen = (s.seoMetaTitle || "").length;
     const descLen = (s.seoMetaDescription || "").length;
@@ -906,10 +911,10 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Site Identity" description="Configure your site name and title format for search engines." />
+          <SectionHeader title={translateUi(uiLanguage, "Site Identity")} description="Configure your site name and title format for search engines." />
           <div className="grid sm:grid-cols-2 gap-5">
             <FieldGroup label="Site Name" description="Used in structured data and browser tabs"><Input value={s.siteName || ""} onChange={e => updateSettings({ siteName: e.target.value })} placeholder="Find & Study" className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Title Template" description="Use {{pageTitle}} as placeholder"><Input value={s.siteTitleTemplate || ""} onChange={e => updateSettings({ siteTitleTemplate: e.target.value })} placeholder="{{pageTitle}} | Find & Study" className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label="Title Template" description="Use {{pageTitle}} as placeholder"><Input value={s.siteTitleTemplate || ""} onChange={e => updateSettings({ siteTitleTemplate: e.target.value })} placeholder={translateUi(uiLanguage, "{{pageTitle}} | Find & Study")} className="rounded-xl font-mono text-xs" /></FieldGroup>
             <FieldGroup label="Canonical Base URL" className="sm:col-span-2"><Input value={s.canonicalBaseUrl || ""} onChange={e => updateSettings({ canonicalBaseUrl: e.target.value })} placeholder="https://findandstudy.com" className="rounded-xl" /></FieldGroup>
           </div>
         </Card>
@@ -917,12 +922,12 @@ export default function SettingsPage() {
         <Card className="p-4 bg-blue-50 border-blue-200">
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-            <p className="text-sm text-blue-800">These are global defaults. Override per page in <button type="button" onClick={() => setLocation("/admin/website/seo")} className="font-semibold underline cursor-pointer">Website &gt; SEO Overrides</button>.</p>
+            <p className="text-sm text-blue-800">{translateUi(uiLanguage, "These are global defaults. Override per page in")} <button type="button" onClick={() => setLocation("/admin/website/seo")} className="font-semibold underline cursor-pointer">{translateUi(uiLanguage, "Website > SEO Overrides")}</button>.</p>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Default Meta Tags" description="Default SEO metadata used when pages don't specify their own." />
+          <SectionHeader title={translateUi(uiLanguage, "Default Meta Tags")} description="Default SEO metadata used when pages don't specify their own." />
           <div className="space-y-5">
             <FieldGroup label="Meta Title" description={`${titleLen}/60 characters recommended`}>
               <Input value={s.seoMetaTitle || ""} onChange={e => updateSettings({ seoMetaTitle: e.target.value })} maxLength={70} className="rounded-xl" />
@@ -930,43 +935,41 @@ export default function SettingsPage() {
             <FieldGroup label="Meta Description" description={`${descLen}/160 characters recommended`}>
               <Textarea value={s.seoMetaDescription || ""} onChange={e => updateSettings({ seoMetaDescription: e.target.value })} maxLength={200} className="rounded-xl min-h-[70px]" />
             </FieldGroup>
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-              Meta keywords are intentionally not published. Search intent and catalogue taxonomy remain separate from page metadata.
-            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"> {translateUi(uiLanguage, "Meta keywords are intentionally not published. Search intent and catalogue taxonomy remain separate from page metadata.")} </div>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Robots & Indexing" />
+          <SectionHeader title={translateUi(uiLanguage, "Robots & Indexing")} />
           <div className="space-y-4">
             <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
-              <div><p className="text-sm font-semibold">Allow Search Indexing</p><p className="text-xs text-muted-foreground">Let search engines index your site</p></div>
+              <div><p className="text-sm font-semibold">{translateUi(uiLanguage, "Allow Search Indexing")}</p><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Let search engines index your site")}</p></div>
               <Switch checked={s.robotsIndex !== false} onCheckedChange={v => updateSettings({ robotsIndex: v })} />
             </div>
             <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
-              <div><p className="text-sm font-semibold">Allow Link Following</p><p className="text-xs text-muted-foreground">Let search engines follow links on your pages</p></div>
+              <div><p className="text-sm font-semibold">{translateUi(uiLanguage, "Allow Link Following")}</p><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Let search engines follow links on your pages")}</p></div>
               <Switch checked={s.robotsFollow !== false} onCheckedChange={v => updateSettings({ robotsFollow: v })} />
             </div>
             <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
-              <div><p className="text-sm font-semibold">Staging Noindex</p><p className="text-xs text-muted-foreground">Block indexing on staging/development environments</p></div>
+              <div><p className="text-sm font-semibold">{translateUi(uiLanguage, "Staging Noindex")}</p><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Block indexing on staging/development environments")}</p></div>
               <Switch checked={s.stagingNoindex === true} onCheckedChange={v => updateSettings({ stagingNoindex: v })} />
             </div>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="AI Discovery & Answer Engines" description="Manage search discovery and model-training preferences independently. These settings improve technical eligibility; they do not guarantee ranking or citation." />
+          <SectionHeader title={translateUi(uiLanguage, "AI Discovery & Answer Engines")} description="Manage search discovery and model-training preferences independently. These settings improve technical eligibility; they do not guarantee ranking or citation." />
           <div className="space-y-4">
             <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
-              <div><p className="text-sm font-semibold">Allow ChatGPT Search discovery</p><p className="text-xs text-muted-foreground">Allows OAI-SearchBot to discover public pages for ChatGPT search.</p></div>
+              <div><p className="text-sm font-semibold">{translateUi(uiLanguage, "Allow ChatGPT Search discovery")}</p><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Allows OAI-SearchBot to discover public pages for ChatGPT search.")}</p></div>
               <Switch checked={technicalPolicy.allowOaiSearchBot} onCheckedChange={v => updateTechnicalPolicy({ allowOaiSearchBot: v })} />
             </div>
             <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
-              <div><p className="text-sm font-semibold">Allow OpenAI model-training crawler</p><p className="text-xs text-muted-foreground">Controls GPTBot separately from ChatGPT Search.</p></div>
+              <div><p className="text-sm font-semibold">{translateUi(uiLanguage, "Allow OpenAI model-training crawler")}</p><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Controls GPTBot separately from ChatGPT Search.")}</p></div>
               <Switch checked={technicalPolicy.allowGptBot} onCheckedChange={v => updateTechnicalPolicy({ allowGptBot: v })} />
             </div>
             <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
-              <div><p className="text-sm font-semibold">Allow Google-Extended</p><p className="text-xs text-muted-foreground">Controls use by Google's extended generative systems; normal Google Search uses Googlebot.</p></div>
+              <div><p className="text-sm font-semibold">{translateUi(uiLanguage, "Allow Google-Extended")}</p><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Controls use by Google's extended generative systems; normal Google Search uses Googlebot.")}</p></div>
               <Switch checked={technicalPolicy.allowGoogleExtended} onCheckedChange={v => updateTechnicalPolicy({ allowGoogleExtended: v })} />
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -976,7 +979,7 @@ export default function SettingsPage() {
               <FieldGroup label="Image preview">
                 <Select value={technicalPolicy.maxImagePreview} onValueChange={v => updateTechnicalPolicy({ maxImagePreview: v })}>
                   <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="large">Large</SelectItem><SelectItem value="standard">Standard</SelectItem><SelectItem value="none">None</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="large">{translateUi(uiLanguage, "Large")}</SelectItem><SelectItem value="standard">{translateUi(uiLanguage, "Standard")}</SelectItem><SelectItem value="none">{translateUi(uiLanguage, "None")}</SelectItem></SelectContent>
                 </Select>
               </FieldGroup>
               <FieldGroup label="Maximum video preview" description="-1 means no explicit limit">
@@ -990,19 +993,19 @@ export default function SettingsPage() {
               </FieldGroup>
             </div>
             <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
-              <div><p className="text-sm font-semibold">IndexNow change notifications</p><p className="text-xs text-muted-foreground">Stores the policy now. Delivery remains off until a verified key and durable outbox are configured.</p></div>
+              <div><p className="text-sm font-semibold">{translateUi(uiLanguage, "IndexNow change notifications")}</p><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Stores the policy now. Delivery remains off until a verified key and durable outbox are configured.")}</p></div>
               <Switch checked={technicalPolicy.indexNowEnabled} onCheckedChange={v => updateTechnicalPolicy({ indexNowEnabled: v })} />
             </div>
             <div className="rounded-xl border bg-muted/30 p-4 text-xs text-muted-foreground">
-              <p className="font-semibold text-foreground">Crawler policy preview</p>
+              <p className="font-semibold text-foreground">{translateUi(uiLanguage, "Crawler policy preview")}</p>
               <code className="mt-2 block whitespace-pre-wrap">{`OAI-SearchBot: ${technicalPolicy.allowOaiSearchBot ? "Allow" : "Disallow"}\nGPTBot: ${technicalPolicy.allowGptBot ? "Allow" : "Disallow"}\nGoogle-Extended: ${technicalPolicy.allowGoogleExtended ? "Allow" : "Disallow"}`}</code>
-              <p className="mt-3">The existing llms.txt remains a supplementary, deterministic identity document. It is not treated as a ranking signal or an alternative to robots, sitemap, canonical or structured data.</p>
+              <p className="mt-3">{translateUi(uiLanguage, "The existing llms.txt remains a supplementary, deterministic identity document. It is not treated as a ranking signal or an alternative to robots, sitemap, canonical or structured data.")}</p>
             </div>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Open Graph / Social Sharing" description="Control how your site appears when shared on social media." />
+          <SectionHeader title={translateUi(uiLanguage, "Open Graph / Social Sharing")} description="Control how your site appears when shared on social media." />
           <div className="space-y-5">
             <div className="grid sm:grid-cols-2 gap-5">
               <FieldGroup label="OG Title"><Input value={s.ogTitle || ""} onChange={e => updateSettings({ ogTitle: e.target.value })} className="rounded-xl" /></FieldGroup>
@@ -1019,7 +1022,7 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Search Preview" description="How your site may appear on Google search results." />
+          <SectionHeader title={translateUi(uiLanguage, "Search Preview")} description="How your site may appear on Google search results." />
           <div className="p-5 rounded-xl border border-border/50 bg-white dark:bg-gray-950 max-w-lg">
             <p className="text-sm text-blue-700 dark:text-blue-400 truncate">{s.canonicalBaseUrl || "https://yoursite.com"}</p>
             <p className="text-lg text-blue-800 dark:text-blue-300 font-medium truncate hover:underline cursor-pointer mt-0.5">{s.seoMetaTitle || s.siteName || "Your Site Title"}</p>
@@ -1028,17 +1031,17 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Analytics & Tracking" description="Third-party tracking and verification codes." />
+          <SectionHeader title={translateUi(uiLanguage, "Analytics & Tracking")} description="Third-party tracking and verification codes." />
           <div className="grid sm:grid-cols-2 gap-5">
-            <FieldGroup label="Google Search Console" description="Verification code"><Input value={s.googleSearchConsoleCode || ""} onChange={e => updateSettings({ googleSearchConsoleCode: e.target.value })} placeholder="google-site-verification=..." className="rounded-xl font-mono text-xs" /></FieldGroup>
-            <FieldGroup label="Google Analytics (GA4)" description="Measurement ID"><Input value={s.googleAnalyticsId || ""} onChange={e => updateSettings({ googleAnalyticsId: e.target.value })} placeholder="G-XXXXXXXXXX" className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label="Google Search Console" description="Verification code"><Input value={s.googleSearchConsoleCode || ""} onChange={e => updateSettings({ googleSearchConsoleCode: e.target.value })} placeholder={translateUi(uiLanguage, "google-site-verification=...")} className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label="Google Analytics (GA4)" description="Measurement ID"><Input value={s.googleAnalyticsId || ""} onChange={e => updateSettings({ googleAnalyticsId: e.target.value })} placeholder={translateUi(uiLanguage, "G-XXXXXXXXXX")} className="rounded-xl font-mono text-xs" /></FieldGroup>
             <FieldGroup label="Meta Pixel ID"><Input value={s.metaPixelId || ""} onChange={e => updateSettings({ metaPixelId: e.target.value })} placeholder="123456789012345" className="rounded-xl font-mono text-xs" /></FieldGroup>
             <FieldGroup label="TikTok Pixel ID"><Input value={s.tiktokPixelId || ""} onChange={e => updateSettings({ tiktokPixelId: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Structured Data (Schema.org)" description="Organization data for rich search results." />
+          <SectionHeader title={translateUi(uiLanguage, "Structured Data (Schema.org)")} description="Organization data for rich search results." />
           <div className="grid sm:grid-cols-2 gap-5">
             <FieldGroup label="Organization Name"><Input value={s.orgSchemaName || ""} onChange={e => updateSettings({ orgSchemaName: e.target.value })} className="rounded-xl" /></FieldGroup>
             <FieldGroup label="Website URL"><Input value={s.orgSchemaUrl || ""} onChange={e => updateSettings({ orgSchemaUrl: e.target.value })} className="rounded-xl" /></FieldGroup>
@@ -1066,46 +1069,47 @@ export default function SettingsPage() {
   }
 
   function EmailBrandingTab() {
+  const { lang: uiLanguage } = useUiLanguage();
     const s = settings;
     return (
       <div className="space-y-6">
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Email Identity" description="Configure the sender details for all outgoing emails." />
+          <SectionHeader title={translateUi(uiLanguage, "Email Identity")} description="Configure the sender details for all outgoing emails." />
           <div className="grid sm:grid-cols-2 gap-5">
             <FieldGroup label="Sender Name" description="Displayed as the 'From' name"><Input value={s.emailSenderName || ""} onChange={e => updateSettings({ emailSenderName: e.target.value })} placeholder="Find & Study" className="rounded-xl" /></FieldGroup>
-            <FieldGroup label="Sender Email"><Input value={s.emailSenderEmail || ""} onChange={e => updateSettings({ emailSenderEmail: e.target.value })} type="email" placeholder="info@findandstudy.com" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Sender Email"><Input value={s.emailSenderEmail || ""} onChange={e => updateSettings({ emailSenderEmail: e.target.value })} type="email" placeholder={translateUi(uiLanguage, "info@findandstudy.com")} className="rounded-xl" /></FieldGroup>
             <FieldGroup label="Reply-To Email" className="sm:col-span-2"><Input value={s.emailReplyTo || ""} onChange={e => updateSettings({ emailReplyTo: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Email Branding" description="Customize the look of outgoing emails." />
+          <SectionHeader title={translateUi(uiLanguage, "Email Branding")} description="Customize the look of outgoing emails." />
           <div className="space-y-5">
             <LogoUploader label="Email Header Logo" dims="300x80px, PNG" value={s.emailLogoUrl || ""} onChange={v => updateSettings({ emailLogoUrl: v })} />
             <ColorField label="Email Button Color" description="Primary button color in emails" value={s.emailButtonColor || ""} onChange={v => updateSettings({ emailButtonColor: v })} defaultColor="#143591" />
             <FieldGroup label="Email Footer Text" description="Shown at the bottom of every email">
-              <Textarea value={s.emailFooterText || ""} onChange={e => updateSettings({ emailFooterText: e.target.value })} className="rounded-xl min-h-[60px]" placeholder="Find & Study Educational Consulting&#10;Istanbul, Turkey" />
+              <Textarea value={s.emailFooterText || ""} onChange={e => updateSettings({ emailFooterText: e.target.value })} className="rounded-xl min-h-[60px]" placeholder={translateUi(uiLanguage, "Find & Study Educational Consulting&#10;Istanbul, Turkey")} />
             </FieldGroup>
             <FieldGroup label="Email Signature Block" description="Rich signature text appended to emails">
               <Textarea value={s.emailSignatureBlock || ""} onChange={e => updateSettings({ emailSignatureBlock: e.target.value })} className="rounded-xl min-h-[60px]" />
             </FieldGroup>
             <FieldGroup label="Disclaimer Text" description="Legal disclaimer at the bottom of emails">
-              <Textarea value={s.emailDisclaimerText || ""} onChange={e => updateSettings({ emailDisclaimerText: e.target.value })} className="rounded-xl min-h-[50px]" placeholder="This email and any attachments are confidential..." />
+              <Textarea value={s.emailDisclaimerText || ""} onChange={e => updateSettings({ emailDisclaimerText: e.target.value })} className="rounded-xl min-h-[50px]" placeholder={translateUi(uiLanguage, "This email and any attachments are confidential...")} />
             </FieldGroup>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Email Preview" description="How a branded email might look." />
+          <SectionHeader title={translateUi(uiLanguage, "Email Preview")} description="How a branded email might look." />
           <div className="max-w-md mx-auto rounded-xl border border-border/50 overflow-hidden bg-white dark:bg-gray-950">
             <div className="px-6 py-4 border-b border-border/30 text-center" style={{ backgroundColor: (s.emailButtonColor || "#143591") + "10" }}>
               {s.emailLogoUrl ? <img src={s.emailLogoUrl} className="max-h-10 mx-auto object-contain" alt="" /> : <p className="font-bold text-lg" style={{ color: s.emailButtonColor || "#143591" }}>{s.emailSenderName || "Your Company"}</p>}
             </div>
             <div className="px-6 py-5">
-              <p className="text-sm text-gray-800 dark:text-gray-200 mb-4">Hello,</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">This is a preview of how your branded emails will appear to recipients.</p>
+              <p className="text-sm text-gray-800 dark:text-gray-200 mb-4">{translateUi(uiLanguage, "Hello,")}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{translateUi(uiLanguage, "This is a preview of how your branded emails will appear to recipients.")}</p>
               <div className="text-center my-4">
-                <button className="px-6 py-2.5 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: s.emailButtonColor || "#143591" }}>View Details</button>
+                <button className="px-6 py-2.5 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: s.emailButtonColor || "#143591" }}>{translateUi(uiLanguage, "View Details")}</button>
               </div>
             </div>
             <div className="px-6 py-3 border-t border-border/30 bg-gray-50 dark:bg-gray-900">
@@ -1126,25 +1130,26 @@ export default function SettingsPage() {
   }
 
   function DocumentsTab() {
+  const { lang: uiLanguage } = useUiLanguage();
     const s = settings;
     return (
       <div className="space-y-6">
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="PDF / Document Branding" description="Customize the identity of generated PDFs and documents." />
+          <SectionHeader title={translateUi(uiLanguage, "PDF / Document Branding")} description="Customize the identity of generated PDFs and documents." />
           <div className="space-y-5">
             <LogoUploader label="PDF Logo" dims="300x80px, PNG/SVG" value={s.pdfLogoUrl || ""} onChange={v => updateSettings({ pdfLogoUrl: v })} />
             <div className="grid sm:grid-cols-2 gap-5">
               <FieldGroup label="Header Text" description="Displayed at the top of PDF documents">
-                <Input value={s.pdfHeaderText || ""} onChange={e => updateSettings({ pdfHeaderText: e.target.value })} placeholder="Find & Study Educational Consulting" className="rounded-xl" />
+                <Input value={s.pdfHeaderText || ""} onChange={e => updateSettings({ pdfHeaderText: e.target.value })} placeholder={translateUi(uiLanguage, "Find & Study Educational Consulting")} className="rounded-xl" />
               </FieldGroup>
               <FieldGroup label="Footer Text" description="Displayed at the bottom of every page">
-                <Input value={s.pdfFooterText || ""} onChange={e => updateSettings({ pdfFooterText: e.target.value })} placeholder="© 2025 Find & Study. All rights reserved." className="rounded-xl" />
+                <Input value={s.pdfFooterText || ""} onChange={e => updateSettings({ pdfFooterText: e.target.value })} placeholder={translateUi(uiLanguage, "© 2025 Find & Study. All rights reserved.")} className="rounded-xl" />
               </FieldGroup>
               <FieldGroup label="Watermark Text" description="Faint text overlaid on document pages">
-                <Input value={s.pdfWatermarkText || ""} onChange={e => updateSettings({ pdfWatermarkText: e.target.value })} placeholder="CONFIDENTIAL" className="rounded-xl" />
+                <Input value={s.pdfWatermarkText || ""} onChange={e => updateSettings({ pdfWatermarkText: e.target.value })} placeholder={translateUi(uiLanguage, "CONFIDENTIAL")} className="rounded-xl" />
               </FieldGroup>
               <FieldGroup label="Signature Label" description="Label above the signature line">
-                <Input value={s.pdfSignatureLabel || ""} onChange={e => updateSettings({ pdfSignatureLabel: e.target.value })} placeholder="Authorized Representative" className="rounded-xl" />
+                <Input value={s.pdfSignatureLabel || ""} onChange={e => updateSettings({ pdfSignatureLabel: e.target.value })} placeholder={translateUi(uiLanguage, "Authorized Representative")} className="rounded-xl" />
               </FieldGroup>
             </div>
             <div className="grid sm:grid-cols-2 gap-5">
@@ -1160,12 +1165,12 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Document Preview" description="How your branded documents may look." />
+          <SectionHeader title={translateUi(uiLanguage, "Document Preview")} description="How your branded documents may look." />
           <div className="max-w-sm mx-auto">
             <div className="rounded-xl border border-border/50 overflow-hidden bg-white dark:bg-gray-950 shadow-sm">
               <div className="h-2 w-full" style={{ backgroundColor: s.pdfPrimaryColor || "#143591" }} />
               <div className="px-5 py-4 flex items-center justify-between border-b border-border/30">
-                {s.pdfLogoUrl ? <img src={s.pdfLogoUrl} className="max-h-8 object-contain" alt="" /> : <p className="text-sm font-bold" style={{ color: s.pdfPrimaryColor || "#143591" }}>Company Logo</p>}
+                {s.pdfLogoUrl ? <img src={s.pdfLogoUrl} className="max-h-8 object-contain" alt="" /> : <p className="text-sm font-bold" style={{ color: s.pdfPrimaryColor || "#143591" }}>{translateUi(uiLanguage, "Company Logo")}</p>}
                 <p className="text-[10px] text-muted-foreground">{s.pdfHeaderText || "Header Text"}</p>
               </div>
               <div className="px-5 py-6">
@@ -1215,23 +1220,24 @@ export default function SettingsPage() {
   }
 
   function AdvancedTab() {
+  const { lang: uiLanguage } = useUiLanguage();
     const s = settings;
     const isSuperAdmin = user?.role === "super_admin";
     return (
       <div className="space-y-6">
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Site Configuration" description="Domain, sitemap, and robots settings." />
+          <SectionHeader title={translateUi(uiLanguage, "Site Configuration")} description="Domain, sitemap, and robots settings." />
           <div className="grid sm:grid-cols-2 gap-5">
             <FieldGroup label="Canonical Domain"><Input value={s.canonicalBaseUrl || ""} onChange={e => updateSettings({ canonicalBaseUrl: e.target.value })} placeholder="https://findandstudy.com" className="rounded-xl" /></FieldGroup>
             <FieldGroup label="Sitemap URL"><Input value={s.sitemapUrl || ""} onChange={e => updateSettings({ sitemapUrl: e.target.value })} placeholder="/sitemap.xml" className="rounded-xl" /></FieldGroup>
             <FieldGroup label="robots.txt Content" description="Custom robots.txt rules" className="sm:col-span-2">
-              <Textarea value={s.robotsTxtContent || ""} onChange={e => updateSettings({ robotsTxtContent: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" placeholder="User-agent: *&#10;Allow: /" />
+              <Textarea value={s.robotsTxtContent || ""} onChange={e => updateSettings({ robotsTxtContent: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" placeholder={translateUi(uiLanguage, "User-agent: *&#10;Allow: /")} />
             </FieldGroup>
           </div>
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Tracking & Widgets" description="Third-party integrations and widget configurations." />
+          <SectionHeader title={translateUi(uiLanguage, "Tracking & Widgets")} description="Third-party integrations and widget configurations." />
           <div className="grid sm:grid-cols-2 gap-5">
             <FieldGroup label="LinkedIn Insight Tag"><Input value={s.linkedinInsightTag || ""} onChange={e => updateSettings({ linkedinInsightTag: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
             <FieldGroup label="Microsoft Clarity / Hotjar ID"><Input value={s.clarityId || ""} onChange={e => updateSettings({ clarityId: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
@@ -1245,16 +1251,16 @@ export default function SettingsPage() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <SectionHeader title="Custom Scripts" description="Inject custom code into the page. Use with caution — incorrect scripts may break the application." />
+                <SectionHeader title={translateUi(uiLanguage, "Custom Scripts")} description="Inject custom code into the page. Use with caution — incorrect scripts may break the application." />
                 <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 mb-4">
-                  <p className="text-xs text-amber-700 dark:text-amber-400">Only Super Admins can edit these fields. Malicious or broken scripts can compromise security and functionality.</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400">{translateUi(uiLanguage, "Only Super Admins can edit these fields. Malicious or broken scripts can compromise security and functionality.")}</p>
                 </div>
                 <div className="space-y-5">
                   <FieldGroup label="Custom Head Script" description="Injected before </head> — for analytics, fonts, etc.">
-                    <Textarea value={s.customHeadScript || ""} onChange={e => updateSettings({ customHeadScript: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" placeholder="<!-- Google Tag Manager -->" />
+                    <Textarea value={s.customHeadScript || ""} onChange={e => updateSettings({ customHeadScript: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" placeholder={translateUi(uiLanguage, "<!-- Google Tag Manager -->")} />
                   </FieldGroup>
                   <FieldGroup label="Custom Body-End Script" description="Injected before </body> — for chat widgets, etc.">
-                    <Textarea value={s.customBodyEndScript || ""} onChange={e => updateSettings({ customBodyEndScript: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" placeholder="<!-- Live chat widget -->" />
+                    <Textarea value={s.customBodyEndScript || ""} onChange={e => updateSettings({ customBodyEndScript: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" placeholder={translateUi(uiLanguage, "<!-- Live chat widget -->")} />
                   </FieldGroup>
                   <FieldGroup label="Live Chat Script" description="Full live chat embed code">
                     <Textarea value={s.liveChatScript || ""} onChange={e => updateSettings({ liveChatScript: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" />
@@ -1341,6 +1347,7 @@ export default function SettingsPage() {
 }
 
 function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const leadPipeline = usePipelineStages("lead", true);
   const applicationPipeline = usePipelineStages("application", true);
   const studentPipeline = usePipelineStages("student", true);
@@ -1391,7 +1398,7 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
     <div className="space-y-6">
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <SectionHeader
-          title="Lead → Student Auto-Convert"
+          title={translateUi(uiLanguage, "Lead → Student Auto-Convert")}
           description="Control what happens when an applicant completes the public Apply form or the embed widget. When enabled, the lead is moved to 'converted' and the linked student's status is set to the stage you choose."
         />
         <div className="grid gap-5 sm:grid-cols-[1fr_240px] items-start">
@@ -1402,10 +1409,8 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
               disabled={!autoConvertLoaded || savingAutoConvert}
             />
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm">Auto-convert on full submit</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Public Apply and Embed widget submissions automatically convert the lead and create an active student. Disable to keep new submissions in the leads pipeline for manual review.
-              </p>
+              <p className="font-semibold text-sm">{translateUi(uiLanguage, "Auto-convert on full submit")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5"> {translateUi(uiLanguage, "Public Apply and Embed widget submissions automatically convert the lead and create an active student. Disable to keep new submissions in the leads pipeline for manual review.")} </p>
             </div>
           </div>
           <FieldGroup label="Initial student stage" description="Used as the student's status when auto-convert fires.">
@@ -1428,7 +1433,7 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
       </Card>
 
       <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <SectionHeader title="Pipeline Stages" description="Configure the pipeline stages for leads, applications, and students. Changes here apply to all users — staff, agents, and sub-agents. On the Application pipeline you can also map each stage to a student status — when the application reaches that stage, the linked student's status is updated automatically." />
+        <SectionHeader title={translateUi(uiLanguage, "Pipeline Stages")} description="Configure the pipeline stages for leads, applications, and students. Changes here apply to all users — staff, agents, and sub-agents. On the Application pipeline you can also map each stage to a student status — when the application reaches that stage, the linked student's status is updated automatically." />
         <div className="space-y-4">
           {pipelines.map(({ type, label, description, pipeline }) => (
             <div key={type} className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:border-primary/20 transition-colors">
@@ -1451,8 +1456,7 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
                 </div>
               </div>
               <Button variant="outline" size="sm" className="shrink-0 ml-4" onClick={() => setEditingType(type)}>
-                <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit
-              </Button>
+                <Pencil className="w-3.5 h-3.5 mr-1.5" /> {translateUi(uiLanguage, "Edit")} </Button>
             </div>
           ))}
         </div>
@@ -1487,6 +1491,7 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
 type YearDetail = { year: number; startDate: string; endDate: string };
 
 function YearsManagement() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const [details, setDetails] = useState<YearDetail[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1585,15 +1590,15 @@ function YearsManagement() {
   return (
     <Card className="border-none shadow-lg shadow-black/5 p-6">
       <SectionHeader
-        title="Academic Years"
+        title={translateUi(uiLanguage, "Academic Years")}
         description="Define each academic year and its season window (start & end dates). The system uses today's date to decide which year is the active season — so records auto-tag correctly even when the season doesn't start on January 1."
       />
 
       <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4 mb-6">
-        <p className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">Add a new year</p>
+        <p className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">{translateUi(uiLanguage, "Add a new year")}</p>
         <div className="grid grid-cols-1 md:grid-cols-[140px_1fr_1fr_auto] gap-3 items-end">
           <div>
-            <label className="text-[11px] font-medium text-muted-foreground block mb-1">Year</label>
+            <label className="text-[11px] font-medium text-muted-foreground block mb-1">{translateUi(uiLanguage, "Year")}</label>
             <Input
               type="number"
               value={newYear}
@@ -1605,31 +1610,29 @@ function YearsManagement() {
             />
           </div>
           <div>
-            <label className="text-[11px] font-medium text-muted-foreground block mb-1">Season starts</label>
+            <label className="text-[11px] font-medium text-muted-foreground block mb-1">{translateUi(uiLanguage, "Season starts")}</label>
             <Input
               type="date"
               value={newStart}
               onChange={e => setNewStart(e.target.value)}
               className="rounded-xl"
-              placeholder="YYYY-MM-DD"
+              placeholder={translateUi(uiLanguage, "YYYY-MM-DD")}
             />
           </div>
           <div>
-            <label className="text-[11px] font-medium text-muted-foreground block mb-1">Season ends</label>
+            <label className="text-[11px] font-medium text-muted-foreground block mb-1">{translateUi(uiLanguage, "Season ends")}</label>
             <Input
               type="date"
               value={newEnd}
               onChange={e => setNewEnd(e.target.value)}
               className="rounded-xl"
-              placeholder="YYYY-MM-DD"
+              placeholder={translateUi(uiLanguage, "YYYY-MM-DD")}
             />
           </div>
           <Button onClick={handleAdd} disabled={saving || !newYear.trim()} className="rounded-xl gap-2 shrink-0 h-10">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Add
-          </Button>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} {translateUi(uiLanguage, "Add")} </Button>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-2">If you leave dates empty we default to Jan 1 → Dec 31 of the year you entered.</p>
+        <p className="text-[11px] text-muted-foreground mt-2">{translateUi(uiLanguage, "If you leave dates empty we default to Jan 1 → Dec 31 of the year you entered.")}</p>
       </div>
 
       <div className="space-y-2">
@@ -1642,7 +1645,7 @@ function YearsManagement() {
                 <CalendarDays className={`w-4 h-4 ${isActive ? "text-emerald-600" : "text-primary"}`} />
                 <span className="text-sm font-bold text-foreground">{d.year}</span>
                 {isActive && (
-                  <Badge className="text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 border-0 px-1.5 py-0">Active</Badge>
+                  <Badge className="text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 border-0 px-1.5 py-0">{translateUi(uiLanguage, "Active")}</Badge>
                 )}
               </div>
               <Input
@@ -1663,7 +1666,7 @@ function YearsManagement() {
                 onClick={() => handleRemove(d.year)}
                 disabled={saving || details.length <= 1}
                 className="w-8 h-8 rounded-lg hover:bg-destructive/10 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30 justify-self-end"
-                title="Remove year"
+                title={translateUi(uiLanguage, "Remove year")}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1697,6 +1700,7 @@ const PRESET_COLORS = [
 ];
 
 function QuickLinksTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -1828,13 +1832,10 @@ function QuickLinksTab() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h3 className="font-display font-bold text-lg">{t("settingsPage.quickLinks")}</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Manage custom shortcut buttons that appear on user dashboards.
-            </p>
+            <p className="text-sm text-muted-foreground mt-1"> {translateUi(uiLanguage, "Manage custom shortcut buttons that appear on user dashboards.")} </p>
           </div>
           <Button onClick={openNew} className="gap-2">
-            <Plus className="w-4 h-4" /> Add Link
-          </Button>
+            <Plus className="w-4 h-4" /> {translateUi(uiLanguage, "Add Link")} </Button>
         </div>
 
         {showForm && (
@@ -1846,7 +1847,7 @@ function QuickLinksTab() {
                 <Input
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="e.g. Dorm Booking"
+                  placeholder={translateUi(uiLanguage, "e.g. Dorm Booking")}
                 />
               </div>
               <div>
@@ -1929,7 +1930,7 @@ function QuickLinksTab() {
               </div>
             </div>
             <div className="flex items-center gap-2 justify-end">
-              <Button variant="ghost" onClick={() => { setShowForm(false); setEditingId(null); }}>Cancel</Button>
+              <Button variant="ghost" onClick={() => { setShowForm(false); setEditingId(null); }}>{translateUi(uiLanguage, "Cancel")}</Button>
               <Button onClick={handleSave} disabled={saving} className="gap-2">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {editingId ? "Update" : "Create"}
@@ -1945,8 +1946,8 @@ function QuickLinksTab() {
         ) : links.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <LinkIcon className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p className="font-medium">No quick links yet</p>
-            <p className="text-xs mt-1">Add links to external sites like dorm booking, insurance portals, etc.</p>
+            <p className="font-medium">{translateUi(uiLanguage, "No quick links yet")}</p>
+            <p className="text-xs mt-1">{translateUi(uiLanguage, "Add links to external sites like dorm booking, insurance portals, etc.")}</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -2002,7 +2003,7 @@ function QuickLinksTab() {
                   </Button>
                   {deleteConfirm === link.id ? (
                     <div className="flex items-center gap-1">
-                      <span className="text-[10px] text-destructive font-medium">Delete?</span>
+                      <span className="text-[10px] text-destructive font-medium">{translateUi(uiLanguage, "Delete?")}</span>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(link.id)}>
                         <Check className="w-3 h-3" />
                       </Button>
@@ -2031,10 +2032,10 @@ function QuickLinksTab() {
         <div className="flex items-start gap-3">
           <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
           <div className="text-xs text-muted-foreground space-y-1">
-            <p className="font-medium text-foreground text-sm">How quick links work</p>
-            <p>Quick links appear as shortcut buttons on user dashboards. Each link opens in a new tab.</p>
-            <p>Choose a target to control which users see each link: Agent, Sub Agent, Staff, or Student.</p>
-            <p>Changes are reflected immediately on user dashboards — no restart needed.</p>
+            <p className="font-medium text-foreground text-sm">{translateUi(uiLanguage, "How quick links work")}</p>
+            <p>{translateUi(uiLanguage, "Quick links appear as shortcut buttons on user dashboards. Each link opens in a new tab.")}</p>
+            <p>{translateUi(uiLanguage, "Choose a target to control which users see each link: Agent, Sub Agent, Staff, or Student.")}</p>
+            <p>{translateUi(uiLanguage, "Changes are reflected immediately on user dashboards — no restart needed.")}</p>
           </div>
         </div>
       </Card>
@@ -2057,6 +2058,7 @@ type LeadFormWidget = {
 };
 
 function WebToLeadTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -2104,10 +2106,8 @@ function WebToLeadTab() {
       <Card className="border shadow-sm p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
-            <h3 className="font-display font-semibold text-base mb-1">Web to Lead Formları</h3>
-            <p className="text-sm text-muted-foreground">
-              Web sitelerinize gömebileceğiniz form widget'ları oluşturun. Her form için ayrı bir kod parçası alır, hangi sayfadan geldiğini ve UTM bilgilerini lead detayında görürsünüz.
-            </p>
+            <h3 className="font-display font-semibold text-base mb-1">{translateUi(uiLanguage, "Web to Lead Formları")}</h3>
+            <p className="text-sm text-muted-foreground"> {translateUi(uiLanguage, "Web sitelerinize gömebileceğiniz form widget'ları oluşturun. Her form için ayrı bir kod parçası alır, hangi sayfadan geldiğini ve UTM bilgilerini lead detayında görürsünüz.")} </p>
           </div>
           {isAdmin && (
             <Button onClick={() => setCreating(true)} className="gap-1.5 shrink-0">
@@ -2201,6 +2201,7 @@ function slugify(s: string) {
 }
 
 function LeadFormWidgetDialog({ widget, onClose, onSaved }: { widget: LeadFormWidget | null; onClose: () => void; onSaved: () => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const isEdit = !!widget;
   const [name, setName] = useState(widget?.name || "");
@@ -2253,46 +2254,46 @@ function LeadFormWidgetDialog({ widget, onClose, onSaved }: { widget: LeadFormWi
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div>
-            <Label className="text-xs font-semibold mb-1.5 block">Form Adı *</Label>
+            <Label className="text-xs font-semibold mb-1.5 block">{translateUi(uiLanguage, "Form Adı *")}</Label>
             <Input
               value={name}
               onChange={e => {
                 setName(e.target.value);
                 if (!slugTouched) setSlug(slugify(e.target.value));
               }}
-              placeholder="Örn: Anasayfa İletişim Formu"
+              placeholder={translateUi(uiLanguage, "Örn: Anasayfa İletişim Formu")}
             />
           </div>
           <div>
-            <Label className="text-xs font-semibold mb-1.5 block">Slug *</Label>
+            <Label className="text-xs font-semibold mb-1.5 block">{translateUi(uiLanguage, "Slug *")}</Label>
             <Input
               value={slug}
               onChange={e => { setSlug(e.target.value); setSlugTouched(true); }}
-              placeholder="anasayfa-iletisim"
+              placeholder={translateUi(uiLanguage, "anasayfa-iletisim")}
               className="font-mono text-xs"
               disabled={isEdit}
             />
-            <p className="text-[11px] text-muted-foreground mt-1">Lead'in source alanı: <code>embed:{slug || "slug"}</code></p>
+            <p className="text-[11px] text-muted-foreground mt-1">{translateUi(uiLanguage, "Lead'in source alanı:")} <code>{translateUi(uiLanguage, "embed:")}{slug || "slug"}</code></p>
           </div>
           <div>
-            <Label className="text-xs font-semibold mb-1.5 block">Ana Renk</Label>
+            <Label className="text-xs font-semibold mb-1.5 block">{translateUi(uiLanguage, "Ana Renk")}</Label>
             <div className="flex gap-2 items-center">
               <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="w-10 h-10 rounded cursor-pointer border" />
               <Input value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="flex-1 font-mono text-xs" />
             </div>
           </div>
           <div>
-            <Label className="text-xs font-semibold mb-1.5 block">İzinli Domainler</Label>
+            <Label className="text-xs font-semibold mb-1.5 block">{translateUi(uiLanguage, "İzinli Domainler")}</Label>
             <Input
               value={domains}
               onChange={e => setDomains(e.target.value)}
-              placeholder="örn: example.com, masterstudyinturkey.com"
+              placeholder={translateUi(uiLanguage, "örn: example.com, masterstudyinturkey.com")}
             />
-            <p className="text-[11px] text-muted-foreground mt-1">Virgülle ayırın. Boş bırakırsanız her domainden çalışır.</p>
+            <p className="text-[11px] text-muted-foreground mt-1">{translateUi(uiLanguage, "Virgülle ayırın. Boş bırakırsanız her domainden çalışır.")}</p>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>İptal</Button>
+          <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "İptal")}</Button>
           <Button onClick={handleSave} disabled={saving}>{saving ? "Kaydediliyor..." : (isEdit ? "Güncelle" : "Oluştur")}</Button>
         </DialogFooter>
       </DialogContent>
@@ -2301,6 +2302,7 @@ function LeadFormWidgetDialog({ widget, onClose, onSaved }: { widget: LeadFormWi
 }
 
 function LeadFormCodeDialog({ widget, onClose }: { widget: LeadFormWidget; onClose: () => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const apiBase = `${window.location.origin}/api`;
@@ -2321,38 +2323,36 @@ function LeadFormCodeDialog({ widget, onClose }: { widget: LeadFormWidget; onClo
     <Dialog open={true} onOpenChange={() => onClose()}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Embed Kodu: {widget.name}</DialogTitle>
+          <DialogTitle>{translateUi(uiLanguage, "Embed Kodu:")} {widget.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <Label className="text-xs font-semibold">JavaScript Embed (önerilen — otomatik boyutlanır)</Label>
+              <Label className="text-xs font-semibold">{translateUi(uiLanguage, "JavaScript Embed (önerilen — otomatik boyutlanır)")}</Label>
               <Button size="sm" variant="secondary" onClick={() => copy(scriptCode)} className="gap-1.5 text-xs h-7">
-                {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />} Kopyala
-              </Button>
+                {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />} {translateUi(uiLanguage, "Kopyala")} </Button>
             </div>
             <pre className="bg-secondary/50 border rounded-xl p-3 text-xs whitespace-pre-wrap break-all font-mono">{scriptCode}</pre>
           </div>
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <Label className="text-xs font-semibold">Iframe (alternatif)</Label>
+              <Label className="text-xs font-semibold">{translateUi(uiLanguage, "Iframe (alternatif)")}</Label>
               <Button size="sm" variant="secondary" onClick={() => copy(iframeCode)} className="gap-1.5 text-xs h-7">
-                <Copy className="w-3 h-3" /> Kopyala
-              </Button>
+                <Copy className="w-3 h-3" /> {translateUi(uiLanguage, "Kopyala")} </Button>
             </div>
             <pre className="bg-secondary/50 border rounded-xl p-3 text-xs whitespace-pre-wrap break-all font-mono">{iframeCode}</pre>
           </div>
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900">
-            <p className="font-semibold mb-1">Nasıl çalışır?</p>
+            <p className="font-semibold mb-1">{translateUi(uiLanguage, "Nasıl çalışır?")}</p>
             <ul className="list-disc list-inside space-y-0.5 text-blue-800">
-              <li>Bu kodu sitenizin herhangi bir sayfasına yapıştırın (WordPress için Custom HTML bloğu).</li>
-              <li>Form gönderildiğinde lead otomatik olarak CRM'e düşer ve <code className="bg-white/60 px-1 rounded">embed:{widget.slug}</code> kaynağıyla işaretlenir.</li>
-              <li>Sayfa URL'si ve UTM parametreleri (utm_source, utm_medium, utm_campaign, ...) lead detayında görünür.</li>
+              <li>{translateUi(uiLanguage, "Bu kodu sitenizin herhangi bir sayfasına yapıştırın (WordPress için Custom HTML bloğu).")}</li>
+              <li>{translateUi(uiLanguage, "Form gönderildiğinde lead otomatik olarak CRM'e düşer ve")} <code className="bg-white/60 px-1 rounded">{translateUi(uiLanguage, "embed:")}{widget.slug}</code> {translateUi(uiLanguage, "kaynağıyla işaretlenir.")}</li>
+              <li>{translateUi(uiLanguage, "Sayfa URL'si ve UTM parametreleri (utm_source, utm_medium, utm_campaign, ...) lead detayında görünür.")}</li>
             </ul>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Kapat</Button>
+          <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Kapat")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -2370,7 +2370,7 @@ function _DeprecatedWebToLeadTab() {
     <Card className="p-4 bg-blue-50 border-blue-200 mb-6">
       <div className="flex items-start gap-3">
         <Info className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-        <p className="text-sm text-blue-800">Full form management is available in <button type="button" onClick={() => setLocation("/admin/website/forms")} className="font-semibold underline cursor-pointer">Website &gt; Forms</button>. This page provides a quick embed snippet for external sites.</p>
+        <p className="text-sm text-blue-800"><UiText text={"Full form management is available in"} /> <button type="button" onClick={() => setLocation("/admin/website/forms")} className="font-semibold underline cursor-pointer"><UiText text={"Website > Forms"} /></button><UiText text={". This page provides a quick embed snippet for external sites."} /></p>
       </div>
     </Card>
   );
@@ -2432,9 +2432,7 @@ function _DeprecatedWebToLeadTab() {
           </div>
           <h3 className="font-display font-semibold text-base">{t("settingsPage.webToLeadForm")}</h3>
         </div>
-        <p className="text-sm text-muted-foreground mb-5">
-          Customize the lead capture form for your company website. The generated HTML code can be copied and pasted into any website.
-        </p>
+        <p className="text-sm text-muted-foreground mb-5"> <UiText text={"Customize the lead capture form for your company website. The generated HTML code can be copied and pasted into any website."} /> </p>
 
         <div className="grid sm:grid-cols-2 gap-4">
           <div>

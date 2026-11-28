@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { whilePageVisible } from "@/lib/visibleSubscription";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -81,6 +82,7 @@ function resolveActionUrl(url: string | null, role: string | undefined): string 
 }
 
 export function NotificationCenter() {
+  const { lang: uiLanguage } = useUiLanguage();
   const [, setLocation] = useLocation();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -218,7 +220,7 @@ export function NotificationCenter() {
             <div className="p-4 border-b border-border/50 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-sm">Notifications</h3>
+                <h3 className="font-semibold text-sm">{translateUi(uiLanguage, "Notifications")}</h3>
                 {importantUnreadCount > 0 && (
                   <Badge className="bg-red-500 text-white text-[10px] h-5">{importantUnreadCount}</Badge>
                 )}
@@ -226,8 +228,7 @@ export function NotificationCenter() {
               <div className="flex gap-1">
                 {allUnreadCount > 0 && (
                   <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={markAllRead}>
-                    <CheckCheck className="w-3 h-3" /> Mark all read
-                  </Button>
+                    <CheckCheck className="w-3 h-3" /> {translateUi(uiLanguage, "Mark all read")} </Button>
                 )}
                 <Button size="icon" variant="ghost" className="w-7 h-7" onClick={() => setOpen(false)}>
                   <X className="w-3.5 h-3.5" />
@@ -241,18 +242,14 @@ export function NotificationCenter() {
                 variant={view === "important" ? "default" : "ghost"}
                 className="h-7 text-xs gap-1.5"
                 onClick={() => setView("important")}
-              >
-                Important
-                {importantUnreadCount > 0 && <Badge variant="secondary" className="h-4 px-1.5 text-[9px]">{importantUnreadCount}</Badge>}
+              > {translateUi(uiLanguage, "Important")} {importantUnreadCount > 0 && <Badge variant="secondary" className="h-4 px-1.5 text-[9px]">{importantUnreadCount}</Badge>}
               </Button>
               <Button
                 size="sm"
                 variant={view === "all" ? "default" : "ghost"}
                 className="h-7 text-xs gap-1.5"
                 onClick={() => setView("all")}
-              >
-                All
-                {allUnreadCount > 0 && <Badge variant="secondary" className="h-4 px-1.5 text-[9px]">{allUnreadCount}</Badge>}
+              > {translateUi(uiLanguage, "All")} {allUnreadCount > 0 && <Badge variant="secondary" className="h-4 px-1.5 text-[9px]">{allUnreadCount}</Badge>}
               </Button>
             </div>
 

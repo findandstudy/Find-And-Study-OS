@@ -1,3 +1,4 @@
+import { translateUi } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -85,7 +86,7 @@ type PersonaCapability = {
 
 export default function AiActionQueue() {
   const { t, lang } = useI18n();
-  const copy = (english: string, turkish: string) => lang === "tr" ? turkish : english;
+  const copy = (english: string, turkish: string) => translateUi(lang, english, turkish);
   const { toast } = useToast();
   const [items, setItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);

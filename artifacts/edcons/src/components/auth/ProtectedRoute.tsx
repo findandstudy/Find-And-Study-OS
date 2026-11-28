@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -19,6 +20,7 @@ interface Props {
 }
 
 function PendingScreen() {
+  const { lang: uiLanguage } = useUiLanguage();
   const [, setLocation] = useLocation();
   useSeo({ title: "Account Pending", noindex: true });
   return (
@@ -27,20 +29,16 @@ function PendingScreen() {
         <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center mx-auto mb-4">
           <Clock className="w-8 h-8 text-amber-600 dark:text-amber-400" />
         </div>
-        <h1 className="text-2xl font-bold text-foreground mb-2">Account Pending Activation</h1>
-        <p className="text-muted-foreground mb-6">
-          Your account has been registered and is awaiting approval from an administrator.
-          Please contact your team to get your account activated.
-        </p>
-        <Button variant="outline" onClick={() => setLocation("/")}>
-          Back to Home
-        </Button>
+        <h1 className="text-2xl font-bold text-foreground mb-2">{translateUi(uiLanguage, "Account Pending Activation")}</h1>
+        <p className="text-muted-foreground mb-6"> {translateUi(uiLanguage, "Your account has been registered and is awaiting approval from an administrator. Please contact your team to get your account activated.")} </p>
+        <Button variant="outline" onClick={() => setLocation("/")}> {translateUi(uiLanguage, "Back to Home")} </Button>
       </div>
     </div>
   );
 }
 
 function AccessDeniedScreen() {
+  const { lang: uiLanguage } = useUiLanguage();
   useSeo({ title: "Access Denied", noindex: true });
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-background">
@@ -48,13 +46,9 @@ function AccessDeniedScreen() {
         <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
           <ShieldX className="w-8 h-8 text-destructive" />
         </div>
-        <h1 className="text-2xl font-bold text-foreground mb-2">Access Denied</h1>
-        <p className="text-muted-foreground mb-6">
-          You do not have permission to view this page. Contact your administrator if you believe this is an error.
-        </p>
-        <Button variant="outline" onClick={() => window.history.back()}>
-          Go Back
-        </Button>
+        <h1 className="text-2xl font-bold text-foreground mb-2">{translateUi(uiLanguage, "Access Denied")}</h1>
+        <p className="text-muted-foreground mb-6"> {translateUi(uiLanguage, "You do not have permission to view this page. Contact your administrator if you believe this is an error.")} </p>
+        <Button variant="outline" onClick={() => window.history.back()}> {translateUi(uiLanguage, "Go Back")} </Button>
       </div>
     </div>
   );

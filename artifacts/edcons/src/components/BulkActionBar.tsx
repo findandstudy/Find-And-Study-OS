@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Trash2, UserPlus, ArrowRightLeft, MessageCircle } from "lucide-react";
@@ -41,6 +42,7 @@ export function BulkActionBar({
   entityLabel = "items",
   moveLabel = "Move Stage",
 }: BulkActionBarProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const [assignOpen, setAssignOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
 
@@ -49,8 +51,7 @@ export function BulkActionBar({
   return (
     <div className="flex items-center gap-2">
       <span className="text-sm font-medium text-muted-foreground mr-1">
-        {selectedCount} selected
-      </span>
+        {selectedCount} {translateUi(uiLanguage, "selected")} </span>
 
       {onDelete && (
         <Button variant="destructive" size="sm" className="rounded-full h-8 gap-1.5" onClick={onDelete}>
@@ -65,19 +66,17 @@ export function BulkActionBar({
           className="rounded-full h-8 gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
           onClick={onSendMessage}
         >
-          <MessageCircle className="w-3.5 h-3.5" /> Send Template
-        </Button>
+          <MessageCircle className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Send Template")} </Button>
       )}
 
       {staffUsers.length > 0 && (
         <Popover open={assignOpen} onOpenChange={setAssignOpen}>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50">
-              <UserPlus className="w-3.5 h-3.5" /> Assign
-            </Button>
+              <UserPlus className="w-3.5 h-3.5" /> {translateUi(uiLanguage, "Assign")} </Button>
           </PopoverTrigger>
           <PopoverContent className="w-56 p-2" align="end">
-            <p className="text-xs text-muted-foreground mb-2 px-1">Assign {selectedCount} {entityLabel} to:</p>
+            <p className="text-xs text-muted-foreground mb-2 px-1">{translateUi(uiLanguage, "Assign")} {selectedCount} {entityLabel} {translateUi(uiLanguage, "to:")}</p>
             <div className="max-h-48 overflow-y-auto space-y-0.5">
               {staffUsers.map(u => (
                 <button
@@ -101,7 +100,7 @@ export function BulkActionBar({
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-56 p-2" align="end">
-            <p className="text-xs text-muted-foreground mb-2 px-1">{moveLabel} for {selectedCount} {entityLabel}:</p>
+            <p className="text-xs text-muted-foreground mb-2 px-1">{moveLabel} {translateUi(uiLanguage, "for")} {selectedCount} {entityLabel}:</p>
             <div className="max-h-48 overflow-y-auto space-y-0.5">
               {stages.map(s => (
                 <button

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useMemo, useRef, startTransition } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -65,6 +66,7 @@ function describeAuthError(status: number, data: any, t: (k: string) => string):
 type Tab = "login" | "register" | "verify" | "set-password" | "forgot-password";
 
 export default function Login() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { user, isLoading } = useAuth(false);
   const { settings, resolvedTheme } = useTheme();
   const { t, lang, setLang, localePath, isRTL } = useI18n();
@@ -471,7 +473,7 @@ export default function Login() {
             type="button"
             onClick={() => setLangOpen(!langOpen)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-secondary/80 transition-colors text-sm font-medium"
-            aria-label="Select language"
+            aria-label={translateUi(uiLanguage, "Select language")}
           >
             <CountryFlag code={LANGUAGE_COUNTRY_CODES[lang]} size="sm" />
             <span className="text-foreground">{LANGUAGE_META[lang].code.toUpperCase()}</span>
@@ -535,7 +537,7 @@ export default function Login() {
           {tab !== "verify" && tab !== "set-password" && tab !== "forgot-password" && (
             <div className="flex rounded-xl bg-secondary/50 p-1 mb-8">
               <button
-                aria-label="Login tab"
+                aria-label={translateUi(uiLanguage, "Login tab")}
                 onClick={() => { setTab("login"); setError(""); }}
                 className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${tab === "login" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
@@ -571,7 +573,7 @@ export default function Login() {
                       type="email"
                       value={loginForm.email}
                       onChange={e => setLoginForm(f => ({ ...f, email: e.target.value }))}
-                      placeholder="you@example.com"
+                      placeholder={translateUi(uiLanguage, "you@example.com")}
                       className="rounded-xl h-12"
                       required
                       autoComplete="email"
@@ -641,7 +643,7 @@ export default function Login() {
                       <Input
                         value={registerForm.firstName}
                         onChange={e => setRegisterForm(f => ({ ...f, firstName: toLatinUpper(e.target.value) }))}
-                        placeholder="John"
+                        placeholder={translateUi(uiLanguage, "John")}
                         className="rounded-xl h-11"
                         required
                       />
@@ -651,7 +653,7 @@ export default function Login() {
                       <Input
                         value={registerForm.lastName}
                         onChange={e => setRegisterForm(f => ({ ...f, lastName: toLatinUpper(e.target.value) }))}
-                        placeholder="Doe"
+                        placeholder={translateUi(uiLanguage, "Doe")}
                         className="rounded-xl h-11"
                         required
                       />
@@ -663,7 +665,7 @@ export default function Login() {
                       type="email"
                       value={registerForm.email}
                       onChange={e => setRegisterForm(f => ({ ...f, email: e.target.value }))}
-                      placeholder="you@example.com"
+                      placeholder={translateUi(uiLanguage, "you@example.com")}
                       className="rounded-xl h-11"
                       required
                     />
@@ -832,7 +834,7 @@ export default function Login() {
                           type="email"
                           value={forgotEmail}
                           onChange={e => setForgotEmail(e.target.value)}
-                          placeholder="you@example.com"
+                          placeholder={translateUi(uiLanguage, "you@example.com")}
                           className="rounded-xl h-12"
                           required
                           autoFocus

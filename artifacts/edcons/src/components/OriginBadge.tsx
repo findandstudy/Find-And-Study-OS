@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { Home, Briefcase, Users } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -75,6 +76,7 @@ export function OriginSection({
   originLeadId?: number | null;
   originStudentId?: number | null;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   if (!originType) return null;
 
   const config = ORIGIN_CONFIG[originType as OriginType];
@@ -94,10 +96,10 @@ export function OriginSection({
         )}
       </div>
       {originLeadId && (
-        <p className="text-xs text-muted-foreground">Converted from Lead #{originLeadId}</p>
+        <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Converted from Lead #")}{originLeadId}</p>
       )}
       {originStudentId && (
-        <p className="text-xs text-muted-foreground">Inherited from Student #{originStudentId}</p>
+        <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Inherited from Student #")}{originStudentId}</p>
       )}
     </div>
   );

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -408,6 +409,7 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
   setConfirmed: (b: boolean) => void;
   error: string;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -544,7 +546,7 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
               onChange={e => handleFile(e.target.files?.[0])} />
             {uploadedUrl ? (
               <>
-                <img src={uploadedUrl} alt="İmza" className="max-h-full max-w-full object-contain p-2" />
+                <img src={uploadedUrl} alt={translateUi(uiLanguage, "İmza")} className="max-h-full max-w-full object-contain p-2" />
                 <button type="button" onClick={clearUpload} className="absolute top-2 right-2 text-xs text-muted-foreground flex items-center gap-1 bg-white/80 px-2 py-1 rounded">
                   <X className="w-3 h-3" /> {t("agentContract.removeSignature")}
                 </button>

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
@@ -142,6 +143,7 @@ function parsePhoneCode(fullPhone: string): { phoneCode: string; phone: string }
 }
 
 export default function AgentSubAgents() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, isRTL } = useI18n();
   const { user } = useAuth(true);
   const { toast } = useToast();
@@ -604,7 +606,7 @@ export default function AgentSubAgents() {
               <div className="relative w-full h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
                 {form.logoUrl ? (
                   <>
-                    <img src={form.logoUrl} alt="Sub Agent Logo" className="max-h-16 max-w-full object-contain" />
+                    <img src={form.logoUrl} alt={translateUi(uiLanguage, "Sub Agent Logo")} className="max-h-16 max-w-full object-contain" />
                     <button onClick={() => setForm(f => ({ ...f, logoUrl: "" }))} className="absolute top-2 right-2 w-6 h-6 rounded-full bg-destructive/90 text-white flex items-center justify-center hover:bg-destructive">
                       <X className="w-3 h-3" />
                     </button>
@@ -687,7 +689,7 @@ export default function AgentSubAgents() {
               <div className="relative w-full h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
                 {form.logoUrl ? (
                   <>
-                    <img src={form.logoUrl} alt="Sub Agent Logo" className="max-h-16 max-w-full object-contain" />
+                    <img src={form.logoUrl} alt={translateUi(uiLanguage, "Sub Agent Logo")} className="max-h-16 max-w-full object-contain" />
                     <button onClick={() => setForm(f => ({ ...f, logoUrl: "" }))} className="absolute top-2 right-2 w-6 h-6 rounded-full bg-destructive/90 text-white flex items-center justify-center hover:bg-destructive">
                       <X className="w-3 h-3" />
                     </button>

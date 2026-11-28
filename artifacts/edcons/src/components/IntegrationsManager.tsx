@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useRef } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
@@ -327,6 +328,7 @@ function namedAnthropicDef(data: IntegrationData): IntegrationDef {
 }
 
 export function IntegrationsManager() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t, lang, dir } = useI18n();
   const { user } = useAuth();
@@ -509,11 +511,8 @@ export function IntegrationsManager() {
         <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-900">
           <Shield className="w-5 h-5 mt-0.5 flex-shrink-0" />
           <div className="text-sm">
-            <p className="font-semibold">Production-only integrations are simulated.</p>
-            <p className="opacity-90 mt-0.5">
-              WhatsApp Business and Web Form can only be enabled in production. Outbound calls run in simulated mode.
-              Webhooks still work for testing. Set <code className="px-1 bg-amber-100 rounded">ALLOW_LIVE_INTEGRATIONS=true</code> to override.
-            </p>
+            <p className="font-semibold">{translateUi(uiLanguage, "Production-only integrations are simulated.")}</p>
+            <p className="opacity-90 mt-0.5"> {translateUi(uiLanguage, "WhatsApp Business and Web Form can only be enabled in production. Outbound calls run in simulated mode. Webhooks still work for testing. Set")} <code className="px-1 bg-amber-100 rounded">{translateUi(uiLanguage, "ALLOW_LIVE_INTEGRATIONS=true")}</code> {translateUi(uiLanguage, "to override.")} </p>
           </div>
         </div>
       )}
@@ -521,16 +520,12 @@ export function IntegrationsManager() {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="font-display font-bold text-lg flex items-center gap-2">
-              <Zap className="w-5 h-5 text-primary" /> Integrations
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Connect external services, APIs, and third-party platforms.
-            </p>
+              <Zap className="w-5 h-5 text-primary" /> {translateUi(uiLanguage, "Integrations")} </h2>
+            <p className="text-sm text-muted-foreground mt-1"> {translateUi(uiLanguage, "Connect external services, APIs, and third-party platforms.")} </p>
           </div>
           <div className="flex items-center gap-2">
             <Badge className="bg-primary/10 text-primary border-primary/20">
-              {integrations.filter((i) => i.isEnabled).length} active
-            </Badge>
+              {integrations.filter((i) => i.isEnabled).length} {translateUi(uiLanguage, "active")} </Badge>
           </div>
         </div>
 
@@ -538,7 +533,7 @@ export function IntegrationsManager() {
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search integrations..."
+              placeholder={translateUi(uiLanguage, "Search integrations...")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="ps-9 h-9 rounded-xl"
@@ -630,9 +625,7 @@ export function IntegrationsManager() {
                         onClick={() => handleTest(def.key)}
                         disabled={testing === def.key}
                       >
-                        {testing === def.key ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
-                        Test
-                      </Button>
+                        {testing === def.key ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />} {translateUi(uiLanguage, "Test")} </Button>
                     )}
                   </div>
 
@@ -669,30 +662,26 @@ export function IntegrationsManager() {
               <div className="space-y-4 py-2">
                 {isNamedAnthropicConnection(editDef.key) && (
                   <div>
-                    <Label className="text-xs">Connection name <span className="text-red-500">*</span></Label>
+                    <Label className="text-xs">{translateUi(uiLanguage, "Connection name")} <span className="text-red-500">*</span></Label>
                     <Input
                       value={connectionName}
                       onChange={(event) => setConnectionName(event.target.value)}
                       className="h-9 rounded-xl mt-1"
-                      placeholder="Website AI connection"
+                      placeholder={translateUi(uiLanguage, "Website AI connection")}
                     />
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Internal key: <code>{editDef.key}</code>. API keys remain encrypted and are never sent to widgets.
-                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-1"> {translateUi(uiLanguage, "Internal key:")} <code>{editDef.key}</code>{translateUi(uiLanguage, ". API keys remain encrypted and are never sent to widgets.")} </p>
                   </div>
                 )}
                 <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/30 border border-border/50">
                   <div>
-                    <p className="text-sm font-medium">Enable Integration</p>
-                    <p className="text-xs text-muted-foreground">Activate this integration for use in the system</p>
+                    <p className="text-sm font-medium">{translateUi(uiLanguage, "Enable Integration")}</p>
+                    <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Activate this integration for use in the system")}</p>
                   </div>
                   <Switch checked={editEnabled} onCheckedChange={setEditEnabled} />
                 </div>
 
                 {LIVE_GATED_KEYS.has(editDef.key) && liveMode && !liveMode.live && (
-                  <div className="text-xs p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900">
-                    Settings can be saved (disabled) but enabling requires production.
-                  </div>
+                  <div className="text-xs p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900"> {translateUi(uiLanguage, "Settings can be saved (disabled) but enabling requires production.")} </div>
                 )}
                 {editDef.fields.map((field) => (
                   <div key={field.key}>
@@ -707,8 +696,8 @@ export function IntegrationsManager() {
                           onChange={(e) => setEditConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
                           className="h-9 w-full rounded-xl border border-input bg-background px-3 text-sm"
                         >
-                          <option value="" disabled>Select a model</option>
-                          {editConfig[field.key] && !(field.options || []).some(option => option.value === editConfig[field.key]) ? <option value={editConfig[field.key]}>Current legacy model — {editConfig[field.key]}</option> : null}
+                          <option value="" disabled>{translateUi(uiLanguage, "Select a model")}</option>
+                          {editConfig[field.key] && !(field.options || []).some(option => option.value === editConfig[field.key]) ? <option value={editConfig[field.key]}>{translateUi(uiLanguage, "Current legacy model —")} {editConfig[field.key]}</option> : null}
                           {(field.options || []).map(option => <option key={option.value} value={option.value}>{option.label} — {option.description}</option>)}
                         </select>
                       ) : <Input
@@ -735,15 +724,10 @@ export function IntegrationsManager() {
                   const verifyToken = editConfig.webhookVerifyToken || "(set Webhook Verify Token above first)";
                   return (
                     <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
-                      <p className="text-xs font-semibold">Meta Cloud API webhook setup</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        In Meta &rarr; App Dashboard &rarr; WhatsApp &rarr; Configuration, paste the
-                        <strong> Callback URL</strong> and <strong>Verify Token</strong> below, then
-                        subscribe the <code>messages</code> field. Meta will GET this URL with
-                        <code> hub.verify_token</code>; the handshake passes only if the token matches exactly.
-                      </p>
+                      <p className="text-xs font-semibold">{translateUi(uiLanguage, "Meta Cloud API webhook setup")}</p>
+                      <p className="text-[11px] text-muted-foreground"> {translateUi(uiLanguage, "In Meta &rarr; App Dashboard &rarr; WhatsApp &rarr; Configuration, paste the")} <strong> {translateUi(uiLanguage, "Callback URL")}</strong> {translateUi(uiLanguage, "and")} <strong>{translateUi(uiLanguage, "Verify Token")}</strong> {translateUi(uiLanguage, "below, then subscribe the")} <code>{translateUi(uiLanguage, "messages")}</code> {translateUi(uiLanguage, "field. Meta will GET this URL with")} <code> {translateUi(uiLanguage, "hub.verify_token")}</code>{translateUi(uiLanguage, "; the handshake passes only if the token matches exactly.")} </p>
                       <div className="space-y-1.5">
-                        <Label className="text-[11px]">Callback URL</Label>
+                        <Label className="text-[11px]">{translateUi(uiLanguage, "Callback URL")}</Label>
                         <div className="flex items-center gap-1.5">
                           <Input readOnly value={callbackUrl} className="h-8 rounded-lg text-[11px] font-mono" />
                           <Button
@@ -752,10 +736,9 @@ export function IntegrationsManager() {
                             className="h-8 text-xs rounded-lg gap-1 shrink-0"
                             onClick={() => copyToClipboard(callbackUrl, "Callback URL")}
                           >
-                            <Copy className="w-3 h-3" /> Copy
-                          </Button>
+                            <Copy className="w-3 h-3" /> {translateUi(uiLanguage, "Copy")} </Button>
                         </div>
-                        <Label className="text-[11px] mt-1.5">Verify Token (paste into Meta)</Label>
+                        <Label className="text-[11px] mt-1.5">{translateUi(uiLanguage, "Verify Token (paste into Meta)")}</Label>
                         <div className="flex items-center gap-1.5">
                           <Input readOnly value={verifyToken} className="h-8 rounded-lg text-[11px] font-mono" />
                           <Button
@@ -765,15 +748,10 @@ export function IntegrationsManager() {
                             onClick={() => copyToClipboard(verifyToken, "Verify Token")}
                             disabled={!editConfig.webhookVerifyToken}
                           >
-                            <Copy className="w-3 h-3" /> Copy
-                          </Button>
+                            <Copy className="w-3 h-3" /> {translateUi(uiLanguage, "Copy")} </Button>
                         </div>
                       </div>
-                      <p className="text-[11px] text-amber-700">
-                        The App Secret is required separately for HMAC signature checks on every
-                        inbound message. Both fields must be saved before the integration can be
-                        enabled in production.
-                      </p>
+                      <p className="text-[11px] text-amber-700"> {translateUi(uiLanguage, "The App Secret is required separately for HMAC signature checks on every inbound message. Both fields must be saved before the integration can be enabled in production.")} </p>
                     </div>
                   );
                 })()}
@@ -826,15 +804,10 @@ export function IntegrationsManager() {
                   const serverForward = `# On YOUR server, forward the submission with the secret in a header.\n# Keep the token server-side only — never expose it in browser HTML.\ncurl -X POST "${endpoint}" \\\n  -H "Content-Type: application/json" \\\n  -H "X-Webform-Token: ${secret}" \\\n  -d '{"firstName":"Jane","lastName":"Doe","email":"jane@example.com","phone":"","message":"Hi","agent_ref":""}'`;
                   return (
                     <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
-                      <p className="text-xs font-semibold">Integration snippet</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        The secret must stay on your server. Never place it in public HTML — anyone
-                        viewing the page could read it and forge submissions. Collect leads with a
-                        public form that posts to your own backend, then forward them to the webhook
-                        with the <code>X-Webform-Token</code> header (or an{" "}
-                        <code>X-Webform-Signature</code> HMAC).
-                      </p>
-                      <p className="text-[11px] font-medium">1. Public form (no secret)</p>
+                      <p className="text-xs font-semibold">{translateUi(uiLanguage, "Integration snippet")}</p>
+                      <p className="text-[11px] text-muted-foreground"> {translateUi(uiLanguage, "The secret must stay on your server. Never place it in public HTML — anyone viewing the page could read it and forge submissions. Collect leads with a public form that posts to your own backend, then forward them to the webhook with the")} <code>{translateUi(uiLanguage, "X-Webform-Token")}</code> {translateUi(uiLanguage, "header (or an")}{" "}
+                        <code>{translateUi(uiLanguage, "X-Webform-Signature")}</code> {translateUi(uiLanguage, "HMAC).")} </p>
+                      <p className="text-[11px] font-medium">{translateUi(uiLanguage, "1. Public form (no secret)")}</p>
                       <textarea
                         readOnly
                         className="w-full h-28 text-[10px] font-mono p-2 rounded-lg bg-background border border-border resize-none"
@@ -846,9 +819,8 @@ export function IntegrationsManager() {
                         className="h-7 text-xs rounded-lg gap-1"
                         onClick={() => copyToClipboard(publicForm, "Public form")}
                       >
-                        <Copy className="w-3 h-3" /> Copy form
-                      </Button>
-                      <p className="text-[11px] font-medium pt-1">2. Server-to-server forward (secret in header)</p>
+                        <Copy className="w-3 h-3" /> {translateUi(uiLanguage, "Copy form")} </Button>
+                      <p className="text-[11px] font-medium pt-1">{translateUi(uiLanguage, "2. Server-to-server forward (secret in header)")}</p>
                       <textarea
                         readOnly
                         className="w-full h-28 text-[10px] font-mono p-2 rounded-lg bg-background border border-border resize-none"
@@ -860,21 +832,16 @@ export function IntegrationsManager() {
                         className="h-7 text-xs rounded-lg gap-1"
                         onClick={() => copyToClipboard(serverForward, "Forward example")}
                       >
-                        <Copy className="w-3 h-3" /> Copy example
-                      </Button>
+                        <Copy className="w-3 h-3" /> {translateUi(uiLanguage, "Copy example")} </Button>
                     </div>
                   );
                 })()}
               </div>
 
               <DialogFooter>
-                <Button variant="outline" onClick={() => setEditDef(null)} className="rounded-xl">
-                  Cancel
-                </Button>
+                <Button variant="outline" onClick={() => setEditDef(null)} className="rounded-xl"> {translateUi(uiLanguage, "Cancel")} </Button>
                 <Button onClick={handleSave} disabled={saving} className="rounded-xl gap-1.5">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  Save
-                </Button>
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} {translateUi(uiLanguage, "Save")} </Button>
               </DialogFooter>
             </>
           )}

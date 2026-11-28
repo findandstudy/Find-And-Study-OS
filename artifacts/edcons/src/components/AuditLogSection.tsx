@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -389,6 +390,7 @@ function relativeTime(iso: string): string {
 }
 
 export function AuditLogSection({ resource, resourceId }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, lang } = useI18n();
   const { user } = useAuth(true);
   const [open, setOpen] = useState(false);
@@ -428,7 +430,7 @@ export function AuditLogSection({ resource, resourceId }: Props) {
               {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
             </div>
           ) : logs.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-2">No activity recorded.</p>
+            <p className="text-sm text-muted-foreground py-2">{translateUi(uiLanguage, "No activity recorded.")}</p>
           ) : (
             <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
               {logs.map((log) => {
@@ -475,7 +477,7 @@ export function AuditLogSection({ resource, resourceId }: Props) {
                           </dl>
                         )}
                         {!summary && details.length === 0 && (
-                          <p className="mt-1 text-xs text-muted-foreground italic">No additional details</p>
+                          <p className="mt-1 text-xs text-muted-foreground italic">{translateUi(uiLanguage, "No additional details")}</p>
                         )}
                       </div>
                     </div>

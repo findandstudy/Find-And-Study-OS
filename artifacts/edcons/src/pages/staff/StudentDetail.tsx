@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useRef, useMemo, useEffect, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
 import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
@@ -114,6 +115,7 @@ function AcademicInfoCard({
   applications?: any[];
   isLoading?: boolean;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, dir } = useI18n() as any;
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -300,7 +302,7 @@ function AcademicInfoCard({
             </div>
             <div>
               <Label className="text-xs font-medium">{t("studentAcademic.languageScore")}</Label>
-              <Input value={form.languageScore} onChange={(e) => setForm((f) => ({ ...f, languageScore: e.target.value }))} placeholder="IELTS 6.5" />
+              <Input value={form.languageScore} onChange={(e) => setForm((f) => ({ ...f, languageScore: e.target.value }))} placeholder={translateUi(uiLanguage, "IELTS 6.5")} />
             </div>
           </div>
           <DialogFooter>
@@ -318,6 +320,7 @@ function AcademicInfoCard({
 
 
 export default function StudentDetail({ id, basePath = "/staff" }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, lang } = useI18n();
   const { stages: studentStages } = usePipelineStages("student");
   const { stages: applicationStages } = usePipelineStages("application");
@@ -979,8 +982,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             <button
               type="button"
               className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center text-white cursor-pointer"
-              title="Upload photo"
-              aria-label="Upload profile photo"
+              title={translateUi(uiLanguage, "Upload photo")}
+              aria-label={translateUi(uiLanguage, "Upload profile photo")}
               onClick={() => photoInputRef.current?.click()}
               disabled={photoUploading}
             >
@@ -990,8 +993,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               <button
                 type="button"
                 className="absolute -bottom-1 -right-1 z-10 p-1.5 rounded-full bg-background border border-border shadow hover:bg-secondary text-foreground transition-colors"
-                title="Download photo"
-                aria-label="Download profile photo"
+                title={translateUi(uiLanguage, "Download photo")}
+                aria-label={translateUi(uiLanguage, "Download profile photo")}
                 onClick={downloadPhoto}
               >
                 <Download className="w-3.5 h-3.5" />
@@ -1130,7 +1133,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
               <div className="min-w-0 space-y-4">
                 <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
-                  <h2 className="font-semibold text-foreground">Passport / ID</h2>
+                  <h2 className="font-semibold text-foreground">{translateUi(uiLanguage, "Passport / ID")}</h2>
                   {isLoading ? (
                     <div className="space-y-3">
                       {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
@@ -1206,9 +1209,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 {!isAgent && (
                 <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
                   <h2 className="font-semibold text-foreground flex items-center gap-2">
-                    <Globe className="w-4 h-4" />
-                    Origin
-                  </h2>
+                    <Globe className="w-4 h-4" /> {translateUi(uiLanguage, "Origin")} </h2>
                   {isLoading ? (
                     <Skeleton className="h-8 w-32" />
                   ) : (
@@ -1237,7 +1238,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                           <SelectContent>
                             <SelectItem value="direct">{t("studentDetailPage.direct")}</SelectItem>
                             <SelectItem value="agent">{t("studentDetailPage.agentLabel")}</SelectItem>
-                            <SelectItem value="sub_agent">Sub-Agent</SelectItem>
+                            <SelectItem value="sub_agent">{translateUi(uiLanguage, "Sub-Agent")}</SelectItem>
                           </SelectContent>
                         </Select>
                       )}
@@ -1250,7 +1251,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
             {student?.notes && (
               <div className="mt-4 bg-card rounded-2xl border shadow-sm p-6">
-                <h2 className="font-semibold text-foreground mb-2">Notes</h2>
+                <h2 className="font-semibold text-foreground mb-2">{translateUi(uiLanguage, "Notes")}</h2>
                 <p className="text-sm text-foreground">{student.notes}</p>
               </div>
             )}
@@ -1260,29 +1261,27 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-muted-foreground" />
-                <h2 className="font-semibold text-foreground">Notes</h2>
+                <h2 className="font-semibold text-foreground">{translateUi(uiLanguage, "Notes")}</h2>
               </div>
 
               <div className="flex gap-1 border-b">
                 <button
                   onClick={() => setNoteTab("general")}
                   className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${noteTab === "general" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-                >
-                  General ({generalNotes.length})
+                > {translateUi(uiLanguage, "General (")}{generalNotes.length})
                 </button>
                 {isStaffUser && (
                   <button
                     onClick={() => setNoteTab("internal")}
                     className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${noteTab === "internal" ? "border-orange-500 text-orange-600" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-                  >
-                    🔒 Private ({internalNotes.length})
+                  > {translateUi(uiLanguage, "🔒 Private (")}{internalNotes.length})
                   </button>
                 )}
               </div>
 
               <div className="space-y-3 max-h-80 overflow-y-auto">
                 {activeNotes.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No notes yet.</p>
+                  <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "No notes yet.")}</p>
                 ) : (
                   activeNotes.map((note: any) => (
                     <div key={note.id} className={`group relative rounded-xl p-3 ${noteTab === "internal" ? "bg-orange-50 border border-orange-200" : "bg-secondary/50"}`}>
@@ -1299,8 +1298,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                             onClick={() => handleDeleteNote(note.id)}
                             disabled={deleteNote.isPending}
                             className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity disabled:opacity-50"
-                            aria-label="Delete note"
-                            title="Delete note"
+                            aria-label={translateUi(uiLanguage, "Delete note")}
+                            title={translateUi(uiLanguage, "Delete note")}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1323,9 +1322,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     onClick={handleAddNote}
                     disabled={!noteText.trim()}
                     className={`self-end ${noteTab === "internal" ? "bg-orange-500 hover:bg-orange-600" : ""}`}
-                  >
-                    Add
-                  </Button>
+                  > {translateUi(uiLanguage, "Add")} </Button>
                 </div>
               )}
             </div>
@@ -1333,27 +1330,25 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
           <TabsContent value="applications" className="mt-4">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-muted-foreground">{applications.length} application{applications.length !== 1 ? "s" : ""}</p>
+              <p className="text-sm text-muted-foreground">{applications.length} {translateUi(uiLanguage, "application")}{applications.length !== 1 ? "s" : ""}</p>
               <Button size="sm" onClick={() => setShowNewApp(!showNewApp)}>
-                <Plus className="w-4 h-4 mr-1" />
-                New Application
-              </Button>
+                <Plus className="w-4 h-4 mr-1" /> {translateUi(uiLanguage, "New Application")} </Button>
             </div>
 
             {showNewApp && (
               <div className="bg-card rounded-2xl border shadow-sm p-4 mb-4">
                 <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr 2fr 1fr" }}>
                   <div>
-                    <Label className="text-xs font-medium mb-1 block">Country</Label>
+                    <Label className="text-xs font-medium mb-1 block">{translateUi(uiLanguage, "Country")}</Label>
                     <SearchableSelect
                       value={appCountry}
                       onChange={setAppCountry}
                       options={(countriesList || []).map((c: string) => ({ value: c, label: c }))}
-                      placeholder="Select Country"
+                      placeholder={translateUi(uiLanguage, "Select Country")}
                     />
                   </div>
                   <div>
-                    <Label className="text-xs font-medium mb-1 block">University</Label>
+                    <Label className="text-xs font-medium mb-1 block">{translateUi(uiLanguage, "University")}</Label>
                     <SearchableSelect
                       value={appUniversityId}
                       onChange={setAppUniversityId}
@@ -1363,7 +1358,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     />
                   </div>
                   <div>
-                    <Label className="text-xs font-medium mb-1 block">Course</Label>
+                    <Label className="text-xs font-medium mb-1 block">{translateUi(uiLanguage, "Course")}</Label>
                     <SearchableSelect
                       value={appProgramId}
                       onChange={setAppProgramId}
@@ -1375,7 +1370,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     />
                   </div>
                   <div>
-                    <Label className="text-xs font-medium mb-1 block">Intake</Label>
+                    <Label className="text-xs font-medium mb-1 block">{translateUi(uiLanguage, "Intake")}</Label>
                     <SearchableSelect
                       value={appIntake}
                       onChange={setAppIntake}
@@ -1387,17 +1382,13 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 </div>
                 {hasExistingAppAtSameLevel && appProgramId && (
                   <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm font-medium text-blue-700">Documents already on file from a previous application at the same level.</p>
+                    <p className="text-sm font-medium text-blue-700">{translateUi(uiLanguage, "Documents already on file from a previous application at the same level.")}</p>
                   </div>
                 )}
                 <div className="flex justify-end gap-2 mt-3">
-                  <Button variant="outline" size="sm" onClick={() => { setShowNewApp(false); setAppCountry(""); setAppUniversityId(""); setAppProgramId(""); setAppIntake(""); }}>
-                    Cancel
-                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => { setShowNewApp(false); setAppCountry(""); setAppUniversityId(""); setAppProgramId(""); setAppIntake(""); }}> {translateUi(uiLanguage, "Cancel")} </Button>
                   <Button size="sm" disabled={!appProgramId || appSubmitting} onClick={handleQuickApply}>
-                    {appSubmitting && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
-                    Create Application
-                  </Button>
+                    {appSubmitting && <Loader2 className="w-4 h-4 mr-1 animate-spin" />} {translateUi(uiLanguage, "Create Application")} </Button>
                 </div>
               </div>
             )}
@@ -1408,12 +1399,10 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                     <GraduationCap className="w-7 h-7 text-primary" />
                   </div>
-                  <p className="font-medium text-foreground">No applications yet</p>
-                  <p className="text-sm text-muted-foreground mt-1">Create the first application for this student to get started.</p>
+                  <p className="font-medium text-foreground">{translateUi(uiLanguage, "No applications yet")}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{translateUi(uiLanguage, "Create the first application for this student to get started.")}</p>
                   <Button size="sm" className="mt-5" onClick={() => setShowNewApp(true)}>
-                    <Plus className="w-4 h-4 mr-1" />
-                    New Application
-                  </Button>
+                    <Plus className="w-4 h-4 mr-1" /> {translateUi(uiLanguage, "New Application")} </Button>
                 </div>
               </div>
             ) : (
@@ -1466,17 +1455,15 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setLocation(`${basePath}/applications/${app.id}`)}
-                              >
-                                View
-                              </Button>
+                              > {translateUi(uiLanguage, "View")} </Button>
                               {canDeleteApplication && (
                                 <Button
                                   variant="ghost"
                                   size="icon"
                                   className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                   disabled={deletingAppId === app.id}
-                                  title="Delete application"
-                                  aria-label="Delete application"
+                                  title={translateUi(uiLanguage, "Delete application")}
+                                  aria-label={translateUi(uiLanguage, "Delete application")}
                                   onClick={() => handleDeleteApplication(app)}
                                 >
                                   {deletingAppId === app.id ? (
@@ -1516,7 +1503,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CalendarClock className="w-4 h-4 text-primary" />
-                    <h2 className="font-semibold text-foreground">Follow-ups</h2>
+                    <h2 className="font-semibold text-foreground">{translateUi(uiLanguage, "Follow-ups")}</h2>
                     <span className="text-xs text-muted-foreground">({(followUps as any[]).length})</span>
                   </div>
                   <Button
@@ -1525,9 +1512,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     className="rounded-full"
                     onClick={() => { resetFollowUpForm(); setShowFollowUpForm(!showFollowUpForm); }}
                   >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Add
-                  </Button>
+                    <Plus className="w-3 h-3 mr-1" /> {translateUi(uiLanguage, "Add")} </Button>
                 </div>
 
                 {showFollowUpForm && (
@@ -1571,7 +1556,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
                   {(followUps as any[]).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No follow-ups scheduled.</p>
+                    <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "No follow-ups scheduled.")}</p>
                   ) : (
                     (followUps as any[]).map((fu: any) => (
                       <div
@@ -1622,7 +1607,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                           {fu.notes && <p className="text-xs text-muted-foreground mt-1">{fu.notes}</p>}
                           <div className="flex items-center gap-3 mt-1 flex-wrap">
                             {fu.createdByName && (
-                              <span className="text-xs text-muted-foreground/60" data-testid="fu-created-by">by {fu.createdByName}</span>
+                              <span className="text-xs text-muted-foreground/60" data-testid="fu-created-by">{translateUi(uiLanguage, "by")} {fu.createdByName}</span>
                             )}
                             {fu.createdAt && (
                               <span className="text-xs text-muted-foreground/50">
@@ -1632,8 +1617,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                               </span>
                             )}
                             {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
-                              <span className="text-xs text-amber-500/70" data-testid="fu-edited-by">
-                                (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {fmtDate(fu.updatedAt, dateFormat)}
+                              <span className="text-xs text-amber-500/70" data-testid="fu-edited-by"> {translateUi(uiLanguage, "(edited")}{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {fmtDate(fu.updatedAt, dateFormat)}
                                 {" "}
                                 {new Date(fu.updatedAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })})
                               </span>
@@ -1664,7 +1648,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
           <div className="space-y-4 py-2">
             <div>
-              <Label className="text-xs font-medium text-muted-foreground">Document Type</Label>
+              <Label className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "Document Type")}</Label>
               <SearchableSelect
                 value={uploadType}
                 onValueChange={v => {
@@ -1676,7 +1660,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   setUploadName(`${type}-${first}-${last}`);
                 }}
                 options={documentTypeOptions.map(d => ({ value: d.key, label: d.label }))}
-                placeholder="Select document type"
+                placeholder={translateUi(uiLanguage, "Select document type")}
                 searchPlaceholder="Search document types..."
                 className="mt-1"
                 minDropdownWidth={320}
@@ -1684,7 +1668,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             </div>
 
             <div>
-              <Label className="text-xs font-medium text-muted-foreground">Document Name</Label>
+              <Label className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "Document Name")}</Label>
               <Input
                 className="mt-1"
                 value={uploadName}
@@ -1694,7 +1678,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             </div>
 
             <div>
-              <Label className="text-xs font-medium text-muted-foreground">File</Label>
+              <Label className="text-xs font-medium text-muted-foreground">{translateUi(uiLanguage, "File")}</Label>
               <div
                 className={`mt-1 border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
                   dragging ? "border-primary bg-primary/5" : uploadFile ? "border-primary/40 bg-primary/5" : "border-border hover:border-primary/40 hover:bg-secondary/40"
@@ -1727,8 +1711,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 ) : (
                   <>
                     <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-                    <p className="text-sm font-medium text-muted-foreground">Drag & drop or click</p>
-                    <p className="text-xs text-muted-foreground mt-1">PDF, JPG, JPEG, PNG — max 5 MB</p>
+                    <p className="text-sm font-medium text-muted-foreground">{translateUi(uiLanguage, "Drag & drop or click")}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "PDF, JPG, JPEG, PNG — max 5 MB")}</p>
                   </>
                 )}
               </div>
@@ -1837,6 +1821,7 @@ function F({ label, value, onChange, type = "text", placeholder = "", required =
 function EditStudentDetailDialog({ open, onClose, student, studentId }: {
   open: boolean; onClose: () => void; student: any; studentId: number;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { levels: studyLevels } = useStudyLevels();
   const [form, setForm] = useState({
@@ -1956,49 +1941,49 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-border/50 pb-2">
               <User className="w-4 h-4 text-primary" />
-              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Personal Information</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Personal Information")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <F required label={t("studentDetailPage.firstName")} value={form.firstName} onChange={field("firstName")} placeholder={t("studentDetailPage.firstNamePh")} latinUppercase />
               <F required label={t("studentDetailPage.lastName")} value={form.lastName} onChange={field("lastName")} placeholder={t("studentDetailPage.lastNamePh")} latinUppercase />
-              <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder="email@example.com" />
+              <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder={translateUi(uiLanguage, "email@example.com")} />
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Phone</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Phone")}</Label>
                 <PhoneField value={form.phone} onChange={v => setForm(f => ({ ...f, phone: v }))} />
               </div>
               <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Gender</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Gender")}</Label>
                 <select
                   value={form.gender}
                   onChange={(e) => field("gender")(e.target.value)}
                   className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">Select…</option>
+                  <option value="">{translateUi(uiLanguage, "Select…")}</option>
                   <option value="female">{t("studentDetailPage.female")}</option>
                   <option value="male">{t("studentDetailPage.male")}</option>
                 </select>
               </div>
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Nationality</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Nationality")}</Label>
                 <NationalityCombobox value={form.nationality} onChange={field("nationality")} />
               </div>
               <F label={t("studentDetailPage.mothersName")} value={form.motherName} onChange={field("motherName")} placeholder={t("studentDetailPage.mothersNamePh")} latinUppercase />
               <F label={t("studentDetailPage.fathersName")} value={form.fatherName} onChange={field("fatherName")} placeholder={t("studentDetailPage.fathersNamePh")} latinUppercase />
-              <F label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" className="col-span-2" />
-              <F label="Residence City" value={form.addressCity} onChange={field("addressCity")} placeholder="e.g. Khujand" />
+              <F label="Address" value={form.address} onChange={field("address")} placeholder={translateUi(uiLanguage, "Full home address")} className="col-span-2" />
+              <F label="Residence City" value={form.addressCity} onChange={field("addressCity")} placeholder={translateUi(uiLanguage, "e.g. Khujand")} />
               <F label="Postal Code" value={form.postalCode} onChange={field("postalCode")} placeholder="e.g. 735700" />
-              <F label="City of Birth (optional)" value={form.cityOfBirth} onChange={field("cityOfBirth")} placeholder="e.g. Khujand" />
+              <F label="City of Birth (optional)" value={form.cityOfBirth} onChange={field("cityOfBirth")} placeholder={translateUi(uiLanguage, "e.g. Khujand")} />
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">Needs Visa Support</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Needs Visa Support")}</Label>
                 <select
                   value={form.needsVisaSupport}
                   onChange={(e) => field("needsVisaSupport")(e.target.value)}
                   className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">Not specified</option>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
+                  <option value="">{translateUi(uiLanguage, "Not specified")}</option>
+                  <option value="yes">{translateUi(uiLanguage, "Yes")}</option>
+                  <option value="no">{translateUi(uiLanguage, "No")}</option>
                 </select>
               </div>
             </div>
@@ -2007,10 +1992,10 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-border/50 pb-2">
               <FileText className="w-4 h-4 text-primary" />
-              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Passport / Identity</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Passport / Identity")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder="e.g. AB1234567" className="col-span-2" />
+              <F label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder={translateUi(uiLanguage, "e.g. AB1234567")} className="col-span-2" />
               <F label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" />
               <F label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" />
             </div>
@@ -2019,11 +2004,11 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-border/50 pb-2">
               <GraduationCap className="w-4 h-4 text-primary" />
-              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Education</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Education")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5 col-span-2">
-                <Label className="font-semibold text-sm">Interested Level</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Interested Level")}</Label>
                 <Select value={form.interestedLevel} onValueChange={field("interestedLevel")}>
                   <SelectTrigger className="rounded-xl h-9">
                     <SelectValue placeholder={t("studentDetailPage.selectLevel")} />
@@ -2033,12 +2018,12 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
                   </SelectContent>
                 </Select>
               </div>
-              <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. ANKARA FEN LISESI" className="col-span-2" latinUppercase />
-              <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. ISTANBUL UNIVERSITY" className="col-span-2" latinUppercase />
-              <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. BOGAZICI UNIVERSITY" className="col-span-2" latinUppercase />
+              <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder={translateUi(uiLanguage, "e.g. ANKARA FEN LISESI")} className="col-span-2" latinUppercase />
+              <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder={translateUi(uiLanguage, "e.g. ISTANBUL UNIVERSITY")} className="col-span-2" latinUppercase />
+              <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder={translateUi(uiLanguage, "e.g. BOGAZICI UNIVERSITY")} className="col-span-2" latinUppercase />
               <F label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm">GPA</Label>
+                <Label className="font-semibold text-sm">{translateUi(uiLanguage, "GPA")}</Label>
                 <div className="flex gap-1.5">
                   <Input
                     type="number" step="0.01" min="0"
@@ -2060,7 +2045,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
                   </Select>
                 </div>
               </div>
-              <F label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder="e.g. IELTS 7.0, TOEFL 100" className="col-span-2" />
+              <F label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder={translateUi(uiLanguage, "e.g. IELTS 7.0, TOEFL 100")} className="col-span-2" />
             </div>
           </section>
 
@@ -2095,7 +2080,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
           </section>
 
           <div className="space-y-1.5">
-            <Label className="font-semibold text-sm">Notes</Label>
+            <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Notes")}</Label>
             <textarea
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
@@ -2106,9 +2091,9 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
           </div>
         </div>
         <DialogFooter className="pt-3 border-t border-border/50">
-          <Button variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
+          <Button variant="outline" onClick={onClose} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={handleSave} disabled={!form.firstName || !form.lastName || saving} className="rounded-xl">
-            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Saving...</> : "Save Changes"}
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{translateUi(uiLanguage, "Saving...")}</> : "Save Changes"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2220,6 +2205,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
   canUpload: boolean;
   qc: any;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t } = useI18n();
   const [, setLocation] = useLocation();
@@ -2456,7 +2442,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
                         <a
                           {...getPreviewTriggerProps(previewTargetFor(doc))}
                           className="flex items-center gap-1.5 text-xs text-foreground/80 hover:text-primary font-medium transition-colors"
-                          title="Preview"
+                          title={translateUi(uiLanguage, "Preview")}
                           aria-label={`Preview ${doc.name}`}
                           data-testid={`btn-preview-${doc.id}`}
                         >
@@ -2589,6 +2575,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
 }
 
 function ApplicationStageDocumentsSection({ studentId, basePath }: { studentId: number; basePath: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const { data: docs = [], isLoading } = useQuery<any[]>({
@@ -2674,11 +2661,11 @@ function ApplicationStageDocumentsSection({ studentId, basePath }: { studentId: 
                         {new Date(d.createdAt).toLocaleString()}
                         {d.uploadedByName && <> · {d.uploadedByName}</>}
                         {d.sizeBytes ? ` · ${(d.sizeBytes / 1024).toFixed(0)} KB` : ""}
-                        {d.validUntil && <> · Geçerlilik: {new Date(d.validUntil).toLocaleDateString()}</>}
+                        {d.validUntil && <> {translateUi(uiLanguage, "· Geçerlilik:")} {new Date(d.validUntil).toLocaleDateString()}</>}
                       </p>
                     </div>
                     {(d.hasFileData || d.fileUrl) && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownload(d)} title="İndir">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownload(d)} title={translateUi(uiLanguage, "İndir")}>
                         <Download className="w-4 h-4" />
                       </Button>
                     )}

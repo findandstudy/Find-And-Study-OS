@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useListUsers } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
@@ -158,6 +159,7 @@ function UserSortHeader({ label, sortKey, currentSort, onSort }: {
 }
 
 function UsersTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [sort, setSort] = useState<{ key: UserSortKey; dir: SortDir }>({ key: "user", dir: "asc" });
@@ -443,25 +445,22 @@ function UsersTab() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">All Users</h2>
-          <p className="text-muted-foreground text-sm mt-0.5">{nonStudentUsers?.length || 0} users in the system</p>
+          <h2 className="text-lg font-semibold text-foreground">{translateUi(uiLanguage, "All Users")}</h2>
+          <p className="text-muted-foreground text-sm mt-0.5">{nonStudentUsers?.length || 0} {translateUi(uiLanguage, "users in the system")}</p>
         </div>
         <Button className="rounded-xl gap-2" onClick={() => setCreateOpen(true)}>
-          <UserPlus className="w-4 h-4" /> Create User
-        </Button>
+          <UserPlus className="w-4 h-4" /> {translateUi(uiLanguage, "Create User")} </Button>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name or email..." className="pl-10 rounded-xl" />
+            placeholder={translateUi(uiLanguage, "Search by name or email...")} className="pl-10 rounded-xl" />
         </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => setRoleFilter("all")}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${roleFilter === "all" ? "bg-primary text-white shadow-sm" : "bg-secondary hover:bg-secondary/80"}`}>
-            All
-          </button>
+            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${roleFilter === "all" ? "bg-primary text-white shadow-sm" : "bg-secondary hover:bg-secondary/80"}`}> {translateUi(uiLanguage, "All")} </button>
           {([
             { value: "staff", labelKey: "usersPage.roleStaff" },
             { value: "agent", labelKey: "usersPage.roleAgent" },
@@ -504,9 +503,9 @@ function UsersTab() {
                 <UserSortHeader label="User" sortKey="user" currentSort={sort} onSort={handleSort} />
                 <UserSortHeader label="Email" sortKey="email" currentSort={sort} onSort={handleSort} />
                 <UserSortHeader label="Role" sortKey="role" currentSort={sort} onSort={handleSort} />
-                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Branch</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{translateUi(uiLanguage, "Branch")}</th>
                 <UserSortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
-                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Actions</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{translateUi(uiLanguage, "Actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
@@ -521,7 +520,7 @@ function UsersTab() {
                   </tr>
                 ))
               ) : pagedUsers.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-16 text-center text-muted-foreground">No users found</td></tr>
+                <tr><td colSpan={6} className="px-6 py-16 text-center text-muted-foreground">{translateUi(uiLanguage, "No users found")}</td></tr>
               ) : pagedUsers.map(user => {
                 const badge = {
                   color: roleBadgeColors[user.role] || "bg-secondary text-foreground border-border",
@@ -541,7 +540,7 @@ function UsersTab() {
                         )}
                         <div>
                           <p className="font-semibold text-foreground text-sm">{user.firstName} {user.lastName}</p>
-                          <p className="text-xs text-muted-foreground">ID #{user.id}</p>
+                          <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "ID #")}{user.id}</p>
                         </div>
                       </div>
                     </td>
@@ -567,7 +566,7 @@ function UsersTab() {
                       {requiresDirectBranch(user.role) ? (
                         user.branchName
                           ? <span className="text-foreground">{user.branchName}</span>
-                          : <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">Unassigned</Badge>
+                          : <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">{translateUi(uiLanguage, "Unassigned")}</Badge>
                       ) : (
                         <span className="text-muted-foreground">{user.role === "super_admin" ? "Global" : "Managed separately"}</span>
                       )}
@@ -592,10 +591,9 @@ function UsersTab() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-56">
                             <DropdownMenuItem onClick={() => { setPasswordDialog({ userId: user.id, userName: `${user.firstName} ${user.lastName}` }); setNewPassword(""); }}>
-                              <KeyRound className="w-4 h-4 mr-2" /> Set Password
-                            </DropdownMenuItem>
+                              <KeyRound className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Set Password")} </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleImpersonate(user)}>
-                              <LogIn className="w-4 h-4 mr-2" /> Login as {user.firstName}
+                              <LogIn className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Login as")} {user.firstName}
                             </DropdownMenuItem>
                             {["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"].includes(user.role) && (
                               <DropdownMenuItem asChild>
@@ -607,9 +605,9 @@ function UsersTab() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => handleToggleStatus(user)}>
                               {user.isActive ? (
-                                <><ShieldOff className="w-4 h-4 mr-2" /> Deactivate</>
+                                <><ShieldOff className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Deactivate")}</>
                               ) : (
-                                <><ShieldCheck className="w-4 h-4 mr-2" /> Activate</>
+                                <><ShieldCheck className="w-4 h-4 mr-2" /> {translateUi(uiLanguage, "Activate")}</>
                               )}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
@@ -639,8 +637,7 @@ function UsersTab() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="w-5 h-5" /> Create New User
-            </DialogTitle>
+              <UserPlus className="w-5 h-5" /> {translateUi(uiLanguage, "Create New User")} </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="flex justify-center">
@@ -667,24 +664,24 @@ function UsersTab() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>First Name *</Label>
+                <Label>{translateUi(uiLanguage, "First Name *")}</Label>
                 <Input value={createForm.firstName} onChange={e => setCreateForm(f => ({ ...f, firstName: toLatinUpper(e.target.value) }))}
-                  placeholder="John" />
+                  placeholder={translateUi(uiLanguage, "John")} />
               </div>
               <div className="space-y-2">
-                <Label>Last Name *</Label>
+                <Label>{translateUi(uiLanguage, "Last Name *")}</Label>
                 <Input value={createForm.lastName} onChange={e => setCreateForm(f => ({ ...f, lastName: toLatinUpper(e.target.value) }))}
-                  placeholder="Doe" />
+                  placeholder={translateUi(uiLanguage, "Doe")} />
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Email *</Label>
+              <Label>{translateUi(uiLanguage, "Email *")}</Label>
               <Input type="email" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="john@example.com" />
+                placeholder={translateUi(uiLanguage, "john@example.com")} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Role</Label>
+                <Label>{translateUi(uiLanguage, "Role")}</Label>
                 <Select value={createForm.role} onValueChange={v => setCreateForm(f => ({ ...f, role: v, branchId: requiresDirectBranch(v) ? f.branchId : "" }))}>
                   <SelectTrigger className="rounded-xl">
                     <SelectValue />
@@ -697,7 +694,7 @@ function UsersTab() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Language</Label>
+                <Label>{translateUi(uiLanguage, "Language")}</Label>
                 <Select value={createForm.language} onValueChange={v => setCreateForm(f => ({ ...f, language: v }))}>
                   <SelectTrigger className="rounded-xl">
                     <SelectValue />
@@ -712,10 +709,10 @@ function UsersTab() {
             </div>
             {requiresDirectBranch(createForm.role) && (
               <div className="space-y-2">
-                <Label>Branch *</Label>
+                <Label>{translateUi(uiLanguage, "Branch *")}</Label>
                 <Select value={createForm.branchId} onValueChange={branchId => setCreateForm(f => ({ ...f, branchId }))}>
                   <SelectTrigger className="rounded-xl">
-                    <SelectValue placeholder="Select the staff user's branch" />
+                    <SelectValue placeholder={translateUi(uiLanguage, "Select the staff user's branch")} />
                   </SelectTrigger>
                   <SelectContent>
                     {branches.map(branch => (
@@ -723,11 +720,11 @@ function UsersTab() {
                     ))}
                   </SelectContent>
                 </Select>
-                {branches.length === 0 && <p className="text-xs text-destructive">No assignable active branch is available.</p>}
+                {branches.length === 0 && <p className="text-xs text-destructive">{translateUi(uiLanguage, "No assignable active branch is available.")}</p>}
               </div>
             )}
             <div className="space-y-2">
-              <Label>Phone</Label>
+              <Label>{translateUi(uiLanguage, "Phone")}</Label>
               <div className="flex gap-2">
                 <PhoneCodePicker value={createForm.phoneCode} onChange={v => setCreateForm(f => ({ ...f, phoneCode: v }))} triggerClassName="min-w-[100px] w-auto h-10 shrink-0" />
                 <Input value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: digitsOnly(e.target.value) }))}
@@ -735,14 +732,14 @@ function UsersTab() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Password</Label>
+              <Label>{translateUi(uiLanguage, "Password")}</Label>
               <Input type="password" value={createForm.password} onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))}
-                placeholder="Min. 6 characters" />
-              <p className="text-[11px] text-muted-foreground">Leave empty to create without password (user can set via forgot password)</p>
+                placeholder={translateUi(uiLanguage, "Min. 6 characters")} />
+              <p className="text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Leave empty to create without password (user can set via forgot password)")}</p>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>{translateUi(uiLanguage, "Cancel")}</Button>
             <Button onClick={handleCreate} disabled={creating || createAvatarUploading}>
               {creating ? "Creating..." : createAvatarUploading ? "Uploading photo..." : "Create User"}
             </Button>
@@ -754,8 +751,7 @@ function UsersTab() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Edit2 className="w-5 h-5" /> Edit User
-            </DialogTitle>
+              <Edit2 className="w-5 h-5" /> {translateUi(uiLanguage, "Edit User")} </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="flex justify-center">
@@ -782,24 +778,24 @@ function UsersTab() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>First Name *</Label>
+                <Label>{translateUi(uiLanguage, "First Name *")}</Label>
                 <Input value={editForm.firstName} onChange={e => setEditForm(f => ({ ...f, firstName: toLatinUpper(e.target.value) }))}
-                  placeholder="John" />
+                  placeholder={translateUi(uiLanguage, "John")} />
               </div>
               <div className="space-y-2">
-                <Label>Last Name *</Label>
+                <Label>{translateUi(uiLanguage, "Last Name *")}</Label>
                 <Input value={editForm.lastName} onChange={e => setEditForm(f => ({ ...f, lastName: toLatinUpper(e.target.value) }))}
-                  placeholder="Doe" />
+                  placeholder={translateUi(uiLanguage, "Doe")} />
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Email *</Label>
+              <Label>{translateUi(uiLanguage, "Email *")}</Label>
               <Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="john@example.com" />
+                placeholder={translateUi(uiLanguage, "john@example.com")} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Role</Label>
+                <Label>{translateUi(uiLanguage, "Role")}</Label>
                 <Select value={editForm.role} onValueChange={v => setEditForm(f => ({ ...f, role: v, branchId: requiresDirectBranch(v) ? f.branchId : "" }))}>
                   <SelectTrigger className="rounded-xl">
                     <SelectValue />
@@ -812,7 +808,7 @@ function UsersTab() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Language</Label>
+                <Label>{translateUi(uiLanguage, "Language")}</Label>
                 <Select value={editForm.language} onValueChange={v => setEditForm(f => ({ ...f, language: v }))}>
                   <SelectTrigger className="rounded-xl">
                     <SelectValue />
@@ -827,10 +823,10 @@ function UsersTab() {
             </div>
             {requiresDirectBranch(editForm.role) && (
               <div className="space-y-2">
-                <Label>Branch *</Label>
+                <Label>{translateUi(uiLanguage, "Branch *")}</Label>
                 <Select value={editForm.branchId} onValueChange={branchId => setEditForm(f => ({ ...f, branchId }))}>
                   <SelectTrigger className="rounded-xl">
-                    <SelectValue placeholder="Select the staff user's branch" />
+                    <SelectValue placeholder={translateUi(uiLanguage, "Select the staff user's branch")} />
                   </SelectTrigger>
                   <SelectContent>
                     {branches.map(branch => (
@@ -839,12 +835,12 @@ function UsersTab() {
                   </SelectContent>
                 </Select>
                 {!editForm.branchId && (
-                  <p className="text-xs text-amber-700">This user cannot create branch-scoped records until a branch is assigned.</p>
+                  <p className="text-xs text-amber-700">{translateUi(uiLanguage, "This user cannot create branch-scoped records until a branch is assigned.")}</p>
                 )}
               </div>
             )}
             <div className="space-y-2">
-              <Label>Phone</Label>
+              <Label>{translateUi(uiLanguage, "Phone")}</Label>
               <div className="flex gap-2">
                 <PhoneCodePicker value={editForm.phoneCode} onChange={v => setEditForm(f => ({ ...f, phoneCode: v }))} triggerClassName="min-w-[100px] w-auto h-10 shrink-0" />
                 <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: digitsOnly(e.target.value) }))}
@@ -852,7 +848,7 @@ function UsersTab() {
               </div>
             </div>
             <div className="flex items-center justify-between">
-              <Label>Status</Label>
+              <Label>{translateUi(uiLanguage, "Status")}</Label>
               <div className="flex items-center gap-2">
                 <span className={`text-sm ${editForm.isActive ? "text-green-600" : "text-muted-foreground"}`}>
                   {editForm.isActive ? "Active" : "Inactive"}
@@ -869,8 +865,8 @@ function UsersTab() {
               </div>
             </div>
             <div className="space-y-2 pt-2 border-t">
-              <Label>Permission Overrides</Label>
-              <p className="text-xs text-muted-foreground">Override this user's role permissions. "Inherit" uses the role default.</p>
+              <Label>{translateUi(uiLanguage, "Permission Overrides")}</Label>
+              <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Override this user's role permissions. \"Inherit\" uses the role default.")}</p>
               <div className="space-y-1.5">
                 {OVERRIDE_PERMISSION_KEYS.map(({ key, label }) => {
                   const state = editOverrides[key] === undefined ? "inherit" : editOverrides[key] ? "allow" : "deny";
@@ -908,7 +904,7 @@ function UsersTab() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditOpen(false); setEditUser(null); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setEditOpen(false); setEditUser(null); }}>{translateUi(uiLanguage, "Cancel")}</Button>
             <Button onClick={handleEditSave} disabled={saving || editAvatarUploading}>
               {saving ? "Saving..." : editAvatarUploading ? "Uploading photo..." : "Save Changes"}
             </Button>
@@ -920,26 +916,24 @@ function UsersTab() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <KeyRound className="w-5 h-5" /> Set Password
-            </DialogTitle>
+              <KeyRound className="w-5 h-5" /> {translateUi(uiLanguage, "Set Password")} </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Set a new password for <strong>{passwordDialog?.userName}</strong>
+          <p className="text-sm text-muted-foreground"> {translateUi(uiLanguage, "Set a new password for")} <strong>{passwordDialog?.userName}</strong>
           </p>
           <div className="space-y-2">
-            <Label>New Password</Label>
+            <Label>{translateUi(uiLanguage, "New Password")}</Label>
             <Input
               type="password"
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
-              placeholder="Minimum 6 characters"
+              placeholder={translateUi(uiLanguage, "Minimum 6 characters")}
               onKeyDown={e => { if (e.key === "Enter") handleSetPassword(); }}
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setPasswordDialog(null); setNewPassword(""); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setPasswordDialog(null); setNewPassword(""); }}>{translateUi(uiLanguage, "Cancel")}</Button>
             <Button onClick={handleSetPassword} disabled={passwordSaving || newPassword.length < 6}>
-              {passwordSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : "Set Password"}
+              {passwordSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {translateUi(uiLanguage, "Saving...")}</> : "Set Password"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -949,6 +943,7 @@ function UsersTab() {
 }
 
 function RolesTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const [roles, setRoles] = useState<RoleData[]>([]);
   const [permSchema, setPermSchema] = useState<PermSchema>({});
   const [loading, setLoading] = useState(true);
@@ -1106,12 +1101,11 @@ function RolesTab() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Roles & Permissions</h2>
-          <p className="text-muted-foreground text-sm mt-0.5">{roles.length} roles configured — {totalPerms} available permissions</p>
+          <h2 className="text-lg font-semibold text-foreground">{translateUi(uiLanguage, "Roles & Permissions")}</h2>
+          <p className="text-muted-foreground text-sm mt-0.5">{roles.length} {translateUi(uiLanguage, "roles configured —")} {totalPerms} {translateUi(uiLanguage, "available permissions")}</p>
         </div>
         <Button className="rounded-xl gap-2" onClick={() => setCreateOpen(true)}>
-          <Plus className="w-4 h-4" /> Create Role
-        </Button>
+          <Plus className="w-4 h-4" /> {translateUi(uiLanguage, "Create Role")} </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -1137,7 +1131,7 @@ function RolesTab() {
                   </div>
                   <div className="flex items-center gap-1">
                     {role.isSystem && (
-                      <Badge variant="outline" className="text-[10px] h-5">System</Badge>
+                      <Badge variant="outline" className="text-[10px] h-5">{translateUi(uiLanguage, "System")}</Badge>
                     )}
                     {!role.isSystem && (
                       <Button size="icon" variant="ghost" className="w-7 h-7 text-muted-foreground hover:text-destructive"
@@ -1152,8 +1146,7 @@ function RolesTab() {
                 )}
                 <div className="flex items-center gap-2 mt-3">
                   <Badge variant="secondary" className="text-[10px] h-5">
-                    {(role.permissions as string[])?.length || 0} / {totalPerms} permissions
-                  </Badge>
+                    {(role.permissions as string[])?.length || 0} / {totalPerms} {translateUi(uiLanguage, "permissions")} </Badge>
                 </div>
               </Card>
             );
@@ -1164,30 +1157,29 @@ function RolesTab() {
           {!selectedRole ? (
             <Card className="border-none shadow-lg shadow-black/5 flex flex-col items-center justify-center py-24">
               <Settings2 className="w-12 h-12 text-muted-foreground/40 mb-3" />
-              <p className="text-muted-foreground font-medium">Select a role to manage permissions</p>
-              <p className="text-sm text-muted-foreground/60 mt-1">Click on a role from the left panel</p>
+              <p className="text-muted-foreground font-medium">{translateUi(uiLanguage, "Select a role to manage permissions")}</p>
+              <p className="text-sm text-muted-foreground/60 mt-1">{translateUi(uiLanguage, "Click on a role from the left panel")}</p>
             </Card>
           ) : (
             <Card className="border-none shadow-lg shadow-black/5 overflow-hidden">
               <div className="p-6 border-b border-border/50">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <Lock className="w-5 h-5 text-primary" />
-                    Edit: {editDisplayName}
+                    <Lock className="w-5 h-5 text-primary" /> {translateUi(uiLanguage, "Edit:")} {editDisplayName}
                   </h3>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={selectAll} className="text-xs h-8">Select All</Button>
-                    <Button variant="outline" size="sm" onClick={deselectAll} className="text-xs h-8">Deselect All</Button>
+                    <Button variant="outline" size="sm" onClick={selectAll} className="text-xs h-8">{translateUi(uiLanguage, "Select All")}</Button>
+                    <Button variant="outline" size="sm" onClick={deselectAll} className="text-xs h-8">{translateUi(uiLanguage, "Deselect All")}</Button>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-xs">Display Name</Label>
+                    <Label className="text-xs">{translateUi(uiLanguage, "Display Name")}</Label>
                     <Input value={editDisplayName} onChange={e => setEditDisplayName(e.target.value)}
                       className="h-9 rounded-lg" />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs">Color</Label>
+                    <Label className="text-xs">{translateUi(uiLanguage, "Color")}</Label>
                     <Select value={editColor} onValueChange={setEditColor}>
                       <SelectTrigger className="h-9 rounded-lg">
                         <SelectValue />
@@ -1205,9 +1197,9 @@ function RolesTab() {
                     </Select>
                   </div>
                   <div className="sm:col-span-2 space-y-2">
-                    <Label className="text-xs">Description</Label>
+                    <Label className="text-xs">{translateUi(uiLanguage, "Description")}</Label>
                     <Input value={editDescription} onChange={e => setEditDescription(e.target.value)}
-                      className="h-9 rounded-lg" placeholder="Role description..." />
+                      className="h-9 rounded-lg" placeholder={translateUi(uiLanguage, "Role description...")} />
                   </div>
                 </div>
               </div>
@@ -1272,8 +1264,7 @@ function RolesTab() {
 
               <div className="p-4 border-t border-border/50 flex items-center justify-between bg-secondary/20">
                 <p className="text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground">{editPerms.length}</span> of {totalPerms} permissions enabled
-                </p>
+                  <span className="font-semibold text-foreground">{editPerms.length}</span> {translateUi(uiLanguage, "of")} {totalPerms} {translateUi(uiLanguage, "permissions enabled")} </p>
                 <Button onClick={saveRole} disabled={saving} className="rounded-xl gap-2">
                   {saving ? "Saving..." : "Save Changes"}
                 </Button>
@@ -1287,28 +1278,27 @@ function RolesTab() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Plus className="w-5 h-5" /> Create New Role
-            </DialogTitle>
+              <Plus className="w-5 h-5" /> {translateUi(uiLanguage, "Create New Role")} </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Role Name (slug) *</Label>
+              <Label>{translateUi(uiLanguage, "Role Name (slug) *")}</Label>
               <Input value={newRoleName} onChange={e => setNewRoleName(e.target.value)}
-                placeholder="e.g. marketing_manager" />
-              <p className="text-xs text-muted-foreground">Lowercase letters, numbers, underscores only</p>
+                placeholder={translateUi(uiLanguage, "e.g. marketing_manager")} />
+              <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Lowercase letters, numbers, underscores only")}</p>
             </div>
             <div className="space-y-2">
-              <Label>Display Name *</Label>
+              <Label>{translateUi(uiLanguage, "Display Name *")}</Label>
               <Input value={newRoleDisplay} onChange={e => setNewRoleDisplay(e.target.value)}
-                placeholder="e.g. Marketing Manager" />
+                placeholder={translateUi(uiLanguage, "e.g. Marketing Manager")} />
             </div>
             <div className="space-y-2">
-              <Label>Description</Label>
+              <Label>{translateUi(uiLanguage, "Description")}</Label>
               <Input value={newRoleDesc} onChange={e => setNewRoleDesc(e.target.value)}
-                placeholder="What this role is for..." />
+                placeholder={translateUi(uiLanguage, "What this role is for...")} />
             </div>
             <div className="space-y-2">
-              <Label>Color</Label>
+              <Label>{translateUi(uiLanguage, "Color")}</Label>
               <div className="flex flex-wrap gap-2">
                 {Object.keys(roleColors).map(c => (
                   <button key={c} onClick={() => setNewRoleColor(c)}
@@ -1322,8 +1312,8 @@ function RolesTab() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={createRole}>Create Role</Button>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>{translateUi(uiLanguage, "Cancel")}</Button>
+            <Button onClick={createRole}>{translateUi(uiLanguage, "Create Role")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1332,6 +1322,7 @@ function RolesTab() {
 }
 
 export default function AdminUsers() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   return (
       <div className="space-y-6">
@@ -1342,13 +1333,9 @@ export default function AdminUsers() {
         <Tabs defaultValue="users" className="space-y-6">
           <TabsList className="h-10">
             <TabsTrigger value="users" className="gap-2 px-4">
-              <Users className="w-4 h-4" />
-              Users
-            </TabsTrigger>
+              <Users className="w-4 h-4" /> {translateUi(uiLanguage, "Users")} </TabsTrigger>
             <TabsTrigger value="roles" className="gap-2 px-4">
-              <Shield className="w-4 h-4" />
-              Roles & Permissions
-            </TabsTrigger>
+              <Shield className="w-4 h-4" /> {translateUi(uiLanguage, "Roles & Permissions")} </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users">

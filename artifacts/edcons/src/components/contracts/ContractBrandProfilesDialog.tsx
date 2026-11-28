@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { Edit, FileCheck2, Loader2, Plus, Power, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
@@ -48,6 +49,7 @@ type Props = {
 };
 
 export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onChanged }: Props) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const [editing, setEditing] = useState<ContractBrandProfile | null>(null);
   const [saving, setSaving] = useState(false);
@@ -145,11 +147,11 @@ export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onCh
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Contract brand profiles</DialogTitle></DialogHeader>
-        <p className="text-sm text-muted-foreground">Manage reusable signing-page and PDF branding once, then assign it to any contract template.</p>
+        <DialogHeader><DialogTitle>{translateUi(uiLanguage, "Contract brand profiles")}</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground">{translateUi(uiLanguage, "Manage reusable signing-page and PDF branding once, then assign it to any contract template.")}</p>
         <div className="grid grid-cols-1 lg:grid-cols-[.9fr_1.1fr] gap-5">
           <div className="space-y-2">
-            {profiles.length === 0 && <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">No brand profiles yet.</div>}
+            {profiles.length === 0 && <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">{translateUi(uiLanguage, "No brand profiles yet.")}</div>}
             {profiles.map(profile => (
               <div key={profile.id} className="rounded-lg border p-3 flex items-center gap-3">
                 {profile.config.logoUrl ? <img src={profile.config.logoUrl} alt="" className="h-10 w-14 object-contain rounded border" /> : <div className="h-10 w-14 rounded border" style={{ background: profile.config.primaryColor || "#143591" }} />}
@@ -169,25 +171,25 @@ export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onCh
           <div className="rounded-lg border p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">{editing ? `Edit ${editing.name}` : "New brand profile"}</h3>
-              {editing && <Button type="button" size="sm" variant="ghost" onClick={reset}><Plus className="h-4 w-4 mr-1" /> New</Button>}
+              {editing && <Button type="button" size="sm" variant="ghost" onClick={reset}><Plus className="h-4 w-4 mr-1" /> {translateUi(uiLanguage, "New")}</Button>}
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Key</Label><Input value={form.key} onChange={event => setForm(current => ({ ...current, key: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "") }))} placeholder="find_and_study" /></div>
-              <div><Label>Name</Label><Input value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} placeholder="Find And Study" /></div>
+              <div><Label>{translateUi(uiLanguage, "Key")}</Label><Input value={form.key} onChange={event => setForm(current => ({ ...current, key: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "") }))} placeholder={translateUi(uiLanguage, "find_and_study")} /></div>
+              <div><Label>{translateUi(uiLanguage, "Name")}</Label><Input value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} placeholder="Find And Study" /></div>
             </div>
             {configFields.map(([key, label, placeholder]) => (
               <div key={key}><Label>{label}</Label><Input value={String(form.config[key] || "")} placeholder={placeholder} onChange={event => setForm(current => ({ ...current, config: { ...current.config, [key]: event.target.value } }))} /></div>
             ))}
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Primary color</Label><Input type="color" className="h-10 p-1" value={form.config.primaryColor} onChange={event => setForm(current => ({ ...current, config: { ...current.config, primaryColor: event.target.value } }))} /></div>
-              <div><Label>Accent color</Label><Input type="color" className="h-10 p-1" value={form.config.accentColor} onChange={event => setForm(current => ({ ...current, config: { ...current.config, accentColor: event.target.value } }))} /></div>
+              <div><Label>{translateUi(uiLanguage, "Primary color")}</Label><Input type="color" className="h-10 p-1" value={form.config.primaryColor} onChange={event => setForm(current => ({ ...current, config: { ...current.config, primaryColor: event.target.value } }))} /></div>
+              <div><Label>{translateUi(uiLanguage, "Accent color")}</Label><Input type="color" className="h-10 p-1" value={form.config.accentColor} onChange={event => setForm(current => ({ ...current, config: { ...current.config, accentColor: event.target.value } }))} /></div>
             </div>
             <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
               <div className="flex items-start gap-2">
                 <ShieldCheck className="h-5 w-5 mt-0.5 text-primary" />
                 <div>
-                  <Label>Official company stamp & signature</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">Private. It is never shown during form entry or review; it is added only to the final PDF after the counterparty signs.</p>
+                  <Label>{translateUi(uiLanguage, "Official company stamp & signature")}</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">{translateUi(uiLanguage, "Private. It is never shown during form entry or review; it is added only to the final PDF after the counterparty signs.")}</p>
                 </div>
               </div>
               <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed px-3 py-3 text-sm hover:bg-muted/50">
@@ -197,29 +199,29 @@ export function ContractBrandProfilesDialog({ open, onOpenChange, profiles, onCh
               </label>
               {form.config.companySignatureDataUrl ? (
                 <div className="rounded-md border bg-white p-3">
-                  <img src={form.config.companySignatureDataUrl} alt="Official company stamp and signature preview" className="mx-auto h-24 max-w-full object-contain" />
+                  <img src={form.config.companySignatureDataUrl} alt={translateUi(uiLanguage, "Official company stamp and signature preview")} className="mx-auto h-24 max-w-full object-contain" />
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><FileCheck2 className="h-3.5 w-3.5" /> Ready for final PDFs</span>
-                    <Button type="button" size="sm" variant="outline" onClick={() => { setSignatureAction("remove"); setForm(current => ({ ...current, config: { ...current.config, companySignatureDataUrl: "" } })); }}>Remove</Button>
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><FileCheck2 className="h-3.5 w-3.5" /> {translateUi(uiLanguage, "Ready for final PDFs")}</span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => { setSignatureAction("remove"); setForm(current => ({ ...current, config: { ...current.config, companySignatureDataUrl: "" } })); }}>{translateUi(uiLanguage, "Remove")}</Button>
                   </div>
                 </div>
               ) : signatureConfigured ? (
                 <div className="rounded-md border bg-emerald-50 p-3 text-sm text-emerald-800">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1"><FileCheck2 className="h-4 w-4" /> Official signature is securely configured</span>
-                    <Button type="button" size="sm" variant="outline" onClick={() => setSignatureAction("remove")}>Remove</Button>
+                    <span className="inline-flex items-center gap-1"><FileCheck2 className="h-4 w-4" /> {translateUi(uiLanguage, "Official signature is securely configured")}</span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setSignatureAction("remove")}>{translateUi(uiLanguage, "Remove")}</Button>
                   </div>
-                  <p className="mt-1 text-xs">The saved image is intentionally not returned by the API. Upload a replacement to change it.</p>
+                  <p className="mt-1 text-xs">{translateUi(uiLanguage, "The saved image is intentionally not returned by the API. Upload a replacement to change it.")}</p>
                 </div>
               ) : (
-                <p className="text-xs text-amber-700">A template using this profile cannot be published until an official signature is uploaded.</p>
+                <p className="text-xs text-amber-700">{translateUi(uiLanguage, "A template using this profile cannot be published until an official signature is uploaded.")}</p>
               )}
             </div>
-            <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} /><Power className="h-4 w-4" /> Active</label>
+            <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} /><Power className="h-4 w-4" /> {translateUi(uiLanguage, "Active")}</label>
             <Button type="button" onClick={save} disabled={saving}>{saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}{editing ? "Save brand profile" : "Create brand profile"}</Button>
           </div>
         </div>
-        <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Close</Button></DialogFooter>
+        <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{translateUi(uiLanguage, "Close")}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );

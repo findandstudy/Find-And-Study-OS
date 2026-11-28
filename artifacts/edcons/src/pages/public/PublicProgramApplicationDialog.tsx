@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { lazy, Suspense, useState, useEffect, useRef, useMemo } from "react";
 import { useProgramDocRequirements, useResolveDocMeta } from "@/lib/programDocTypes";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
@@ -157,6 +158,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove, applicationSession }:
   onRemove: () => void;
   applicationSession: string;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -231,14 +233,14 @@ function DropZone({ docType, uploaded, onUpload, onRemove, applicationSession }:
         </button>
         <CheckCircle2 className="w-5 h-5 text-green-500" />
         <p className="text-xs font-semibold text-foreground truncate max-w-[90px]">{uploaded.file.name}</p>
-        {(uploaded.partCount || 1) > 1 && <p className="text-[10px] font-medium text-green-700">{uploaded.partCount} parts combined</p>}
+        {(uploaded.partCount || 1) > 1 && <p className="text-[10px] font-medium text-green-700">{uploaded.partCount} {translateUi(uiLanguage, "parts combined")}</p>}
         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{docType.label ?? t(docType.labelKey)}</span>
         {!isSingleImageDocumentType(docType.key) && (
           <div className="flex items-center gap-2">
             <button type="button" disabled={merging} onClick={() => inputRef.current?.click()} className="text-[10px] font-semibold text-primary hover:underline disabled:opacity-50">
               {merging ? "Combining..." : "+ Add part"}
             </button>
-            <button type="button" disabled={merging} onClick={() => setScannerOpen(true)} className="text-[10px] font-semibold text-primary hover:underline disabled:opacity-50">Scan</button>
+            <button type="button" disabled={merging} onClick={() => setScannerOpen(true)} className="text-[10px] font-semibold text-primary hover:underline disabled:opacity-50">{translateUi(uiLanguage, "Scan")}</button>
           </div>
         )}
         <input ref={inputRef} type="file" multiple={!isSingleImageDocumentType(docType.key)} accept={docType.accept} className="hidden"
@@ -353,6 +355,7 @@ interface ExistingDocInfo {
 }
 
 export default function PublicProgramApplicationDialog({ open, onClose, program }: { open: boolean; onClose: () => void; program: PublicApplicationProgram | null }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, localePath } = useI18n();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -959,12 +962,10 @@ export default function PublicProgramApplicationDialog({ open, onClose, program 
 
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900/60 dark:bg-amber-950/20">
               <p className="text-[11px] text-amber-900 dark:text-amber-200">{APPLICATION_DOCUMENT_HELP_TEXT}</p>
-              <Badge variant="outline" className="border-amber-500 bg-background text-[10px] font-bold text-amber-800 dark:text-amber-200">MAX 5 MB / FILE</Badge>
+              <Badge variant="outline" className="border-amber-500 bg-background text-[10px] font-bold text-amber-800 dark:text-amber-200">{translateUi(uiLanguage, "MAX 5 MB / FILE")}</Badge>
             </div>
             {programReqsError && (
-              <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-xl p-3 text-xs text-rose-700 dark:text-rose-300">
-                Document requirements could not be verified. Please retry.
-              </div>
+              <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-xl p-3 text-xs text-rose-700 dark:text-rose-300"> {translateUi(uiLanguage, "Document requirements could not be verified. Please retry.")} </div>
             )}
             {isLoggedInStudent && reusedCount > 0 && (
               <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2">

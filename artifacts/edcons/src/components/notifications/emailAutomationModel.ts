@@ -1,3 +1,4 @@
+import { translateUi } from "@/lib/ui-localization";
 export const EMAIL_AUTOMATION_PATH = "/admin/settings?tab=notifications#notification-email";
 export function canManageNotificationRules(user: { role: string; isActive: boolean; isImpersonating?: boolean } | null | undefined, authorityConfirmed: boolean): boolean {
   return authorityConfirmed === true && user?.isActive === true && user.isImpersonating !== true && ["admin", "super_admin"].includes(user.role);
@@ -33,7 +34,7 @@ export function emailStageValid(value: { enabled: boolean; templateVersionId: nu
   return Number.isSafeInteger(value.templateVersionId) && Number(value.templateVersionId) > 0 && Number.isSafeInteger(value.senderAccountId) && Number(value.senderAccountId) > 0 && Array.isArray(value.originTypes) && value.originTypes.length > 0 && value.originTypes.every(origin => ["direct", "agent", "sub_agent"].includes(origin));
 }
 export function emailStatusLabel(status: string, lang: string): string {
-  const copy = (en: string, tr: string) => lang === "tr" ? tr : en;
+  const copy = (en: string, tr: string) => translateUi(lang, en, tr);
   const labels: Record<string, string> = {
     draft: copy("Draft", "Taslak"), review: copy("In review", "İncelemede"), approved: copy("Approved", "Onaylı"), retired: copy("Retired", "Kullanımdan kaldırıldı"),
     pending: copy("Pending", "Bekliyor"), queued: copy("Queued", "Kuyrukta"), enqueued: copy("Queued for sending", "Gönderim kuyruğuna alındı"), processing: copy("Processing", "İşleniyor"),
@@ -43,7 +44,7 @@ export function emailStatusLabel(status: string, lang: string): string {
   return labels[status] ?? status;
 }
 export function emailAutomationCopy(lang: string) {
-  const copy = (en: string, tr: string) => lang === "tr" ? tr : en;
+  const copy = (en: string, tr: string) => translateUi(lang, en, tr);
   return { copy,
     title: copy("Email automation", "E-posta otomasyonu"), templates: copy("Email templates", "E-posta şablonları"), senders: copy("Sender email addresses", "Gönderici e-posta adresleri"), history: copy("Delivery history", "Gönderim geçmişi"),
     intro: copy("One shared library for application-stage emails and reusable system templates. Saving a template does not send an email or create an event trigger.", "Başvuru aşaması e-postaları ve sistemde kullanılabilir şablonlar için ortak kütüphane. Şablon kaydetmek e-posta göndermez veya yeni bir olay tetikleyicisi oluşturmaz."),

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -314,6 +315,7 @@ function ScheduleSection({ schedules, userId, onSaved }: { schedules: any[]; use
 
 // ─── Section: Languages ─────────────────────────────────────────────────────
 function LanguagesSection({ languages, userId, onSaved }: { languages: any[]; userId: number; onSaved: () => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [items, setItems] = useState(languages.map(l => ({ ...l })));
@@ -339,7 +341,7 @@ function LanguagesSection({ languages, userId, onSaved }: { languages: any[]; us
       {items.length === 0 && <p className="text-sm text-muted-foreground">{t("staffCards.languages.empty")}</p>}
       {items.map((row, i) => (
         <div key={i} className="grid grid-cols-12 gap-2 items-end">
-          <div className="col-span-5"><Label>{t("staffCards.languages.language")}</Label><Input placeholder="Türkçe" value={row.language} onChange={(e) => update(i, "language", e.target.value)} /></div>
+          <div className="col-span-5"><Label>{t("staffCards.languages.language")}</Label><Input placeholder={translateUi(uiLanguage, "Türkçe")} value={row.language} onChange={(e) => update(i, "language", e.target.value)} /></div>
           <div className="col-span-5"><Label>{t("staffCards.languages.proficiency")}</Label>
             <Select value={row.proficiency || ""} onValueChange={(v) => update(i, "proficiency", v)}>
               <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
@@ -401,6 +403,7 @@ function CountriesSection({ countries, userId, onSaved }: { countries: Array<{ i
 
 // ─── Section: Documents ─────────────────────────────────────────────────────
 function DocumentsSection({ documents, userId, onSaved }: { documents: any[]; userId: number; onSaved: () => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const [docType, setDocType] = useState<"contract" | "diploma" | "passport">("contract");
@@ -480,7 +483,7 @@ function DocumentsSection({ documents, userId, onSaved }: { documents: any[]; us
               <FileText className="h-5 w-5 text-muted-foreground" />
               <div>
                 <div className="font-medium">{d.filename}</div>
-                <div className="text-xs text-muted-foreground">{t(`staffCards.documents.${d.docType}`)} · {(d.sizeBytes / 1024).toFixed(1)} KB · {new Date(d.uploadedAt).toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground">{t(`staffCards.documents.${d.docType}`)} · {(d.sizeBytes / 1024).toFixed(1)} {translateUi(uiLanguage, "KB ·")} {new Date(d.uploadedAt).toLocaleString()}</div>
               </div>
             </div>
             <div className="flex items-center gap-2">

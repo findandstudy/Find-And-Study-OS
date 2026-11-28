@@ -1,3 +1,4 @@
+import { translateUi } from "@/lib/ui-localization";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ArrowRight, FolderKanban, Loader2 } from "lucide-react";
@@ -14,7 +15,7 @@ import {
 export default function TeamWorkspaceEntry() {
   const { lang } = useI18n();
   const [, setLocation] = useLocation();
-  const copy = (tr: string, en: string) => lang === "tr" ? tr : en;
+  const copy = (tr: string, en: string) => translateUi(lang, en, tr);
   const [projects, setProjects] = useState<PersonaWorkspaceProject[]>([]);
   const [phase, setPhase] = useState<"loading" | "ready" | "unavailable" | "session" | "error">("loading");
   const [attempt, setAttempt] = useState(0);

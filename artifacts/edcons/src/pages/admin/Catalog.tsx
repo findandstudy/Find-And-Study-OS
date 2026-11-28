@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -328,6 +329,7 @@ function catalogSourceNotes(fields: readonly SourceFieldOption[]): Record<string
 }
 
 function SourceMetadataEditor({ value, fields, onChange }: { value?: CatalogSourceMetadata; fields: readonly SourceFieldOption[]; onChange: (value: CatalogSourceMetadata) => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const supportedKeys = new Set(fields.map(([key]) => key));
   const metadata = Object.fromEntries(
     Object.entries(value ?? {}).filter(([key, entry]) => supportedKeys.has(key) && entry && typeof entry === "object"),
@@ -338,16 +340,16 @@ function SourceMetadataEditor({ value, fields, onChange }: { value?: CatalogSour
   const setEntry = (key: string, patch: Partial<CatalogFieldSource>) => onChange({ ...metadata, [key]: { ...metadata[key], ...patch } });
   return (
     <details className="rounded-lg border bg-muted/20 p-3" open={isOpen} onToggle={event => setIsOpen(event.currentTarget.open)}>
-      <summary className="cursor-pointer font-medium text-sm">External sources & verification <span className="text-muted-foreground font-normal">({Object.keys(metadata).length} added · {fields.length} available)</span></summary>
-      <p className="mt-2 text-xs text-muted-foreground">Add the official source used for identity fields, factual data and editorial sections on the public detail page. This verification information stays in the admin catalogue and is not displayed publicly.</p>
-      <p className="mt-1 text-[11px] text-muted-foreground">Live counts and catalogue lists are calculated by the system from linked records, so they do not require a manual source.</p>
-      {fields.some(([key]) => key === "countryGuide") && <p className="mt-1 text-[11px] text-muted-foreground"><strong>Country source sheet:</strong> use one Google Sheet per country with the exact columns <code>Topic title</code> and <code>Verified content</code>. Allow link viewing or share the file with the Google Sheets service account configured in Integrations. Topic titles route verified rows to the relevant AI section; they are guidance keys, not public headings or hardcoded copy.</p>}
+      <summary className="cursor-pointer font-medium text-sm">{translateUi(uiLanguage, "External sources & verification")} <span className="text-muted-foreground font-normal">({Object.keys(metadata).length} {translateUi(uiLanguage, "added ·")} {fields.length} {translateUi(uiLanguage, "available)")}</span></summary>
+      <p className="mt-2 text-xs text-muted-foreground">{translateUi(uiLanguage, "Add the official source used for identity fields, factual data and editorial sections on the public detail page. This verification information stays in the admin catalogue and is not displayed publicly.")}</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Live counts and catalogue lists are calculated by the system from linked records, so they do not require a manual source.")}</p>
+      {fields.some(([key]) => key === "countryGuide") && <p className="mt-1 text-[11px] text-muted-foreground"><strong>{translateUi(uiLanguage, "Country source sheet:")}</strong> {translateUi(uiLanguage, "use one Google Sheet per country with the exact columns")} <code>{translateUi(uiLanguage, "Topic title")}</code> {translateUi(uiLanguage, "and")} <code>{translateUi(uiLanguage, "Verified content")}</code>{translateUi(uiLanguage, ". Allow link viewing or share the file with the Google Sheets service account configured in Integrations. Topic titles route verified rows to the relevant AI section; they are guidance keys, not public headings or hardcoded copy.")}</p>}
       <div className="mt-3 flex gap-2">
         <Select value={selectedField} onValueChange={setSelectedField}>
-          <SelectTrigger className="flex-1"><SelectValue placeholder="Choose a field" /></SelectTrigger>
+          <SelectTrigger className="flex-1"><SelectValue placeholder={translateUi(uiLanguage, "Choose a field")} /></SelectTrigger>
           <SelectContent className="max-h-80">{available.map(([key, label, group]) => <SelectItem key={key} value={key}><span className="text-muted-foreground">{group} ·</span> {label}</SelectItem>)}</SelectContent>
         </Select>
-        <Button type="button" variant="outline" disabled={!selectedField} onClick={() => { if (selectedField) { onChange({ ...metadata, [selectedField]: {} }); setSelectedField(""); } }}><Plus className="h-4 w-4 mr-1" />Add source</Button>
+        <Button type="button" variant="outline" disabled={!selectedField} onClick={() => { if (selectedField) { onChange({ ...metadata, [selectedField]: {} }); setSelectedField(""); } }}><Plus className="h-4 w-4 mr-1" />{translateUi(uiLanguage, "Add source")}</Button>
       </div>
       <div className="mt-3 space-y-3">
         {Object.entries(metadata).map(([key, entry]) => {
@@ -357,12 +359,12 @@ function SourceMetadataEditor({ value, fields, onChange }: { value?: CatalogSour
           return <div key={key} className="rounded-md border bg-background p-3 space-y-2">
             <div className="flex items-center justify-between"><div><span className="text-sm font-semibold">{label}</span>{group && <span className="ml-2 text-[11px] text-muted-foreground">{group}</span>}</div><Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => { const next = { ...metadata }; delete next[key]; onChange(next); }}><Trash2 className="h-3.5 w-3.5" /></Button></div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <div><Label className="text-xs">Source / institution</Label><Input className="mt-1" value={entry.sourceName ?? ""} onChange={e => setEntry(key, { sourceName: e.target.value })} placeholder="Official institution" /></div>
-              <div><Label className="text-xs">Source URL</Label><Input className="mt-1" type="url" value={entry.sourceUrl ?? ""} onChange={e => setEntry(key, { sourceUrl: e.target.value })} placeholder="https://..." /></div>
-              <div><Label className="text-xs">Last verified</Label><Input className="mt-1" type="date" value={entry.verifiedAt?.slice(0, 10) ?? ""} onChange={e => setEntry(key, { verifiedAt: e.target.value })} /></div>
-              <div><Label className="text-xs">Valid until</Label><Input className="mt-1" type="date" value={entry.validUntil?.slice(0, 10) ?? ""} onChange={e => setEntry(key, { validUntil: e.target.value })} /></div>
+              <div><Label className="text-xs">{translateUi(uiLanguage, "Source / institution")}</Label><Input className="mt-1" value={entry.sourceName ?? ""} onChange={e => setEntry(key, { sourceName: e.target.value })} placeholder={translateUi(uiLanguage, "Official institution")} /></div>
+              <div><Label className="text-xs">{translateUi(uiLanguage, "Source URL")}</Label><Input className="mt-1" type="url" value={entry.sourceUrl ?? ""} onChange={e => setEntry(key, { sourceUrl: e.target.value })} placeholder="https://..." /></div>
+              <div><Label className="text-xs">{translateUi(uiLanguage, "Last verified")}</Label><Input className="mt-1" type="date" value={entry.verifiedAt?.slice(0, 10) ?? ""} onChange={e => setEntry(key, { verifiedAt: e.target.value })} /></div>
+              <div><Label className="text-xs">{translateUi(uiLanguage, "Valid until")}</Label><Input className="mt-1" type="date" value={entry.validUntil?.slice(0, 10) ?? ""} onChange={e => setEntry(key, { validUntil: e.target.value })} /></div>
             </div>
-            <div><Label className="text-xs">Internal verification note</Label><Input className="mt-1" value={entry.notes ?? ""} onChange={e => setEntry(key, { notes: e.target.value })} placeholder="Optional note" /></div>
+            <div><Label className="text-xs">{translateUi(uiLanguage, "Internal verification note")}</Label><Input className="mt-1" value={entry.notes ?? ""} onChange={e => setEntry(key, { notes: e.target.value })} placeholder={translateUi(uiLanguage, "Optional note")} /></div>
           </div>;
         })}
       </div>
@@ -469,6 +471,7 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
     onProgress: (progress: BulkImportProgress) => void,
   ) => Promise<BulkImportResult>;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const [result, setResult] = useState<BulkImportResult | null>(null);
   const [error, setError] = useState("");
@@ -572,13 +575,13 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
           {preview && (
             <div className="rounded-xl border bg-muted/20 p-3 space-y-3">
               <div className="flex flex-wrap gap-2 text-xs font-medium">
-                <Badge className="bg-emerald-600">Eklenecek: {preview.summary.add}</Badge>
-                <Badge className="bg-blue-600">Güncellenecek: {preview.summary.update}</Badge>
-                <Badge variant={preview.summary.error ? "destructive" : "secondary"}>Hata: {preview.summary.error}</Badge>
+                <Badge className="bg-emerald-600">{translateUi(uiLanguage, "Eklenecek:")} {preview.summary.add}</Badge>
+                <Badge className="bg-blue-600">{translateUi(uiLanguage, "Güncellenecek:")} {preview.summary.update}</Badge>
+                <Badge variant={preview.summary.error ? "destructive" : "secondary"}>{translateUi(uiLanguage, "Hata:")} {preview.summary.error}</Badge>
               </div>
               <div className="max-h-56 overflow-auto rounded-lg border bg-background">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-muted"><tr><th className="p-2 text-left">Satır</th><th className="p-2 text-left">İşlem</th><th className="p-2 text-left">Okul / Program</th><th className="p-2 text-left">Sonuç</th></tr></thead>
+                  <thead className="sticky top-0 bg-muted"><tr><th className="p-2 text-left">{translateUi(uiLanguage, "Satır")}</th><th className="p-2 text-left">{translateUi(uiLanguage, "İşlem")}</th><th className="p-2 text-left">{translateUi(uiLanguage, "Okul / Program")}</th><th className="p-2 text-left">{translateUi(uiLanguage, "Sonuç")}</th></tr></thead>
                   <tbody>{preview.rows.map(item => (
                     <tr key={item.row} className="border-t align-top">
                       <td className="p-2">{item.row}</td>
@@ -589,8 +592,8 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
                   ))}</tbody>
                 </table>
               </div>
-              <p className="text-xs text-muted-foreground">Bu adım henüz veritabanında değişiklik yapmaz. Aynı okul + program + derece + dil kimliği yeniden yüklendiğinde yeni kayıt yerine güncelleme yapılır.</p>
-              <Button onClick={confirmImport} disabled={!preview.canImport || loading} className="w-full">Onayla ve içe aktar</Button>
+              <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Bu adım henüz veritabanında değişiklik yapmaz. Aynı okul + program + derece + dil kimliği yeniden yüklendiğinde yeni kayıt yerine güncelleme yapılır.")}</p>
+              <Button onClick={confirmImport} disabled={!preview.canImport || loading} className="w-full">{translateUi(uiLanguage, "Onayla ve içe aktar")}</Button>
             </div>
           )}
           {result && (
@@ -1098,6 +1101,7 @@ function CountriesTab() {
    CITIES TAB
 ══════════════════════════════════════════════════════════ */
 function CitiesTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -1413,37 +1417,37 @@ function CitiesTab() {
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div><Label>Transport modes</Label><Input className="mt-1" placeholder="Metro, Tram, Bus, Ferry" value={(form?.transportModes ?? []).join(", ")} onChange={e => setForm(f => ({ ...f, transportModes: e.target.value.split(",").map(v => v.trim()).filter(Boolean) }))} /></div>
-              <div className="sm:col-span-2"><Label>Campus geography</Label><Input className="mt-1" placeholder="Europe · Asia" value={form?.campusGeography ?? ""} onChange={e => setForm(f => ({ ...f, campusGeography: e.target.value }))} /></div>
-              <div><Label>Latitude</Label><Input className="mt-1" type="number" step="any" value={form?.latitude ?? ""} onChange={e => setForm(f => ({ ...f, latitude: e.target.value === "" ? null : Number(e.target.value) }))} /></div>
-              <div><Label>Longitude</Label><Input className="mt-1" type="number" step="any" value={form?.longitude ?? ""} onChange={e => setForm(f => ({ ...f, longitude: e.target.value === "" ? null : Number(e.target.value) }))} /></div>
+              <div><Label>{translateUi(uiLanguage, "Transport modes")}</Label><Input className="mt-1" placeholder={translateUi(uiLanguage, "Metro, Tram, Bus, Ferry")} value={(form?.transportModes ?? []).join(", ")} onChange={e => setForm(f => ({ ...f, transportModes: e.target.value.split(",").map(v => v.trim()).filter(Boolean) }))} /></div>
+              <div className="sm:col-span-2"><Label>{translateUi(uiLanguage, "Campus geography")}</Label><Input className="mt-1" placeholder={translateUi(uiLanguage, "Europe · Asia")} value={form?.campusGeography ?? ""} onChange={e => setForm(f => ({ ...f, campusGeography: e.target.value }))} /></div>
+              <div><Label>{translateUi(uiLanguage, "Latitude")}</Label><Input className="mt-1" type="number" step="any" value={form?.latitude ?? ""} onChange={e => setForm(f => ({ ...f, latitude: e.target.value === "" ? null : Number(e.target.value) }))} /></div>
+              <div><Label>{translateUi(uiLanguage, "Longitude")}</Label><Input className="mt-1" type="number" step="any" value={form?.longitude ?? ""} onChange={e => setForm(f => ({ ...f, longitude: e.target.value === "" ? null : Number(e.target.value) }))} /></div>
             </div>
             <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.city} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
             <div className="rounded-lg border p-3 space-y-3">
-              <p className="text-sm font-semibold">External city data</p>
-              <p className="text-xs text-muted-foreground">Climate and housing values are stored with provider, source and verification metadata; they are not CMS copy.</p>
+              <p className="text-sm font-semibold">{translateUi(uiLanguage, "External city data")}</p>
+              <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Climate and housing values are stored with provider, source and verification metadata; they are not CMS copy.")}</p>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div><Label>Climate provider</Label><Input className="mt-1" value={externalForm.climateProvider ?? ""} onChange={e => setExternalForm(f => ({ ...f, climateProvider: e.target.value }))} /></div>
-                <div><Label>Climate source URL</Label><Input className="mt-1" value={externalForm.climateSourceUrl ?? ""} onChange={e => setExternalForm(f => ({ ...f, climateSourceUrl: e.target.value }))} /></div>
-                <div><Label>Climate summary</Label><Input className="mt-1" placeholder="6.8°C Jan · 24.7°C Jul–Aug" value={externalForm.climateSummary ?? ""} onChange={e => setExternalForm(f => ({ ...f, climateSummary: e.target.value }))} /></div>
-                <div><Label>Annual average °C</Label><Input className="mt-1" type="number" step="0.1" value={externalForm.climateAnnualAverageC ?? ""} onChange={e => setExternalForm(f => ({ ...f, climateAnnualAverageC: e.target.value === "" ? null : Number(e.target.value) }))} /></div>
-                <div><Label>Housing provider</Label><Input className="mt-1" value={externalForm.housingProvider ?? ""} onChange={e => setExternalForm(f => ({ ...f, housingProvider: e.target.value }))} /></div>
-                <div><Label>Housing source URL</Label><Input className="mt-1" value={externalForm.housingSourceUrl ?? ""} onChange={e => setExternalForm(f => ({ ...f, housingSourceUrl: e.target.value }))} /></div>
-                <div className="sm:col-span-2"><Label>Housing summary</Label><Input className="mt-1" placeholder="University · private · rental" value={externalForm.housingSummary ?? ""} onChange={e => setExternalForm(f => ({ ...f, housingSummary: e.target.value }))} /></div>
+                <div><Label>{translateUi(uiLanguage, "Climate provider")}</Label><Input className="mt-1" value={externalForm.climateProvider ?? ""} onChange={e => setExternalForm(f => ({ ...f, climateProvider: e.target.value }))} /></div>
+                <div><Label>{translateUi(uiLanguage, "Climate source URL")}</Label><Input className="mt-1" value={externalForm.climateSourceUrl ?? ""} onChange={e => setExternalForm(f => ({ ...f, climateSourceUrl: e.target.value }))} /></div>
+                <div><Label>{translateUi(uiLanguage, "Climate summary")}</Label><Input className="mt-1" placeholder={translateUi(uiLanguage, "6.8°C Jan · 24.7°C Jul–Aug")} value={externalForm.climateSummary ?? ""} onChange={e => setExternalForm(f => ({ ...f, climateSummary: e.target.value }))} /></div>
+                <div><Label>{translateUi(uiLanguage, "Annual average °C")}</Label><Input className="mt-1" type="number" step="0.1" value={externalForm.climateAnnualAverageC ?? ""} onChange={e => setExternalForm(f => ({ ...f, climateAnnualAverageC: e.target.value === "" ? null : Number(e.target.value) }))} /></div>
+                <div><Label>{translateUi(uiLanguage, "Housing provider")}</Label><Input className="mt-1" value={externalForm.housingProvider ?? ""} onChange={e => setExternalForm(f => ({ ...f, housingProvider: e.target.value }))} /></div>
+                <div><Label>{translateUi(uiLanguage, "Housing source URL")}</Label><Input className="mt-1" value={externalForm.housingSourceUrl ?? ""} onChange={e => setExternalForm(f => ({ ...f, housingSourceUrl: e.target.value }))} /></div>
+                <div className="sm:col-span-2"><Label>{translateUi(uiLanguage, "Housing summary")}</Label><Input className="mt-1" placeholder={translateUi(uiLanguage, "University · private · rental")} value={externalForm.housingSummary ?? ""} onChange={e => setExternalForm(f => ({ ...f, housingSummary: e.target.value }))} /></div>
               </div>
             </div>
             <div className="rounded-lg border p-3 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div><p className="text-sm font-semibold">Stored city weather</p><p className="text-xs text-muted-foreground">OpenWeather is called by the server at most once every 24 hours. Public pages only read this stored snapshot.</p></div>
-                {form?.id && <Button type="button" variant="outline" size="sm" onClick={() => refreshWeather.mutate(form.id!)} disabled={refreshWeather.isPending || form.latitude == null || form.longitude == null}><RefreshCw className={cn("mr-2 h-4 w-4", refreshWeather.isPending && "animate-spin")} />Refresh now</Button>}
+                <div><p className="text-sm font-semibold">{translateUi(uiLanguage, "Stored city weather")}</p><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "OpenWeather is called by the server at most once every 24 hours. Public pages only read this stored snapshot.")}</p></div>
+                {form?.id && <Button type="button" variant="outline" size="sm" onClick={() => refreshWeather.mutate(form.id!)} disabled={refreshWeather.isPending || form.latitude == null || form.longitude == null}><RefreshCw className={cn("mr-2 h-4 w-4", refreshWeather.isPending && "animate-spin")} />{translateUi(uiLanguage, "Refresh now")}</Button>}
               </div>
-              {!form?.id ? <p className="text-xs text-muted-foreground">Save the city before requesting weather.</p>
-                : form.latitude == null || form.longitude == null ? <p className="text-xs text-amber-700">Latitude and longitude are required before weather can be synchronized.</p>
+              {!form?.id ? <p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Save the city before requesting weather.")}</p>
+                : form.latitude == null || form.longitude == null ? <p className="text-xs text-amber-700">{translateUi(uiLanguage, "Latitude and longitude are required before weather can be synchronized.")}</p>
                   : <div className="grid gap-2 text-xs sm:grid-cols-2">
-                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">Integration</span><p className="font-medium">{weatherState?.integration.keyConfigured ? "API key configured" : "API key missing"} · {weatherState?.integration.automaticSyncEnabled ? "Automatic sync on" : "Automatic sync off"}</p></div>
-                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">Latest snapshot</span><p className="font-medium">{weatherState?.snapshot ? `${weatherState.snapshot.temperatureC.toFixed(1)}°C · ${weatherState.snapshot.description}` : "No successful snapshot yet"}</p></div>
-                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">Fetched</span><p className="font-medium">{weatherState?.snapshot?.fetchedAt ? new Date(weatherState.snapshot.fetchedAt).toLocaleString() : "—"}</p></div>
-                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">Last sync result</span><p className={cn("font-medium", weatherState?.sync?.lastErrorCode && "text-destructive")}>{weatherState?.sync?.lastErrorCode || (weatherState?.sync ? "Successful" : "Not attempted")}</p></div>
+                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">{translateUi(uiLanguage, "Integration")}</span><p className="font-medium">{weatherState?.integration.keyConfigured ? "API key configured" : "API key missing"} · {weatherState?.integration.automaticSyncEnabled ? "Automatic sync on" : "Automatic sync off"}</p></div>
+                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">{translateUi(uiLanguage, "Latest snapshot")}</span><p className="font-medium">{weatherState?.snapshot ? `${weatherState.snapshot.temperatureC.toFixed(1)}°C · ${weatherState.snapshot.description}` : "No successful snapshot yet"}</p></div>
+                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">{translateUi(uiLanguage, "Fetched")}</span><p className="font-medium">{weatherState?.snapshot?.fetchedAt ? new Date(weatherState.snapshot.fetchedAt).toLocaleString() : "—"}</p></div>
+                    <div className="rounded-md bg-muted/60 p-2"><span className="text-muted-foreground">{translateUi(uiLanguage, "Last sync result")}</span><p className={cn("font-medium", weatherState?.sync?.lastErrorCode && "text-destructive")}>{weatherState?.sync?.lastErrorCode || (weatherState?.sync ? "Successful" : "Not attempted")}</p></div>
                   </div>}
             </div>
             <div className="flex items-center justify-between">
@@ -1502,6 +1506,7 @@ function CitiesTab() {
    UNIVERSITIES TAB
 ══════════════════════════════════════════════════════════ */
 function UniversitiesTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -2131,55 +2136,55 @@ function UniversitiesTab() {
             <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wider">Başvuru Takvimi</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Doğrulanmış okul dönemleri programlara varsayılan olarak yansır. Bilinmeyen tarihlere tahmin girmeyin; ders başlangıç/bitişi başvuru tarihinden ayrıdır.</p>
+                  <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wider">{translateUi(uiLanguage, "Başvuru Takvimi")}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{translateUi(uiLanguage, "Doğrulanmış okul dönemleri programlara varsayılan olarak yansır. Bilinmeyen tarihlere tahmin girmeyin; ders başlangıç/bitişi başvuru tarihinden ayrıdır.")}</p>
                 </div>
                 <Button type="button" size="sm" variant="outline" onClick={() => setF({ applicationPeriods: [
                   ...(form?.applicationPeriods ?? []),
                   { termName: "", academicYear: new Date().getFullYear(), campusName: "", applicationsOpenAt: "", applicationDeadlineAt: "", classesStartOn: "", classesEndOn: "", sourceTimezone: "Europe/Istanbul", sourceUrl: "", verifiedAt: new Date().toISOString().slice(0, 10), isActive: true },
-                ] })}><Plus className="h-3.5 w-3.5 mr-1" />Dönem ekle</Button>
+                ] })}><Plus className="h-3.5 w-3.5 mr-1" />{translateUi(uiLanguage, "Dönem ekle")}</Button>
               </div>
-              {(form?.applicationPeriods ?? []).length === 0 && <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">Henüz doğrulanmış bir dönem eklenmedi.</p>}
+              {(form?.applicationPeriods ?? []).length === 0 && <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">{translateUi(uiLanguage, "Henüz doğrulanmış bir dönem eklenmedi.")}</p>}
               {(form?.applicationPeriods ?? []).map((period, index) => <div key={period.id ?? `new-${index}`} className="rounded-lg border bg-background p-3 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold">Dönem {index + 1}{period.id ? ` · #${period.id}` : " · yeni"}</p>
+                  <p className="text-sm font-semibold">{translateUi(uiLanguage, "Dönem")} {index + 1}{period.id ? ` · #${period.id}` : " · yeni"}</p>
                   <Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setF({ applicationPeriods: (form?.applicationPeriods ?? []).filter((_, rowIndex) => rowIndex !== index) })}><Trash2 className="h-3.5 w-3.5" /></Button>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <div><Label className="text-xs">Dönem adı *</Label><Input className="mt-1" value={period.termName} onChange={e => setApplicationPeriod(index, { termName: e.target.value })} placeholder="Mart dönemi" /></div>
-                  <div><Label className="text-xs">Akademik yıl *</Label><Input className="mt-1" type="number" min="2000" max="2200" value={period.academicYear} onChange={e => setApplicationPeriod(index, { academicYear: Number(e.target.value) })} /></div>
-                  <div><Label className="text-xs">Kampüs (varsa)</Label><Input className="mt-1" value={period.campusName ?? ""} onChange={e => setApplicationPeriod(index, { campusName: e.target.value })} placeholder="Gdańsk" /></div>
-                  <div><Label className="text-xs">Okul saat dilimi *</Label><Input className="mt-1" value={period.sourceTimezone} onChange={e => setApplicationPeriod(index, { sourceTimezone: e.target.value })} placeholder="Europe/Warsaw" /></div>
-                  <div><Label className="text-xs">Başvurular açılır</Label><Input className="mt-1" type="date" value={period.applicationsOpenAt?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { applicationsOpenAt: e.target.value })} /></div>
-                  <div><Label className="text-xs">Son başvuru</Label><Input className="mt-1" type="date" value={period.applicationDeadlineAt?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { applicationDeadlineAt: e.target.value })} /></div>
-                  <div><Label className="text-xs">Ders başlangıcı (ayrı)</Label><Input className="mt-1" type="date" value={period.classesStartOn?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { classesStartOn: e.target.value })} /></div>
-                  <div><Label className="text-xs">Ders bitişi (ayrı)</Label><Input className="mt-1" type="date" value={period.classesEndOn?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { classesEndOn: e.target.value })} /></div>
-                  <div className="xl:col-span-3"><Label className="text-xs">Kaynak URL *</Label><Input className="mt-1" type="url" value={period.sourceUrl} onChange={e => setApplicationPeriod(index, { sourceUrl: e.target.value })} placeholder="https://…" /></div>
-                  <div><Label className="text-xs">Doğrulama tarihi *</Label><Input className="mt-1" type="date" value={period.verifiedAt?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { verifiedAt: e.target.value })} /></div>
+                  <div><Label className="text-xs">{translateUi(uiLanguage, "Dönem adı *")}</Label><Input className="mt-1" value={period.termName} onChange={e => setApplicationPeriod(index, { termName: e.target.value })} placeholder={translateUi(uiLanguage, "Mart dönemi")} /></div>
+                  <div><Label className="text-xs">{translateUi(uiLanguage, "Akademik yıl *")}</Label><Input className="mt-1" type="number" min="2000" max="2200" value={period.academicYear} onChange={e => setApplicationPeriod(index, { academicYear: Number(e.target.value) })} /></div>
+                  <div><Label className="text-xs">{translateUi(uiLanguage, "Kampüs (varsa)")}</Label><Input className="mt-1" value={period.campusName ?? ""} onChange={e => setApplicationPeriod(index, { campusName: e.target.value })} placeholder={translateUi(uiLanguage, "Gdańsk")} /></div>
+                  <div><Label className="text-xs">{translateUi(uiLanguage, "Okul saat dilimi *")}</Label><Input className="mt-1" value={period.sourceTimezone} onChange={e => setApplicationPeriod(index, { sourceTimezone: e.target.value })} placeholder={translateUi(uiLanguage, "Europe/Warsaw")} /></div>
+                  <div><Label className="text-xs">{translateUi(uiLanguage, "Başvurular açılır")}</Label><Input className="mt-1" type="date" value={period.applicationsOpenAt?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { applicationsOpenAt: e.target.value })} /></div>
+                  <div><Label className="text-xs">{translateUi(uiLanguage, "Son başvuru")}</Label><Input className="mt-1" type="date" value={period.applicationDeadlineAt?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { applicationDeadlineAt: e.target.value })} /></div>
+                  <div><Label className="text-xs">{translateUi(uiLanguage, "Ders başlangıcı (ayrı)")}</Label><Input className="mt-1" type="date" value={period.classesStartOn?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { classesStartOn: e.target.value })} /></div>
+                  <div><Label className="text-xs">{translateUi(uiLanguage, "Ders bitişi (ayrı)")}</Label><Input className="mt-1" type="date" value={period.classesEndOn?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { classesEndOn: e.target.value })} /></div>
+                  <div className="xl:col-span-3"><Label className="text-xs">{translateUi(uiLanguage, "Kaynak URL *")}</Label><Input className="mt-1" type="url" value={period.sourceUrl} onChange={e => setApplicationPeriod(index, { sourceUrl: e.target.value })} placeholder="https://…" /></div>
+                  <div><Label className="text-xs">{translateUi(uiLanguage, "Doğrulama tarihi *")}</Label><Input className="mt-1" type="date" value={period.verifiedAt?.slice(0, 10) ?? ""} onChange={e => setApplicationPeriod(index, { verifiedAt: e.target.value })} /></div>
                 </div>
                 {period.id && <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                  <span className="text-xs text-muted-foreground">Sentetik bildirim önizlemesi:</span>
-                  <Button type="button" size="sm" variant="outline" disabled={reminderPreviewLoading || !period.applicationDeadlineAt} onClick={() => void openReminderPreview(period, 30)}>30 gün</Button>
-                  <Button type="button" size="sm" variant="outline" disabled={reminderPreviewLoading || !period.applicationDeadlineAt} onClick={() => void openReminderPreview(period, 7)}>7 gün</Button>
-                  <Badge variant="outline">Gerçek gönderim kapalı</Badge>
+                  <span className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Sentetik bildirim önizlemesi:")}</span>
+                  <Button type="button" size="sm" variant="outline" disabled={reminderPreviewLoading || !period.applicationDeadlineAt} onClick={() => void openReminderPreview(period, 30)}>{translateUi(uiLanguage, "30 gün")}</Button>
+                  <Button type="button" size="sm" variant="outline" disabled={reminderPreviewLoading || !period.applicationDeadlineAt} onClick={() => void openReminderPreview(period, 7)}>{translateUi(uiLanguage, "7 gün")}</Button>
+                  <Badge variant="outline">{translateUi(uiLanguage, "Gerçek gönderim kapalı")}</Badge>
                 </div>}
               </div>)}
             </div>
 
             <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4 space-y-3">
               <div>
-                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Student matching eligibility</p>
-                <p className="text-xs text-muted-foreground mt-1">These are university-wide defaults. Programs may override them. Rules without current evidence are never treated as a confirmed match.</p>
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">{translateUi(uiLanguage, "Student matching eligibility")}</p>
+                <p className="text-xs text-muted-foreground mt-1">{translateUi(uiLanguage, "These are university-wide defaults. Programs may override them. Rules without current evidence are never treated as a confirmed match.")}</p>
               </div>
               <div>
-                <Label>Nationality policy</Label>
+                <Label>{translateUi(uiLanguage, "Nationality policy")}</Label>
                 <Select value={form?.nationalityPolicy ?? "unknown"} onValueChange={v => setF({ nationalityPolicy: v as University["nationalityPolicy"], acceptedNationalityCodes: v === "restricted" ? (form?.acceptedNationalityCodes ?? []) : [] })}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="unknown">Not verified</SelectItem><SelectItem value="open">Open to all nationalities</SelectItem><SelectItem value="restricted">Only selected nationalities</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="unknown">{translateUi(uiLanguage, "Not verified")}</SelectItem><SelectItem value="open">{translateUi(uiLanguage, "Open to all nationalities")}</SelectItem><SelectItem value="restricted">{translateUi(uiLanguage, "Only selected nationalities")}</SelectItem></SelectContent>
                 </Select>
               </div>
               {form?.nationalityPolicy === "restricted" && <div>
-                <Label>Accepted nationalities</Label>
+                <Label>{translateUi(uiLanguage, "Accepted nationalities")}</Label>
                 <div className="mt-2 max-h-40 overflow-y-auto rounded-md border bg-background p-2 grid grid-cols-2 gap-1">
                   {allCountries.filter(country => country.isActive).map(country => {
                     const selected = (form?.acceptedNationalityCodes ?? []).includes(country.code);
@@ -2188,19 +2193,19 @@ function UniversitiesTab() {
                 </div>
               </div>}
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Required previous education</Label><Select value={form?.defaultRequiredEducationLevel ?? "none"} onValueChange={v => setF({ defaultRequiredEducationLevel: v === "none" ? null : v })}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Not verified</SelectItem><SelectItem value="high_school">High school</SelectItem><SelectItem value="bachelor">Bachelor</SelectItem><SelectItem value="master">Master</SelectItem></SelectContent></Select></div>
-                <div><Label>Grade scale</Label><Select value={form?.defaultGradeScale ?? "none"} onValueChange={v => setF({ defaultGradeScale: v === "none" ? null : v })}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Not verified</SelectItem><SelectItem value="percent_100">100 point</SelectItem><SelectItem value="gpa_4">GPA 4.0</SelectItem><SelectItem value="gpa_5">GPA 5.0</SelectItem><SelectItem value="gpa_10">GPA 10.0</SelectItem><SelectItem value="gpa_20">GPA 20.0</SelectItem></SelectContent></Select></div>
-                <div><Label>Minimum grade</Label><Input className="mt-1" type="number" step="0.01" value={form?.defaultMinGradeValue ?? ""} onChange={e => setF({ defaultMinGradeValue: e.target.value ? Number(e.target.value) : null })} /></div>
-                <div className="flex items-center justify-between rounded border px-3 mt-5"><Label>Conditional language admission</Label><Switch checked={form?.defaultConditionalAdmission ?? false} onCheckedChange={v => setF({ defaultConditionalAdmission: v })} /></div>
+                <div><Label>{translateUi(uiLanguage, "Required previous education")}</Label><Select value={form?.defaultRequiredEducationLevel ?? "none"} onValueChange={v => setF({ defaultRequiredEducationLevel: v === "none" ? null : v })}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">{translateUi(uiLanguage, "Not verified")}</SelectItem><SelectItem value="high_school">{translateUi(uiLanguage, "High school")}</SelectItem><SelectItem value="bachelor">{translateUi(uiLanguage, "Bachelor")}</SelectItem><SelectItem value="master">{translateUi(uiLanguage, "Master")}</SelectItem></SelectContent></Select></div>
+                <div><Label>{translateUi(uiLanguage, "Grade scale")}</Label><Select value={form?.defaultGradeScale ?? "none"} onValueChange={v => setF({ defaultGradeScale: v === "none" ? null : v })}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">{translateUi(uiLanguage, "Not verified")}</SelectItem><SelectItem value="percent_100">{translateUi(uiLanguage, "100 point")}</SelectItem><SelectItem value="gpa_4">{translateUi(uiLanguage, "GPA 4.0")}</SelectItem><SelectItem value="gpa_5">{translateUi(uiLanguage, "GPA 5.0")}</SelectItem><SelectItem value="gpa_10">{translateUi(uiLanguage, "GPA 10.0")}</SelectItem><SelectItem value="gpa_20">{translateUi(uiLanguage, "GPA 20.0")}</SelectItem></SelectContent></Select></div>
+                <div><Label>{translateUi(uiLanguage, "Minimum grade")}</Label><Input className="mt-1" type="number" step="0.01" value={form?.defaultMinGradeValue ?? ""} onChange={e => setF({ defaultMinGradeValue: e.target.value ? Number(e.target.value) : null })} /></div>
+                <div className="flex items-center justify-between rounded border px-3 mt-5"><Label>{translateUi(uiLanguage, "Conditional language admission")}</Label><Switch checked={form?.defaultConditionalAdmission ?? false} onCheckedChange={v => setF({ defaultConditionalAdmission: v })} /></div>
               </div>
               <div className="space-y-2">
-                <div className="flex items-center justify-between"><Label>Default accepted language tests</Label><Button type="button" size="sm" variant="outline" onClick={() => setF({ defaultLanguageRequirements: [...(form?.defaultLanguageRequirements ?? []), { test: "ielts", overall: 6 }] })}><Plus className="h-3 w-3 mr-1" /> Add</Button></div>
+                <div className="flex items-center justify-between"><Label>{translateUi(uiLanguage, "Default accepted language tests")}</Label><Button type="button" size="sm" variant="outline" onClick={() => setF({ defaultLanguageRequirements: [...(form?.defaultLanguageRequirements ?? []), { test: "ielts", overall: 6 }] })}><Plus className="h-3 w-3 mr-1" /> {translateUi(uiLanguage, "Add")}</Button></div>
                 {(form?.defaultLanguageRequirements ?? []).map((rule, index) => <div key={index} className="grid grid-cols-[1fr_110px_36px] gap-2"><Select value={rule.test} onValueChange={test => setF({ defaultLanguageRequirements: (form?.defaultLanguageRequirements ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, test } : item) })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["ielts", "toefl", "pte", "duolingo"].map(test => <SelectItem key={test} value={test}>{test.toUpperCase()}</SelectItem>)}</SelectContent></Select><Input type="number" step="0.5" value={rule.overall} onChange={e => setF({ defaultLanguageRequirements: (form?.defaultLanguageRequirements ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, overall: Number(e.target.value) } : item) })} /><Button type="button" size="icon" variant="ghost" onClick={() => setF({ defaultLanguageRequirements: (form?.defaultLanguageRequirements ?? []).filter((_, itemIndex) => itemIndex !== index) })}><Trash2 className="h-4 w-4" /></Button></div>)}
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <div><Label>Official source URL</Label><Input className="mt-1" type="url" placeholder="https://…" value={form?.admissionSourceUrl ?? ""} onChange={e => setF({ admissionSourceUrl: e.target.value || null })} /></div>
-                <div><Label>Last verified</Label><Input className="mt-1" type="date" value={form?.admissionVerifiedAt?.slice(0, 10) ?? ""} onChange={e => setF({ admissionVerifiedAt: e.target.value ? new Date(`${e.target.value}T00:00:00.000Z`).toISOString() : null })} /></div>
-                <div><Label>Valid until</Label><Input className="mt-1" type="date" value={form?.admissionValidUntil?.slice(0, 10) ?? ""} onChange={e => setF({ admissionValidUntil: e.target.value ? new Date(`${e.target.value}T23:59:59.999Z`).toISOString() : null })} /></div>
+                <div><Label>{translateUi(uiLanguage, "Official source URL")}</Label><Input className="mt-1" type="url" placeholder="https://…" value={form?.admissionSourceUrl ?? ""} onChange={e => setF({ admissionSourceUrl: e.target.value || null })} /></div>
+                <div><Label>{translateUi(uiLanguage, "Last verified")}</Label><Input className="mt-1" type="date" value={form?.admissionVerifiedAt?.slice(0, 10) ?? ""} onChange={e => setF({ admissionVerifiedAt: e.target.value ? new Date(`${e.target.value}T00:00:00.000Z`).toISOString() : null })} /></div>
+                <div><Label>{translateUi(uiLanguage, "Valid until")}</Label><Input className="mt-1" type="date" value={form?.admissionValidUntil?.slice(0, 10) ?? ""} onChange={e => setF({ admissionValidUntil: e.target.value ? new Date(`${e.target.value}T23:59:59.999Z`).toISOString() : null })} /></div>
               </div>
             </div>
 
@@ -2224,7 +2229,7 @@ function UniversitiesTab() {
                   </div>
                   <div>
                     <Label>{t("common.email")}</Label>
-                    <Input className="mt-1 bg-white" type="email" placeholder="contact@university.edu" value={form?.contactPersonEmail ?? ""} onChange={e => setF({ contactPersonEmail: e.target.value })} />
+                    <Input className="mt-1 bg-white" type="email" placeholder={translateUi(uiLanguage, "contact@university.edu")} value={form?.contactPersonEmail ?? ""} onChange={e => setF({ contactPersonEmail: e.target.value })} />
                   </div>
                 </div>
               </div>
@@ -2243,22 +2248,22 @@ function UniversitiesTab() {
 
       <Dialog open={reminderPreview !== null} onOpenChange={open => !open && setReminderPreview(null)}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Son tarih bildirim önizlemesi · {reminderPreview?.daysBefore} gün</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{translateUi(uiLanguage, "Son tarih bildirim önizlemesi ·")} {reminderPreview?.daysBefore} {translateUi(uiLanguage, "gün")}</DialogTitle></DialogHeader>
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
-            <p className="font-medium text-amber-900">Sentetik güvenlik testi — gerçek gönderim kapalı</p>
-            <p className="mt-1 text-xs text-amber-800">Tamamlanan başvurular, izni olmayanlar, listeden çıkanlar ve yakın zamanda aynı hatırlatmayı alanlar otomatik dışlanır. Tarih değişirse bekleyen eski niyetler iptal edilir.</p>
+            <p className="font-medium text-amber-900">{translateUi(uiLanguage, "Sentetik güvenlik testi — gerçek gönderim kapalı")}</p>
+            <p className="mt-1 text-xs text-amber-800">{translateUi(uiLanguage, "Tamamlanan başvurular, izni olmayanlar, listeden çıkanlar ve yakın zamanda aynı hatırlatmayı alanlar otomatik dışlanır. Tarih değişirse bekleyen eski niyetler iptal edilir.")}</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Uygun</p><p className="text-2xl font-bold text-emerald-700">{reminderPreview?.summary?.eligible ?? 0}</p></div>
-            <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Dışlanan</p><p className="text-2xl font-bold text-amber-700">{reminderPreview?.summary?.excluded ?? 0}</p></div>
+            <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Uygun")}</p><p className="text-2xl font-bold text-emerald-700">{reminderPreview?.summary?.eligible ?? 0}</p></div>
+            <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">{translateUi(uiLanguage, "Dışlanan")}</p><p className="text-2xl font-bold text-amber-700">{reminderPreview?.summary?.excluded ?? 0}</p></div>
           </div>
           <div className="rounded-lg border overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50"><tr><th className="px-3 py-2 text-left">Sentetik kayıt</th><th className="px-3 py-2 text-left">Kanal</th><th className="px-3 py-2 text-left">Sonuç</th><th className="px-3 py-2 text-left">Neden</th></tr></thead>
+              <thead className="bg-muted/50"><tr><th className="px-3 py-2 text-left">{translateUi(uiLanguage, "Sentetik kayıt")}</th><th className="px-3 py-2 text-left">{translateUi(uiLanguage, "Kanal")}</th><th className="px-3 py-2 text-left">{translateUi(uiLanguage, "Sonuç")}</th><th className="px-3 py-2 text-left">{translateUi(uiLanguage, "Neden")}</th></tr></thead>
               <tbody className="divide-y">{(reminderPreview?.data ?? []).map((row: any) => <tr key={row.reference}><td className="px-3 py-2 font-mono text-xs">{row.reference}</td><td className="px-3 py-2">{row.channel ?? "—"}</td><td className="px-3 py-2"><Badge variant="outline" className={row.eligible ? "border-emerald-300 text-emerald-700" : "border-amber-300 text-amber-700"}>{row.eligible ? "Uygun" : "Dışlandı"}</Badge></td><td className="px-3 py-2 text-xs text-muted-foreground">{row.reason}</td></tr>)}</tbody>
             </table>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setReminderPreview(null)}>Kapat</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setReminderPreview(null)}>{translateUi(uiLanguage, "Kapat")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -2296,6 +2301,7 @@ function UniversitiesTab() {
    PROGRAMS TAB
 ══════════════════════════════════════════════════════════ */
 function ProgramsTab() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -3147,36 +3153,36 @@ function ProgramsTab() {
               </div>
               <div className="grid grid-cols-2 gap-3 border-t border-amber-200 pt-3">
                 <div>
-                  <Label className="text-xs">Required previous education</Label>
+                  <Label className="text-xs">{translateUi(uiLanguage, "Required previous education")}</Label>
                   <Select value={form?.requiredEducationLevel ?? "none"} onValueChange={v => setForm(f => ({ ...f, requiredEducationLevel: v === "none" ? null : v }))}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Not verified</SelectItem>
-                      <SelectItem value="high_school">High school</SelectItem>
-                      <SelectItem value="bachelor">Bachelor</SelectItem>
-                      <SelectItem value="master">Master</SelectItem>
+                      <SelectItem value="none">{translateUi(uiLanguage, "Not verified")}</SelectItem>
+                      <SelectItem value="high_school">{translateUi(uiLanguage, "High school")}</SelectItem>
+                      <SelectItem value="bachelor">{translateUi(uiLanguage, "Bachelor")}</SelectItem>
+                      <SelectItem value="master">{translateUi(uiLanguage, "Master")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs">Grade scale</Label>
+                  <Label className="text-xs">{translateUi(uiLanguage, "Grade scale")}</Label>
                   <Select value={form?.gradeScale ?? "none"} onValueChange={v => setForm(f => ({ ...f, gradeScale: v === "none" ? null : v }))}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Not verified</SelectItem>
-                      <SelectItem value="percent_100">100 point</SelectItem>
-                      <SelectItem value="gpa_4">GPA 4.0</SelectItem>
-                      <SelectItem value="gpa_5">GPA 5.0</SelectItem>
-                      <SelectItem value="gpa_10">GPA 10.0</SelectItem>
-                      <SelectItem value="gpa_20">GPA 20.0</SelectItem>
+                      <SelectItem value="none">{translateUi(uiLanguage, "Not verified")}</SelectItem>
+                      <SelectItem value="percent_100">{translateUi(uiLanguage, "100 point")}</SelectItem>
+                      <SelectItem value="gpa_4">{translateUi(uiLanguage, "GPA 4.0")}</SelectItem>
+                      <SelectItem value="gpa_5">{translateUi(uiLanguage, "GPA 5.0")}</SelectItem>
+                      <SelectItem value="gpa_10">{translateUi(uiLanguage, "GPA 10.0")}</SelectItem>
+                      <SelectItem value="gpa_20">{translateUi(uiLanguage, "GPA 20.0")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Minimum grade</Label><Input className="mt-1" type="number" step="0.01" value={form?.minGradeValue ?? ""} onChange={e => setForm(f => ({ ...f, minGradeValue: e.target.value ? Number(e.target.value) : null }))} /></div>
-                <div className="flex items-center justify-between rounded border px-3 mt-5"><Label className="text-xs">Conditional language admission</Label><Switch checked={form?.conditionalAdmission ?? false} onCheckedChange={v => setForm(f => ({ ...f, conditionalAdmission: v }))} /></div>
+                <div><Label className="text-xs">{translateUi(uiLanguage, "Minimum grade")}</Label><Input className="mt-1" type="number" step="0.01" value={form?.minGradeValue ?? ""} onChange={e => setForm(f => ({ ...f, minGradeValue: e.target.value ? Number(e.target.value) : null }))} /></div>
+                <div className="flex items-center justify-between rounded border px-3 mt-5"><Label className="text-xs">{translateUi(uiLanguage, "Conditional language admission")}</Label><Switch checked={form?.conditionalAdmission ?? false} onCheckedChange={v => setForm(f => ({ ...f, conditionalAdmission: v }))} /></div>
               </div>
               <div className="border-t border-amber-200 pt-3 space-y-2">
-                <div className="flex items-center justify-between"><Label className="text-xs">Accepted language tests</Label><Button type="button" size="sm" variant="outline" onClick={() => setForm(f => ({ ...f, languageRequirements: [...(f?.languageRequirements ?? []), { test: "ielts", overall: 6 }] }))}><Plus className="h-3 w-3 mr-1" /> Add</Button></div>
+                <div className="flex items-center justify-between"><Label className="text-xs">{translateUi(uiLanguage, "Accepted language tests")}</Label><Button type="button" size="sm" variant="outline" onClick={() => setForm(f => ({ ...f, languageRequirements: [...(f?.languageRequirements ?? []), { test: "ielts", overall: 6 }] }))}><Plus className="h-3 w-3 mr-1" /> {translateUi(uiLanguage, "Add")}</Button></div>
                 {(form?.languageRequirements ?? []).map((rule, index) => <div key={index} className="grid grid-cols-[1fr_110px_36px] gap-2">
                   <Select value={rule.test} onValueChange={test => setForm(f => ({ ...f, languageRequirements: (f?.languageRequirements ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, test } : item) }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["ielts", "toefl", "pte", "duolingo"].map(test => <SelectItem key={test} value={test}>{test.toUpperCase()}</SelectItem>)}</SelectContent>
@@ -3186,9 +3192,9 @@ function ProgramsTab() {
                 </div>)}
               </div>
               <div className="grid grid-cols-3 gap-3 border-t border-amber-200 pt-3">
-                <div><Label className="text-xs">Official source URL</Label><Input className="mt-1" type="url" value={form?.admissionSourceUrl ?? ""} onChange={e => setForm(f => ({ ...f, admissionSourceUrl: e.target.value || null }))} /></div>
-                <div><Label className="text-xs">Last verified</Label><Input className="mt-1" type="date" value={form?.admissionVerifiedAt?.slice(0, 10) ?? ""} onChange={e => setForm(f => ({ ...f, admissionVerifiedAt: e.target.value ? new Date(`${e.target.value}T00:00:00.000Z`).toISOString() : null }))} /></div>
-                <div><Label className="text-xs">Valid until</Label><Input className="mt-1" type="date" value={form?.admissionValidUntil?.slice(0, 10) ?? ""} onChange={e => setForm(f => ({ ...f, admissionValidUntil: e.target.value ? new Date(`${e.target.value}T23:59:59.999Z`).toISOString() : null }))} /></div>
+                <div><Label className="text-xs">{translateUi(uiLanguage, "Official source URL")}</Label><Input className="mt-1" type="url" value={form?.admissionSourceUrl ?? ""} onChange={e => setForm(f => ({ ...f, admissionSourceUrl: e.target.value || null }))} /></div>
+                <div><Label className="text-xs">{translateUi(uiLanguage, "Last verified")}</Label><Input className="mt-1" type="date" value={form?.admissionVerifiedAt?.slice(0, 10) ?? ""} onChange={e => setForm(f => ({ ...f, admissionVerifiedAt: e.target.value ? new Date(`${e.target.value}T00:00:00.000Z`).toISOString() : null }))} /></div>
+                <div><Label className="text-xs">{translateUi(uiLanguage, "Valid until")}</Label><Input className="mt-1" type="date" value={form?.admissionValidUntil?.slice(0, 10) ?? ""} onChange={e => setForm(f => ({ ...f, admissionValidUntil: e.target.value ? new Date(`${e.target.value}T23:59:59.999Z`).toISOString() : null }))} /></div>
               </div>
             </div>
 
@@ -3205,8 +3211,8 @@ function ProgramsTab() {
                   <Input className="mt-1" type="number" min="0" placeholder={t("catalogPage.zeroNone")} value={form?.enrollmentFee ?? ""} onChange={e => setForm(f => ({ ...f, enrollmentFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
-                  <Label className="text-xs">Adaptasyon Ücreti</Label>
-                  <Input className="mt-1" type="number" min="0" placeholder="Boş = bilinmiyor / uygulanmıyor değil" value={form?.adaptationFee ?? ""} onChange={e => setForm(f => ({ ...f, adaptationFee: e.target.value === "" ? null : Number(e.target.value) }))} />
+                  <Label className="text-xs">{translateUi(uiLanguage, "Adaptasyon Ücreti")}</Label>
+                  <Input className="mt-1" type="number" min="0" placeholder={translateUi(uiLanguage, "Boş = bilinmiyor / uygulanmıyor değil")} value={form?.adaptationFee ?? ""} onChange={e => setForm(f => ({ ...f, adaptationFee: e.target.value === "" ? null : Number(e.target.value) }))} />
                 </div>
                 <div>
                   <Label className="text-xs">{t("catalogPage.advancedFee")}</Label>
@@ -3228,10 +3234,10 @@ function ProgramsTab() {
                   <Label className="text-xs">{t("catalogPage.languageFee")}</Label>
                   <Input className="mt-1" type="number" placeholder={t("catalogPage.zeroNone")} value={form?.languageFee ?? ""} onChange={e => setForm(f => ({ ...f, languageFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
-                <div><Label className="text-xs">Fiyat yürürlük başlangıcı</Label><Input className="mt-1" type="date" value={form?.priceValidFrom ?? ""} onChange={e => setForm(f => ({ ...f, priceValidFrom: e.target.value || null }))} /></div>
-                <div><Label className="text-xs">Fiyat yürürlük bitişi</Label><Input className="mt-1" type="date" value={form?.priceValidUntil ?? ""} onChange={e => setForm(f => ({ ...f, priceValidUntil: e.target.value || null }))} /></div>
+                <div><Label className="text-xs">{translateUi(uiLanguage, "Fiyat yürürlük başlangıcı")}</Label><Input className="mt-1" type="date" value={form?.priceValidFrom ?? ""} onChange={e => setForm(f => ({ ...f, priceValidFrom: e.target.value || null }))} /></div>
+                <div><Label className="text-xs">{translateUi(uiLanguage, "Fiyat yürürlük bitişi")}</Label><Input className="mt-1" type="date" value={form?.priceValidUntil ?? ""} onChange={e => setForm(f => ({ ...f, priceValidUntil: e.target.value || null }))} /></div>
               </div>
-              <div><Label className="text-xs">Finans notları (yalnız iç kullanım)</Label><Textarea className="mt-1" rows={2} value={form?.financeNotes ?? ""} onChange={e => setForm(f => ({ ...f, financeNotes: e.target.value || null }))} placeholder="Komisyon koşulları, ödeme yöntemi veya partner notu…" /></div>
+              <div><Label className="text-xs">{translateUi(uiLanguage, "Finans notları (yalnız iç kullanım)")}</Label><Textarea className="mt-1" rows={2} value={form?.financeNotes ?? ""} onChange={e => setForm(f => ({ ...f, financeNotes: e.target.value || null }))} placeholder={translateUi(uiLanguage, "Komisyon koşulları, ödeme yöntemi veya partner notu…")} /></div>
             </div>
 
             <div>
@@ -3255,16 +3261,16 @@ function ProgramsTab() {
               </div>
             </div>
             <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 space-y-3">
-              <div><p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Doğrulanmış okul dönemi</p><p className="mt-1 text-[11px] text-muted-foreground">Program seçilen okul dönemini varsayılan olarak kullanır. Yalnız program gerçekten farklıysa aşağıdaki override alanlarını doldurun.</p></div>
+              <div><p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">{translateUi(uiLanguage, "Doğrulanmış okul dönemi")}</p><p className="mt-1 text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Program seçilen okul dönemini varsayılan olarak kullanır. Yalnız program gerçekten farklıysa aşağıdaki override alanlarını doldurun.")}</p></div>
               <Select value={form?.universityApplicationPeriodId ? String(form.universityApplicationPeriodId) : "none"} onValueChange={value => setForm(current => ({ ...current, universityApplicationPeriodId: value === "none" ? null : Number(value) }))}>
-                <SelectTrigger><SelectValue placeholder="Okul dönemi seçin" /></SelectTrigger>
-                <SelectContent><SelectItem value="none">Bağlı doğrulanmış dönem yok</SelectItem>{programPeriods.map(period => <SelectItem key={period.id} value={String(period.id)}>{period.termName} · {period.academicYear}{period.campusName ? ` · ${period.campusName}` : ""}</SelectItem>)}</SelectContent>
+                <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "Okul dönemi seçin")} /></SelectTrigger>
+                <SelectContent><SelectItem value="none">{translateUi(uiLanguage, "Bağlı doğrulanmış dönem yok")}</SelectItem>{programPeriods.map(period => <SelectItem key={period.id} value={String(period.id)}>{period.termName} · {period.academicYear}{period.campusName ? ` · ${period.campusName}` : ""}</SelectItem>)}</SelectContent>
               </Select>
               {form?.universityApplicationPeriodId && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div><Label className="text-xs">Başvuru açılış override</Label><Input className="mt-1" type="date" value={form.applicationsOpenOverrideAt?.slice(0, 10) ?? ""} onChange={e => setForm(current => ({ ...current, applicationsOpenOverrideAt: e.target.value || null }))} /></div>
-                <div><Label className="text-xs">Son başvuru override</Label><Input className="mt-1" type="date" value={form.applicationDeadlineOverrideAt?.slice(0, 10) ?? ""} onChange={e => setForm(current => ({ ...current, applicationDeadlineOverrideAt: e.target.value || null }))} /></div>
-                <div><Label className="text-xs">Ders başlangıç override</Label><Input className="mt-1" type="date" value={form.classesStartOverrideOn ?? ""} onChange={e => setForm(current => ({ ...current, classesStartOverrideOn: e.target.value || null }))} /></div>
-                <div><Label className="text-xs">Ders bitiş override</Label><Input className="mt-1" type="date" value={form.classesEndOverrideOn ?? ""} onChange={e => setForm(current => ({ ...current, classesEndOverrideOn: e.target.value || null }))} /></div>
+                <div><Label className="text-xs">{translateUi(uiLanguage, "Başvuru açılış override")}</Label><Input className="mt-1" type="date" value={form.applicationsOpenOverrideAt?.slice(0, 10) ?? ""} onChange={e => setForm(current => ({ ...current, applicationsOpenOverrideAt: e.target.value || null }))} /></div>
+                <div><Label className="text-xs">{translateUi(uiLanguage, "Son başvuru override")}</Label><Input className="mt-1" type="date" value={form.applicationDeadlineOverrideAt?.slice(0, 10) ?? ""} onChange={e => setForm(current => ({ ...current, applicationDeadlineOverrideAt: e.target.value || null }))} /></div>
+                <div><Label className="text-xs">{translateUi(uiLanguage, "Ders başlangıç override")}</Label><Input className="mt-1" type="date" value={form.classesStartOverrideOn ?? ""} onChange={e => setForm(current => ({ ...current, classesStartOverrideOn: e.target.value || null }))} /></div>
+                <div><Label className="text-xs">{translateUi(uiLanguage, "Ders bitiş override")}</Label><Input className="mt-1" type="date" value={form.classesEndOverrideOn ?? ""} onChange={e => setForm(current => ({ ...current, classesEndOverrideOn: e.target.value || null }))} /></div>
               </div>}
             </div>
             <div><Label>{t("catalogPage.requirements")}</Label><Textarea className="mt-1" rows={2} placeholder={t("catalogPage.requirementsPlaceholder")} value={form?.requirements ?? ""} onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))} /></div>
@@ -4245,6 +4251,7 @@ function OrphanDocumentsCard({ open, setOpen }: { open: boolean; setOpen: (o: bo
 }
 
 function DocumentMetaDialog({ option, onClose }: { option: CatalogOption; onClose: () => void }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -4288,7 +4295,7 @@ function DocumentMetaDialog({ option, onClose }: { option: CatalogOption; onClos
           </div>
           <div>
             <Label className="text-xs">{t("catalogPage.acceptedExtensionsLabel")}</Label>
-            <Input value={accept} onChange={e => setAccept(e.target.value)} placeholder=".pdf,.jpg,.jpeg,.png" className="h-9 text-sm font-mono" />
+            <Input value={accept} onChange={e => setAccept(e.target.value)} placeholder={translateUi(uiLanguage, ".pdf,.jpg,.jpeg,.png")} className="h-9 text-sm font-mono" />
             <p className="text-[10px] text-muted-foreground mt-1">{t("catalogPage.extensionsHint")}</p>
           </div>
         </div>

@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { Children, cloneElement, isValidElement, useEffect, useMemo, useRef, useState, useContext, type CSSProperties, type ReactNode } from "react";
 import { DetailPreviewContext } from "./DetailPreviewContext";
 import { customFetch } from "@workspace/api-client-react";
@@ -14,6 +15,7 @@ const previewSectionLabels: Record<string, string> = {
 };
 
 function PreviewEmptySection({ layoutKey }: { layoutKey: string }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const key = layoutKey.replace(/^editorial-/, "");
   const title = previewSectionLabels[key] ?? key.replace(/([a-z])([A-Z])/g, "$1 $2");
   const message = "No reviewed content has been added for this record yet. This section is part of the shared template and can be completed in the CMS editor.";
@@ -21,9 +23,9 @@ function PreviewEmptySection({ layoutKey }: { layoutKey: string }) {
     <div className="detail-wrap detail-editorial-content">
       <div className="detail-editorial-heading"><span aria-hidden="true">+</span><h2>{title}</h2></div>
       <p className="detail-prose detail-editorial-intro">{message}</p>
-      {key === "climate" && <div className="detail-climate-ribbon" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <article key={index}><span>Month {index + 1}</span><b>—</b></article>)}</div>}
-      {key === "housing" && <div className="detail-housing-strip" aria-hidden="true">{Array.from({ length: 3 }, (_, index) => <article key={index}><div><span>0{index + 1}</span><h3>Housing option</h3><p>Awaiting reviewed accommodation data.</p></div></article>)}</div>}
-      {(key === "reviews" || key === "studentStory") && <div className="detail-review-grid" aria-hidden="true"><div /><div><blockquote><p>“Reviewed student experience will appear here.”</p><cite>Awaiting verified first-party review</cite></blockquote></div></div>}
+      {key === "climate" && <div className="detail-climate-ribbon" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <article key={index}><span>{translateUi(uiLanguage, "Month")} {index + 1}</span><b>—</b></article>)}</div>}
+      {key === "housing" && <div className="detail-housing-strip" aria-hidden="true">{Array.from({ length: 3 }, (_, index) => <article key={index}><div><span>0{index + 1}</span><h3>{translateUi(uiLanguage, "Housing option")}</h3><p>{translateUi(uiLanguage, "Awaiting reviewed accommodation data.")}</p></div></article>)}</div>}
+      {(key === "reviews" || key === "studentStory") && <div className="detail-review-grid" aria-hidden="true"><div /><div><blockquote><p>{translateUi(uiLanguage, "“Reviewed student experience will appear here.”")}</p><cite>{translateUi(uiLanguage, "Awaiting verified first-party review")}</cite></blockquote></div></div>}
     </div>
   </section>;
 }

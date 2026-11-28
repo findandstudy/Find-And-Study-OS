@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch, ApiError } from "@workspace/api-client-react";
@@ -73,6 +74,7 @@ const FREQ_COLORS: Record<string, string> = {
 };
 
 export default function PopupsPage() {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -141,7 +143,7 @@ export default function PopupsPage() {
           <p className="text-sm text-muted-foreground mt-1">{t("popups.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => refetch()} title="Refresh">
+          <Button variant="outline" size="icon" onClick={() => refetch()} title={translateUi(uiLanguage, "Refresh")}>
             <RefreshCw className="w-4 h-4" />
           </Button>
           <Button onClick={openCreate} data-testid="button-new-popup">
@@ -181,13 +183,13 @@ export default function PopupsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Title / Content</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground hidden md:table-cell">Audience</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground hidden md:table-cell">Frequency</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground hidden lg:table-cell">Status</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground hidden lg:table-cell">Date Range</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground hidden xl:table-cell">Created</th>
-                <th className="px-4 py-3 text-right font-semibold text-muted-foreground">Actions</th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">{translateUi(uiLanguage, "Title / Content")}</th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground hidden md:table-cell">{translateUi(uiLanguage, "Audience")}</th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground hidden md:table-cell">{translateUi(uiLanguage, "Frequency")}</th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground hidden lg:table-cell">{translateUi(uiLanguage, "Status")}</th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground hidden lg:table-cell">{translateUi(uiLanguage, "Date Range")}</th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground hidden xl:table-cell">{translateUi(uiLanguage, "Created")}</th>
+                <th className="px-4 py-3 text-right font-semibold text-muted-foreground">{translateUi(uiLanguage, "Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -202,13 +204,11 @@ export default function PopupsPage() {
                     <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{p.content}</p>
                     {p.imageUrl && (
                       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                        <ImageIcon className="w-3 h-3" /> Image
-                      </span>
+                        <ImageIcon className="w-3 h-3" /> {translateUi(uiLanguage, "Image")} </span>
                     )}
                     {p.linkUrl && (
                       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground mt-0.5 ml-2">
-                        <ExternalLink className="w-3 h-3" /> Link
-                      </span>
+                        <ExternalLink className="w-3 h-3" /> {translateUi(uiLanguage, "Link")} </span>
                     )}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
@@ -238,7 +238,7 @@ export default function PopupsPage() {
                         {formatDate(p.startsAt)} → {formatDate(p.expiresAt)}
                       </span>
                     ) : (
-                      <span className="text-muted-foreground/50">Always</span>
+                      <span className="text-muted-foreground/50">{translateUi(uiLanguage, "Always")}</span>
                     )}
                   </td>
                   <td className="px-4 py-3 hidden xl:table-cell text-xs text-muted-foreground">
@@ -284,12 +284,12 @@ export default function PopupsPage() {
         <Dialog open={true} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
           <DialogContent className="max-w-sm" data-testid="dialog-delete-confirm">
             <DialogHeader>
-              <DialogTitle>Delete Pop-up</DialogTitle>
+              <DialogTitle>{translateUi(uiLanguage, "Delete Pop-up")}</DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">{t("popups.deleteConfirm")}</p>
             <p className="text-sm font-medium mt-1">{deleteTarget.title}</p>
             <DialogFooter className="mt-2">
-              <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setDeleteTarget(null)}>{translateUi(uiLanguage, "Cancel")}</Button>
               <Button
                 variant="destructive"
                 onClick={doDelete}
@@ -316,6 +316,7 @@ function PopupDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
 
@@ -477,7 +478,7 @@ function PopupDialog({
             {imageUrl && (
               <img
                 src={imageUrl}
-                alt="Preview"
+                alt={translateUi(uiLanguage, "Preview")}
                 className="mt-2 rounded-lg max-h-32 object-cover border"
                 onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
               />
@@ -608,11 +609,9 @@ function PopupDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>{translateUi(uiLanguage, "Cancel")}</Button>
           <Button onClick={save} disabled={saving} data-testid="button-save">
-            {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
-            Save
-          </Button>
+            {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />} {translateUi(uiLanguage, "Save")} </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

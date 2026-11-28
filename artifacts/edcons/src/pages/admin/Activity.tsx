@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useMemo } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import {
@@ -859,6 +860,7 @@ function OverviewPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
 }
 
 function UserDetailPage({ userId }: { userId: number }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t, lang } = useI18n();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -921,7 +923,7 @@ function UserDetailPage({ userId }: { userId: number }) {
           <div className="flex items-center gap-3 mt-1">
             {user && <Badge variant="outline" className="text-xs capitalize">{user.role}</Badge>}
             {presence && <StatusBadge status={presence.status || "offline"} />}
-            {presence?.currentRoute && <span className="text-xs text-muted-foreground">on {presence.currentRoute}</span>}
+            {presence?.currentRoute && <span className="text-xs text-muted-foreground">{translateUi(uiLanguage, "on")} {presence.currentRoute}</span>}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -1061,7 +1063,7 @@ function UserDetailPage({ userId }: { userId: number }) {
                     {s.isActive ? (
                       <Badge className="text-[10px] bg-green-500/10 text-green-600">{t("adminActivity.active")}</Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[10px]">Ended</Badge>
+                      <Badge variant="secondary" className="text-[10px]">{translateUi(uiLanguage, "Ended")}</Badge>
                     )}
                   </td>
                 </tr>

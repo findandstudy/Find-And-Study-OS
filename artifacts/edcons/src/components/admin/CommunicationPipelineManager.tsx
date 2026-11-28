@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
@@ -100,6 +101,7 @@ function slotsFromPipeline(pipeline: Pipeline): SlotDraft[] {
 }
 
 export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: number }) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { toast } = useToast();
   const { t } = useI18n();
   const tx = (key: string) => t(`communicationRouting.${key}`);
@@ -279,7 +281,7 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
           </div>
           <div className="space-y-1.5">
             <Label>{tx("technicalKey")}</Label>
-            <Input value={newSlug} onChange={(event) => setNewSlug(toSlug(event.target.value))} placeholder="dorm-booking" />
+            <Input value={newSlug} onChange={(event) => setNewSlug(toSlug(event.target.value))} placeholder={translateUi(uiLanguage, "dorm-booking")} />
           </div>
           <Button className="self-end" onClick={createPipeline} disabled={creating || newName.trim().length < 2 || newSlug.length < 2}>
             {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
