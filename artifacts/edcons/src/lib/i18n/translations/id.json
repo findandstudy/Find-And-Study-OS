@@ -11615,6 +11615,9 @@
     "readyStages": "Tahap siap",
     "configured": "Dikonfigurasi",
     "recipient": "Mahasiswa langsung → mahasiswa; mahasiswa agensi → agen atau subagennya. Pilih sumber dan pengirim di bawah.",
-    "limits": "Penerima aktif dan terverifikasi diperlukan. Satu email per pendaftaran dan tahap; tanpa pengiriman untuk peristiwa lama."
+    "limits": "Penerima aktif dan terverifikasi diperlukan. Satu email per pendaftaran dan tahap; tanpa pengiriman untuk peristiwa lama.",
+    "manageTemplates": "Kelola templat di Pesan",
+    "reuseSmtp": "Gunakan integrasi SMTP yang ada",
+    "configureSmtp": "Konfigurasi integrasi SMTP"
   }
 }

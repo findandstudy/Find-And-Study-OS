@@ -11614,6 +11614,9 @@
     "readyStages": "Etapas listas",
     "configured": "Configuradas",
     "recipient": "Estudiante directo → estudiante; estudiante de agencia → su agente o subagente. Seleccione fuentes y remitente abajo.",
-    "limits": "Se requiere un destinatario activo y verificado. Un correo por solicitud y etapa; sin envíos retroactivos."
+    "limits": "Se requiere un destinatario activo y verificado. Un correo por solicitud y etapa; sin envíos retroactivos.",
+    "manageTemplates": "Gestionar plantillas en Mensajes",
+    "reuseSmtp": "Usar la integración SMTP existente",
+    "configureSmtp": "Configurar la integración SMTP"
   }
 }

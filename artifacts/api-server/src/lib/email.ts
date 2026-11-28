@@ -54,23 +54,12 @@ export async function assertSafeTenantSmtpDestination(host: string, port: number
 }
 
 async function getSmtpConfig(): Promise<SmtpConfig | null> {
-  const [integration] = await db.select()
-    .from(integrationsTable)
-    .where(eq(integrationsTable.key, "smtp"));
-
-  if (!integration || !integration.isEnabled) return null;
-
-  const config = decryptConfig(integration.config as Record<string, any>);
-  if (!config.host || !config.username || !config.password || isEncrypted(config.password)) return null;
-
-  return {
-    host: config.host,
-    port: parseInt(config.port, 10) || 587,
-    username: config.username,
-    password: config.password,
-    fromEmail: config.fromEmail || config.username,
-    fromName: config.fromName,
-  };
+  const { legacySmtpSnapshot } = await import("./notifications/legacySmtpSender");
+  const source = await legacySmtpSnapshot();
+  const config = source?.input;
+  if (!source?.enabled || !config?.host || !config.username || !config.password || isEncrypted(config.password)) return null;
+  return { host: String(config.host), port: config.port, username: String(config.username), password: String(config.password),
+    fromEmail: String(config.fromEmail), fromName: String(config.fromName) };
 }
 
 async function getSenderDefaults(): Promise<{ senderName: string; senderEmail: string; replyTo?: string }> {

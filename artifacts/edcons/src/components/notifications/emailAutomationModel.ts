@@ -1,9 +1,9 @@
 import { translateUi } from "@/lib/ui-localization";
-export const EMAIL_AUTOMATION_PATH = "/admin/settings?tab=notifications#notification-email";
+export const EMAIL_AUTOMATION_PATH = "/staff/messages?tab=templates#email-templates";
 export function canManageNotificationRules(user: { role: string; isActive: boolean; isImpersonating?: boolean } | null | undefined, authorityConfirmed: boolean): boolean {
   return authorityConfirmed === true && user?.isActive === true && user.isImpersonating !== true && ["admin", "super_admin"].includes(user.role);
 }
-export type EmailSender = { id: number; displayName: string; fromEmail: string; fromName: string; replyTo?: string | null; config: { host: string; port: number; username: string; passwordConfigured: boolean }; isActive: boolean; verified: boolean; revision: number; createdById: number; lastChangedById: number };
+export type EmailSender = { sourceIntegrationKey?: "smtp" | null; id: number; displayName: string; fromEmail: string; fromName: string; replyTo?: string | null; config: { host: string; port: number; username: string; passwordConfigured: boolean }; isActive: boolean; verified: boolean; revision: number; createdById: number; lastChangedById: number };
 export type EmailTemplateVersion = { id: number; templateId: number; version: number; status: string; subject: string; content: string; language: string; variables: string[]; createdById: number; approvedById?: number | null; createdAt: string };
 export type EmailTemplate = { id: number; name: string; category: string; channel: string; language: string; isActive: boolean; versions: EmailTemplateVersion[] };
 export type EmailHistoryItem = { id: number; kind?: "stage" | "system"; applicationId?: number; stageKey?: string; status: string; errorCode?: string | null; deliveryErrorCode?: string | null; createdAt: string; templateVersionId: number; senderAccountId: number; queueStatus?: string | null };
@@ -77,6 +77,6 @@ export function emailAutomationCopy(lang: string) {
     unavailable: copy("Previously selected option is no longer eligible. Select another option or disable this automation.", "Önceki seçim artık kullanıma uygun değil. Başka bir seçenek seçin veya bu otomasyonu kapatın."),
     historyNote: copy("Recent shared-library email records only. Status 'sent' means accepted by the SMTP server, not confirmed inbox delivery. Legacy email, recipient addresses and message contents are not shown.", "Yalnızca ortak kütüphane e-postalarının son kayıtları. 'Gönderildi' durumu SMTP sunucusunun kabulünü belirtir; gelen kutusuna teslim edildiğinin kanıtı değildir. Eski e-postalar, alıcı adresleri ve mesaj içerikleri gösterilmez."),
     status: copy("Status", "Durum"), application: copy("Application", "Başvuru"), stage: copy("Stage", "Aşama"), date: copy("Created", "Oluşturulma"), reason: copy("Reason code", "Neden kodu"),
-    libraryLink: copy("Manage automatic email templates in Notifications", "Otomatik e-posta şablonlarını Bildirimler'de yönet"),
+    libraryLink: copy("Message Templates", "Mesaj Şablonları"),
   };
 }

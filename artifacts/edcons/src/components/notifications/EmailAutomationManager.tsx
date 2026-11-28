@@ -22,14 +22,14 @@ type Confirmation = { path: string; body?: object; note: string };
 const blankTemplate = (): TemplateDraft => ({ name: "", category: "applications", language: "en", subject: "", content: "" });
 const blankSender = (): SenderDraft => ({ displayName: "", fromEmail: "", fromName: "", replyTo: "", host: "", port: 587, username: "", password: "", isActive: false });
 
-export function EmailAutomationManager({ view = "all" }: { view?: "all" | "senders" } = {}) {
+export function EmailAutomationManager({ view = "all" }: { view?: "all" | "senders" | "templates" | "history" } = {}) {
   const { lang: uiLanguage } = useUiLanguage();
   const { lang, dir, t } = useI18n();
   const copy = emailAutomationCopy(lang);
   const { user } = useAuth();
   const client = useQueryClient();
   const library = useEmailLibrary();
-  const [tab, setTab] = useState<"templates" | "senders" | "history">(view === "senders" ? "senders" : "templates");
+  const [tab, setTab] = useState<"templates" | "senders" | "history">(view === "senders" ? "senders" : view === "history" ? "history" : "templates");
   const [historySource, setHistorySource] = useState<"stage" | "system">("stage");
   const [historyCursors, setHistoryCursors] = useState<Array<number | undefined>>([undefined]);
   const historyCursor = historyCursors.at(-1);
@@ -42,8 +42,9 @@ export function EmailAutomationManager({ view = "all" }: { view?: "all" | "sende
   const inFlight = useRef(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { if (window.location.hash === "#notification-email") document.getElementById("notification-email")?.scrollIntoView({ block: "start" }); }, []);
+  useEffect(() => { if (["#notification-email", "#email-templates", "#system-email-templates"].includes(window.location.hash)) document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: "start" }); }, []);
   const history = useQuery({ queryKey: [...emailLibraryKey, "history", historySource, historyCursor], queryFn: ({ signal }) => customFetch(`/api/notification-email/history?source=${historySource}${historyCursor ? `&cursor=${historyCursor}` : ""}`, { signal, cache: "no-store" }) as Promise<{ items: EmailHistoryItem[]; nextCursor?: number | null }>, enabled: tab === "history", retry: false, staleTime: 0, gcTime: 0 });
+  const smtpIntegration = useQuery({ queryKey: [...emailLibraryKey, "smtp-integration"], enabled: view === "senders", retry: false, gcTime: 0, queryFn: ({signal}) => customFetch("/api/notification-email/smtp-integration", {signal, cache:"no-store"}) as Promise<{configured:boolean; available:boolean}> });
   const capability = library.capabilities.data;
   const templates = library.templates.data?.templates ?? [];
   const senders = library.senders.data?.senders ?? [];
@@ -83,14 +84,14 @@ export function EmailAutomationManager({ view = "all" }: { view?: "all" | "sende
     if (result && mounted.current) setPreview(result);
   }
   const errorNotice = error ? <p role="alert" className="text-sm text-destructive">{copy.error}</p> : null;
-  return <Card id="notification-email" className="p-4 sm:p-6 space-y-4 min-w-0 scroll-mt-6" data-testid="email-automation-manager" dir={dir}>
-    <header className="space-y-2"><h2 className="font-semibold text-lg">{copy.title}</h2><p className="text-sm text-muted-foreground">{copy.intro}</p>
-      <a href="/staff/messages?tab=templates" className="block text-sm text-primary underline">{copy.copy("WhatsApp / message templates — existing Messages library", "WhatsApp / mesaj şablonları — mevcut Mesajlar kütüphanesi")}</a>
+  return <Card id={view === "templates" ? "email-templates" : "notification-email"} className="p-4 sm:p-6 space-y-4 min-w-0 scroll-mt-6" data-testid="email-automation-manager" dir={dir}>
+    <header className="space-y-2"><h2 className="font-semibold text-lg">{view === "templates" ? copy.templates : view === "senders" ? copy.senders : copy.title}</h2><p className="text-sm text-muted-foreground">{copy.intro}</p>
+      {view !== "templates" && <a href="/staff/messages?tab=templates#email-templates" className="block text-sm text-primary underline">{t("stageEmail.manageTemplates")}</a>}
       {library.capabilities.isError ? <p role="alert" className="text-sm text-destructive">{copy.loadError} <Button variant="outline" size="sm" onClick={() => void library.capabilities.refetch()}>{copy.refresh}</Button></p> : capability ? <p className="rounded-md border bg-secondary/40 p-3 text-sm" data-testid="email-runtime-status">{capability.enabled ? copy.enabled : copy.disabled}</p> : <p role="status">{copy.loading}</p>}
     </header>
-    {view === "all" && <StageEmailReadiness />}
+    {(view === "all" || view === "history") && <StageEmailReadiness />}
     <div className="flex flex-wrap gap-2" role="group" aria-label={copy.title}>
-      {(view === "senders" ? ["senders"] as const : ["templates", "senders", "history"] as const).map(key => <Button key={key} type="button" size="sm" variant={tab === key ? "default" : "outline"} aria-pressed={tab === key} onClick={() => { setTab(key); setError(false); }}>{copy[key]}</Button>)}
+      {(view === "all" ? ["templates", "senders", "history"] as const : [view] as const).map(key => <Button key={key} type="button" size="sm" variant={tab === key ? "default" : "outline"} aria-pressed={tab === key} onClick={() => { setTab(key); setError(false); }}>{copy[key]}</Button>)}
       <Button type="button" variant="ghost" size="sm" className="ms-auto" disabled={activeQuery.isFetching || busy} onClick={() => { void activeQuery.refetch(); void library.capabilities.refetch(); }}>{copy.refresh}</Button>
     </div>
     {errorNotice}
@@ -119,12 +120,16 @@ export function EmailAutomationManager({ view = "all" }: { view?: "all" | "sende
     </div>}
     {tab === "senders" && <div className="space-y-4" data-testid="email-sender-library">
       <p className="text-xs text-muted-foreground">{copy.senderHint}</p><p className="text-xs text-muted-foreground">{copy.verifyNote}</p>
-      <Button disabled={busy || !capability?.canManage} onClick={() => { setError(false); setSenderDraft(blankSender()); }}>{copy.newSender}</Button>
+      <div className="flex flex-wrap gap-2">
+      <Button disabled={busy || !capability?.canManage || !smtpIntegration.data?.available} onClick={() => void action("/senders/use-smtp-integration")}>{t("stageEmail.reuseSmtp")}</Button>
+      <a className="text-primary underline self-center" href="/admin/settings?tab=integrations">{t("stageEmail.configureSmtp")}</a>
+      <Button variant="outline" disabled={busy || !capability?.canManage} onClick={() => { setError(false); setSenderDraft(blankSender()); }}>{copy.newSender}</Button>
+      </div>
       {!library.senders.isLoading && !library.senders.isError && senders.length === 0 && <p className="text-sm text-muted-foreground">{copy.empty}</p>}
       {senders.map(sender => <article key={sender.id} className="rounded-lg border p-3 space-y-3 min-w-0">
         <h3 className="font-semibold break-words">{sender.displayName}</h3><p className="text-sm break-all" dir="ltr">{sender.fromEmail}</p>
         <div className="flex flex-wrap gap-2"><Badge variant={sender.verified ? "default" : "secondary"}>{sender.verified ? copy.verified : copy.notVerified}</Badge><Badge variant="outline">{sender.isActive ? copy.active : copy.inactive}</Badge><span className="text-xs text-muted-foreground">r{sender.revision}</span></div>
-        <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={busy || !capability?.canManage} onClick={() => editSender(sender)}>{copy.edit}</Button>
+        <div className="flex flex-wrap gap-2">{sender.sourceIntegrationKey ? <a className="text-primary underline" href="/admin/settings?tab=integrations">{t("stageEmail.configureSmtp")}</a> : <Button size="sm" variant="outline" disabled={busy || !capability?.canManage} onClick={() => editSender(sender)}>{copy.edit}</Button>}
           <Button size="sm" variant="outline" disabled={busy || !capability?.verificationAllowed || !canVerifyEmailSender(sender, user?.id)} onClick={() => setConfirmation({ path: `/senders/${sender.id}/verify`, body: { expectedRevision: sender.revision }, note: copy.verifyNote })}>{copy.verify}</Button></div>
       </article>)}
     </div>}

@@ -4,10 +4,12 @@ import { isEncrypted } from "../encryption";
 import { parseAccountConfig } from "../inbox/channelAccountConfig";
 import { emailDeliveryAllowed, isEmailMailbox } from "../emailDeliveryPolicy";
 import { EmailLibraryError, positiveEmailId } from "./emailTemplateLibrary";
+import { legacySmtpSnapshot } from "./legacySmtpSender";
 
 export type EmailSenderMetadata = {
   revision: number; fromEmail: string; fromName: string; replyTo: string;
   verified: boolean; createdById: number; lastChangedById: number; approvedById?: number;
+  sourceIntegrationKey?: "smtp"; sourceFingerprint?: string;
 };
 export type ResolvedEmailSender = { host: string; port: number; secure: boolean; user: string; pass: string; fromName: string; fromEmail: string; replyTo: string };
 type SenderInput = { displayName: string; host: string; port: number; username: string; password: string; fromEmail: string; fromName: string; replyTo: string };
@@ -22,6 +24,8 @@ export function emailSenderMetadata(value: unknown): EmailSenderMetadata | null 
     || typeof meta.fromName !== "string" || meta.fromName.length > 120 || /[\x00-\x1f\x7f]/.test(meta.fromName)
     || typeof meta.replyTo !== "string" || (!!meta.replyTo && !isEmailMailbox(meta.replyTo))) return null;
   if (meta.verified && (!Number.isSafeInteger(meta.approvedById) || meta.approvedById! < 1 || meta.approvedById === meta.lastChangedById)) return null;
+  if ((meta.sourceIntegrationKey !== undefined || meta.sourceFingerprint !== undefined)
+    && (meta.sourceIntegrationKey !== "smtp" || !/^[a-f0-9]{64}$/.test(meta.sourceFingerprint ?? ""))) return null;
   return meta;
 }
 
@@ -55,6 +59,24 @@ export function senderInputFromRow(row: ChannelAccount): SenderInput {
   return validateEmailSender({ displayName: row.displayName, ...config, fromEmail: meta.fromEmail, fromName: meta.fromName, replyTo: meta.replyTo });
 }
 
+export async function senderInputForAccount(row: ChannelAccount): Promise<SenderInput> {
+  const meta = emailSenderMetadata(row.metadata);
+  if (!meta?.sourceIntegrationKey) return senderInputFromRow(row);
+  const source = await legacySmtpSnapshot();
+  if (!source?.enabled || source.fingerprint !== meta.sourceFingerprint) throw new EmailLibraryError("EMAIL_INTEGRATION_CHANGED", 409);
+  return validateEmailSender(source.input);
+}
+
+export async function projectEmailSender(row: ChannelAccount) {
+  const result = safeEmailSender(row);
+  const sourceIntegrationKey = emailSenderMetadata(row.metadata)?.sourceIntegrationKey;
+  if (!sourceIntegrationKey) return { ...result, sourceIntegrationKey: null };
+  try {
+    const config = await senderInputForAccount(row);
+    return { ...result, sourceIntegrationKey, config: { host: config.host, port: config.port, username: config.username, passwordConfigured: true } };
+  } catch { return { ...result, sourceIntegrationKey, verified: false, isActive: false }; }
+}
+
 /** Never returns credentials, encrypted blobs, arbitrary metadata, or a placeholder password. */
 export function safeEmailSender(row: ChannelAccount) {
   const meta = emailSenderMetadata(row.metadata);
@@ -83,7 +105,15 @@ export function resolveEmailSenderRow(row: ChannelAccount | undefined, revision:
 export async function resolveEmailSenderAccount(id: number, revision: number): Promise<ResolvedEmailSender | null> {
   positiveEmailId(id); positiveEmailId(revision);
   const [row] = await db.select().from(channelAccountsTable).where(and(eq(channelAccountsTable.id, id), eq(channelAccountsTable.channel, "email"), eq(channelAccountsTable.provider, "smtp"))).limit(1);
-  return resolveEmailSenderRow(row, revision);
+  if (!row) return null;
+  if (!emailSenderMetadata(row.metadata)?.sourceIntegrationKey) return resolveEmailSenderRow(row, revision);
+  const meta = emailSenderMetadata(row.metadata);
+  if (!meta?.verified || meta.revision !== revision || !row.isActive || row.status !== "active") return null;
+  try {
+    const config = await senderInputForAccount(row);
+    return { host: config.host, port: config.port, secure: config.port === 465, user: config.username, pass: config.password,
+      fromEmail: config.fromEmail, fromName: config.fromName, replyTo: config.replyTo };
+  } catch { return null; }
 }
 
 type VerifyTransport = { verify(): Promise<unknown>; close(): void };

@@ -11614,6 +11614,9 @@
     "readyStages": "Ready stages",
     "configured": "Configured",
     "recipient": "Direct student → student; agency student → their agent or sub-agent. Select sources and sender below.",
-    "limits": "Verified active recipient required. One email per application and stage; no historical sends."
+    "limits": "Verified active recipient required. One email per application and stage; no historical sends.",
+    "manageTemplates": "Manage templates in Messages",
+    "reuseSmtp": "Use existing SMTP integration",
+    "configureSmtp": "Configure SMTP integration"
   }
 }

@@ -1,3 +1,5 @@
+import { EmailAutomationManager } from "@/components/notifications/EmailAutomationManager";
+import { NotificationRulesManager } from "@/components/NotificationRulesManager";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { WorkPipelineInboxSidebar, type WorkConversationState } from "@/components/inbox/WorkPipelineInboxSidebar";
 import { whilePageVisible } from "@/lib/visibleSubscription";
@@ -184,6 +186,7 @@ interface ComposerTemplate {
   channel: string;
   language: string;
   isActive: boolean;
+  isVersionedEmail?: boolean;
   externalTemplateName?: string | null;
   approvalStatus?: string | null;
 }
@@ -4990,6 +4993,7 @@ function whatsappTemplateVariableCount(body: string): number {
 
 interface Template {
   id: number;
+  isVersionedEmail?: boolean;
   name: string;
   category: string;
   subject: string | null;
@@ -5011,6 +5015,7 @@ function TemplatesTab() {
   const { lang: uiLanguage } = useUiLanguage();
   const { t: tx, lang } = useI18n();
   const { user: templateUser } = useAuth();
+  const [templatePreferences, setTemplatePreferences] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -5313,7 +5318,7 @@ function TemplatesTab() {
     return true;
   });
 
-  const cannedFiltered = filtered.filter(t => !t.externalTemplateName);
+  const cannedFiltered = filtered.filter(t => !t.externalTemplateName && t.channel !== "email" && !t.isVersionedEmail);
   const waFiltered = filtered.filter(t => !!t.externalTemplateName);
 
   const grouped = cannedFiltered.reduce<Record<string, Template[]>>((acc, t) => {
@@ -5336,13 +5341,17 @@ function TemplatesTab() {
   return (
     <>
     <div className="space-y-4">
+      {["admin", "super_admin"].includes(templateUser?.role ?? "") && <>
+        <EmailAutomationManager view="templates" />
+        <NotificationRulesManager isAdmin notifications={templatePreferences} setNotifications={setTemplatePreferences} mode="templates" />
+      </>}
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div>
             <h3 className="font-semibold text-foreground flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" /> {translateUi(uiLanguage, "Message Templates")} </h3>
             <p className="text-sm text-muted-foreground mt-1"> {translateUi(uiLanguage, "Create and manage reusable message templates for quick communication.")} </p>
-            {["admin", "super_admin"].includes(templateUser?.role ?? "") && <a className="block mt-2 text-sm text-primary underline" href={EMAIL_AUTOMATION_PATH}>{emailAutomationCopy(lang).libraryLink}</a>}
+
           </div>
           <Button onClick={openNew} className="rounded-xl gap-2">
             <Plus className="w-4 h-4" /> {translateUi(uiLanguage, "New Template")} </Button>
@@ -5815,7 +5824,7 @@ function TemplatesTab() {
                 <Select value={formChannel} onValueChange={setFormChannel}>
                   <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {TEMPLATE_CHANNELS.map(c => (
+                    {TEMPLATE_CHANNELS.filter(channel => channel.value !== "email").map(c => (
                       <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
                     ))}
                   </SelectContent>

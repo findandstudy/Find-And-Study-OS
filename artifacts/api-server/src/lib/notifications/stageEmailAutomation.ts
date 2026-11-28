@@ -2,6 +2,7 @@ import { pool } from "@workspace/db";
 import type { PoolClient } from "pg";
 import { renderApprovedEmailVersion } from "./emailTemplateLibrary";
 import { stageEmailOrigin, stageEmailRecipient, stageEmailRuntime, parseStageAutomaticEmail } from "./stageEmailPolicy";
+import { resolveEmailSenderAccount } from "./emailSenderAccounts";
 
 type Dispatch = { id: number; application_id: number; student_id: number; agent_id: number | null;
   stage_key: string; template_version_id: number; sender_account_id: number; sender_revision: number;
@@ -40,6 +41,7 @@ async function currentBinding(client: Pick<PoolClient, "query">, intent: Dispatc
   const sender = row.metadata?.emailSender;
   if (!row.sender_active || row.channel !== "email" || row.provider !== "smtp" || sender?.verified !== true ||
     sender?.revision !== intent.sender_revision) return { code: "SENDER_CHANGED_OR_UNVERIFIED" } as const;
+  if (sender.sourceIntegrationKey && !await resolveEmailSenderAccount(intent.sender_account_id, intent.sender_revision)) return { code: "SENDER_CHANGED_OR_UNVERIFIED" } as const;
   // The source selects exactly one account; never fall back to the student,
   // parent agency, creator or staff mailbox when an agency recipient is invalid.
   const direct = origin === "direct";

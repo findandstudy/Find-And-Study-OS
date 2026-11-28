@@ -10,6 +10,8 @@ import { serializeAccountConfig } from "../lib/inbox/channelAccountConfig";
 import { emailDeliveryAllowed } from "../lib/emailDeliveryPolicy";
 import { stageEmailRuntime } from "../lib/notifications/stageEmailPolicy";
 import { backgroundJobsEnabled } from "../lib/backgroundJobs";
+import { legacySmtpSnapshot } from "../lib/notifications/legacySmtpSender";
+import { senderInputForAccount, projectEmailSender } from "../lib/notifications/emailSenderAccounts";
 import { stageEmailReadiness } from "../lib/notifications/stageEmailReadiness";
 
 const router: IRouter = Router();
@@ -43,13 +45,42 @@ router.get("/notification-email/readiness", handle(async (_req, res) => {
 router.get("/notification-email/senders", handle(async (_req, res) => {
   const rows = await db.select().from(channelAccountsTable).where(and(eq(channelAccountsTable.channel, "email"), eq(channelAccountsTable.provider, "smtp")))
     .orderBy(desc(channelAccountsTable.id)).limit(101);
-  res.json({ senders: rows.slice(0, 100).map(safeEmailSender), truncated: rows.length > 100 });
+  res.json({ senders: await Promise.all(rows.slice(0, 100).map(projectEmailSender)), truncated: rows.length > 100 });
+}));
+
+router.get("/notification-email/smtp-integration", handle(async (_req, res) => {
+  const source = await legacySmtpSnapshot();
+  let available = false;
+  try { if (source?.enabled) { validateEmailSender(source.input); available = true; } } catch { /* no secrets in response */ }
+  res.json({ configured: !!source, available });
+}));
+
+router.post("/notification-email/senders/use-smtp-integration", handle(async (req, res) => {
+  const source = await legacySmtpSnapshot();
+  if (!source?.enabled) throw new EmailLibraryError("EMAIL_SMTP_INTEGRATION_REQUIRED", 409);
+  const input = validateEmailSender(source.input);
+  const row = await db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(1579243913)`);
+    const [existing] = await tx.select().from(channelAccountsTable).where(and(eq(channelAccountsTable.channel, "email"),
+      eq(channelAccountsTable.provider, "smtp"), sql`${channelAccountsTable.metadata}->'emailSender'->>'sourceIntegrationKey'='smtp'`)).for("update").limit(1);
+    const old = existing ? emailSenderMetadata(existing.metadata) : null;
+    if (old?.sourceFingerprint === source.fingerprint) return existing;
+    const metadata = { emailSender: { revision: old ? positiveEmailId(old.revision + 1) : 1,
+      fromEmail: input.fromEmail, fromName: input.fromName, replyTo: input.replyTo, verified: false,
+      createdById: old?.createdById ?? req.user!.id, lastChangedById: req.user!.id,
+      sourceIntegrationKey: "smtp" as const, sourceFingerprint: source.fingerprint } };
+    const values = { displayName: "SMTP", metadata, configEncrypted: null, isActive: false, status: "inactive", updatedAt: new Date() };
+    if (existing) return (await tx.update(channelAccountsTable).set(values).where(senderWhere(existing.id)).returning())[0];
+    return (await tx.insert(channelAccountsTable).values({ ...values, channel: "email", provider: "smtp", isDefault: false }).returning())[0];
+  });
+  await logAudit(req.user!.id, "notification_email.smtp_integration_linked", "channel_account", row.id, { revision: emailSenderMetadata(row.metadata)?.revision }, req.ip);
+  res.json({ sender: await projectEmailSender(row) });
 }));
 
 router.get("/notification-email/senders/:id", handle(async (req, res) => {
   const [row] = await db.select().from(channelAccountsTable).where(senderWhere(positiveEmailId(req.params.id))).limit(1);
   if (!row) throw new EmailLibraryError("EMAIL_SENDER_NOT_FOUND", 404);
-  res.json({ sender: safeEmailSender(row) });
+  res.json({ sender: await projectEmailSender(row) });
 }));
 
 router.post("/notification-email/senders", handle(async (req, res) => {
@@ -70,6 +101,7 @@ router.patch("/notification-email/senders/:id", handle(async (req, res) => {
     if (!old) throw new EmailLibraryError("EMAIL_SENDER_NOT_FOUND", 404);
     const meta = emailSenderMetadata(old.metadata);
     if (!meta || meta.revision !== expected) throw new EmailLibraryError("EMAIL_SENDER_REVISION_CONFLICT", 409);
+    if (meta.sourceIntegrationKey) throw new EmailLibraryError("EMAIL_SENDER_USE_INTEGRATION", 409);
     if (req.body.isActive === true) throw new EmailLibraryError("EMAIL_SENDER_VERIFICATION_REQUIRED", 409);
     const input = validateEmailSender(req.body, senderInputFromRow(old));
     const revision = positiveEmailId(meta.revision + 1);
@@ -91,7 +123,7 @@ router.post("/notification-email/senders/:id/verify", handle(async (req, res) =>
   const meta = emailSenderMetadata(old.metadata);
   if (!meta || meta.revision !== expected) throw new EmailLibraryError("EMAIL_SENDER_REVISION_CONFLICT", 409);
   if (meta.lastChangedById === req.user!.id) throw new EmailLibraryError("EMAIL_SECOND_REVIEWER_REQUIRED", 403);
-  await verifyEmailSenderConnection(id, senderInputFromRow(old));
+  await verifyEmailSenderConnection(id, await senderInputForAccount(old));
   // Never hold DB locks while waiting for an external SMTP server.
   const row = await db.transaction(async tx => {
     const [current] = await tx.select().from(channelAccountsTable).where(senderWhere(id)).for("update");
@@ -99,12 +131,13 @@ router.post("/notification-email/senders/:id/verify", handle(async (req, res) =>
     if (!current || !currentMeta || currentMeta.revision !== expected || current.configEncrypted !== old.configEncrypted
       || JSON.stringify(current.metadata) !== JSON.stringify(old.metadata)) throw new EmailLibraryError("EMAIL_SENDER_REVISION_CONFLICT", 409);
     if (!emailDeliveryAllowed()) throw new EmailLibraryError("EMAIL_VERIFICATION_DISABLED", 409);
+    if (currentMeta.sourceIntegrationKey) await senderInputForAccount(current);
     const [updated] = await tx.update(channelAccountsTable).set({ isActive: true, status: "active",
       metadata: { emailSender: { ...currentMeta, verified: true, approvedById: req.user!.id } }, updatedAt: new Date() }).where(senderWhere(id)).returning();
     return updated;
   });
   await logAudit(req.user!.id, "notification_email.sender_verified", "channel_account", id, { revision: expected, kind: "smtp_connection_authentication" }, req.ip);
-  res.json({ sender: safeEmailSender(row) });
+  res.json({ sender: await projectEmailSender(row) });
 }));
 
 router.get("/notification-email/templates", handle(async (req, res) => {

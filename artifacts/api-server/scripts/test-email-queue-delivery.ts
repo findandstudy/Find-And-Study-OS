@@ -49,7 +49,7 @@ mock.method(db, "select", () => ({ from: (table: unknown) => {
     ? [{ isEnabled: true, config: encryptConfig({ host: "smtp.example.test", port: "587", username: "sender@example.test", password: "synthetic-password", fromEmail: "sender@example.test" }) }]
     : table === workspace.settingsTable ? [{ emailSenderName: "Fixture Sender", emailSenderEmail: "sender@example.test" }]
       : table === workspace.channelAccountsTable && senderRecord ? [senderRecord] : [];
-  return { where: () => ({ limit: async () => result, then: (resolve: any) => Promise.resolve(result).then(resolve) }),
+  return { limit: async () => result, where: () => ({ limit: async () => result, then: (resolve: any) => Promise.resolve(result).then(resolve) }),
     then: (resolve: any) => Promise.resolve(result).then(resolve) };
 } }));
 mock.method(nodemailer, "createTransport", (options: unknown) => {

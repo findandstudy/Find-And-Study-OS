@@ -1536,6 +1536,7 @@ router.get("/message-templates", requireAuth, requireRole(...ADMIN_ROLES, ...STA
       updatedAt: messageTemplatesTable.updatedAt,
       creatorFirstName: usersTable.firstName,
       creatorLastName: usersTable.lastName,
+      isVersionedEmail: sql<boolean>`exists(select 1 from message_template_email_versions ev where ev.template_id=${messageTemplatesTable.id})`,
     })
     .from(messageTemplatesTable)
     .leftJoin(usersTable, eq(messageTemplatesTable.createdById, usersTable.id))

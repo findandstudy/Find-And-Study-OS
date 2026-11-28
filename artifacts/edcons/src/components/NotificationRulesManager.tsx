@@ -128,12 +128,13 @@ const TEMPLATE_VARS: Record<string, string[]> = {
 };
 
 interface Props {
+  mode?: "rules" | "templates";
   isAdmin: boolean;
   notifications: Record<string, boolean>;
   setNotifications: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
 }
 
-export function NotificationRulesManager({ isAdmin, notifications, setNotifications }: Props) {
+export function NotificationRulesManager({ isAdmin, notifications, setNotifications, mode = "rules" }: Props) {
   const { lang: uiLanguage } = useUiLanguage();
   const [rules, setRules] = useState<NotificationRule[]>([]);
   const [loading, setLoading] = useState(false);
@@ -290,7 +291,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
         ? "tr"
         : Object.keys(translations)[0];
     const top = defaultLang ? translations[defaultLang] : { subject: "", body: "" };
-    const template: NotifTemplate = { subject: top.subject || "", body: top.body || "", translations,
+    const template: NotifTemplate = { ...(mode === "rules" ? editingTemplate.template ?? {} : { subject: top.subject || "", body: top.body || "", translations }),
       emailTemplateVersionId: useEmailLibrary ? emailBinding.templateVersionId : null,
       emailSenderAccountId: useEmailLibrary ? emailBinding.senderAccountId : null,
     };
@@ -345,6 +346,162 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
     { key: "financeAlerts", label: t("notificationRules.prefFinanceAlerts"), desc: t("notificationRules.prefFinanceAlertsDesc") },
   ];
 
+  const templateDialog = canManageRules && editingTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-border/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-display font-bold text-lg">{t("notificationRules.editEmailTemplate")}</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {editingTemplate.name} — <span className="font-mono text-xs">{editingTemplate.event}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => setEditingTemplate(null)}
+                  className="p-2 rounded-lg hover:bg-secondary transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {canManageEmail && <section className="rounded-lg border p-3 space-y-3" data-testid="notification-email-binding">
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={useEmailLibrary} onChange={e => setUseEmailLibrary(e.target.checked)} />{emailCopy.copy("Use an approved shared email template", "Onaylı ortak e-posta şablonu kullan")}</label>
+                {mode === "templates" && <p className="text-xs text-muted-foreground">{emailCopy.copy("Applies only to this rule's email channel. The event and recipients stay unchanged. Unbound rules keep the existing language editor below.", "Yalnızca bu kuralın e-posta kanalı için geçerlidir. Olay ve alıcılar değişmez. Bağlanmamış kurallar aşağıdaki mevcut dil düzenleyicisini kullanır.")}</p>}
+                {useEmailLibrary && <EmailLibrarySelection {...emailBinding} onChange={setEmailBinding} allowedVariables={TEMPLATE_VARS[editingTemplate.event] ?? []} />}
+              </section>}
+              {mode === "templates" ? <>
+              <div>
+                <Label className="text-sm font-medium mb-2 block">{t("notificationRules.templateLanguage")}</Label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {TEMPLATE_LANGS.map(l => {
+                    const hasContent = !!(templateTranslations[l.code]?.subject || templateTranslations[l.code]?.body);
+                    return (
+                      <button
+                        key={l.code}
+                        onClick={() => setActiveLang(l.code)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all ${
+                          activeLang === l.code
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-secondary/30 text-muted-foreground border-border/50 hover:border-border"
+                        }`}
+                      >
+                        {l.label}
+                        {hasContent && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-green-500 align-middle" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">{t("notificationRules.availableVariables")}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(TEMPLATE_VARS[editingTemplate.event] || []).map(v => (
+                        <code
+                          key={v}
+                          onClick={() => insertVariable(v)}
+                          className="text-[11px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                        >
+                          {`{{${v}}}`}
+                        </code>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-blue-500 mt-1">{t("notificationRules.clickVariableHint")}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">{t("notificationRules.emailSubject")}</Label>
+                <Input
+                  value={templateTranslations[activeLang]?.subject || ""}
+                  onChange={e => updateActiveField("subject", e.target.value)}
+                  placeholder={t("notificationRules.emailSubjectPlaceholder", { name: editingTemplate.name })}
+                  className="bg-secondary/30"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">{t("notificationRules.emailBody")}</Label>
+                <Textarea
+                  value={templateTranslations[activeLang]?.body || ""}
+                  onChange={e => updateActiveField("body", e.target.value)}
+                  placeholder={t("notificationRules.emailBodyPlaceholder")}
+                  rows={6}
+                  className="bg-secondary/30 font-mono text-sm"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">{t("notificationRules.htmlSupportedHint")}</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="gap-1.5"
+                >
+                  <Eye className="w-4 h-4" />
+                  {showPreview ? t("notificationRules.hidePreview") : t("notificationRules.showPreview")}
+                </Button>
+              </div>
+
+              {showPreview && (templateTranslations[activeLang]?.subject || templateTranslations[activeLang]?.body) && (() => {
+                const { previewSubject, previewBody } = renderPreview(templateTranslations[activeLang]?.subject || "", templateTranslations[activeLang]?.body || "");
+                return (
+                  <div className="border border-border/50 rounded-xl overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-center">
+                      <h3 className="text-white font-bold text-xl">{translateUi(uiLanguage, "Find And Study OS")}</h3>
+                      <p className="text-white/70 text-sm mt-1">{t("notificationRules.notification")}</p>
+                    </div>
+                    <div className="p-6 bg-white dark:bg-background">
+                      <h4 className="font-bold text-lg mb-3 text-foreground">{previewSubject || t("notificationRules.noSubject")}</h4>
+                      <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap mb-4">
+                        {previewBody || t("notificationRules.noBody")}
+                      </p>
+                      <div className="text-center">
+                        <span className="inline-block bg-indigo-500 text-white px-6 py-2.5 rounded-lg text-sm font-semibold">
+                          {t("notificationRules.viewDetails")}
+                        </span>
+                      </div>
+                      <hr className="my-4 border-border/30" />
+                      <p className="text-[11px] text-muted-foreground text-center">
+                        {t("notificationRules.automatedFooter")}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+              </> : <a href="/staff/messages?tab=templates#system-email-templates" className="text-primary underline">{t("stageEmail.manageTemplates")}</a>}
+            </div>
+
+            <div className="p-6 border-t border-border/50 flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setEditingTemplate(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                onClick={saveTemplate}
+                disabled={!canManageRules || savingTemplate}
+                className="gap-1.5"
+              >
+                {savingTemplate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {t("notificationRules.saveTemplate")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+  if (mode === "templates") return <section id="system-email-templates" className="space-y-3 rounded-xl border p-4">
+    <h3 className="font-semibold">{t("notificationRules.systemRules")}</h3>
+    {loading && <p role="status">{emailCopy.loading}</p>}
+    {rules.map(rule => <div key={rule.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><span>{rule.name}</span><Button variant="outline" size="sm" disabled={!canManageRules} onClick={() => openTemplateEditor(rule)}>{t("notificationRules.editEmailTemplate")}</Button></div>)}
+    {templateDialog}
+  </section>;
   return (
     <div className="space-y-6">
       <Card className="border-none shadow-lg shadow-black/5 p-6">
@@ -518,156 +675,10 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
         </Card>
       )}
 
-      {canManageEmail && <EmailAutomationManager />}
+      {canManageEmail && <EmailAutomationManager view="history" />}
 
-      {canManageRules && editingTemplate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-border/50">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-display font-bold text-lg">{t("notificationRules.editEmailTemplate")}</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {editingTemplate.name} — <span className="font-mono text-xs">{editingTemplate.event}</span>
-                  </p>
-                </div>
-                <button
-                  onClick={() => setEditingTemplate(null)}
-                  className="p-2 rounded-lg hover:bg-secondary transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
+      {templateDialog}
 
-            <div className="p-6 space-y-5">
-              {canManageEmail && <section className="rounded-lg border p-3 space-y-3" data-testid="notification-email-binding">
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={useEmailLibrary} onChange={e => setUseEmailLibrary(e.target.checked)} />{emailCopy.copy("Use an approved shared email template", "Onaylı ortak e-posta şablonu kullan")}</label>
-                <p className="text-xs text-muted-foreground">{emailCopy.copy("Applies only to this rule's email channel. The event and recipients stay unchanged. Unbound rules keep the existing language editor below.", "Yalnızca bu kuralın e-posta kanalı için geçerlidir. Olay ve alıcılar değişmez. Bağlanmamış kurallar aşağıdaki mevcut dil düzenleyicisini kullanır.")}</p>
-                {useEmailLibrary && <EmailLibrarySelection {...emailBinding} onChange={setEmailBinding} allowedVariables={TEMPLATE_VARS[editingTemplate.event] ?? []} />}
-              </section>}
-              <div>
-                <Label className="text-sm font-medium mb-2 block">{t("notificationRules.templateLanguage")}</Label>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {TEMPLATE_LANGS.map(l => {
-                    const hasContent = !!(templateTranslations[l.code]?.subject || templateTranslations[l.code]?.body);
-                    return (
-                      <button
-                        key={l.code}
-                        onClick={() => setActiveLang(l.code)}
-                        className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all ${
-                          activeLang === l.code
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-secondary/30 text-muted-foreground border-border/50 hover:border-border"
-                        }`}
-                      >
-                        {l.label}
-                        {hasContent && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-green-500 align-middle" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">{t("notificationRules.availableVariables")}</p>
-                    <div className="flex flex-wrap gap-1">
-                      {(TEMPLATE_VARS[editingTemplate.event] || []).map(v => (
-                        <code
-                          key={v}
-                          onClick={() => insertVariable(v)}
-                          className="text-[11px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
-                        >
-                          {`{{${v}}}`}
-                        </code>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-blue-500 mt-1">{t("notificationRules.clickVariableHint")}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium mb-2 block">{t("notificationRules.emailSubject")}</Label>
-                <Input
-                  value={templateTranslations[activeLang]?.subject || ""}
-                  onChange={e => updateActiveField("subject", e.target.value)}
-                  placeholder={t("notificationRules.emailSubjectPlaceholder", { name: editingTemplate.name })}
-                  className="bg-secondary/30"
-                />
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium mb-2 block">{t("notificationRules.emailBody")}</Label>
-                <Textarea
-                  value={templateTranslations[activeLang]?.body || ""}
-                  onChange={e => updateActiveField("body", e.target.value)}
-                  placeholder={t("notificationRules.emailBodyPlaceholder")}
-                  rows={6}
-                  className="bg-secondary/30 font-mono text-sm"
-                />
-                <p className="text-[10px] text-muted-foreground mt-1">{t("notificationRules.htmlSupportedHint")}</p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowPreview(!showPreview)}
-                  className="gap-1.5"
-                >
-                  <Eye className="w-4 h-4" />
-                  {showPreview ? t("notificationRules.hidePreview") : t("notificationRules.showPreview")}
-                </Button>
-              </div>
-
-              {showPreview && (templateTranslations[activeLang]?.subject || templateTranslations[activeLang]?.body) && (() => {
-                const { previewSubject, previewBody } = renderPreview(templateTranslations[activeLang]?.subject || "", templateTranslations[activeLang]?.body || "");
-                return (
-                  <div className="border border-border/50 rounded-xl overflow-hidden">
-                    <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-center">
-                      <h3 className="text-white font-bold text-xl">{translateUi(uiLanguage, "Find And Study OS")}</h3>
-                      <p className="text-white/70 text-sm mt-1">{t("notificationRules.notification")}</p>
-                    </div>
-                    <div className="p-6 bg-white dark:bg-background">
-                      <h4 className="font-bold text-lg mb-3 text-foreground">{previewSubject || t("notificationRules.noSubject")}</h4>
-                      <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap mb-4">
-                        {previewBody || t("notificationRules.noBody")}
-                      </p>
-                      <div className="text-center">
-                        <span className="inline-block bg-indigo-500 text-white px-6 py-2.5 rounded-lg text-sm font-semibold">
-                          {t("notificationRules.viewDetails")}
-                        </span>
-                      </div>
-                      <hr className="my-4 border-border/30" />
-                      <p className="text-[11px] text-muted-foreground text-center">
-                        {t("notificationRules.automatedFooter")}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            <div className="p-6 border-t border-border/50 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setEditingTemplate(null)}>
-                {t("common.cancel")}
-              </Button>
-              <Button
-                onClick={saveTemplate}
-                disabled={!canManageRules || savingTemplate}
-                className="gap-1.5"
-              >
-                {savingTemplate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {t("notificationRules.saveTemplate")}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { db, emailTemplateVersionsTable, messageTemplatesTable, channelAccountsTable, NOTIFICATION_EVENTS, DEFAULT_NOTIFICATION_RULES } from "@workspace/db";
 import { and, eq, inArray } from "drizzle-orm";
+import { resolveEmailSenderAccount } from "./emailSenderAccounts";
 
 export const REGISTERED_NOTIFICATION_EVENTS = new Set([
   ...Object.values(NOTIFICATION_EVENTS).flatMap(category => Object.keys(category.events)),
@@ -30,8 +31,9 @@ export async function bindNotificationEmailTemplate(raw: unknown, event: string)
   const [sender] = await db.select({ metadata: channelAccountsTable.metadata }).from(channelAccountsTable)
     .where(and(eq(channelAccountsTable.id, Number(value.emailSenderAccountId)), eq(channelAccountsTable.channel, "email"),
       eq(channelAccountsTable.provider, "smtp"), eq(channelAccountsTable.isActive, true)));
-  const config = (sender?.metadata as {emailSender?: {verified?: boolean; revision?: number}} | undefined)?.emailSender;
+  const config = (sender?.metadata as {emailSender?: {verified?: boolean; revision?: number; sourceIntegrationKey?: string}} | undefined)?.emailSender;
   if (!version || !config?.verified || !Number.isSafeInteger(config.revision) || config.revision! < 1) throw new Error("EMAIL_APPROVED_TEMPLATE_AND_VERIFIED_SENDER_REQUIRED");
+  if (config.sourceIntegrationKey && !await resolveEmailSenderAccount(Number(value.emailSenderAccountId), config.revision!)) throw new Error("EMAIL_APPROVED_TEMPLATE_AND_VERIFIED_SENDER_REQUIRED");
   if (!emailVariablesFitEvent(event, version.variables)) throw new Error("EMAIL_VARIABLES_UNAVAILABLE_FOR_EVENT");
   return { ...value, emailSenderRevision: config.revision };
 }

@@ -11614,6 +11614,9 @@
     "readyStages": "Étapes prêtes",
     "configured": "Configurées",
     "recipient": "Étudiant direct → étudiant ; étudiant d’agence → son agent ou sous-agent. Choisissez les sources et l’expéditeur ci-dessous.",
-    "limits": "Destinataire actif et vérifié requis. Un e-mail par candidature et étape ; aucun envoi rétroactif."
+    "limits": "Destinataire actif et vérifié requis. Un e-mail par candidature et étape ; aucun envoi rétroactif.",
+    "manageTemplates": "Gérer les modèles dans Messages",
+    "reuseSmtp": "Utiliser l’intégration SMTP existante",
+    "configureSmtp": "Configurer l’intégration SMTP"
   }
 }

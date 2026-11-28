@@ -152,7 +152,7 @@ test("legacy immediate and worker use one atomic durable claim; crashes are quar
   assert.match(source, /const item = await claimEmail\(\)/);
   assert.match(source, /status='unknown', delivery_error_code='EMAIL_CLAIM_STALE'/);
   assert.doesNotMatch(index, /UPDATE email_queue SET status = 'pending' WHERE status = 'processing'/);
-  assert.match(source, /decryptConfig\(integration.config/);
+  assert.match(readFileSync(new URL("../src/lib/notifications/legacySmtpSender.ts", import.meta.url), "utf8"), /decryptConfig\(integration.config/);
   assert.match(source, /isEncrypted\(config.password\)/);
   assert.match(source, /v.status='approved' AND t.is_active=true/);
   assert.match(source, /validateStageEmailQueueItem\(item.id\)/);

@@ -224,7 +224,7 @@ export default function SettingsPage() {
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
-    return requested === "notifications" || requested === "pipeline" ? requested : "profile";
+    return requested === "notifications" || requested === "pipeline" || requested === "integrations" ? requested : "profile";
   });
   const [form, setForm] = useState({ firstName: "", lastName: "", phoneCode: "+90", phone: "", avatarUrl: "", email: "", startDate: "", homeAddress: "", passportNumber: "", contractUrl: "", passportUrl: "", emergencyContactName: "", emergencyPhoneCode: "+90", emergencyPhone: "" });
   const [avatarUploading, setAvatarUploading] = useState(false);

@@ -11614,6 +11614,9 @@
     "readyStages": "Hazır aşamalar",
     "configured": "Yapılandırılan",
     "recipient": "Bireysel öğrenci → öğrenci; acente öğrencisi → ilgili acente veya alt acente. Aşağıdan kaynakları ve göndericiyi seçin.",
-    "limits": "Doğrulanmış aktif alıcı gerekir. Başvuru ve aşama başına bir e-posta; geçmişe dönük gönderim yapılmaz."
+    "limits": "Doğrulanmış aktif alıcı gerekir. Başvuru ve aşama başına bir e-posta; geçmişe dönük gönderim yapılmaz.",
+    "manageTemplates": "Şablonları Mesajlar’da yönet",
+    "reuseSmtp": "Mevcut SMTP entegrasyonunu kullan",
+    "configureSmtp": "SMTP entegrasyonunu düzenle"
   }
 }

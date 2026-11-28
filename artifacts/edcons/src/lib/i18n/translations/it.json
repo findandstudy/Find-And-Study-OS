@@ -11614,6 +11614,9 @@
     "readyStages": "Fasi pronte",
     "configured": "Configurate",
     "recipient": "Studente diretto → studente; studente di agenzia → agente o subagente corrispondente. Seleziona le fonti e il mittente qui sotto.",
-    "limits": "È necessario un destinatario attivo e verificato. Una email per candidatura e fase; nessun invio retroattivo."
+    "limits": "È necessario un destinatario attivo e verificato. Una email per candidatura e fase; nessun invio retroattivo.",
+    "manageTemplates": "Gestisci i modelli in Messaggi",
+    "reuseSmtp": "Usa l’integrazione SMTP esistente",
+    "configureSmtp": "Configura l’integrazione SMTP"
   }
 }

@@ -11614,6 +11614,9 @@
     "readyStages": "Taýýar tapgyrlar",
     "configured": "Sazlanan",
     "recipient": "Özbaşdak talyp → talyp; agentligiň talyby → degişli agent ýa-da kiçi agent. Aşakda çeşmeleri we iberijini saýlaň.",
-    "limits": "Tassyklanan işjeň alyjy gerek. Her arza we tapgyr üçin bir e-poçta; geçmişdäki wakalara iberilmeýär."
+    "limits": "Tassyklanan işjeň alyjy gerek. Her arza we tapgyr üçin bir e-poçta; geçmişdäki wakalara iberilmeýär.",
+    "manageTemplates": "Şablonlary Habarlar bölüminde dolandyryň",
+    "reuseSmtp": "Bar bolan SMTP integrasiýasyny ulanyň",
+    "configureSmtp": "SMTP integrasiýasyny sazlaň"
   }
 }

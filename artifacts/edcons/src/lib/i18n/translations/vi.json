@@ -11614,6 +11614,9 @@
     "readyStages": "Giai đoạn sẵn sàng",
     "configured": "Đã cấu hình",
     "recipient": "Sinh viên trực tiếp → sinh viên; sinh viên đại lý → đại lý hoặc đại lý phụ tương ứng. Chọn nguồn và người gửi bên dưới.",
-    "limits": "Cần người nhận đang hoạt động và đã xác minh. Một email cho mỗi hồ sơ và giai đoạn; không gửi cho sự kiện cũ."
+    "limits": "Cần người nhận đang hoạt động và đã xác minh. Một email cho mỗi hồ sơ và giai đoạn; không gửi cho sự kiện cũ.",
+    "manageTemplates": "Quản lý mẫu trong Tin nhắn",
+    "reuseSmtp": "Sử dụng tích hợp SMTP hiện có",
+    "configureSmtp": "Cấu hình tích hợp SMTP"
   }
 }

@@ -52,12 +52,17 @@ test("preview is isolated by network-denying CSP and empty iframe sandbox", () =
   assert.match(manager, /sandbox="" referrerPolicy="no-referrer"/);
   assert.doesNotMatch(manager, /dangerouslySetInnerHTML|\/send-test|\/send-now/);
 });
-test("new library reuses Notifications and existing Messages entry point", () => {
-  assert.equal(EMAIL_AUTOMATION_PATH, "/admin/settings?tab=notifications#notification-email");
-  assert.match(source("components/NotificationRulesManager.tsx"), /<EmailAutomationManager/);
-  assert.match(source("pages/staff/Messages.tsx"), /href=\{EMAIL_AUTOMATION_PATH\}/);
-  assert.match(source("pages/staff/Settings.tsx"), /get\("tab"\) === "notifications"/);
+test("Messages owns template authoring; settings only bind, show history or manage senders", () => {
+  assert.equal(EMAIL_AUTOMATION_PATH, "/staff/messages?tab=templates#email-templates");
+  const rules=source("components/NotificationRulesManager.tsx");
+  assert.match(rules, /EmailAutomationManager view="history"/);
+  assert.match(rules, /mode === "templates" \? <>/);
+  assert.match(source("pages/staff/Messages.tsx"), /EmailAutomationManager view="templates"/);
+  assert.match(source("pages/staff/Messages.tsx"), /mode="templates"/);
+  assert.match(source("components/IntegrationsManager.tsx"), /EmailAutomationManager view="senders"/);
+  assert.match(source("pages/staff/Settings.tsx"), /requested === "integrations"/);
 });
+
 test("existing rule legacy editor preserved; binding nullable and explicit", () => {
   const rules = source("components/NotificationRulesManager.tsx");
   assert.match(rules, /emailTemplateVersionId: useEmailLibrary \? emailBinding.templateVersionId : null/);

@@ -11614,6 +11614,9 @@
     "readyStages": "Tayyor bosqichlar",
     "configured": "Sozlangan",
     "recipient": "Mustaqil talaba → talaba; agentlik talabasi → tegishli agent yoki subagent. Quyida manbalar va yuboruvchini tanlang.",
-    "limits": "Tasdiqlangan faol qabul qiluvchi kerak. Har bir ariza va bosqich uchun bitta xat; eski voqealarga yuborilmaydi."
+    "limits": "Tasdiqlangan faol qabul qiluvchi kerak. Har bir ariza va bosqich uchun bitta xat; eski voqealarga yuborilmaydi.",
+    "manageTemplates": "Shablonlarni Xabarlarda boshqaring",
+    "reuseSmtp": "Mavjud SMTP integratsiyasidan foydalanish",
+    "configureSmtp": "SMTP integratsiyasini sozlash"
   }
 }
