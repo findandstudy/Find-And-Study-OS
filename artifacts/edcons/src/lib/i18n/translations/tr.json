@@ -11605,5 +11605,15 @@
     "missingDate": "Doğrulanmış başvuru takvimi bulunmuyor.",
     "saveFirst": "Önizlemeden önce takvim değişikliklerini kaydedin.",
     "scheduledOn": "Planlanan tarih"
+  },
+  "stageEmail": {
+    "readiness": "Başvuru aşaması e-posta hazırlığı",
+    "runtime": "Aşama otomasyonu",
+    "delivery": "E-posta gönderimi",
+    "worker": "Arka plan işçisi",
+    "readyStages": "Hazır aşamalar",
+    "configured": "Yapılandırılan",
+    "recipient": "Bireysel öğrenci → öğrenci; acente öğrencisi → ilgili acente veya alt acente. Aşağıdan kaynakları ve göndericiyi seçin.",
+    "limits": "Doğrulanmış aktif alıcı gerekir. Başvuru ve aşama başına bir e-posta; geçmişe dönük gönderim yapılmaz."
   }
 }

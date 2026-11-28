@@ -82,7 +82,7 @@ test("TR copy and safe English fallback preserve explicit delivery limits", () =
   assert.equal(emailAutomationCopy("tr").title, "E-posta otomasyonu");
   for (const lang of ["en", "ar", "ru", "hi"]) assert.equal(emailAutomationCopy(lang).title, "Email automation");
   assert.match(emailAutomationCopy("en").historyNote, /not confirmed inbox delivery/);
-  assert.match(emailAutomationCopy("en").stageNote, /No backfill/);
+  assert.match(source("components/notifications/EmailAutomationFields.tsx"), /stageEmail.limits/);
 });
 test("catalogue is bounded and pinned references hydrate through exact lookup", () => {
   const hook = source("components/notifications/useEmailLibrary.ts");
@@ -99,7 +99,11 @@ test("actual delivery statuses are localized without claiming confirmed delivery
     assert.equal(emailStatusLabel(status, "ar"), en);
   }
   assert.equal(emailStatusLabel("sent", "en"), "SMTP accepted");
-  assert.match(source("components/notifications/EmailAutomationManager.tsx"), /Only the latest 100 records are shown/);
+  const manager = source("components/notifications/EmailAutomationManager.tsx");
+  assert.match(manager, /historySource, historyCursor/);
+  assert.match(manager, /deliveryErrorCode/);
+  assert.match(manager, /common.next/);
+  assert.match(manager, /common.previous/);
 });
 test("legacy rule writes require confirmed active admin session, never manager or impersonation", () => {
   for (const role of ["admin", "super_admin"]) {

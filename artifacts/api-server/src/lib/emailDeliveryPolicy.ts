@@ -80,6 +80,7 @@ const STAGE_EMAIL_POLICY_CODES = new Set([
   "STAGE_POLICY_CHANGED", "TEMPLATE_NOT_APPROVED", "SENDER_CHANGED_OR_UNVERIFIED",
   "STUDENT_EMAIL_MISSING_OR_UNVERIFIED", "STAGE_INTENT_NOT_FOUND", "RECIPIENT_CHANGED",
   "STAGE_EMAIL_CONTEXT_CHANGED",
+  "AGENT_EMAIL_MISSING_OR_UNVERIFIED",
 ]);
 /** Persist known operational codes, never arbitrary provider/database exception text. */
 export function stageEmailDeliveryErrorCode(value: unknown): string {

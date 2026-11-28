@@ -11605,5 +11605,15 @@
     "missingDate": "No hay un calendario de solicitudes verificado.",
     "saveFirst": "Guarde los cambios del calendario antes de la vista previa.",
     "scheduledOn": "Fecha programada"
+  },
+  "stageEmail": {
+    "readiness": "Preparación del correo por etapa",
+    "runtime": "Automatización de etapas",
+    "delivery": "Envío de correo",
+    "worker": "Proceso en segundo plano",
+    "readyStages": "Etapas listas",
+    "configured": "Configuradas",
+    "recipient": "Estudiante directo → estudiante; estudiante de agencia → su agente o subagente. Seleccione fuentes y remitente abajo.",
+    "limits": "Se requiere un destinatario activo y verificado. Un correo por solicitud y etapa; sin envíos retroactivos."
   }
 }

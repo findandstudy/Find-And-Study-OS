@@ -11605,5 +11605,15 @@
     "missingDate": "暂无已核实的申请日历。",
     "saveFirst": "请先保存日历更改，再预览。",
     "scheduledOn": "计划日期"
+  },
+  "stageEmail": {
+    "readiness": "申请阶段邮件准备情况",
+    "runtime": "阶段自动化",
+    "delivery": "邮件发送",
+    "worker": "后台任务",
+    "readyStages": "就绪阶段",
+    "configured": "已配置",
+    "recipient": "独立申请学生 → 学生；代理学生 → 对应代理或子代理。请在下方选择来源和发件人。",
+    "limits": "收件人必须已验证且处于启用状态。每个申请每个阶段发送一封邮件，不补发历史事件。"
   }
 }

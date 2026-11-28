@@ -17,7 +17,7 @@ test("stage config requires exact approved references and explicit valid origins
     {enabled:true,templateVersionId:1,senderAccountId:2,originTypes:[]},
     {enabled:true,templateVersionId:1,senderAccountId:2,originTypes:["all"]}]) assert.throws(() => parseStageAutomaticEmail(raw));
 });
-test("source audience never changes the student recipient into an agency mailbox", () => {
+test("source classification and matching verified mailbox are strict", () => {
   assert.equal(stageEmailOrigin(null,null),"direct");
   assert.equal(stageEmailOrigin(2,null),"agent");
   assert.equal(stageEmailOrigin(3,2),"sub_agent");

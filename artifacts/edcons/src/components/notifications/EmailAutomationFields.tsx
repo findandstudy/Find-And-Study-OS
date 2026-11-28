@@ -65,7 +65,8 @@ export function StageAutomaticEmailFields({ value, onChange }: { value?: StageAu
   const id = useId();
   return <section className="space-y-3 rounded-lg border p-4" data-testid="stage-automatic-email">
     <h3 className="font-semibold text-sm">{copy.stageTitle}</h3>
-    <p className="text-xs text-muted-foreground">{copy.stageNote}</p>
+    <p className="text-xs text-muted-foreground">{t("stageEmail.recipient")}</p>
+    <p className="text-xs text-muted-foreground">{t("stageEmail.limits")}</p>
     <fieldset className="flex flex-wrap gap-3 text-sm"><legend className="mb-2">{copy.stageEnabled}</legend>
       {[true, false].map(enabled => <label key={String(enabled)} className="flex gap-2 items-center"><input type="radio" name={`${id}-enabled`} checked={(value?.enabled === true) === enabled} onChange={() => onChange(enabled ? { enabled: true, templateVersionId: value?.templateVersionId ?? null, senderAccountId: value?.senderAccountId ?? null, originTypes: value?.originTypes ?? ["direct"] } : null)} />{t(enabled ? "common.yes" : "common.no")}</label>)}
     </fieldset>

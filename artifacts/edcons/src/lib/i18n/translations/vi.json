@@ -11605,5 +11605,15 @@
     "missingDate": "Chưa có lịch nộp hồ sơ đã xác minh.",
     "saveFirst": "Lưu thay đổi lịch trước khi xem trước.",
     "scheduledOn": "Ngày đã lên lịch"
+  },
+  "stageEmail": {
+    "readiness": "Mức sẵn sàng email theo giai đoạn",
+    "runtime": "Tự động hóa giai đoạn",
+    "delivery": "Gửi email",
+    "worker": "Tiến trình nền",
+    "readyStages": "Giai đoạn sẵn sàng",
+    "configured": "Đã cấu hình",
+    "recipient": "Sinh viên trực tiếp → sinh viên; sinh viên đại lý → đại lý hoặc đại lý phụ tương ứng. Chọn nguồn và người gửi bên dưới.",
+    "limits": "Cần người nhận đang hoạt động và đã xác minh. Một email cho mỗi hồ sơ và giai đoạn; không gửi cho sự kiện cũ."
   }
 }

@@ -10,6 +10,7 @@ import { serializeAccountConfig } from "../lib/inbox/channelAccountConfig";
 import { emailDeliveryAllowed } from "../lib/emailDeliveryPolicy";
 import { stageEmailRuntime } from "../lib/notifications/stageEmailPolicy";
 import { backgroundJobsEnabled } from "../lib/backgroundJobs";
+import { stageEmailReadiness } from "../lib/notifications/stageEmailReadiness";
 
 const router: IRouter = Router();
 router.use("/notification-email", requireEmailAutomationHuman, (_req, res, next) => { res.set("Cache-Control", "private, no-store"); next(); });
@@ -33,6 +34,10 @@ router.get("/notification-email/capabilities", handle(async (_req, res) => {
   res.json({ enabled: stageEmailRuntime().enabled && emailDeliveryAllowed() && backgroundJobsEnabled(), runtimeConfigured: stageEmailRuntime().enabled,
     deliveryAllowed: emailDeliveryAllowed(), backgroundJobsConfigured: backgroundJobsEnabled(), verificationAllowed: emailDeliveryAllowed(), canManage: true,
     variables: EMAIL_TEMPLATE_VARIABLES, stageVariables: STAGE_EMAIL_TEMPLATE_VARIABLES, languages: EMAIL_TEMPLATE_LANGUAGES, categories: EMAIL_TEMPLATE_CATEGORIES });
+}));
+
+router.get("/notification-email/readiness", handle(async (_req, res) => {
+  res.json(await stageEmailReadiness());
 }));
 
 router.get("/notification-email/senders", handle(async (_req, res) => {

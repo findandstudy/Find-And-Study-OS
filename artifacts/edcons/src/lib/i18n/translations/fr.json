@@ -11605,5 +11605,15 @@
     "missingDate": "Aucun calendrier de candidature vérifié n’est disponible.",
     "saveFirst": "Enregistrez les changements du calendrier avant l’aperçu.",
     "scheduledOn": "Date prévue"
+  },
+  "stageEmail": {
+    "readiness": "Préparation des e-mails par étape",
+    "runtime": "Automatisation des étapes",
+    "delivery": "Envoi des e-mails",
+    "worker": "Traitement en arrière-plan",
+    "readyStages": "Étapes prêtes",
+    "configured": "Configurées",
+    "recipient": "Étudiant direct → étudiant ; étudiant d’agence → son agent ou sous-agent. Choisissez les sources et l’expéditeur ci-dessous.",
+    "limits": "Destinataire actif et vérifié requis. Un e-mail par candidature et étape ; aucun envoi rétroactif."
   }
 }

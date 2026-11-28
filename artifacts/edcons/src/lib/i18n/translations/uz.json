@@ -11605,5 +11605,15 @@
     "missingDate": "Tasdiqlangan ariza taqvimi yo‘q.",
     "saveFirst": "Oldindan ko‘rishdan avval taqvim o‘zgarishlarini saqlang.",
     "scheduledOn": "Rejalashtirilgan sana"
+  },
+  "stageEmail": {
+    "readiness": "Ariza bosqichi xatlarining tayyorligi",
+    "runtime": "Bosqichlarni avtomatlashtirish",
+    "delivery": "Elektron xat yuborish",
+    "worker": "Fon ishchisi",
+    "readyStages": "Tayyor bosqichlar",
+    "configured": "Sozlangan",
+    "recipient": "Mustaqil talaba → talaba; agentlik talabasi → tegishli agent yoki subagent. Quyida manbalar va yuboruvchini tanlang.",
+    "limits": "Tasdiqlangan faol qabul qiluvchi kerak. Har bir ariza va bosqich uchun bitta xat; eski voqealarga yuborilmaydi."
   }
 }

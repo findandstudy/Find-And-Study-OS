@@ -11605,5 +11605,15 @@
     "missingDate": "Tassyklanan arza senenamasy ýok.",
     "saveFirst": "Öňünden görmezden öň senenama üýtgeşmelerini ýazdyryň.",
     "scheduledOn": "Meýilleşdirilen sene"
+  },
+  "stageEmail": {
+    "readiness": "Arza tapgyrynyň e-poçta taýýarlygy",
+    "runtime": "Tapgyr awtomatlaşdyrmasy",
+    "delivery": "E-poçta ibermek",
+    "worker": "Fon işgäri",
+    "readyStages": "Taýýar tapgyrlar",
+    "configured": "Sazlanan",
+    "recipient": "Özbaşdak talyp → talyp; agentligiň talyby → degişli agent ýa-da kiçi agent. Aşakda çeşmeleri we iberijini saýlaň.",
+    "limits": "Tassyklanan işjeň alyjy gerek. Her arza we tapgyr üçin bir e-poçta; geçmişdäki wakalara iberilmeýär."
   }
 }

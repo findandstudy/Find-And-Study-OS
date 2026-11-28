@@ -11605,5 +11605,15 @@
     "missingDate": "No verified application calendar is available.",
     "saveFirst": "Save calendar changes before previewing.",
     "scheduledOn": "Scheduled date"
+  },
+  "stageEmail": {
+    "readiness": "Application-stage email readiness",
+    "runtime": "Stage automation",
+    "delivery": "Email delivery",
+    "worker": "Background worker",
+    "readyStages": "Ready stages",
+    "configured": "Configured",
+    "recipient": "Direct student → student; agency student → their agent or sub-agent. Select sources and sender below.",
+    "limits": "Verified active recipient required. One email per application and stage; no historical sends."
   }
 }

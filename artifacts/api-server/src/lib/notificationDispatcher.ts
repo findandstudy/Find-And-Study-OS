@@ -7,7 +7,7 @@ import { sendWhatsAppText, type WhatsAppConfig } from "./inbox/channels/whatsapp
 import { invalidateNotificationCounts } from "./notificationCountCache";
 import { notificationPriority } from "./notificationPriority";
 import { resolveAgentFeatures } from "./agentFeatures";
-import { hasStageEmailForStudent } from "./notifications/stageEmailAutomation";
+import { hasStageEmailForRecipient } from "./notifications/stageEmailAutomation";
 import { renderApprovedEmailVersion } from "./notifications/emailTemplateLibrary";
 
 // ---------------------------------------------------------------------------
@@ -364,7 +364,7 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
             if (!user.email) continue;
             try {
               if (ctx.event === "application.stage_changed" && typeof ctx.data?.applicationId === "number" &&
-                typeof ctx.data.stage === "string" && await hasStageEmailForStudent(ctx.data.applicationId, ctx.data.stage, user.id)) continue;
+                typeof ctx.data.stage === "string" && await hasStageEmailForRecipient(ctx.data.applicationId, ctx.data.stage, user.id)) continue;
               if (!ctx.emailOverride && template?.emailTemplateVersionId) {
                 const approved = await renderApprovedEmailVersion(template.emailTemplateVersionId, vars);
                 if (!approved || !template.emailSenderAccountId || !template.emailSenderRevision) continue;

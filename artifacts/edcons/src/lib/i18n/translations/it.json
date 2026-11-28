@@ -11605,5 +11605,15 @@
     "missingDate": "Nessun calendario delle domande verificato disponibile.",
     "saveFirst": "Salva le modifiche al calendario prima dell’anteprima.",
     "scheduledOn": "Data prevista"
+  },
+  "stageEmail": {
+    "readiness": "Preparazione delle email per fase",
+    "runtime": "Automazione delle fasi",
+    "delivery": "Invio email",
+    "worker": "Processo in background",
+    "readyStages": "Fasi pronte",
+    "configured": "Configurate",
+    "recipient": "Studente diretto → studente; studente di agenzia → agente o subagente corrispondente. Seleziona le fonti e il mittente qui sotto.",
+    "limits": "È necessario un destinatario attivo e verificato. Una email per candidatura e fase; nessun invio retroattivo."
   }
 }

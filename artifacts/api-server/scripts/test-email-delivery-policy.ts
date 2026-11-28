@@ -16,6 +16,7 @@ const message: ClaimedEmail = {
 
 test("stage delivery diagnostics preserve only explicitly allowlisted codes", () => {
   assert.equal(stageEmailDeliveryErrorCode("RECIPIENT_CHANGED"), "RECIPIENT_CHANGED");
+  assert.equal(stageEmailDeliveryErrorCode("AGENT_EMAIL_MISSING_OR_UNVERIFIED"), "AGENT_EMAIL_MISSING_OR_UNVERIFIED");
   assert.equal(stageEmailDeliveryErrorCode("AUTOMATION_INACTIVE_OR_HISTORICAL"), "AUTOMATION_INACTIVE_OR_HISTORICAL");
   for (const value of [null, "SMTP_PASSWORD_SECRET", "recipient@example.test", "STAGE_POLICY_CHANGED\nsecret", {}]) {
     assert.equal(stageEmailDeliveryErrorCode(value), "STAGE_EMAIL_POLICY_BLOCKED");

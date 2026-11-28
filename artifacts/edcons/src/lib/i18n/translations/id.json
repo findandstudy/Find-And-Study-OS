@@ -11606,5 +11606,15 @@
     "missingDate": "Kalender pendaftaran terverifikasi belum tersedia.",
     "saveFirst": "Simpan perubahan kalender sebelum pratinjau.",
     "scheduledOn": "Tanggal terjadwal"
+  },
+  "stageEmail": {
+    "readiness": "Kesiapan email tahap pendaftaran",
+    "runtime": "Otomatisasi tahap",
+    "delivery": "Pengiriman email",
+    "worker": "Pekerja latar belakang",
+    "readyStages": "Tahap siap",
+    "configured": "Dikonfigurasi",
+    "recipient": "Mahasiswa langsung → mahasiswa; mahasiswa agensi → agen atau subagennya. Pilih sumber dan pengirim di bawah.",
+    "limits": "Penerima aktif dan terverifikasi diperlukan. Satu email per pendaftaran dan tahap; tanpa pengiriman untuk peristiwa lama."
   }
 }

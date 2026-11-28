@@ -1,7 +1,9 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { executeClaimedEmail, classifyEmailTransportReceipt } from "../src/lib/emailDeliveryPolicy";
+import { stageEmailReadiness } from "../src/lib/notifications/stageEmailReadiness";
 import { pool } from "@workspace/db";
-import { processStageEmailOutbox, validateStageEmailQueueItem, hasStageEmailForStudent } from "../src/lib/notifications/stageEmailAutomation";
+import { processStageEmailOutbox, validateStageEmailQueueItem, hasStageEmailForRecipient } from "../src/lib/notifications/stageEmailAutomation";
 
 const target = new URL(process.env.DATABASE_URL!);
 if (target.hostname !== "127.0.0.1" || target.port !== "5433" || target.pathname !== "/fasos_apply_local" ||
@@ -66,14 +68,14 @@ test("transactional transition intent, origin isolation, immutable approval and 
       await pool.query("UPDATE pipeline_stages SET automatic_email=$2 WHERE key=$1",[key,config]);
     }
   });
-  await t.test("concurrent sweeps enqueue once, approved variables render, generic email suppression is student-only",async()=>{
+  await t.test("concurrent sweeps enqueue once, approved variables render, generic suppression targets only the actual recipient",async()=>{
     await Promise.all([processStageEmailOutbox(),processStageEmailOutbox()]);
     const rows=await pool.query("SELECT q.* FROM email_queue q JOIN pipeline_stage_email_dispatches d ON d.email_queue_id=q.id WHERE d.application_id=$1",[appId]);
     assert.equal(rows.rowCount,1);assert.equal(rows.rows[0].status,"pending");assert.match(rows.rows[0].subject,/Hello Mail/);
     assert.match(rows.rows[0].html_body,/Synthetic programme/);
     assert.deepEqual(await validateStageEmailQueueItem(rows.rows[0].id),{allowed:true});
-    assert.equal(await hasStageEmailForStudent(appId,key,studentUser.id),true);
-    assert.equal(await hasStageEmailForStudent(appId,key,maker.id),false);
+    assert.equal(await hasStageEmailForRecipient(appId,key,studentUser.id),true);
+    assert.equal(await hasStageEmailForRecipient(appId,key,maker.id),false);
     await pool.query("UPDATE students SET email='changed@example.test' WHERE id=$1",[student.id]);
     assert.equal((await validateStageEmailQueueItem(rows.rows[0].id)).allowed,false);
     await pool.query("UPDATE students SET email=$2 WHERE id=$1",[student.id,studentUser.email]);
@@ -81,6 +83,44 @@ test("transactional transition intent, origin isolation, immutable approval and 
     assert.equal((await validateStageEmailQueueItem(rows.rows[0].id)).code,"STAGE_EMAIL_CONTEXT_CHANGED");
     await pool.query("UPDATE applications SET stage='moved' WHERE id=$1",[appId]);
     assert.equal((await validateStageEmailQueueItem(rows.rows[0].id)).code,"RECORD_SCOPE_OR_STAGE_CHANGED");
+  });
+  await t.test("source routing selects the owning agency, never its parent or student, and revalidates", async()=>{
+    await pool.query("UPDATE applications SET stage=$2 WHERE id=$1",[appId,key]);
+    await pool.query("UPDATE pipeline_stages SET automatic_email=$2 WHERE key=$1",[key,{...config,originTypes:["direct","agent","sub_agent"]}]);
+    const agencyUsers=(await pool.query("INSERT INTO users(first_name,last_name,role,email,email_verified) VALUES('Synthetic','Agent','agent',$1,true),('Synthetic','Sub','sub_agent',$2,true) RETURNING id,email",[key+'_agent@example.invalid',key+'_sub@example.invalid'])).rows;
+    const parent=(await pool.query("INSERT INTO agents(first_name,last_name,status,user_id,email) VALUES('Synthetic','Agency','active',$1,$2) RETURNING id",[agencyUsers[0].id,agencyUsers[0].email])).rows[0];
+    const child=(await pool.query("INSERT INTO agents(first_name,last_name,status,user_id,email,parent_agent_id) VALUES('Synthetic','Sub','active',$1,$2,$3) RETURNING id",[agencyUsers[1].id,agencyUsers[1].email,parent.id])).rows[0];
+    for(const [i,g] of [parent,child].entries()){
+      const st=(await pool.query("INSERT INTO students(first_name,last_name,email,user_id,agent_id) VALUES('Synthetic','AgencyStudent',$1,$2,$3) RETURNING id",[studentUser.email,studentUser.id,g.id])).rows[0];
+      const a=await newApp(st.id);await processStageEmailOutbox();
+      const q=(await pool.query("SELECT q.* FROM email_queue q JOIN pipeline_stage_email_dispatches d ON d.email_queue_id=q.id WHERE d.application_id=$1",[a])).rows[0];
+      assert.equal(q.to_email,agencyUsers[i].email);
+      assert.equal(await hasStageEmailForRecipient(a,key,studentUser.id),false);
+      assert.equal(await hasStageEmailForRecipient(a,key,agencyUsers[i].id),true);
+      assert.equal(await hasStageEmailForRecipient(a,key,maker.id),false);
+      assert.equal((await validateStageEmailQueueItem(q.id)).allowed,true);
+      await pool.query("UPDATE users SET email_verified=false WHERE id=$1",[agencyUsers[i].id]);
+      assert.equal((await validateStageEmailQueueItem(q.id)).code,'AGENT_EMAIL_MISSING_OR_UNVERIFIED');
+      const skippedApp=await newApp(st.id);await processStageEmailOutbox();
+      assert.equal((await pool.query("SELECT error_code FROM pipeline_stage_email_dispatches WHERE application_id=$1",[skippedApp])).rows[0].error_code,'AGENT_EMAIL_MISSING_OR_UNVERIFIED');
+      await pool.query("UPDATE users SET email_verified=true WHERE id=$1",[agencyUsers[i].id]);
+      await pool.query("UPDATE agents SET email='wrong@example.invalid' WHERE id=$1",[g.id]);
+      assert.equal((await validateStageEmailQueueItem(q.id)).allowed,false);
+      await pool.query("UPDATE agents SET email=$2 WHERE id=$1",[g.id,agencyUsers[i].email]);
+      const claimed=(await pool.query("UPDATE email_queue SET status='processing',claim_token='synthetic-claim' WHERE id=$1 AND status='pending' RETURNING *",[q.id])).rows[0];
+      let calls=0;
+      assert.equal(await executeClaimedEmail(claimed,{
+        allowed:()=>true, // Injected in-memory transport only; process delivery flags remain disabled.
+        send:async row=>{calls++;assert.equal((await validateStageEmailQueueItem(row.id)).allowed,true);return classifyEmailTransportReceipt({accepted:[row.to_email],rejected:[],messageId:'synthetic-id',response:'250 mock accepted'},row.to_email,'synthetic-id');},
+        save:async(row,result)=>{const saved=await pool.query("UPDATE email_queue SET status=$3,provider_message_id=$4,claim_token=null WHERE id=$1 AND claim_token=$2 AND status='processing'",[row.id,row.claim_token,result.status,result.messageId]);assert.equal(saved.rowCount,1);},
+        onSaveFailure:()=>assert.fail('mock receipt must persist')
+      }),true);
+      assert.equal(calls,1);await processStageEmailOutbox();
+      assert.equal((await pool.query("SELECT count(*)::int n FROM email_queue WHERE id=$1 AND status='sent'",[q.id])).rows[0].n,1);
+      assert.equal((await pool.query("SELECT count(*)::int n FROM pipeline_stage_email_dispatches WHERE application_id=$1",[a])).rows[0].n,1);
+    }
+    const readiness=await stageEmailReadiness();assert.equal(readiness.delivery,false);assert.equal(readiness.ready,false);assert.ok(readiness.counts.ready_stages>=1);
+    await pool.query("UPDATE pipeline_stages SET automatic_email=$2 WHERE key=$1",[key,config]);
   });
   await t.test("retirement, sender change and historical intent never silently send",async()=>{
     const a=await newApp(); await processStageEmailOutbox();
@@ -92,6 +132,6 @@ test("transactional transition intent, origin isolation, immutable approval and 
     assert.equal((await validateStageEmailQueueItem(q)).code,"TEMPLATE_NOT_APPROVED");
     process.env.PIPELINE_EMAIL_AUTOMATION_SINCE=new Date(Date.now()+60_000).toISOString();
     assert.equal((await validateStageEmailQueueItem(q)).code,"AUTOMATION_INACTIVE_OR_HISTORICAL");
-    assert.equal((await pool.query("SELECT count(*)::int n FROM email_queue WHERE status='sent'")).rows[0].n,0);
+    assert.equal((await pool.query("SELECT count(*)::int n FROM email_queue WHERE status='sent' AND idempotency_key IS NULL")).rows[0].n,0);
   });
 });

@@ -12,6 +12,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useAuth } from "@/hooks/use-auth";
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n";
 import DOMPurify from "isomorphic-dompurify";
+import { StageEmailReadiness } from "./StageEmailReadiness";
 import { emailLibraryKey, useEmailLibrary } from "./useEmailLibrary";
 import { canApproveEmail, canVerifyEmailSender, emailAutomationCopy, emailStatusLabel, emailTemplateVariables, safeEmailPreview, type EmailTemplate, type EmailTemplateVersion, type EmailSender, type EmailHistoryItem } from "./emailAutomationModel";
 
@@ -23,13 +24,15 @@ const blankSender = (): SenderDraft => ({ displayName: "", fromEmail: "", fromNa
 
 export function EmailAutomationManager({ view = "all" }: { view?: "all" | "senders" } = {}) {
   const { lang: uiLanguage } = useUiLanguage();
-  const { lang, dir } = useI18n();
+  const { lang, dir, t } = useI18n();
   const copy = emailAutomationCopy(lang);
   const { user } = useAuth();
   const client = useQueryClient();
   const library = useEmailLibrary();
   const [tab, setTab] = useState<"templates" | "senders" | "history">(view === "senders" ? "senders" : "templates");
   const [historySource, setHistorySource] = useState<"stage" | "system">("stage");
+  const [historyCursors, setHistoryCursors] = useState<Array<number | undefined>>([undefined]);
+  const historyCursor = historyCursors.at(-1);
   const [draft, setDraft] = useState<TemplateDraft | null>(null);
   const [senderDraft, setSenderDraft] = useState<SenderDraft | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
@@ -40,7 +43,7 @@ export function EmailAutomationManager({ view = "all" }: { view?: "all" | "sende
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { if (window.location.hash === "#notification-email") document.getElementById("notification-email")?.scrollIntoView({ block: "start" }); }, []);
-  const history = useQuery({ queryKey: [...emailLibraryKey, "history", historySource], queryFn: ({ signal }) => customFetch(`/api/notification-email/history?source=${historySource}`, { signal, cache: "no-store" }) as Promise<{ items: EmailHistoryItem[]; nextCursor?: string | null }>, enabled: tab === "history", retry: false, staleTime: 0, gcTime: 0 });
+  const history = useQuery({ queryKey: [...emailLibraryKey, "history", historySource, historyCursor], queryFn: ({ signal }) => customFetch(`/api/notification-email/history?source=${historySource}${historyCursor ? `&cursor=${historyCursor}` : ""}`, { signal, cache: "no-store" }) as Promise<{ items: EmailHistoryItem[]; nextCursor?: number | null }>, enabled: tab === "history", retry: false, staleTime: 0, gcTime: 0 });
   const capability = library.capabilities.data;
   const templates = library.templates.data?.templates ?? [];
   const senders = library.senders.data?.senders ?? [];
@@ -83,9 +86,9 @@ export function EmailAutomationManager({ view = "all" }: { view?: "all" | "sende
   return <Card id="notification-email" className="p-4 sm:p-6 space-y-4 min-w-0 scroll-mt-6" data-testid="email-automation-manager" dir={dir}>
     <header className="space-y-2"><h2 className="font-semibold text-lg">{copy.title}</h2><p className="text-sm text-muted-foreground">{copy.intro}</p>
       <a href="/staff/messages?tab=templates" className="block text-sm text-primary underline">{copy.copy("WhatsApp / message templates — existing Messages library", "WhatsApp / mesaj şablonları — mevcut Mesajlar kütüphanesi")}</a>
-      {lang !== "tr" && lang !== "en" && <p className="text-xs text-muted-foreground">{copy.fallback}</p>}
       {library.capabilities.isError ? <p role="alert" className="text-sm text-destructive">{copy.loadError} <Button variant="outline" size="sm" onClick={() => void library.capabilities.refetch()}>{copy.refresh}</Button></p> : capability ? <p className="rounded-md border bg-secondary/40 p-3 text-sm" data-testid="email-runtime-status">{capability.enabled ? copy.enabled : copy.disabled}</p> : <p role="status">{copy.loading}</p>}
     </header>
+    {view === "all" && <StageEmailReadiness />}
     <div className="flex flex-wrap gap-2" role="group" aria-label={copy.title}>
       {(view === "senders" ? ["senders"] as const : ["templates", "senders", "history"] as const).map(key => <Button key={key} type="button" size="sm" variant={tab === key ? "default" : "outline"} aria-pressed={tab === key} onClick={() => { setTab(key); setError(false); }}>{copy[key]}</Button>)}
       <Button type="button" variant="ghost" size="sm" className="ms-auto" disabled={activeQuery.isFetching || busy} onClick={() => { void activeQuery.refetch(); void library.capabilities.refetch(); }}>{copy.refresh}</Button>
@@ -127,15 +130,18 @@ export function EmailAutomationManager({ view = "all" }: { view?: "all" | "sende
     </div>}
     {tab === "history" && <div className="space-y-3" data-testid="email-delivery-history">
       <p className="text-xs text-muted-foreground">{copy.historyNote}</p>
-      <label className="block space-y-1 text-sm"><span>{copy.copy("Source", "Kaynak")}</span><select aria-label={copy.copy("Source", "Kaynak")} className="w-full sm:w-auto h-10 rounded-md border bg-background px-2" value={historySource} onChange={e => setHistorySource(e.target.value as "stage" | "system")}><option value="stage">{copy.copy("Application stages", "Başvuru aşamaları")}</option><option value="system">{copy.copy("System notification rules", "Sistem bildirim kuralları")}</option></select></label>
+      <label className="block space-y-1 text-sm"><span>{copy.copy("Source", "Kaynak")}</span><select aria-label={copy.copy("Source", "Kaynak")} className="w-full sm:w-auto h-10 rounded-md border bg-background px-2" value={historySource} onChange={e => { setHistorySource(e.target.value as "stage" | "system"); setHistoryCursors([undefined]); }}><option value="stage">{copy.copy("Application stages", "Başvuru aşamaları")}</option><option value="system">{copy.copy("System notification rules", "Sistem bildirim kuralları")}</option></select></label>
       {!history.isLoading && !history.isError && !history.data?.items.length && <p className="text-sm text-muted-foreground">{copy.empty}</p>}
       {history.data?.items.map(item => <article key={item.id} className="rounded-lg border p-3 grid sm:grid-cols-2 gap-2 text-sm">
         {historySource === "stage" ? <><div>{copy.application}: {Number.isSafeInteger(item.applicationId) && Number(item.applicationId) > 0 ? <a className="text-primary underline" href={`/admin/applications/${item.applicationId}`}>#{item.applicationId}</a> : "—"}</div><div>{copy.stage}: <span className="break-all">{item.stageKey}</span></div></> : <><div>{copy.version}: #{item.templateVersionId}</div><div>{copy.sender}: #{item.senderAccountId}</div></>}
         <div>{copy.status}: {statusLabel(item.status)}{item.queueStatus && item.queueStatus !== item.status ? ` · ${statusLabel(item.queueStatus)}` : ""}</div>
         <div>{copy.date}: {Number.isFinite(Date.parse(item.createdAt)) ? new Date(item.createdAt).toLocaleString(lang) : "—"}</div>
-        {item.errorCode && <div className="sm:col-span-2 break-all text-muted-foreground">{copy.reason}: {item.errorCode}</div>}
+        {(item.deliveryErrorCode || item.errorCode) && <div className="sm:col-span-2 break-all text-muted-foreground">{copy.reason}: {[item.errorCode, item.deliveryErrorCode].filter((code, index, all) => code && all.indexOf(code) === index).join(" · ")}</div>}
       </article>)}
-      {history.data?.nextCursor && <p className="text-xs text-muted-foreground" data-testid="email-history-limit">{copy.copy("Only the latest 100 records are shown.", "Son 100 kayıt gösteriliyor.")}</p>}
+      <nav className="flex gap-2" aria-label={copy.history}>
+        <Button type="button" variant="outline" size="sm" disabled={history.isFetching || historyCursors.length < 2} onClick={() => setHistoryCursors(cursors => cursors.slice(0, -1))}>{t("common.previous")}</Button>
+        <Button type="button" variant="outline" size="sm" disabled={history.isFetching || history.isError || !Number.isSafeInteger(history.data?.nextCursor) || Number(history.data?.nextCursor) <= 0 || historyCursors.includes(history.data?.nextCursor ?? undefined)} onClick={() => { const cursor = history.data?.nextCursor; if (cursor && Number.isSafeInteger(cursor) && cursor > 0) setHistoryCursors(cursors => [...cursors, cursor]); }}>{t("common.next")}</Button>
+      </nav>
     </div>}
 
     <Dialog open={Boolean(draft)} onOpenChange={open => { if (!open && !busy) setDraft(null); }}><DialogContent dir={dir} className="max-w-2xl max-h-[90vh] overflow-y-auto w-[calc(100%-2rem)]"><DialogHeader><DialogTitle>{draft?.templateId ? copy.newVersion : copy.newTemplate}</DialogTitle></DialogHeader>

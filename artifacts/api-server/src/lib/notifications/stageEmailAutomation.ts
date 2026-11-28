@@ -14,17 +14,20 @@ async function currentBinding(client: Pick<PoolClient, "query">, intent: Dispatc
   const { rows } = await client.query(`SELECT a.stage,a.deleted_at,a.student_id,a.agent_id AS application_agent_id,
     s.agent_id,s.deleted_at AS student_deleted,s.email,s.first_name,s.last_name,s.user_id,
     u.email AS user_email,u.email_verified,u.is_active AS user_active,u.deleted_at AS user_deleted,u.role AS user_role,
-    g.parent_agent_id,g.deleted_at AS agent_deleted,g.status AS agent_status,
+    g.parent_agent_id,g.deleted_at AS agent_deleted,g.status AS agent_status,g.email AS agent_email,g.user_id AS agent_user_id,
+    gu.email AS agent_user_email,gu.email_verified AS agent_verified,gu.is_active AS agent_user_active,
+    gu.deleted_at AS agent_user_deleted,gu.role AS agent_user_role,
     a.university_name,a.program_name,ps.label,ps.automatic_email,
     v.status AS version_status,t.is_active AS template_active,t.channel AS template_channel,
     ca.is_active AS sender_active,ca.channel,ca.provider,ca.metadata
     FROM applications a JOIN students s ON s.id=a.student_id
     LEFT JOIN users u ON u.id=s.user_id LEFT JOIN agents g ON g.id=s.agent_id
+    LEFT JOIN users gu ON gu.id=g.user_id
     LEFT JOIN pipeline_stages ps ON ps.entity_type='application' AND ps.key=a.stage
     JOIN message_template_email_versions v ON v.id=$2 JOIN message_templates t ON t.id=v.template_id
     JOIN channel_accounts ca ON ca.id=$3 WHERE a.id=$1`, [intent.application_id,intent.template_version_id,intent.sender_account_id]);
   const row = rows[0];
-  if (!row || row.deleted_at || row.student_deleted || row.user_deleted || row.student_id !== intent.student_id ||
+  if (!row || row.deleted_at || row.student_deleted || row.student_id !== intent.student_id ||
     row.stage !== intent.stage_key || row.agent_id !== intent.agent_id ||
     (row.application_agent_id != null && row.application_agent_id !== row.agent_id) ||
     (row.agent_id != null && (row.agent_deleted || row.agent_status !== "active"))) return { code: "RECORD_SCOPE_OR_STAGE_CHANGED" } as const;
@@ -37,10 +40,16 @@ async function currentBinding(client: Pick<PoolClient, "query">, intent: Dispatc
   const sender = row.metadata?.emailSender;
   if (!row.sender_active || row.channel !== "email" || row.provider !== "smtp" || sender?.verified !== true ||
     sender?.revision !== intent.sender_revision) return { code: "SENDER_CHANGED_OR_UNVERIFIED" } as const;
-  const email = stageEmailRecipient({ studentEmail: row.email, userEmail: row.user_email, verified: row.email_verified,
-    active: row.user_active && row.user_role === "student" });
-  if (!email) return { code: "STUDENT_EMAIL_MISSING_OR_UNVERIFIED" } as const;
-  return { email, userId: row.user_id as number, variables: {
+  // The source selects exactly one account; never fall back to the student,
+  // parent agency, creator or staff mailbox when an agency recipient is invalid.
+  const direct = origin === "direct";
+  const email = stageEmailRecipient(direct
+    ? { studentEmail: row.email, userEmail: row.user_email, verified: row.email_verified,
+        active: row.user_active && !row.user_deleted && row.user_role === "student" }
+    : { studentEmail: row.agent_email, userEmail: row.agent_user_email, verified: row.agent_verified,
+        active: row.agent_user_active && !row.agent_user_deleted && ["agent", "sub_agent"].includes(row.agent_user_role) });
+  if (!email) return { code: direct ? "STUDENT_EMAIL_MISSING_OR_UNVERIFIED" : "AGENT_EMAIL_MISSING_OR_UNVERIFIED" } as const;
+  return { email, userId: (direct ? row.user_id : row.agent_user_id) as number, variables: {
     studentName: `${row.first_name || ""} ${row.last_name || ""}`.trim(), firstName: row.first_name || "", lastName: row.last_name || "",
     universityName: row.university_name || "", programName: row.program_name || "", newStage: row.label || row.stage,
     newStageKey: row.stage, applicationId: String(intent.application_id),
@@ -100,10 +109,11 @@ export async function validateStageEmailQueueItem(queueId: number): Promise<{ al
 }
 
 /** Suppress only the student's generic stage email when a durable eligible intent exists. */
-export async function hasStageEmailForStudent(applicationId: number, stageKey: string, userId: number): Promise<boolean> {
+export async function hasStageEmailForRecipient(applicationId: number, stageKey: string, userId: number): Promise<boolean> {
   if (!stageEmailRuntime().enabled) return false;
-  const { rows } = await pool.query<Dispatch>(`SELECT d.* FROM pipeline_stage_email_dispatches d JOIN students s ON s.id=d.student_id
-    WHERE d.application_id=$1 AND d.stage_key=$2 AND s.user_id=$3`, [applicationId,stageKey,userId]);
+  const { rows } = await pool.query<Dispatch>(`SELECT d.* FROM pipeline_stage_email_dispatches d
+    WHERE d.application_id=$1 AND d.stage_key=$2`, [applicationId,stageKey]);
   if (!rows[0]) return false;
-  return "email" in await currentBinding(pool, rows[0]);
+  const binding = await currentBinding(pool, rows[0]);
+  return "email" in binding && binding.userId === userId;
 }
