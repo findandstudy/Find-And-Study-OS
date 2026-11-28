@@ -496,12 +496,12 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
           </div>
         </div>
       );
-  if (mode === "templates") return <section id="system-email-templates" className="space-y-3 rounded-xl border p-4">
-    <h3 className="font-semibold">{t("notificationRules.systemRules")}</h3>
+  if (mode === "templates") return <details id="system-email-templates" className="space-y-3 rounded-xl border p-4">
+    <summary className="font-semibold cursor-pointer">{t("notificationRules.systemRules")}</summary>
     {loading && <p role="status">{emailCopy.loading}</p>}
     {rules.map(rule => <div key={rule.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><span>{rule.name}</span><Button variant="outline" size="sm" disabled={!canManageRules} onClick={() => openTemplateEditor(rule)}>{t("notificationRules.editEmailTemplate")}</Button></div>)}
     {templateDialog}
-  </section>;
+  </details>;
   return (
     <div className="space-y-6">
       <Card className="border-none shadow-lg shadow-black/5 p-6">

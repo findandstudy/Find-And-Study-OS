@@ -6,7 +6,6 @@ import { whilePageVisible } from "@/lib/visibleSubscription";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { inboxListFilters } from "@/lib/inboxListFilters";
-import { EMAIL_AUTOMATION_PATH, emailAutomationCopy } from "@/components/notifications/emailAutomationModel";
 import { runInboxBulkBlock } from "@/lib/inboxBulkBlock";
 import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { useQueryClient } from "@tanstack/react-query";
