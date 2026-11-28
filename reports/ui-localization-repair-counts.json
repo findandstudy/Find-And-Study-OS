@@ -1,0 +1,94 @@
+{
+  "ar": {
+    "reviewed": 4889,
+    "changed": 4717
+  },
+  "bn": {
+    "reviewed": 3796,
+    "changed": 3713
+  },
+  "en": {
+    "reviewed": 4305,
+    "changed": 582
+  },
+  "es": {
+    "reviewed": 4817,
+    "changed": 4629
+  },
+  "fa": {
+    "reviewed": 4734,
+    "changed": 4662
+  },
+  "fr": {
+    "reviewed": 4969,
+    "changed": 4585
+  },
+  "hi": {
+    "reviewed": 4737,
+    "changed": 4645
+  },
+  "id": {
+    "reviewed": 4922,
+    "changed": 4659
+  },
+  "it": {
+    "reviewed": 3845,
+    "changed": 3697
+  },
+  "kk": {
+    "reviewed": 10877,
+    "changed": 9811
+  },
+  "ko": {
+    "reviewed": 3786,
+    "changed": 3716
+  },
+  "ky": {
+    "reviewed": 10877,
+    "changed": 9899
+  },
+  "ne": {
+    "reviewed": 3795,
+    "changed": 3716
+  },
+  "pt": {
+    "reviewed": 3872,
+    "changed": 3735
+  },
+  "ru": {
+    "reviewed": 4728,
+    "changed": 4641
+  },
+  "tg": {
+    "reviewed": 10877,
+    "changed": 9614
+  },
+  "tk": {
+    "reviewed": 10877,
+    "changed": 10504
+  },
+  "tr": {
+    "reviewed": 2895,
+    "changed": 2363
+  },
+  "uk": {
+    "reviewed": 3798,
+    "changed": 3712
+  },
+  "ur": {
+    "reviewed": 10877,
+    "changed": 9827
+  },
+  "uz": {
+    "reviewed": 10877,
+    "changed": 10055
+  },
+  "vi": {
+    "reviewed": 3814,
+    "changed": 3716
+  },
+  "zh": {
+    "reviewed": 4732,
+    "changed": 4654
+  }
+}
