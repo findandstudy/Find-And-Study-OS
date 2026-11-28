@@ -661,7 +661,7 @@ test("contract PDF rendering is network-isolated and does not log signer PII", (
   assert.match(contractPdfSource, /Contract rendering is intentionally network-isolated/);
   assert.match(contractPdfSource, /return route\.abort\(\)/);
   assert.doesNotMatch(contractPdfSource, /route\.continue\(\);\s*\n\s*\}\);/);
-  assert.doesNotMatch(contractPdfSource, /render start signer=/);
+  assert.doesNotMatch(contractPdfSource, /console\.[^\n]*(?:signer=|signerEmail)/);
 });
 
 test("activity PDF rendering blocks network access and returns generic errors", () => {

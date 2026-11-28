@@ -289,10 +289,10 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
     evidencePages.forEach((p) => merged.addPage(p));
     const pdfBytes = await merged.save();
 
-    console.log(`[contract-pdf] render done signer=${params.signerEmail} ms=${Date.now() - renderStart} rss=${rssMb()}MB`);
+    console.log(`[contract-pdf] render done ms=${Date.now() - renderStart} rss=${rssMb()}MB`);
     return { pdfBytes, evidenceHash };
   } catch (err) {
-    console.error(`[contract-pdf] render failed signer=${params.signerEmail} ms=${Date.now() - renderStart} rss=${rssMb()}MB:`, err);
+    console.error(`[contract-pdf] render failed ms=${Date.now() - renderStart} rss=${rssMb()}MB`);
     throw err;
   } finally {
     // Force-close any browser still alive. This is the critical path for

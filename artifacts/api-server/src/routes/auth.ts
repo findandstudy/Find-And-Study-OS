@@ -715,7 +715,7 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
   });
   const accepted = await sendEmail(normalizedEmail, emailContent);
   await logAudit(user.id, "auth.password_reset.request", "user", user.id, {
-    delivery: accepted ? "accepted" : "unconfirmed",
+    delivery: process.env.EMAIL_DELIVERY_DISABLED === "true" ? "blocked" : accepted ? "accepted" : "unconfirmed",
   }, req.ip);
   res.json({ message: "If an account with that email exists, a password reset link has been sent." });
 });
