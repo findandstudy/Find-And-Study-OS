@@ -35,7 +35,7 @@ async function main() {
       fs.writeFileSync(file,JSON.stringify(result));completed++;console.log(JSON.stringify({lang:job.lang,batch:job.id,completed,total:jobs.length}));break;
     }catch(error){const message=error instanceof Error?error.message:'';if(attempt===2){failed++;console.log(JSON.stringify({lang:job.lang,batch:job.id,error:/429|rate.limit/i.test(message)?'RATE_LIMIT':/JSON/.test(message)?'INVALID_JSON':/interpolation/.test(message)?'INVALID_PLACEHOLDER':'PROVIDER_ERROR'}));}else await new Promise(r=>setTimeout(r,/429|rate.limit/i.test(message)?30000:(attempt+1)*2000));}}
   }}
-  await Promise.all(Array.from({length:12},()=>worker()));
+  await Promise.all(Array.from({length:24},()=>worker()));
   fs.writeFileSync(path.join(output,'summary.json'),JSON.stringify({completed,failed,total:jobs.length}));
   process.exitCode=failed?1:0;
 }

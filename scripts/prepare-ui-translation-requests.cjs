@@ -12,7 +12,11 @@ fs.writeFileSync(filePath,JSON.stringify(dict,null,2)+'\n');
 for(const[key,value]of Object.entries(en)){
  const missingEnglish=values[key]===value&&/[a-zA-Z]{3}/.test(value)&&!brand.test(value)&&!/^https?:|^mailto:|^tel:|^[A-Z0-9_ .:/-]+$|^\{\{?\w+\}?\}$/.test(value);
  const sourceTurkish=lang==='en'&&(key.startsWith('uiText.')||(/[çğıöşüÇĞİÖŞÜ]/.test(value)&&!/(?:Acıbadem|Türkiye|İstanbul|İzmir|Oʻzbekcha|Türkçe|Français|Português|Español)/.test(value)));
- if((lang!=='en'&&missingEnglish)||sourceTurkish||artifactKeys.has(file+':'+key))texts[key]=value;
+ // These legacy catalogues contain unrelated desktop-software/dictionary
+ // translations (e.g. Students -> Finland). Review the complete catalogue,
+ // not merely English leftovers, so key parity cannot hide semantic damage.
+ const semanticRepair=['tk','ky','kk','uz','tg','ur'].includes(lang)&&/[\p{L}]{2}/u.test(value)&&!brand.test(value)&&!/^https?:|^mailto:|^tel:|^[A-Z0-9_ .:/-]+$/.test(value);
+ if((lang!=='en'&&missingEnglish)||sourceTurkish||artifactKeys.has(file+':'+key)||semanticRepair)texts[key]=value;
 }
 tasks.push({lang,texts});}
 fs.writeFileSync(path.resolve(__dirname,'../reports/ui-translation-requests.json'),JSON.stringify(tasks));
