@@ -69,3 +69,20 @@ başvurular yeniden oynatılmamalı. `sent` yalnız SMTP kabulü, inbox teslimi 
 Production Apply'a, gerçek öğrenci/acente verisine ve gerçek iletişime dokunulmadı.
 Önceki Academy düzeltmesi ve başvuru son tarihi işi aynı staging hattında korunur;
 bu değişiklik bunların çalışma ayarlarını değiştirmez.
+
+## Staging yayın kanıtı
+
+- Son staging source: `18ff24bbbf141980d4451412491577680c8c66ad`.
+- Release: `staging-20261128T095508Z-18ff24bbbf14`.
+- `/api/health`: HTTP 200, `status=ok`, `dbConnected=true`; Docker `healthy`.
+- Network kapalı build konteynerinde API/ön yüz typecheck, 56 e-posta testi,
+  normal build'in 190 kontrolü ve asset/i18n bütçeleri PASS.
+- Tarayıcıda İngilizce/Türkçe hazırlık kontrolü, kaynak ve gönderici seçicileri,
+  gönderim geçmişi ve sayfalama doğrulandı. Aşama ayarlarına URL ile geçişte
+  bulunan profil-sekmesi fallback'i düzeltildi; reload sonrası Pipeline Stages
+  başlığı doğrudan geldi.
+- Son salt okunur kontrol: migration ledger 146; etkin e-posta aşaması 0;
+  aşama gönderim kaydı 0. Hiçbir gerçek kayıt için gönderim oluşturulmadı.
+- Yönetim ekranı: `/admin/settings?tab=notifications#notification-email`.
+- Yerel test ekinde öğrencinin portal hesabı olmadan acente alıcısının çalışması
+  ve acente hesabının staff rolüne dönmesi halinde gönderimin engellenmesi de PASS.
