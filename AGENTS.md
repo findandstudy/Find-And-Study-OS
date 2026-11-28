@@ -883,3 +883,14 @@ ve container healthy. DB migration/production/gerçek mesaj/imza işlemi yok.
 Staging PublicPage tasarım deltasını koruyan cherry-pick entegrasyonu kullanıldı.
 Geçici export final public paketten, tamamlanan worker container'ları temizlendi.
 Ayrıntılı kapsam/sınırlar: STAGING_SYSTEM_TRANSLATION_QA_2026-11-28.md.
+
+## Kalıcı kullanıcı talimatı — tüm değişikliklerde çok dilli teslim (28 Kasım 2026)
+
+Bundan sonraki tüm geliştirme, düzeltme, tasarım ve özellik çalışmalarında çok dillilik başlangıçtan itibaren işin zorunlu parçasıdır. Çeviriler sonradan tamamlanacak ayrı bir iş olarak bırakılmaz.
+
+- Yeni veya değişen kullanıcıya görünen tüm metinler ortak i18n yapısından gelmelidir: menü, başlık, form, buton, tooltip, doğrulama/hata/başarı mesajı, modal, boş/yükleniyor durumu, bildirim ve erişilebilirlik etiketi dahil.
+- İlgili çeviriler aynı değişiklikte sistemin desteklediği TÜM dillerde tamamlanır. Şu an 23 dil vardır; kapsamın kaynağı güncel desteklenen dil listesidir, sabit bir EN/TR listesi değildir.
+- Seçilen dilde başka dilden arayüz metni bırakılmaz; yalnız anahtar eklemek veya İngilizce metni diğer sözlüklere kopyalamak tamamlanmış çeviri sayılmaz. Terminoloji ve anlam tutarlılığı korunur.
+- Değişkenler, çoğul/sayı/tarih/para biçimleri ve Arapça/Farsça/Urduca gibi RTL dillerindeki yön ve yerleşim dikkate alınır. Görünür metin çevirisi API yollarını, kimlikleri, rol/statü değerlerini veya örnek kodları değiştirmemelidir; marka ve doğrulanmış özel adlar korunur.
+- Teslim/yayın öncesi i18n anahtar/placeholder eşliği ve ilgili kontroller çalıştırılır; değişen ekranın dil geçişi ve gerektiğinde RTL görünümü doğrulanır. Eksik çeviri varsa iş tamamlandı diye sunulmaz; somut engel açıkça belirtilir.
+- Bu kural admin/staff, agent/sub-agent, student ve public arayüzlerde geçerlidir. Mevcut güvenlik, veri ve deployment yetki sınırlarını genişletmez.
