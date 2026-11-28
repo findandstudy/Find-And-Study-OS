@@ -1,3 +1,4 @@
+import { formatTimeAgo } from "@/lib/i18n/index";
 import { whilePageVisible } from "@/lib/visibleSubscription";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -48,16 +49,10 @@ type FeedItem = {
   auditChanges?: Record<string, unknown> | null;
 };
 
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
+function relativeTime(iso: string | null, lang: Parameters<typeof formatTimeAgo>[0]): string {
+  if (!iso) return "—";
+  if (Date.now()-new Date(iso).getTime()>=7*86400000) return new Date(iso).toLocaleDateString(lang);
+  return formatTimeAgo(lang, iso);
 }
 
 function isDueOverdue(dueAt: string | null | undefined): boolean {
@@ -199,6 +194,7 @@ interface FeedItemCardProps {
 }
 
 function FeedItemCard({ item, isStaff, currentUserId, onComplete, onDeleteNote, t }: FeedItemCardProps) {
+  const { lang } = useI18n();
   const [expanded, setExpanded] = useState(false);
 
   if (item.type === "note") {
@@ -222,7 +218,7 @@ function FeedItemCard({ item, isStaff, currentUserId, onComplete, onDeleteNote, 
             )}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            <span className="text-[10px] text-muted-foreground">{relativeTime(item.ts)}</span>
+            <span className="text-[10px] text-muted-foreground">{relativeTime(item.ts, lang)}</span>
             {canDelete && (
               <button
                 className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive ml-1"
@@ -255,7 +251,7 @@ function FeedItemCard({ item, isStaff, currentUserId, onComplete, onDeleteNote, 
               <span className={`font-medium text-sm ${item.completed ? "line-through text-muted-foreground" : ""}`}>
                 {item.title}
               </span>
-              <span className="text-[10px] text-muted-foreground flex-shrink-0">{relativeTime(item.ts)}</span>
+              <span className="text-[10px] text-muted-foreground flex-shrink-0">{relativeTime(item.ts, lang)}</span>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
               {item.dueAt && (
@@ -288,7 +284,7 @@ function FeedItemCard({ item, isStaff, currentUserId, onComplete, onDeleteNote, 
           <span>{actionLabel(item.action ?? "", item.auditChanges)}</span>
           {item.actorName && <span>· {item.actorName}</span>}
         </div>
-        <span className="flex-shrink-0">{relativeTime(item.ts)}</span>
+        <span className="flex-shrink-0">{relativeTime(item.ts, lang)}</span>
       </div>
     );
   }

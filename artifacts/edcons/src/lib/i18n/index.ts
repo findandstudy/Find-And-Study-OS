@@ -101,6 +101,34 @@ const translationLoaders: Record<Language, () => Promise<{ default: TranslationM
   it: () => import("./translations/it.json"),
 };
 
+// Vite emits two bounded UI packs per locale. Direct Node/test imports retain
+// the canonical complete JSON and therefore do not need the virtual packs.
+const uiTranslationLoaders: Record<Language, () => Promise<Array<{ default: Record<string, string> }>>> = {
+  en: () => Promise.all([import("./translations/en.json?ui-part=0&raw"), import("./translations/en.json?ui-part=1&raw")]),
+  tr: () => Promise.all([import("./translations/tr.json?ui-part=0&raw"), import("./translations/tr.json?ui-part=1&raw")]),
+  ar: () => Promise.all([import("./translations/ar.json?ui-part=0&raw"), import("./translations/ar.json?ui-part=1&raw")]),
+  fr: () => Promise.all([import("./translations/fr.json?ui-part=0&raw"), import("./translations/fr.json?ui-part=1&raw")]),
+  ru: () => Promise.all([import("./translations/ru.json?ui-part=0&raw"), import("./translations/ru.json?ui-part=1&raw")]),
+  fa: () => Promise.all([import("./translations/fa.json?ui-part=0&raw"), import("./translations/fa.json?ui-part=1&raw")]),
+  zh: () => Promise.all([import("./translations/zh.json?ui-part=0&raw"), import("./translations/zh.json?ui-part=1&raw")]),
+  hi: () => Promise.all([import("./translations/hi.json?ui-part=0&raw"), import("./translations/hi.json?ui-part=1&raw")]),
+  es: () => Promise.all([import("./translations/es.json?ui-part=0&raw"), import("./translations/es.json?ui-part=1&raw")]),
+  id: () => Promise.all([import("./translations/id.json?ui-part=0&raw"), import("./translations/id.json?ui-part=1&raw")]),
+  ur: () => Promise.all([import("./translations/ur.json?ui-part=0&raw"), import("./translations/ur.json?ui-part=1&raw")]),
+  tk: () => Promise.all([import("./translations/tk.json?ui-part=0&raw"), import("./translations/tk.json?ui-part=1&raw")]),
+  ky: () => Promise.all([import("./translations/ky.json?ui-part=0&raw"), import("./translations/ky.json?ui-part=1&raw")]),
+  kk: () => Promise.all([import("./translations/kk.json?ui-part=0&raw"), import("./translations/kk.json?ui-part=1&raw")]),
+  uz: () => Promise.all([import("./translations/uz.json?ui-part=0&raw"), import("./translations/uz.json?ui-part=1&raw")]),
+  tg: () => Promise.all([import("./translations/tg.json?ui-part=0&raw"), import("./translations/tg.json?ui-part=1&raw")]),
+  bn: () => Promise.all([import("./translations/bn.json?ui-part=0&raw"), import("./translations/bn.json?ui-part=1&raw")]),
+  pt: () => Promise.all([import("./translations/pt.json?ui-part=0&raw"), import("./translations/pt.json?ui-part=1&raw")]),
+  ne: () => Promise.all([import("./translations/ne.json?ui-part=0&raw"), import("./translations/ne.json?ui-part=1&raw")]),
+  vi: () => Promise.all([import("./translations/vi.json?ui-part=0&raw"), import("./translations/vi.json?ui-part=1&raw")]),
+  ko: () => Promise.all([import("./translations/ko.json?ui-part=0&raw"), import("./translations/ko.json?ui-part=1&raw")]),
+  uk: () => Promise.all([import("./translations/uk.json?ui-part=0&raw"), import("./translations/uk.json?ui-part=1&raw")]),
+  it: () => Promise.all([import("./translations/it.json?ui-part=0&raw"), import("./translations/it.json?ui-part=1&raw")]),
+};
+
 function flattenObject(obj: Record<string, unknown>, prefix = ""): Record<string, string> {
   const result: Record<string, string> = {};
   for (const key of Object.keys(obj)) {
@@ -147,8 +175,10 @@ export function loadLanguage(lang: Language): Promise<boolean> {
   const pending = inFlight[lang];
   if (pending) return pending;
   const p = translationLoaders[lang]()
-    .then((mod) => {
-      flatTranslations[lang] = flattenObject(mod.default);
+    .then(async (mod) => {
+      const dictionary = mod.default;
+      const uiText = dictionary.uiText || Object.assign({}, ...(await uiTranslationLoaders[lang]()).map(part => part.default));
+      flatTranslations[lang] = flattenObject({ ...dictionary, uiText });
       return true;
     })
     .catch((err) => {

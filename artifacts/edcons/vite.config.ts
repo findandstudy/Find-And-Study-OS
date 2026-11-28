@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
+import { readFileSync } from "node:fs";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { configureProxyCleanup } from "./dev/proxyCleanup";
 
@@ -33,6 +34,26 @@ const injectSiteBaseUrl = {
 export default defineConfig({
   base: basePath,
   plugins: [
+    {
+      name: 'bounded-ui-locale-packs',
+      enforce: 'pre',
+      load(id) {
+        const match = /\/src\/lib\/i18n\/translations\/([a-z]{2})\.json\?ui-part=([01])&raw$/.exec(id);
+        if (!match) return;
+        const file = id.split('?')[0];
+        this.addWatchFile(file);
+        const source = JSON.parse(readFileSync(file, 'utf8'));
+        const part = Number(match[2]);
+        const values = Object.fromEntries(Object.entries(source.uiText || {}).filter(([key]) => parseInt(key.slice(-1), 16) % 2 === part));
+        return `export default ${JSON.stringify(values)};`;
+      },
+      transform(code, id) {
+        if (!/\/src\/lib\/i18n\/translations\/[a-z]{2}\.json(?:\?import)?$/.test(id)) return;
+        const source = JSON.parse(code);
+        delete source.uiText;
+        return { code: JSON.stringify(source), map: null };
+      },
+    },
     injectSiteBaseUrl,
     react(),
     tailwindcss(),
@@ -96,6 +117,8 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          const uiLocale = /\/translations\/([a-z]{2})\.json\?ui-part=([01])&raw$/.exec(id);
+          if (uiLocale) return `ui-text-${uiLocale[1]}-${uiLocale[2]}`;
           if (!id.includes("node_modules")) return undefined;
           // The Pages-only static preview renderer must remain lazy. Bundling
           // react-dom/server.browser with the public React runtime makes every

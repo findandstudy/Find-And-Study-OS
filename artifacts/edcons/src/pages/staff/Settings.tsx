@@ -464,7 +464,6 @@ export default function SettingsPage() {
   }
 
   function ProfileTab() {
-  const { lang: uiLanguage } = useUiLanguage();
     return (<>
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <SectionHeader title={t("settingsPage.personalInformation")} description={t("settingsPage.personalInformationDesc")} />
@@ -685,7 +684,6 @@ export default function SettingsPage() {
   }
 
   function SecurityTab() {
-  const { lang: uiLanguage } = useUiLanguage();
     return (
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <SectionHeader title={t("settingsPage.securityAccess")} description={t("settingsPage.securityAccessDesc")} />
@@ -723,7 +721,6 @@ export default function SettingsPage() {
   }
 
   function BrandingTab() {
-  const { lang: uiLanguage } = useUiLanguage();
     const s = settings;
     return (
       <div className="space-y-6">
@@ -814,7 +811,6 @@ export default function SettingsPage() {
   }
 
   function CompanyTab() {
-  const { lang: uiLanguage } = useUiLanguage();
     const s = settings;
     return (
       <div className="space-y-6">
@@ -891,7 +887,6 @@ export default function SettingsPage() {
   }
 
   function SeoTab() {
-  const { lang: uiLanguage } = useUiLanguage();
     const s = settings;
     const titleLen = (s.seoMetaTitle || "").length;
     const descLen = (s.seoMetaDescription || "").length;
@@ -1071,7 +1066,6 @@ export default function SettingsPage() {
   }
 
   function EmailBrandingTab() {
-  const { lang: uiLanguage } = useUiLanguage();
     const s = settings;
     return (
       <div className="space-y-6">
@@ -1132,7 +1126,6 @@ export default function SettingsPage() {
   }
 
   function DocumentsTab() {
-  const { lang: uiLanguage } = useUiLanguage();
     const s = settings;
     return (
       <div className="space-y-6">
@@ -1222,7 +1215,6 @@ export default function SettingsPage() {
   }
 
   function AdvancedTab() {
-  const { lang: uiLanguage } = useUiLanguage();
     const s = settings;
     const isSuperAdmin = user?.role === "super_admin";
     return (

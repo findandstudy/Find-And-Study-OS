@@ -1,3 +1,4 @@
+import { formatTimeAgo } from "@/lib/i18n/index";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { useState, useEffect, useMemo } from "react";
 import { customFetch } from "@workspace/api-client-react";
@@ -50,15 +51,10 @@ function fmtDateTime(dateStr: string | null) {
   return new Date(dateStr).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-function timeAgo(dateStr: string | null): string {
+function timeAgo(dateStr: string | null, lang: Parameters<typeof formatTimeAgo>[0]): string {
   if (!dateStr) return "—";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  
+  return formatTimeAgo(lang, dateStr);
 }
 
 function StatusDot({ status }: { status: string }) {
@@ -838,7 +834,7 @@ function OverviewPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
                   <td className="px-4 py-3 text-sm font-mono font-semibold text-green-600">{formatDuration(u.activeDuration)}</td>
                   <td className="px-4 py-3 text-sm font-mono text-muted-foreground">{formatDuration(u.idleDuration)}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{fmtTime(u.firstLogin)}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{timeAgo(u.lastSeen)}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{timeAgo(u.lastSeen, lang)}</td>
                   <td className="px-4 py-3">
                     <Button size="sm" variant="ghost" className="h-7 text-xs rounded-lg gap-1">
                       <Eye className="w-3.5 h-3.5" /> {t("adminActivity.details")}

@@ -82,6 +82,13 @@ for (const locale of localeCodes) {
   const compressed = await gzipBytes(urlPath);
   assert.ok(compressed <= 120 * 1024, `${locale} locale exceeds 120 KiB gzip: ${compressed}`);
   localeChunkSizes[locale] = compressed;
+  for (const part of [0, 1]) {
+    const packs = assetNames.filter(name => new RegExp(`^ui-text-${locale}-${part}-[A-Za-z0-9_-]+\\.js$`).test(name));
+    assert.equal(packs.length, 1, `expected UI pack ${locale}/${part}`);
+    const url = `/assets/${packs[0]}`;
+    assert.ok(!initialJavascript.includes(url), 'UI locale packs must stay lazy');
+    assert.ok(await gzipBytes(url) <= 120 * 1024, `UI locale pack exceeds 120 KiB: ${locale}/${part}`);
+  }
 }
 
 const sourceMaps = assetNames.filter((name) => name.endsWith(".map"));

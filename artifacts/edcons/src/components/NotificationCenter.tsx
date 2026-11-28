@@ -1,3 +1,4 @@
+import { formatTimeAgo } from "@/lib/i18n/index";
 import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { whilePageVisible } from "@/lib/visibleSubscription";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -58,15 +59,10 @@ function getIcon(type: string) {
   return Bell;
 }
 
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+function timeAgo(dateStr: string | null, lang: Parameters<typeof formatTimeAgo>[0]): string {
+  if (!dateStr) return "—";
+  
+  return formatTimeAgo(lang, dateStr);
 }
 
 function resolveActionUrl(url: string | null, role: string | undefined): string | null {
@@ -283,7 +279,7 @@ export function NotificationCenter() {
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm ${!n.isRead ? "font-semibold text-foreground" : "text-foreground/80"}`}>{localized.title}</p>
                         {localized.body && <p className="text-xs text-foreground/65 dark:text-foreground/75 mt-0.5 line-clamp-2">{localized.body}</p>}
-                        <p className="text-[10px] text-foreground/60 dark:text-foreground/70 mt-1">{timeAgo(n.createdAt)}</p>
+                        <p className="text-[10px] text-foreground/60 dark:text-foreground/70 mt-1">{timeAgo(n.createdAt, uiLanguage)}</p>
                       </div>
                       <div className="flex flex-col items-center gap-1 shrink-0 mt-1">
                         {!n.isRead && (
