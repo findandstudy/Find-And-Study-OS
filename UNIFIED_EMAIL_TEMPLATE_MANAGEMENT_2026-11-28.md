@@ -47,3 +47,30 @@ iletişim kapsam dışıdır. Kullanıcı yeni bir şablon hazırlama modülü i
 SMTP channel-account ve message-template kaydı yoktu. Bu değişiklik gerçek bir
 SMTP adresi/parolası uydurmaz veya production'dan secret taşımaz. Kaynak girilene
 ve gerekli insan doğrulamaları tamamlanana kadar gerçek gönderim kapalı kalır.
+
+## Staging yayın ve arayüz kanıtı
+
+- Source `d7544f2997e7f67f89d6cfa5bc3a6e0b7cf4ce5c`;
+  release `staging-20261128T101656Z-d7544f2997e7`.
+- API health HTTP 200, `dbConnected=true`; Docker `healthy`; source worktree temiz.
+- Network kapalı Linux build: API/ön yüz typecheck, 58 e-posta kontrolü,
+  normal frontend build'in 190 kontrolü, i18n/sitemap/bundle bütçeleri PASS.
+- Messages → Templates'ta merkezi sürüm editörü ve açılır eski sistem şablonları
+  doğrulandı. Eski editörde 23 dil metni alanları aynı merkezde açılıyor.
+- Notifications'ta yeni şablon/gönderici oluşturma düğmesi yok. Kural modalında
+  Email Subject/Email Body alanlarının bulunmadığı UI'da doğrulandı; seçim ve
+  Mesajlar bağlantısı mevcut.
+- Integrations → Email (SMTP) → Accounts'ta mevcut entegrasyon kullanımı ve
+  asıl bağlantı düzenleme linki doğrulandı. Kaynak kaydı olmadığından reuse düğmesi
+  doğru şekilde devre dışı; sahte credential veya bağlantı oluşturulmadı.
+- Kullanıcı arayüzünden tek `Application stage update` şablonu oluşturuldu:
+  v1 EN ve v2 TR, ikisi de `review`. Dinamik öğrenci/üniversite/program/aşama/
+  başvuru referansı içerir; öğrenci ve acente alıcısına uygun nötr hitap kullanır.
+  Türkçe önizleme kontrol edildi. Farklı insan yönetici onayı aşılmadı.
+- Son salt okunur kontrol: EN review 1, TR review 1; SMTP integration 0;
+  stage dispatch 0; migration ledger 146. Gerçek mesaj veya e-posta gönderilmedi.
+- Merkezi ekran: `/staff/messages?tab=templates#email-templates`.
+
+Aşama bağlama ve aktivasyonu; onaylı sürüm, gerçek SMTP kaydı ve doğrulanmış
+gönderici beklediği için henüz etkin değildir. İşlevin hazır olması ile gerçek
+gönderimin başlaması ayrı durumlar olarak raporlanır.
