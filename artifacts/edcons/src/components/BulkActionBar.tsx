@@ -1,4 +1,4 @@
-import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Trash2, UserPlus, ArrowRightLeft, MessageCircle } from "lucide-react";
@@ -55,8 +55,7 @@ export function BulkActionBar({
 
       {onDelete && (
         <Button variant="destructive" size="sm" className="rounded-full h-8 gap-1.5" onClick={onDelete}>
-          <Trash2 className="w-3.5 h-3.5" /> Delete
-        </Button>
+          <Trash2 className="w-3.5 h-3.5" /><UiText text={"Delete"} /></Button>
       )}
 
       {onSendMessage && (

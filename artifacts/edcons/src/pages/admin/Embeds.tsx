@@ -1,4 +1,4 @@
-import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useState, useEffect, useRef, useDeferredValue } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -1518,7 +1518,7 @@ function DeleteWidgetBtn({ id, name, onDone }: { id: number; name: string; onDon
   });
   return (
     <>
-      <Button size="icon" variant="ghost" title="Delete" onClick={() => setOpen(true)}>
+      <Button size="icon" variant="ghost" title={translateUi(uiLanguage, "Delete")} onClick={() => setOpen(true)}>
         <Trash2 className="w-4 h-4 text-destructive" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

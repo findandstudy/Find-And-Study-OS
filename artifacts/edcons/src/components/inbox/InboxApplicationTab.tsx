@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -216,6 +217,7 @@ export function InboxApplicationTab({
   onSendDocument,
   documentSendingDisabled,
 }: InboxApplicationTabProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { t } = useI18n();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -764,7 +766,7 @@ export function InboxApplicationTab({
                 }}
                 disabled={deletingId === app.id}
                 className="shrink-0 text-muted-foreground hover:text-destructive transition-colors mt-0.5 opacity-0 group-hover:opacity-100"
-                aria-label="Delete"
+                aria-label={translateUi(uiLanguage, "Delete")}
               >
                 {deletingId === app.id ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />

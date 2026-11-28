@@ -1,4 +1,4 @@
-import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useState } from "react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -148,8 +148,7 @@ export function RowActionsMenu({
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-                <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-              </DropdownMenuItem>
+                <Trash2 className="w-3.5 h-3.5 mr-2" /><UiText text={"Delete"} /></DropdownMenuItem>
             </>
           )}
         </DropdownMenuContent>

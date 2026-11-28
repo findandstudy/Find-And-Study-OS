@@ -1,4 +1,4 @@
-import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch, ApiError } from "@workspace/api-client-react";
@@ -296,9 +296,7 @@ export default function PopupsPage() {
                 disabled={deleteMutation.isPending}
                 data-testid="button-confirm-delete"
               >
-                {deleteMutation.isPending && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
-                Delete
-              </Button>
+                {deleteMutation.isPending && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}<UiText text={"Delete"} /></Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

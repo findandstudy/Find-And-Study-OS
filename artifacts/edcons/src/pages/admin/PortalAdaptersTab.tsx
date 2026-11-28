@@ -1,4 +1,4 @@
-import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 /**
  * PortalAdaptersTab.tsx — SUB-STEP F + H (Declarative Builder)
  *
@@ -673,7 +673,7 @@ export default function PortalAdaptersTab() {
                       variant="ghost" size="icon"
                       className="w-8 h-8 text-destructive hover:text-destructive"
                       onClick={() => setDeleteTarget(a)}
-                      aria-label="Delete"
+                      aria-label={translateUi(uiLanguage, "Delete")}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>

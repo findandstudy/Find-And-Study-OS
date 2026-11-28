@@ -1,4 +1,4 @@
-import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { QuickContactDialog } from "@/components/QuickContact";
@@ -1167,7 +1167,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Delete {count} {translateUi(uiLanguage, "Application")}{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle><UiText text={"Delete"} />{count} {translateUi(uiLanguage, "Application")}{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
         <p className="text-sm text-muted-foreground py-2">{translateUi(uiLanguage, "This action cannot be undone.")}</p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("applicationsPage.cancel")}</Button>

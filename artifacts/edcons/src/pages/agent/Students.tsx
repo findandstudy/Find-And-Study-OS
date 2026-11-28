@@ -1514,7 +1514,7 @@ function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: 
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Delete {count} {translateUi(uiLanguage, "Student")}{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle><UiText text={"Delete"} />{count} {translateUi(uiLanguage, "Student")}{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
         <p className="text-sm text-muted-foreground py-2">{translateUi(uiLanguage, "This action cannot be undone.")}</p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{translateUi(uiLanguage, "Cancel")}</Button>

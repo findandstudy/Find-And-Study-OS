@@ -1,4 +1,4 @@
-import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
@@ -650,7 +650,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Delete {count} {translateUi(uiLanguage, "Lead")}{count > 1 ? "s" : ""}?</DialogTitle>
+          <DialogTitle><UiText text={"Delete"} />{count} {translateUi(uiLanguage, "Lead")}{count > 1 ? "s" : ""}?</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground py-2"> {translateUi(uiLanguage, "This action cannot be undone. The selected lead")}{count > 1 ? "s" : ""} {translateUi(uiLanguage, "and all associated data will be permanently removed.")} </p>
         <DialogFooter>

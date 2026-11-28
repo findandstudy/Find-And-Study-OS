@@ -1,4 +1,4 @@
-import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -674,7 +674,7 @@ export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }
                                 <Archive className="w-3.5 h-3.5" />
                               </Button>
                             )}
-                            <Button size="icon" variant="ghost" className="w-7 h-7 text-destructive" title="Delete" onClick={() => { if (confirm("Delete this post?")) deleteMut.mutate(p.id); }}><Trash2 className="w-3.5 h-3.5" /></Button>
+                            <Button size="icon" variant="ghost" className="w-7 h-7 text-destructive" title={translateUi(uiLanguage, "Delete")} onClick={() => { if (confirm("Delete this post?")) deleteMut.mutate(p.id); }}><Trash2 className="w-3.5 h-3.5" /></Button>
                           </div>
                         </td>
                       </tr>

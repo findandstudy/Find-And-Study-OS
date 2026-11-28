@@ -1,3 +1,4 @@
+import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { formatTimeAgo } from "@/lib/i18n/index";
 import { whilePageVisible } from "@/lib/visibleSubscription";
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -194,6 +195,7 @@ interface FeedItemCardProps {
 }
 
 function FeedItemCard({ item, isStaff, currentUserId, onComplete, onDeleteNote, t }: FeedItemCardProps) {
+  const { lang: uiLanguage } = useUiLanguage();
   const { lang } = useI18n();
   const [expanded, setExpanded] = useState(false);
 
@@ -223,7 +225,7 @@ function FeedItemCard({ item, isStaff, currentUserId, onComplete, onDeleteNote, 
               <button
                 className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive ml-1"
                 onClick={() => item.noteId && onDeleteNote(item.noteId)}
-                title="Delete"
+                title={translateUi(uiLanguage, "Delete")}
               >
                 <X className="h-3.5 w-3.5" />
               </button>

@@ -1,4 +1,4 @@
-import { translateUi, useUiLanguage } from "@/lib/ui-localization";
+import { translateUi, useUiLanguage, UiText } from "@/lib/ui-localization";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useListUsers } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
@@ -613,8 +613,7 @@ function UsersTab() {
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(user.id)}>
-                              <Trash2 className="w-4 h-4 mr-2" /> Delete
-                            </DropdownMenuItem>
+                              <Trash2 className="w-4 h-4 mr-2" /><UiText text={"Delete"} /></DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
