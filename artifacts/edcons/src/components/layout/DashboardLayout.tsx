@@ -2,6 +2,7 @@ import { translateUi, useUiLanguage } from "@/lib/ui-localization";
 import { whilePageVisible } from "@/lib/visibleSubscription";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { DashboardDialogContext } from "@/components/ui/dashboard-dialog-layout";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -1079,7 +1080,9 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
           <main className="min-w-0 flex-1 overflow-y-auto p-4 lg:p-6">
             <div className="max-w-[1800px] mx-auto">
-              {children}
+              <DashboardDialogContext.Provider value={/^\/(?:admin|staff)(?:\/|$)/.test(location) ? { dir: isRTL ? "rtl" : "ltr", closeLabel: t("common.close") } : null}>
+                {children}
+              </DashboardDialogContext.Provider>
             </div>
           </main>
         </div>

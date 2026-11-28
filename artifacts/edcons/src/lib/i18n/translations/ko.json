@@ -7144,6 +7144,10 @@
     "applicationCatalog": "애플리케이션 → 카탈로그"
   },
   "workPipelines": {
+    "moveStage": "단계 변경",
+    "dragCard": "{name} 이동",
+    "deleteRecordsHelp": "선택한 기록이 이 파이프라인에서 제거됩니다.",
+    "bulkLimit": "한 번에 최대 {count}개의 기록을 선택하세요.",
     "title": "워크플로",
     "simpleIntro": "기록과 단계를 관리하세요.",
     "addRecord": "기록 추가",

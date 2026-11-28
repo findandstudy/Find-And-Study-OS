@@ -7144,6 +7144,10 @@
     "applicationCatalog": "Ariza → katalog"
   },
   "workPipelines": {
+    "moveStage": "Bosqichni o‘zgartirish",
+    "dragCard": "{name} yozuvini ko‘chirish",
+    "deleteRecordsHelp": "Tanlangan yozuvlar ushbu ish jarayonidan olib tashlanadi.",
+    "bulkLimit": "Bir safar ko‘pi bilan {count} ta yozuvni tanlang.",
     "title": "Ish jarayonlari",
     "simpleIntro": "Yozuvlaringiz va bosqichlaringizni boshqaring.",
     "addRecord": "Yozuv qo‘shish",

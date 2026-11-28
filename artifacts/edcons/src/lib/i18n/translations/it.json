@@ -7144,6 +7144,10 @@
     "applicationCatalog": "Applicazione → catalogo"
   },
   "workPipelines": {
+    "moveStage": "Cambia fase",
+    "dragCard": "Sposta {name}",
+    "deleteRecordsHelp": "I record selezionati saranno rimossi da questo flusso.",
+    "bulkLimit": "Seleziona fino a {count} record alla volta.",
     "title": "Pipeline",
     "simpleIntro": "Gestisci i tuoi record e le fasi.",
     "addRecord": "Aggiungi record",

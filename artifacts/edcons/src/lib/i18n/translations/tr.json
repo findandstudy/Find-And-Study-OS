@@ -7144,6 +7144,10 @@
     "applicationCatalog": "Başvuru → katalog"
   },
   "workPipelines": {
+    "moveStage": "Aşamayı değiştir",
+    "dragCard": "{name} kartını taşı",
+    "deleteRecordsHelp": "Seçilen kayıtlar bu pipeline’dan kaldırılacak.",
+    "bulkLimit": "Bir seferde en fazla {count} kayıt seçin.",
     "title": "Pipeline’lar",
     "simpleIntro": "Kayıtlarınızı ve aşamalarınızı yönetin.",
     "addRecord": "Kayıt ekle",

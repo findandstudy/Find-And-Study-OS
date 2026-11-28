@@ -7144,6 +7144,10 @@
     "applicationCatalog": "Ứng dụng → danh mục"
   },
   "workPipelines": {
+    "moveStage": "Chuyển giai đoạn",
+    "dragCard": "Di chuyển {name}",
+    "deleteRecordsHelp": "Các bản ghi đã chọn sẽ được xóa khỏi quy trình này.",
+    "bulkLimit": "Chọn tối đa {count} bản ghi mỗi lần.",
     "title": "Quy trình",
     "simpleIntro": "Quản lý bản ghi và các giai đoạn của bạn.",
     "addRecord": "Thêm hồ sơ",

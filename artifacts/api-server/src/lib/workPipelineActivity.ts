@@ -97,7 +97,7 @@ export async function changeWorkActivity(
     const { document: board } = await readWorkBoard(c, t, boardId, actor, true);
     if (board.archived) throw new WorkError(409, "Pipeline is archived");
     const r = await c.query(
-      "SELECT document,revision FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND id=$3 FOR UPDATE",
+      "SELECT document,revision FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND id=$3 AND document->>'removedAt' IS NULL FOR UPDATE",
       [t, boardId, cardId],
     );
     if (!r.rowCount) throw new WorkError(404, "Card not found");
@@ -201,11 +201,11 @@ export async function workActivityDashboard(actor: WorkActor) {
       JSON.stringify([actor.id]),
     ];
     const followUps = await c.query(
-      `SELECT f AS item,b.id AS "boardId",b.document->>'name' AS "boardName",k.id AS "cardId",k.document->>'title' AS "cardTitle" FROM local_work_pipelines.boards b JOIN local_work_pipelines.cards k ON k.tenant_id=b.tenant_id AND k.board_id=b.id CROSS JOIN LATERAL jsonb_array_elements(coalesce(k.document->'followUps','[]')) f WHERE ${allowed} AND f->>'completed'='false' AND (f->>'assigneeId'=$3 OR f->>'createdBy'=$3) AND (f->>'scheduledAt')::timestamptz <= now()+interval '7 days' ORDER BY (f->>'scheduledAt')::timestamptz LIMIT 50`,
+      `SELECT f AS item,b.id AS "boardId",b.document->>'name' AS "boardName",k.id AS "cardId",k.document->>'title' AS "cardTitle" FROM local_work_pipelines.boards b JOIN local_work_pipelines.cards k ON k.tenant_id=b.tenant_id AND k.board_id=b.id CROSS JOIN LATERAL jsonb_array_elements(coalesce(k.document->'followUps','[]')) f WHERE ${allowed} AND k.document->>'removedAt' IS NULL AND f->>'completed'='false' AND (f->>'assigneeId'=$3 OR f->>'createdBy'=$3) AND (f->>'scheduledAt')::timestamptz <= now()+interval '7 days' ORDER BY (f->>'scheduledAt')::timestamptz LIMIT 50`,
       args,
     );
     const notes = await c.query(
-      `SELECT n AS item,b.id AS "boardId",b.document->>'name' AS "boardName",k.id AS "cardId",k.document->>'title' AS "cardTitle" FROM local_work_pipelines.boards b JOIN local_work_pipelines.cards k ON k.tenant_id=b.tenant_id AND k.board_id=b.id CROSS JOIN LATERAL jsonb_array_elements(coalesce(k.document->'notes','[]')) n WHERE ${allowed} ORDER BY n->>'at' DESC LIMIT 8`,
+      `SELECT n AS item,b.id AS "boardId",b.document->>'name' AS "boardName",k.id AS "cardId",k.document->>'title' AS "cardTitle" FROM local_work_pipelines.boards b JOIN local_work_pipelines.cards k ON k.tenant_id=b.tenant_id AND k.board_id=b.id CROSS JOIN LATERAL jsonb_array_elements(coalesce(k.document->'notes','[]')) n WHERE ${allowed} AND k.document->>'removedAt' IS NULL ORDER BY n->>'at' DESC LIMIT 8`,
       args,
     );
     return { followUps: followUps.rows, notes: notes.rows };
@@ -220,7 +220,7 @@ export async function runWorkReminders(now = new Date(), onlyBoardId?: string) {
     // Lock boards before cards, the same order as edits and membership changes.
     // This also stops revoked/archived sources from occupying the reminder batch.
     const boards = await c.query(
-      "SELECT b.id,b.document FROM local_work_pipelines.boards b WHERE b.tenant_id=$1 AND ($3::uuid IS NULL OR b.id=$3::uuid) AND coalesce((b.document->>'archived')::boolean,false)=false AND EXISTS(SELECT 1 FROM local_work_pipelines.cards k CROSS JOIN LATERAL jsonb_array_elements(coalesce(k.document->'followUps','[]')) f JOIN users u ON u.id=(f->>'assigneeId')::int AND u.is_active=true AND u.deleted_at IS NULL WHERE k.tenant_id=b.tenant_id AND k.board_id=b.id AND f->>'completed'='false' AND f->>'remindedAt' IS NULL AND (f->>'scheduledAt')::timestamptz <= $2::timestamptz AND (b.document->>'createdBy'=f->>'assigneeId' OR b.document->'memberIds' @> jsonb_build_array((f->>'assigneeId')::int))) ORDER BY b.id LIMIT 50 FOR UPDATE OF b SKIP LOCKED",
+      "SELECT b.id,b.document FROM local_work_pipelines.boards b WHERE b.tenant_id=$1 AND ($3::uuid IS NULL OR b.id=$3::uuid) AND coalesce((b.document->>'archived')::boolean,false)=false AND EXISTS(SELECT 1 FROM local_work_pipelines.cards k CROSS JOIN LATERAL jsonb_array_elements(coalesce(k.document->'followUps','[]')) f JOIN users u ON u.id=(f->>'assigneeId')::int AND u.is_active=true AND u.deleted_at IS NULL WHERE k.tenant_id=b.tenant_id AND k.board_id=b.id AND k.document->>'removedAt' IS NULL AND f->>'completed'='false' AND f->>'remindedAt' IS NULL AND (f->>'scheduledAt')::timestamptz <= $2::timestamptz AND (b.document->>'createdBy'=f->>'assigneeId' OR b.document->'memberIds' @> jsonb_build_array((f->>'assigneeId')::int))) ORDER BY b.id LIMIT 50 FOR UPDATE OF b SKIP LOCKED",
       [t, now.toISOString(), onlyBoardId ?? null],
     );
     let sent = 0,
@@ -229,7 +229,7 @@ export async function runWorkReminders(now = new Date(), onlyBoardId?: string) {
       if (!remaining) break;
       const board: WorkBoard = br.document;
       const r = await c.query(
-        "SELECT id,document FROM local_work_pipelines.cards k WHERE tenant_id=$1 AND board_id=$2 AND EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(k.document->'followUps','[]')) f WHERE f->>'completed'='false' AND f->>'remindedAt' IS NULL AND (f->>'scheduledAt')::timestamptz <= $3::timestamptz) ORDER BY id LIMIT $4 FOR UPDATE SKIP LOCKED",
+        "SELECT id,document FROM local_work_pipelines.cards k WHERE tenant_id=$1 AND board_id=$2 AND k.document->>'removedAt' IS NULL AND EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(k.document->'followUps','[]')) f WHERE f->>'completed'='false' AND f->>'remindedAt' IS NULL AND (f->>'scheduledAt')::timestamptz <= $3::timestamptz) ORDER BY id LIMIT $4 FOR UPDATE SKIP LOCKED",
         [t, board.id, now.toISOString(), remaining],
       );
       remaining -= r.rowCount ?? 0;

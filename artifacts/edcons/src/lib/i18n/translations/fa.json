@@ -7144,6 +7144,10 @@
     "applicationCatalog": "درخواست پذیرش → فهرست دوره‌ها"
   },
   "workPipelines": {
+    "moveStage": "تغییر مرحله",
+    "dragCard": "انتقال {name}",
+    "deleteRecordsHelp": "رکوردهای انتخاب‌شده از این خط لوله حذف می‌شوند.",
+    "bulkLimit": "هر بار حداکثر {count} رکورد را انتخاب کنید.",
     "title": "روندهای کاری",
     "simpleIntro": "سوابق و مراحل کار خود را مدیریت کنید.",
     "addRecord": "افزودن رکورد",

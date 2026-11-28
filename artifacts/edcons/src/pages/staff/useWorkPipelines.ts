@@ -223,6 +223,7 @@ export function useWorkPipelines() {
       qc.invalidateQueries({ queryKey: ["work-pipeline-boards"] }),
       qc.invalidateQueries({ queryKey: ["work-pipeline-cards"] }),
       qc.invalidateQueries({ queryKey: ["work-pipeline-options"] }),
+      qc.invalidateQueries({ queryKey: ["/api/follow-ups/upcoming"] }),
     ]);
   };
   const run = async (fn: () => Promise<void>) => {
@@ -292,8 +293,8 @@ export function useWorkPipelines() {
   };
   const move = (r: Row<Card>, stageId: string) =>
     run(async () => {
-      await request(`/${selected}/cards/${r.document.id}`, "PUT", {
-        data: { ...cardData(r.document), stageId },
+      await request(`/${selected}/cards/${r.document.id}`, "PATCH", {
+        patch: { stageId },
         revision: r.revision,
       });
       await refresh();

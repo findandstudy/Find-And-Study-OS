@@ -79,7 +79,7 @@ export async function exportWorkRecords(
       filter.template === "true"
         ? { rows: [] as Stored[] }
         : await c.query(
-            "SELECT document,revision FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND ($3='' OR document->>'title' ILIKE $4 OR document->>'contactName' ILIKE $4) AND ($5='all' OR document->>'stageId'=$5) AND ($6='all' OR ($6='none' AND document->>'assigneeId' IS NULL) OR document->>'assigneeId'=$6) ORDER BY document->>'createdAt',id LIMIT 2001",
+            "SELECT document,revision FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND document->>'removedAt' IS NULL AND ($3='' OR document->>'title' ILIKE $4 OR document->>'contactName' ILIKE $4) AND ($5='all' OR document->>'stageId'=$5) AND ($6='all' OR ($6='none' AND document->>'assigneeId' IS NULL) OR document->>'assigneeId'=$6) ORDER BY document->>'createdAt',id LIMIT 2001",
             [t, id, filter.q, `%${filter.q}%`, filter.stage, filter.assignee],
           );
     if (r.rows.length > TRANSFER_LIMIT)
@@ -186,6 +186,7 @@ export async function importWorkRecords(
           throw Error("RecordId was not found in this pipeline");
         if (matches.length > 1) throw Error("Ambiguous match; use RecordId");
         const old: Stored | undefined = matches.length ? matches[0] : undefined;
+        if (old?.document.removedAt) throw Error("RecordId was not found in this pipeline");
         const key = old?.document.id ?? importKey;
         if (seen.has(key)) throw Error("Duplicate row in this file");
         seen.add(key);

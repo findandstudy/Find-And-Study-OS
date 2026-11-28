@@ -7144,6 +7144,10 @@
     "applicationCatalog": "Solicitud → catálogo"
   },
   "workPipelines": {
+    "moveStage": "Cambiar etapa",
+    "dragCard": "Mover {name}",
+    "deleteRecordsHelp": "Los registros seleccionados se quitarán de este flujo.",
+    "bulkLimit": "Selecciona hasta {count} registros a la vez.",
     "title": "Flujos de trabajo",
     "simpleIntro": "Gestiona tus registros y etapas.",
     "addRecord": "Agregar",

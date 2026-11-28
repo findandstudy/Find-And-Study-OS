@@ -1,6 +1,6 @@
 import {emailAutomationHumanAllowed} from "../lib/notifications/emailAutomationPolicy";
 import {configurePipelineNotice} from "../lib/notifications/pipelineNoticeConfiguration";
-import { workConversationState, updateWorkCard } from "../lib/workPipelineInbox";
+import { bulkUpdateWorkCards, workConversationState, updateWorkCard } from "../lib/workPipelineInbox";
 import { readPipelineNoticeHistory } from "../lib/notifications/pipelineNoticeHistory";
 import {
   changeWorkActivity,
@@ -200,7 +200,7 @@ router.get("/work-pipelines/:id/cards/:cardId/delivery-history", wrap(async (req
   const items = await workTx(async (client, tenantId) => {
     const board = await readWorkBoard(client, tenantId, req.params.id, req.user);
     const { rowCount } = await client.query(
-      "SELECT 1 FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND id=$3",
+      "SELECT 1 FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND id=$3 AND document->>'removedAt' IS NULL",
       [tenantId, board.document.id, cardId],
     );
     if (!rowCount) throw new WorkError(404, "Record not found");
@@ -257,14 +257,14 @@ router.put(
         await validateWorkMembers(c, input.memberIds);
         for (const s of input.sources) await sourceExists(c, s);
         const invalid = await c.query(
-          "SELECT id FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND NOT(document->>'stageId'=ANY($3::text[])) LIMIT 1",
+          "SELECT id FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND document->>'removedAt' IS NULL AND NOT(document->>'stageId'=ANY($3::text[])) LIMIT 1",
           [t, req.params.id, input.stages.map((s) => s.id)],
         );
         if (invalid.rowCount)
           throw new WorkError(409, "Move cards before removing their stage");
         const allowed = [old.document.createdBy, ...input.memberIds];
         const stranded = await c.query(
-          "SELECT id FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND ((document->>'assigneeId' IS NOT NULL AND NOT ((document->>'assigneeId')::int=ANY($3::int[]))) OR EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(document->'followUps','[]'::jsonb)) f WHERE f->>'completed'='false' AND NOT ((f->>'assigneeId')::int=ANY($3::int[])))) LIMIT 1",
+          "SELECT id FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND document->>'removedAt' IS NULL AND ((document->>'assigneeId' IS NOT NULL AND NOT ((document->>'assigneeId')::int=ANY($3::int[]))) OR EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(document->'followUps','[]'::jsonb)) f WHERE f->>'completed'='false' AND NOT ((f->>'assigneeId')::int=ANY($3::int[])))) LIMIT 1",
           [t, req.params.id, allowed],
         );
         if (stranded.rowCount) throw new WorkError(409, "Reassign records and open follow-ups before removing a team member");
@@ -313,7 +313,7 @@ router.get(
           .max(200)
           .parse(req.query.q || "");
         const r = await c.query(
-          "SELECT document,revision FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND ($3='' OR document->>'title' ILIKE $4 OR document->>'contactName' ILIKE $4) ORDER BY document->>'createdAt' DESC,id LIMIT 201 OFFSET $5",
+          "SELECT document,revision FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND document->>'removedAt' IS NULL AND ($3='' OR document->>'title' ILIKE $4 OR document->>'contactName' ILIKE $4) ORDER BY document->>'createdAt' DESC,id LIMIT 201 OFFSET $5",
           [t, req.params.id, q, `%${q}%`, offset],
         );
         return {
@@ -375,6 +375,12 @@ router.put(
       req.body.revision, req.body.data, note));
   }),
 );
+router.post(
+  "/work-pipelines/:id/cards/bulk",
+  wrap(async (req: any, res: any) => {
+    res.json(await bulkUpdateWorkCards(req.user, req.params.id, req.body));
+  }),
+);
 router.get("/work-pipelines/conversation/:conversationId", wrap(async (req: any, res: any) => {
   const id = z.coerce.number().int().positive().parse(req.params.conversationId);
   res.json(await workConversationState(req.user, id));
@@ -412,7 +418,7 @@ router.get(
       await workTx(async (c, t) => {
         await readWorkBoard(c, t, req.params.id, req.user);
         const r = await c.query(
-          "SELECT document,revision FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND id=$3",
+          "SELECT document,revision FROM local_work_pipelines.cards WHERE tenant_id=$1 AND board_id=$2 AND id=$3 AND document->>'removedAt' IS NULL",
           [t, req.params.id, req.params.cardId],
         );
         if (!r.rowCount) throw new WorkError(404, "Card not found");

@@ -7144,6 +7144,10 @@
     "applicationCatalog": "অ্যাপ্লিকেশন → ক্যাটালগ"
   },
   "workPipelines": {
+    "moveStage": "ধাপ পরিবর্তন",
+    "dragCard": "{name} সরান",
+    "deleteRecordsHelp": "নির্বাচিত রেকর্ডগুলো বর্তমান পাইপলাইন থেকে সরানো হবে।",
+    "bulkLimit": "একবারে সর্বাধিক {count}টি রেকর্ড নির্বাচন করুন।",
     "title": "পাইপলাইন",
     "simpleIntro": "আপনার রেকর্ড ও ধাপ পরিচালনা করুন।",
     "addRecord": "রেকর্ড যোগ করুন",

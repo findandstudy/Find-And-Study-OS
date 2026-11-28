@@ -7144,6 +7144,10 @@
     "applicationCatalog": "आवेदन → क्याटलग"
   },
   "workPipelines": {
+    "moveStage": "चरण सार्नुहोस्",
+    "dragCard": "{name} सार्नुहोस्",
+    "deleteRecordsHelp": "छानिएका रेकर्डहरू यो पाइपलाइनबाट हटाइनेछन्।",
+    "bulkLimit": "एकपटकमा बढीमा {count} रेकर्ड छान्नुहोस्।",
     "title": "पाइपलाइन",
     "simpleIntro": "आफ्ना रेकर्ड र चरण व्यवस्थापन गर्नुहोस्।",
     "addRecord": "रेकर्ड थप्नुहोस्",

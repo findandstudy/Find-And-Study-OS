@@ -5514,7 +5514,7 @@ function TemplatesTab() {
               {tx("messagesPage.whatsappOfficialTemplatesDesc")}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Button variant="outline" onClick={syncWhatsAppTemplates} disabled={waSyncing} className="rounded-xl gap-2">
               {waSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               {tx("messagesPage.refresh")}

@@ -7144,6 +7144,10 @@
     "applicationCatalog": "Ýüz tutma → katalog"
   },
   "workPipelines": {
+    "moveStage": "Tapgyry üýtget",
+    "dragCard": "{name} ýazgysyny geçir",
+    "deleteRecordsHelp": "Saýlanan ýazgylar bu iş akymyndan aýrylar.",
+    "bulkLimit": "Bir gezekde {count} ýazga çenli saýlaň.",
     "title": "Iş yzarlaýyş akymlary",
     "simpleIntro": "Ýazgylaryňyzy we tapgyrlaryňyzy dolandyryň.",
     "addRecord": "Ýazgy goş",

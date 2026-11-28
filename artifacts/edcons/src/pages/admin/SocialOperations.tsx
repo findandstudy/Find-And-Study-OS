@@ -1063,7 +1063,7 @@ export default function SocialOperations() {
       </div>
 
       {enabled && (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {(overview.data?.workerHealth ?? []).map((worker) => {
             const ready = worker.status === "READY";
             const disabled = worker.status === "DISABLED";
@@ -1078,7 +1078,7 @@ export default function SocialOperations() {
                       : "border-amber-300 dark:border-amber-900"
                 }
               >
-                <CardContent className="flex items-start justify-between gap-4 p-4">
+                <CardContent className="flex flex-wrap items-start justify-between gap-3 p-4 xl:flex-nowrap">
                   <div className="flex min-w-0 items-start gap-3">
                     <div
                       className={`rounded-xl p-2.5 ${
@@ -1109,7 +1109,7 @@ export default function SocialOperations() {
                                 ? translateUi(uiLanguage, "Reklam worker'ı")
                                 : translateUi(uiLanguage, "Advertising worker")}
                       </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
+                      <p className="mt-1 break-words text-xs text-muted-foreground">
                         {disabled
                           ? tr
                             ? translateUi(uiLanguage, "Güvenlik kapısında kapalı ({value0}).", undefined, { value0: String(worker.reason ?? "DISABLED") })

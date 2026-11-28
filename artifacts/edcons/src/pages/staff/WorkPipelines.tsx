@@ -5,6 +5,13 @@ import { WorkPipelineActivity } from "./WorkPipelineActivity";
 import { WorkPipelineExcel } from "./WorkPipelineExcel";
 import { WorkPipelinePicker } from "./WorkPipelinePicker";
 import { useState } from "react";
+import { BulkActionBar } from "@/components/BulkActionBar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   DndContext,
   DragOverlay,
@@ -71,6 +78,7 @@ import {
   X,
   CalendarClock,
   Trophy,
+  GripVertical,
   XCircle,
 } from "lucide-react";
 import {
@@ -83,19 +91,38 @@ import {
 } from "./useWorkPipelines";
 
 type Model = ReturnType<typeof useWorkPipelines>;
+
+type PipelineBulkAction =
+  | { type: "assign"; assigneeId: number }
+  | { type: "move"; stageId: string }
+  | { type: "delete" };
+
+type PipelineSelection = {
+  boardId: string;
+  cards: { id: string; revision: number }[];
+};
+
+const BULK_LIMIT = 200;
+
 function ContactCard({
   row,
   stage,
   m,
+  selected,
+  selectionDisabled,
+  onSelect,
 }: {
   row: Row<Card>;
   stage: Stage;
   m: Model;
+  selected: boolean;
+  selectionDisabled: boolean;
+  onSelect: (id: string) => void;
 }) {
-  const { lang: uiLanguage } = useUiLanguage();
-  const c = row.document,
-    { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-      useSortable({ id: c.id, disabled: m.busy || m.b?.archived });
+  const c = row.document;
+  const selectable = !m.b?.archived;
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id: c.id, disabled: m.busy || !selectable });
   const people =
     m.options.data?.people.filter(
       (p) => m.b?.memberIds.includes(p.id) || m.b?.createdBy === p.id,
@@ -110,14 +137,19 @@ function ContactCard({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`rounded-xl border overflow-hidden mb-3 transition-shadow duration-200 ${isDragging ? "border-primary shadow-xl opacity-50 relative z-50" : color + " hover:shadow-md"}`}
+      className={`rounded-xl border overflow-hidden mb-3 transition-shadow duration-200 ${selected ? "ring-2 ring-inset ring-primary " : ""}${isDragging ? "border-primary shadow-xl opacity-50 relative z-50" : color + " hover:shadow-md"}`}
     >
-      <div
-        {...attributes}
-        {...listeners}
-        className={`p-4 pb-2 ${m.b?.archived ? "cursor-default" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}
-      >
+      <div className="p-3 pb-2">
         <div className="flex items-start gap-2 mb-2">
+          {selectable && (
+            <Checkbox
+              className="mt-2"
+              aria-label={m.t("agentStudents.selectRow") + " " + c.title}
+              checked={selected}
+              disabled={m.busy || (selectionDisabled && !selected)}
+              onCheckedChange={() => onSelect(c.id)}
+            />
+          )}
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0">
             <span className="text-xs font-bold text-primary">
               {c.title
@@ -144,6 +176,21 @@ function ContactCard({
               </span>
             )}
           </div>
+          {selectable && (
+            <Button
+              {...attributes}
+              {...listeners}
+              ref={setActivatorNodeRef}
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label={m.t("workPipelines.dragCard", { name: c.title })}
+              className={isDragging ? "size-8 shrink-0 touch-none cursor-grabbing" : "size-8 shrink-0 touch-none cursor-grab"}
+              disabled={m.busy}
+            >
+              <GripVertical className="size-4" />
+            </Button>
+          )}
         </div>
         <p className="text-xs text-muted-foreground truncate">
           {c.email || c.phone ? <bdi dir="ltr">{c.email || c.phone}</bdi> : m.l.noContact}
@@ -215,10 +262,16 @@ function StageColumn({
   stage,
   rows,
   m,
+  selectedIds,
+  selectionDisabled,
+  onSelect,
 }: {
   stage: Stage;
   rows: Row<Card>[];
   m: Model;
+  selectedIds: ReadonlySet<string> | null;
+  selectionDisabled: boolean;
+  onSelect: (id: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: stage.id,
@@ -228,39 +281,50 @@ function StageColumn({
     lost = stage.result === "closed";
   return (
     <div
-      className={`w-72 flex flex-col max-h-full rounded-2xl border overflow-hidden ${won ? "bg-emerald-50/60 border-emerald-200/50 dark:bg-emerald-900/20 dark:border-emerald-700/30" : lost ? "bg-rose-50/60 border-rose-200/50 dark:bg-rose-900/20 dark:border-rose-700/30" : "bg-secondary/50 border-border/50"}`}
+      className={`flex h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden rounded-2xl border sm:w-72 ${won ? "bg-emerald-50/60 border-emerald-200/50 dark:bg-emerald-900/20 dark:border-emerald-700/30" : lost ? "bg-rose-50/60 border-rose-200/50 dark:bg-rose-900/20 dark:border-rose-700/30" : "bg-secondary/50 border-border/50"}`}
     >
       <div
         className={`p-4 border-b shrink-0 ${won ? "bg-emerald-100/80 border-emerald-200/70 dark:bg-emerald-900/40" : lost ? "bg-rose-100/80 border-rose-200/70 dark:bg-rose-900/40" : "bg-card/50 border-border/50"}`}
       >
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
+          <div className="flex min-w-0 items-center gap-1.5">
             {won ? (
               <Trophy className="w-4 h-4 text-emerald-500" />
             ) : lost ? (
               <XCircle className="w-4 h-4 text-rose-400" />
             ) : null}
-            <h3 className="font-display font-bold">{stage.name}</h3>
+            <h3 className="min-w-0 break-words font-display font-bold">{stage.name}</h3>
           </div>
-          <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border bg-background text-muted-foreground shadow-sm">
+          <span className="w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-xs font-bold border bg-background text-muted-foreground shadow-sm">
             {rows.length}
           </span>
         </div>
       </div>
       <div
         ref={setNodeRef}
-        className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors ${isOver ? "bg-primary/5" : ""}`}
+        tabIndex={0}
+        role="region"
+        aria-label={stage.name}
+        className={`min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-3 custom-scrollbar transition-colors ${isOver ? "bg-primary/5" : ""}`}
       >
         <SortableContext
           items={rows.map((r) => r.document.id)}
           strategy={verticalListSortingStrategy}
         >
           {rows.map((r) => (
-            <ContactCard key={r.document.id} row={r} stage={stage} m={m} />
+            <ContactCard
+              key={r.document.id}
+              row={r}
+              stage={stage}
+              m={m}
+              selected={selectedIds?.has(r.document.id) ?? false}
+              selectionDisabled={m.busy || selectionDisabled}
+              onSelect={onSelect}
+            />
           ))}
           {!rows.length && (
             <div className="h-20 border-2 border-dashed border-border/50 rounded-xl flex items-center justify-center text-sm font-medium text-muted-foreground">
-              {m.l.dropHere}
+              {m.b?.archived ? m.l.noCards : m.l.dropHere}
             </div>
           )}
         </SortableContext>
@@ -271,6 +335,7 @@ function StageColumn({
 
 export default function WorkPipelines() {
   const { lang: uiLanguage } = useUiLanguage();
+  const { toast } = useToast();
   const m = useWorkPipelines(),
     { l, b } = m;
   const [settings, setSettings] = useState<
@@ -291,6 +356,34 @@ export default function WorkPipelines() {
           ? r.document.assigneeId === null
           : String(r.document.assigneeId) === assignment)),
   );
+  const [selection, setSelection] = useState<{ boardId: string; ids: Set<string> }>({ boardId: "", ids: new Set() });
+  const [deleteDraft, setDeleteDraft] = useState<PipelineSelection | null>(null);
+  const canSelect = Boolean(b && !b.archived);
+  const selectedIds = selection.boardId === m.selected ? selection.ids : null;
+  const selectedRows = canSelect ? rows.filter((r) => selectedIds?.has(r.document.id)) : [];
+  const selectedCount = selectedRows.length;
+  const allSelected = selectedCount > 0 && selectedCount >= Math.min(rows.length, BULK_LIMIT);
+  const atLimit = selectedCount >= BULK_LIMIT;
+  const selectAllState = allSelected || (selectedCount > 0 ? "indeterminate" : false);
+  const clearSelection = () => setSelection({ boardId: m.selected, ids: new Set() });
+  const toggleSelection = (id: string) => {
+    if (!canSelect || m.busy) return;
+    setSelection((previous) => {
+      const next = new Set(previous.boardId === m.selected ? previous.ids : []);
+      if (!next.delete(id) && next.size < BULK_LIMIT) next.add(id);
+      return { boardId: m.selected, ids: next };
+    });
+  };
+  const toggleAll = () => {
+    setSelection({
+      boardId: m.selected,
+      ids: allSelected ? new Set() : new Set(rows.slice(0, BULK_LIMIT).map((r) => r.document.id)),
+    });
+  };
+  const selectionSnapshot = (): PipelineSelection => ({
+    boardId: m.selected,
+    cards: selectedRows.map((r) => ({ id: r.document.id, revision: r.revision })),
+  });
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, {
@@ -298,6 +391,8 @@ export default function WorkPipelines() {
     }),
   );
   const selectBoard = (id: string) => {
+    setDeleteDraft(null);
+    setSelection({ boardId: id, ids: new Set() });
     m.choose(id);
     setStageFilter("all");
     setAssignment("all");
@@ -322,6 +417,22 @@ export default function WorkPipelines() {
       );
     if (row && target && row.document.stageId !== target.id)
       void m.move(row, target.id);
+  };
+  const runBulk = (action: PipelineBulkAction, snapshot = selectionSnapshot()) => {
+    if (m.busy || !canSelect || !snapshot.cards.length || snapshot.boardId !== m.selected) return;
+    void m.run(async () => {
+      try {
+        await request("/" + snapshot.boardId + "/cards/bulk", "POST", { cards: snapshot.cards, action });
+      } catch (error) {
+        setDeleteDraft(null);
+        await m.refresh();
+        throw error;
+      }
+      setDeleteDraft(null);
+      clearSelection();
+      await m.refresh();
+      toast({ title: m.t("common.saved") });
+    });
   };
   const notice = (message: string) => (
     <div
@@ -350,7 +461,7 @@ export default function WorkPipelines() {
   if (!m.feature.data?.enabled) return <p role="alert">{l.noPipelines}</p>;
   return (
     <div
-      className="h-[calc(100vh-8rem)] w-full min-w-0 max-w-full flex flex-col"
+      className="flex h-[calc(100dvh-8rem)] min-h-0 w-full min-w-0 flex-col"
       dir={m.isRTL ? "rtl" : "ltr"}
     >
       <AdminPageHeader className="mb-6 shrink-0 min-w-0">
@@ -360,15 +471,15 @@ export default function WorkPipelines() {
           </AdminPageTitle>
           <AdminPageDescription>{l.simpleIntro}</AdminPageDescription>
         </div>
-        <AdminPageActions className="min-w-0 max-w-full">
-          <div className="relative w-64 max-w-full">
+        <AdminPageActions className="sm:justify-end">
+          <div className="relative w-full sm:w-56 lg:w-64">
             <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder={l.search}
               aria-label={l.search}
-              className="ps-9 bg-white dark:bg-black/20 border-border rounded-full"
+              className="ps-9"
               value={m.query}
-              onChange={(e) => m.setQuery(e.target.value)}
+              onChange={(e) => { clearSelection(); m.setQuery(e.target.value); }}
             />
           </div>
           <Popover>
@@ -381,7 +492,7 @@ export default function WorkPipelines() {
             <PopoverContent className="w-72 space-y-4" align="end">
               <div className="space-y-2">
                 <Label>{l.stage}</Label>
-                <Select value={stageFilter} onValueChange={setStageFilter}>
+                <Select value={stageFilter} onValueChange={(value) => { clearSelection(); setStageFilter(value); }}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -397,7 +508,7 @@ export default function WorkPipelines() {
               </div>
               <div className="space-y-2">
                 <Label>{l.assignee}</Label>
-                <Select value={assignment} onValueChange={setAssignment}>
+                <Select value={assignment} onValueChange={(value) => { clearSelection(); setAssignment(value); }}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -445,8 +556,7 @@ export default function WorkPipelines() {
             ))}
           </div>
           <Button
-            className="rounded-full shadow-lg shadow-primary/20"
-            disabled={!b || b.archived}
+            disabled={!b || b.archived || m.busy}
             onClick={() => m.createCard()}
           >
             <Plus className="w-4 h-4 me-2" />
@@ -454,7 +564,7 @@ export default function WorkPipelines() {
           </Button>
         </AdminPageActions>
       </AdminPageHeader>
-      <div className="flex items-center gap-2 mb-4 shrink-0">
+      <div className="mb-4 flex min-w-0 shrink-0 flex-wrap items-center gap-2">
         <WorkPipelinePicker
           key={m.user?.id ?? "anonymous"}
           userId={m.user?.id}
@@ -500,7 +610,42 @@ export default function WorkPipelines() {
           </Popover>
         )}
       </div>
-      {error && !m.boardDraft && !m.cardDraft && notice(error)}
+      {canSelect && (selectedCount > 0 || (m.view === "board" && rows.length > 0)) && (
+        <AdminPageActions className="mb-3 shrink-0" data-testid="work-pipeline-selection">
+          {m.view === "board" && (
+            <label className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+              <Checkbox checked={selectAllState} onCheckedChange={toggleAll} disabled={m.busy} />
+              {m.t("common.selectAll")}
+            </label>
+          )}
+          <BulkActionBar
+            selectedCount={selectedCount}
+            disabled={m.busy}
+            staffUsers={people}
+            stages={b?.stages.map((stage) => ({ key: stage.id, label: stage.name })) ?? []}
+            assignPrompt={l.assignee}
+            moveLabel={m.t("workPipelines.moveStage")}
+            movePrompt={l.stage}
+            onAssign={(assigneeId) => runBulk({ type: "assign", assigneeId })}
+            onMove={(stageId) => runBulk({ type: "move", stageId })}
+            onDelete={m.options.data?.canManage ? () => {
+              m.setError("");
+              setDeleteDraft(selectionSnapshot());
+            } : undefined}
+          />
+          {selectedCount > 0 && (
+            <Button variant="ghost" size="sm" disabled={m.busy} onClick={clearSelection}>
+              {m.t("agentStudents.clearSelection")}
+            </Button>
+          )}
+          {atLimit && rows.length > BULK_LIMIT && (
+            <p role="status" className="text-xs text-muted-foreground">
+              {m.t("workPipelines.bulkLimit", { count: BULK_LIMIT })}
+            </p>
+          )}
+        </AdminPageActions>
+      )}
+      {error && !m.boardDraft && !m.cardDraft && !deleteDraft && notice(error)}
       {b?.archived && (
         <p className="text-sm text-muted-foreground mb-3">{l.archivedHelp}</p>
       )}
@@ -519,20 +664,15 @@ export default function WorkPipelines() {
           )}
         </div>
       ) : m.view === "board" ? (
-        <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
+        <div role="region" aria-label={l.board} tabIndex={0} className="min-h-52 min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-3 custom-scrollbar">
           <div className="flex gap-5 h-full min-w-max px-1">
             <DndContext
               sensors={sensors}
               collisionDetection={(args) => {
+                if (!args.pointerCoordinates) return closestCorners(args);
                 const hits = pointerWithin(args);
-                const column = hits.find((hit) =>
-                  b.stages.some((s) => s.id === hit.id),
-                );
-                return column
-                  ? [column]
-                  : hits.length
-                    ? hits
-                    : closestCorners(args);
+                const column = hits.find((hit) => b.stages.some((s) => s.id === hit.id));
+                return column ? [column] : hits;
               }}
               onDragStart={(e) => setActive(String(e.active.id))}
               onDragEnd={dragEnd}
@@ -546,6 +686,9 @@ export default function WorkPipelines() {
                     stage={s}
                     rows={rows.filter((r) => r.document.stageId === s.id)}
                     m={m}
+                    selectedIds={selectedIds}
+                    selectionDisabled={atLimit}
+                    onSelect={toggleSelection}
                   />
                 ))}
               <DragOverlay>
@@ -562,11 +705,21 @@ export default function WorkPipelines() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col overflow-hidden bg-card rounded-2xl border">
-          <div className="flex-1 overflow-auto">
+        <div className="flex min-h-52 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
+                  {canSelect && (
+                    <TableHead className="w-10">
+                      <Checkbox
+                        aria-label={m.t("common.selectAll")}
+                        checked={selectAllState}
+                        disabled={m.busy || !rows.length}
+                        onCheckedChange={toggleAll}
+                      />
+                    </TableHead>
+                  )}
                   {[
                     l.name,
                     l.email,
@@ -582,7 +735,17 @@ export default function WorkPipelines() {
               </TableHeader>
               <TableBody>
                 {rows.map((r) => (
-                  <TableRow key={r.document.id}>
+                  <TableRow key={r.document.id} data-state={selectedIds?.has(r.document.id) ? "selected" : undefined}>
+                    {canSelect && (
+                      <TableCell>
+                        <Checkbox
+                          aria-label={m.t("agentStudents.selectRow") + " " + r.document.title}
+                          checked={selectedIds?.has(r.document.id) ?? false}
+                          disabled={m.busy || (atLimit && !selectedIds?.has(r.document.id))}
+                          onCheckedChange={() => toggleSelection(r.document.id)}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell>
                       <button
                         className="font-medium text-primary hover:underline"
@@ -643,6 +806,28 @@ export default function WorkPipelines() {
           {l.more}
         </Button>
       )}
+      <AlertDialog open={Boolean(deleteDraft)} onOpenChange={(open) => { if (!open && !m.busy) setDeleteDraft(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{m.t("common.deleteSelected", { n: deleteDraft?.cards.length ?? 0 })}</AlertDialogTitle>
+            <AlertDialogDescription>{m.t("workPipelines.deleteRecordsHelp")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          {m.error && notice(m.error)}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={m.busy}>{l.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={m.busy}
+              onClick={(event) => {
+                event.preventDefault();
+                if (deleteDraft) runBulk({ type: "delete" }, deleteDraft);
+              }}
+            >
+              {m.busy ? l.loading : m.t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Dialog
         open={!!m.boardDraft}
         onOpenChange={(open) => {
@@ -969,7 +1154,7 @@ export default function WorkPipelines() {
         >
           <DialogHeader className="text-start sm:text-start">
             <DialogTitle>
-              {m.cardDraft?.revision ? l.editRecord : l.addRecord}
+              {b?.archived ? m.cardDraft?.document.title : m.cardDraft?.revision ? l.editRecord : l.addRecord}
             </DialogTitle>
           </DialogHeader>
           {m.cardDraft && b && (
@@ -981,92 +1166,94 @@ export default function WorkPipelines() {
               className="space-y-4"
             >
               {m.error && notice(m.error)}
-              <div className="space-y-2">
-                <Label htmlFor="record-name">{l.recordName}</Label>
-                <Input
-                  id="record-name"
-                  required
-                  maxLength={200}
-                  value={m.cardDraft.document.title}
-                  onChange={(e) => m.cardEdit({ title: e.target.value })}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="record-email">{l.email}</Label>
+              <fieldset disabled={b.archived || m.busy} className="min-w-0 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="record-name">{l.recordName}</Label>
                   <Input
-                    id="record-email"
-                    type="email"
-                    autoComplete="email"
-                    value={m.cardDraft.document.email}
-                    onChange={(e) => m.cardEdit({ email: e.target.value })}
+                    id="record-name"
+                    required
+                    maxLength={200}
+                    value={m.cardDraft.document.title}
+                    onChange={(e) => m.cardEdit({ title: e.target.value })}
                   />
                 </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="record-phone">{l.phone}</Label>
-                  <PhoneInput
-                    id="record-phone"
-                    name="phone"
-                    disabled={m.busy}
-                    value={m.cardDraft.document.phone}
-                    onChange={(phone) => m.cardEdit({ phone })}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="min-w-0 space-y-2 sm:col-span-2">
+                    <Label htmlFor="record-email">{l.email}</Label>
+                    <Input
+                      id="record-email"
+                      type="email"
+                      autoComplete="email"
+                      value={m.cardDraft.document.email}
+                      onChange={(e) => m.cardEdit({ email: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="record-phone">{l.phone}</Label>
+                    <PhoneInput
+                      id="record-phone"
+                      name="phone"
+                      disabled={m.busy}
+                      value={m.cardDraft.document.phone}
+                      onChange={(phone) => m.cardEdit({ phone })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{l.stage}</Label>
+                    <Select
+                      value={m.cardDraft.document.stageId}
+                      onValueChange={(stageId) => m.cardEdit({ stageId })}
+                    >
+                      <SelectTrigger aria-label={l.stage}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {b.stages.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{l.assignee}</Label>
+                    <Select
+                      value={
+                        m.cardDraft.document.assigneeId
+                          ? String(m.cardDraft.document.assigneeId)
+                          : "none"
+                      }
+                      onValueChange={(v) =>
+                        m.cardEdit({
+                          assigneeId: v === "none" ? null : Number(v),
+                        })
+                      }
+                    >
+                      <SelectTrigger aria-label={l.assignee}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{l.none}</SelectItem>
+                        {people.map((p) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="record-description">{l.description}</Label>
+                  <Textarea
+                    id="record-description"
+                    rows={3}
+                    value={m.cardDraft.document.description}
+                    onChange={(e) => m.cardEdit({ description: e.target.value })}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>{l.stage}</Label>
-                  <Select
-                    value={m.cardDraft.document.stageId}
-                    onValueChange={(stageId) => m.cardEdit({ stageId })}
-                  >
-                    <SelectTrigger aria-label={l.stage}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {b.stages.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>{l.assignee}</Label>
-                  <Select
-                    value={
-                      m.cardDraft.document.assigneeId
-                        ? String(m.cardDraft.document.assigneeId)
-                        : "none"
-                    }
-                    onValueChange={(v) =>
-                      m.cardEdit({
-                        assigneeId: v === "none" ? null : Number(v),
-                      })
-                    }
-                  >
-                    <SelectTrigger aria-label={l.assignee}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">{l.none}</SelectItem>
-                      {people.map((p) => (
-                        <SelectItem key={p.id} value={String(p.id)}>
-                          {p.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="record-description">{l.description}</Label>
-                <Textarea
-                  id="record-description"
-                  rows={3}
-                  value={m.cardDraft.document.description}
-                  onChange={(e) => m.cardEdit({ description: e.target.value })}
-                />
-              </div>
+              </fieldset>
               {m.cardDraft.revision > 0 && (
                 <WorkPipelineActivity
                   key={m.cardDraft.document.id}

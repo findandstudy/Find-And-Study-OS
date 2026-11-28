@@ -7144,6 +7144,10 @@
     "applicationCatalog": "申请 → 目录"
   },
   "workPipelines": {
+    "moveStage": "更改阶段",
+    "dragCard": "移动{name}",
+    "deleteRecordsHelp": "所选记录将从此流程中移除。",
+    "bulkLimit": "每次最多选择 {count} 条记录。",
     "title": "工作流程",
     "simpleIntro": "管理记录和阶段。",
     "addRecord": "添加记录",

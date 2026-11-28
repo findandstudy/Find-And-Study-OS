@@ -7144,6 +7144,10 @@
     "applicationCatalog": "Application → catalog"
   },
   "workPipelines": {
+    "moveStage": "Move Stage",
+    "dragCard": "Move {name}",
+    "deleteRecordsHelp": "The selected records will be removed from this pipeline.",
+    "bulkLimit": "Select up to {count} records at a time.",
     "title": "Pipelines",
     "simpleIntro": "Manage your records and stages.",
     "addRecord": "Add record",

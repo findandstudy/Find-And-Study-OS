@@ -114,6 +114,8 @@ export type WorkCard = z.infer<typeof workCardInput> & {
   createdAt: string;
   updatedAt: string;
   followUps?: WorkFollowUp[];
+  removedAt?: string;
+  removedBy?: number;
   notes: WorkEvent[];
   history: WorkEvent[];
   source?: { kind: string; key: string; conversationId?: number };

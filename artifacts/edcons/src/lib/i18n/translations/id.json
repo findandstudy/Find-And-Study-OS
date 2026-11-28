@@ -7145,6 +7145,10 @@
     "applicationCatalog": "Pendaftaran → katalog"
   },
   "workPipelines": {
+    "moveStage": "Pindah tahap",
+    "dragCard": "Pindahkan {name}",
+    "deleteRecordsHelp": "Catatan yang dipilih akan dihapus dari alur ini.",
+    "bulkLimit": "Pilih hingga {count} catatan sekaligus.",
     "title": "Alur kerja",
     "simpleIntro": "Kelola catatan dan tahapan Anda.",
     "addRecord": "Tambah Catatan",

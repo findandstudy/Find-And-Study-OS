@@ -466,7 +466,7 @@ export default function ContractTemplatesPage() {
           <DialogHeader>
             <DialogTitle>{editing ? t("contractTemplates.editTemplate") : t("contractTemplates.newTemplate")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {editingPublished && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-900 dark:text-amber-100"> {translateUi(uiLanguage, "This version is published and its contract content, fields and branding are locked. Create a new version to make changes without altering already-issued contracts.")} </div>
             )}
@@ -477,7 +477,7 @@ export default function ContractTemplatesPage() {
                 <Label className="mt-2 block">{t("contractTemplates.titleLabel")}</Label>
                 <Input disabled={editingPublished} className="mt-1" placeholder={t("contractTemplates.titlePlaceholder")} value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div>
                   <Label>{t("contractTemplates.colLanguage")}</Label>
                   <Select disabled={editingPublished} value={form.language} onValueChange={v => setForm(f => ({ ...f, language: v }))}>
@@ -652,8 +652,8 @@ export default function ContractTemplatesPage() {
                     </div>
                     <Input disabled={editingPublished} type="file" accept="image/png,image/jpeg" onChange={e => loadCompanySignature(e.target.files?.[0])} />
                     {form.signingPageConfig.companySignatureDataUrl && (
-                      <div className="flex items-center gap-3">
-                        <img src={form.signingPageConfig.companySignatureDataUrl} alt={translateUi(uiLanguage, "Company signature preview")} className="h-14 max-w-[220px] object-contain border rounded p-1" />
+                      <div className="flex flex-wrap items-center gap-3">
+                        <img src={form.signingPageConfig.companySignatureDataUrl} alt={translateUi(uiLanguage, "Company signature preview")} className="h-14 w-auto max-w-full sm:max-w-[220px] object-contain border rounded p-1" />
                         <Button disabled={editingPublished} type="button" size="sm" variant="outline" onClick={() => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, companySignatureDataUrl: "" } }))}>{translateUi(uiLanguage, "Remove")}</Button>
                       </div>
                     )}

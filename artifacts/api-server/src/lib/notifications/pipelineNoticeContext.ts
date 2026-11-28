@@ -93,7 +93,7 @@ export async function noticeContext(
       return { code: "NOTICE_SCOPE_CHANGED" };
     const { rows } = await c.query(
       `SELECT k.document,b.document board FROM local_work_pipelines.cards k JOIN local_work_pipelines.boards b ON b.tenant_id=k.tenant_id AND b.id=k.board_id
-      WHERE k.tenant_id=$1 AND k.board_id=$2 AND k.id=$3`,
+      WHERE k.tenant_id=$1 AND k.board_id=$2 AND k.id=$3 AND k.document->>'removedAt' IS NULL`,
       [n.tenant_id, n.board_id, n.entity_id],
     );
     if (!rows[0] || rows[0].board.archived)

@@ -351,9 +351,9 @@ function SourceMetadataEditor({ value, fields, onChange }: { value?: CatalogSour
       <p className="mt-2 text-xs text-muted-foreground">{translateUi(uiLanguage, "Add the official source used for identity fields, factual data and editorial sections on the public detail page. This verification information stays in the admin catalogue and is not displayed publicly.")}</p>
       <p className="mt-1 text-[11px] text-muted-foreground">{translateUi(uiLanguage, "Live counts and catalogue lists are calculated by the system from linked records, so they do not require a manual source.")}</p>
       {fields.some(([key]) => key === "countryGuide") && <p className="mt-1 text-[11px] text-muted-foreground"><strong>{translateUi(uiLanguage, "Country source sheet:")}</strong> {translateUi(uiLanguage, "use one Google Sheet per country with the exact columns")} <code>{"Topic title"}</code> {translateUi(uiLanguage, "and")} <code>{"Verified content"}</code>{translateUi(uiLanguage, ". Allow link viewing or share the file with the Google Sheets service account configured in Integrations. Topic titles route verified rows to the relevant AI section; they are guidance keys, not public headings or hardcoded copy.")}</p>}
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
         <Select value={selectedField} onValueChange={setSelectedField}>
-          <SelectTrigger className="flex-1"><SelectValue placeholder={translateUi(uiLanguage, "Choose a field")} /></SelectTrigger>
+          <SelectTrigger className="min-w-0 flex-1"><SelectValue placeholder={translateUi(uiLanguage, "Choose a field")} /></SelectTrigger>
           <SelectContent className="max-h-80">{available.map(([key, label, group]) => <SelectItem key={key} value={key}><span className="text-muted-foreground">{group} ·</span> {label}</SelectItem>)}</SelectContent>
         </Select>
         <Button type="button" variant="outline" disabled={!selectedField} onClick={() => { if (selectedField) { onChange({ ...metadata, [selectedField]: {} }); setSelectedField(""); } }}><Plus className="h-4 w-4 mr-1" />{translateUi(uiLanguage, "Add source")}</Button>
@@ -365,7 +365,7 @@ function SourceMetadataEditor({ value, fields, onChange }: { value?: CatalogSour
           const group = option?.[2];
           return <div key={key} className="rounded-md border bg-background p-3 space-y-2">
             <div className="flex items-center justify-between"><div><span className="text-sm font-semibold">{label}</span>{group && <span className="ml-2 text-[11px] text-muted-foreground">{group}</span>}</div><Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => { const next = { ...metadata }; delete next[key]; onChange(next); }}><Trash2 className="h-3.5 w-3.5" /></Button></div>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div><Label className="text-xs">{translateUi(uiLanguage, "Source / institution")}</Label><Input className="mt-1" value={entry.sourceName ?? ""} onChange={e => setEntry(key, { sourceName: e.target.value })} placeholder={translateUi(uiLanguage, "Official institution")} /></div>
               <div><Label className="text-xs">{translateUi(uiLanguage, "Source URL")}</Label><Input className="mt-1" type="url" value={entry.sourceUrl ?? ""} onChange={e => setEntry(key, { sourceUrl: e.target.value })} placeholder="https://..." /></div>
               <div><Label className="text-xs">{translateUi(uiLanguage, "Last verified")}</Label><Input className="mt-1" type="date" value={entry.verifiedAt?.slice(0, 10) ?? ""} onChange={e => setEntry(key, { verifiedAt: e.target.value })} /></div>
@@ -3073,9 +3073,9 @@ function ProgramsTab() {
       <Pagination page={page} totalPages={totalPages} onPage={p => { setPage(p); setSelected(new Set()); }} />
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
+        <DialogContent className="max-w-2xl max-h-[85dvh]">
           <DialogHeader><DialogTitle>{form?.id ? t("catalogPage.editProgram") : t("catalogPage.newProgram")}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             <div>
               <Label>{t("catalogPage.universityRequired")}</Label>
               <Select value={form?.universityId ? String(form.universityId) : ""} onValueChange={v => setForm(f => ({ ...f, universityId: Number(v) }))}>
@@ -3086,7 +3086,7 @@ function ProgramsTab() {
 
             <div><Label>{t("catalogPage.programNameRequired")}</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div><Label>{t("catalogPage.programDescriptionEnglish")}</Label><Textarea className="mt-1" rows={4} value={form?.description ?? ""} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder={t("catalogPage.programDescriptionPlaceholder")} /></div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label>{t("catalogPage.degree")}</Label>
                 <Select value={form?.degree ?? ""} onValueChange={v => setForm(f => ({ ...f, degree: v }))}>
@@ -3151,7 +3151,7 @@ function ProgramsTab() {
 
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3">
               <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">{t("catalogPage.minimumRequirements")}</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label className="text-xs">{t("catalogPage.minDiplomaGpa")}</Label>
                   <Input className="mt-1" type="number" step="0.01" placeholder={t("catalogPage.egGpa")} value={form?.minGpa ?? ""} onChange={e => setForm(f => ({ ...f, minGpa: e.target.value ? Number(e.target.value) : null }))} />
@@ -3165,7 +3165,7 @@ function ProgramsTab() {
                   <Input className="mt-1" type="number" step="1" min="1" placeholder={t("catalogPage.quotaPlaceholder")} value={form?.quota ?? ""} onChange={e => setForm(f => ({ ...f, quota: e.target.value ? Math.max(1, Math.round(Number(e.target.value))) : null }))} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 border-t border-amber-200 pt-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 border-t border-amber-200 pt-3">
                 <div>
                   <Label className="text-xs">{translateUi(uiLanguage, "Required previous education")}</Label>
                   <Select value={form?.requiredEducationLevel ?? "none"} onValueChange={v => setForm(f => ({ ...f, requiredEducationLevel: v === "none" ? null : v }))}>
@@ -3196,8 +3196,8 @@ function ProgramsTab() {
                 <div className="flex items-center justify-between rounded border px-3 mt-5"><Label className="text-xs">{translateUi(uiLanguage, "Conditional language admission")}</Label><Switch checked={form?.conditionalAdmission ?? false} onCheckedChange={v => setForm(f => ({ ...f, conditionalAdmission: v }))} /></div>
               </div>
               <div className="border-t border-amber-200 pt-3 space-y-2">
-                <div className="flex items-center justify-between"><Label className="text-xs">{translateUi(uiLanguage, "Accepted language tests")}</Label><Button type="button" size="sm" variant="outline" onClick={() => setForm(f => ({ ...f, languageRequirements: [...(f?.languageRequirements ?? []), { test: "ielts", overall: 6 }] }))}><Plus className="h-3 w-3 mr-1" /> {translateUi(uiLanguage, "Add")}</Button></div>
-                {(form?.languageRequirements ?? []).map((rule, index) => <div key={index} className="grid grid-cols-[1fr_110px_36px] gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2"><Label className="text-xs">{translateUi(uiLanguage, "Accepted language tests")}</Label><Button type="button" size="sm" variant="outline" onClick={() => setForm(f => ({ ...f, languageRequirements: [...(f?.languageRequirements ?? []), { test: "ielts", overall: 6 }] }))}><Plus className="h-3 w-3 mr-1" /> {translateUi(uiLanguage, "Add")}</Button></div>
+                {(form?.languageRequirements ?? []).map((rule, index) => <div key={index} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(0,1fr)_110px_36px]">
                   <Select value={rule.test} onValueChange={test => setForm(f => ({ ...f, languageRequirements: (f?.languageRequirements ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, test } : item) }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["ielts", "toefl", "pte", "duolingo"].map(test => <SelectItem key={test} value={test}>{test.toUpperCase()}</SelectItem>)}</SelectContent>
                   </Select>
@@ -3205,7 +3205,7 @@ function ProgramsTab() {
                   <Button type="button" size="icon" variant="ghost" onClick={() => setForm(f => ({ ...f, languageRequirements: (f?.languageRequirements ?? []).filter((_, itemIndex) => itemIndex !== index) }))}><Trash2 className="h-4 w-4" /></Button>
                 </div>)}
               </div>
-              <div className="grid grid-cols-3 gap-3 border-t border-amber-200 pt-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 border-t border-amber-200 pt-3">
                 <div><Label className="text-xs">{translateUi(uiLanguage, "Official source URL")}</Label><Input className="mt-1" type="url" value={form?.admissionSourceUrl ?? ""} onChange={e => setForm(f => ({ ...f, admissionSourceUrl: e.target.value || null }))} /></div>
                 <div><Label className="text-xs">{translateUi(uiLanguage, "Last verified")}</Label><Input className="mt-1" type="date" value={form?.admissionVerifiedAt?.slice(0, 10) ?? ""} onChange={e => setForm(f => ({ ...f, admissionVerifiedAt: e.target.value ? new Date(`${e.target.value}T00:00:00.000Z`).toISOString() : null }))} /></div>
                 <div><Label className="text-xs">{translateUi(uiLanguage, "Valid until")}</Label><Input className="mt-1" type="date" value={form?.admissionValidUntil?.slice(0, 10) ?? ""} onChange={e => setForm(f => ({ ...f, admissionValidUntil: e.target.value ? new Date(`${e.target.value}T23:59:59.999Z`).toISOString() : null }))} /></div>
@@ -3215,7 +3215,7 @@ function ProgramsTab() {
             {/* ── Additional Fees ────────────────────────────── */}
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("catalogPage.additionalFees")} ({form?.currency ?? "USD"})</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label className="text-xs">{t("catalogPage.applicationFee")}</Label>
                   <Input className="mt-1" type="number" placeholder={t("catalogPage.zeroNone")} value={form?.applicationFee ?? ""} onChange={e => setForm(f => ({ ...f, applicationFee: e.target.value ? Number(e.target.value) : null }))} />
@@ -3280,7 +3280,7 @@ function ProgramsTab() {
                 <SelectTrigger><SelectValue placeholder={translateUi(uiLanguage, "Okul dönemi seçin")} /></SelectTrigger>
                 <SelectContent><SelectItem value="none">{translateUi(uiLanguage, "Bağlı doğrulanmış dönem yok")}</SelectItem>{programPeriods.map(period => <SelectItem key={period.id} value={String(period.id)}>{period.termName} · {period.academicYear}{period.campusName ? ` · ${period.campusName}` : ""}</SelectItem>)}</SelectContent>
               </Select>
-              {form?.universityApplicationPeriodId && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {form?.universityApplicationPeriodId && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div><Label className="text-xs">{translateUi(uiLanguage, "Başvuru açılış override")}</Label><Input className="mt-1" type="date" value={form.applicationsOpenOverrideAt?.slice(0, 10) ?? ""} onChange={e => setForm(current => ({ ...current, applicationsOpenOverrideAt: e.target.value || null }))} /></div>
                 <div><Label className="text-xs">{translateUi(uiLanguage, "Son başvuru override")}</Label><Input className="mt-1" type="date" value={form.applicationDeadlineOverrideAt?.slice(0, 10) ?? ""} onChange={e => setForm(current => ({ ...current, applicationDeadlineOverrideAt: e.target.value || null }))} /></div>
                 <div><Label className="text-xs">{translateUi(uiLanguage, "Ders başlangıç override")}</Label><Input className="mt-1" type="date" value={form.classesStartOverrideOn ?? ""} onChange={e => setForm(current => ({ ...current, classesStartOverrideOn: e.target.value || null }))} /></div>
@@ -3291,7 +3291,7 @@ function ProgramsTab() {
             <div><Label>{t("catalogPage.refundProcess")}</Label><Textarea className="mt-1" rows={5} placeholder={t("catalogPage.refundProcessPlaceholder")} value={form?.refundProcess ?? ""} onChange={e => setForm(f => ({ ...f, refundProcess: e.target.value }))} /></div>
 
             <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">{t("catalogPage.requiredDocuments")}</p>
                 <p className="text-[11px] text-muted-foreground">
                   {t("catalogPage.docReqSummary", { req: Object.values(docReqs).filter(v => v !== "none").length, mand: Object.values(docReqs).filter(v => v === "mandatory").length })}
@@ -3354,7 +3354,7 @@ function ProgramsTab() {
 
             <SourceMetadataEditor value={form?.sourceMetadata} fields={SOURCE_FIELDS.program} onChange={sourceMetadata => setForm(f => ({ ...f, sourceMetadata }))} />
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <Label>{t("common.active")}</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>

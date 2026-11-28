@@ -15,7 +15,7 @@ export async function upcomingWorkFollowUps(actor: WorkActor, until: Date, creat
       JOIN local_work_pipelines.cards k ON k.tenant_id=b.tenant_id AND k.board_id=b.id
       CROSS JOIN LATERAL jsonb_array_elements(coalesce(k.document->'followUps','[]')) f
       LEFT JOIN users creator ON creator.id=(f->>'createdBy')::int
-      WHERE b.tenant_id=$1 AND coalesce((b.document->>'archived')::boolean,false)=false
+      WHERE b.tenant_id=$1 AND k.document->>'removedAt' IS NULL AND coalesce((b.document->>'archived')::boolean,false)=false
         AND ($2::boolean OR b.document->>'createdBy'=$3 OR b.document->'memberIds' @> $4::jsonb)
         AND ($2::boolean OR f->>'assigneeId'=$3 OR f->>'createdBy'=$3)
         AND f->>'completed'='false' AND (f->>'scheduledAt')::timestamptz <= $5::timestamptz

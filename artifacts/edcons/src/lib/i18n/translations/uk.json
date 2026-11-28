@@ -7144,6 +7144,10 @@
     "applicationCatalog": "Додаток → каталог"
   },
   "workPipelines": {
+    "moveStage": "Змінити етап",
+    "dragCard": "Перемістити {name}",
+    "deleteRecordsHelp": "Вибрані записи буде вилучено з цієї воронки.",
+    "bulkLimit": "Виберіть до {count} записів за раз.",
     "title": "Робочі процеси",
     "simpleIntro": "Керуйте записами та етапами.",
     "addRecord": "Додати запис",

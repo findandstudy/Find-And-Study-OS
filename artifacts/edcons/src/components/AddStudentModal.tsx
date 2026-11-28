@@ -861,19 +861,19 @@ export function AddStudentModal({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && step !== "analyzing") handleClose(); }}>
       <DialogContent
-        className="sm:max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden"
+        className="sm:max-w-2xl max-h-[92dvh] flex flex-col p-0 gap-0 overflow-hidden"
         onInteractOutside={(e) => { if (step === "analyzing") e.preventDefault(); }}
         onEscapeKeyDown={(e) => { if (step === "analyzing") e.preventDefault(); }}
       >
-        <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/50 shrink-0">
-          <div className="text-xl font-display font-semibold">{t("studentsPage.addNewStudent")}</div>
+        <DialogHeader className="shrink-0 border-b border-border/50 px-4 pt-5 pb-4 pe-10 sm:px-6 sm:pe-12">
+          <DialogTitle className="text-xl font-display">{t("studentsPage.addNewStudent")}</DialogTitle>
           <div className="mt-3 space-y-2">
             <Progress value={stepProgress} className="h-1.5" />
-            <div className="flex items-center gap-6 text-xs font-medium">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium">
               {[
-                { id: "upload", label: "1. Upload Documents" },
-                { id: "analyzing", label: "2. AI Analysis" },
-                { id: "review", label: "3. Review & Save" },
+                { id: "upload", label: t("stageDocUpload.uploadDocuments") },
+                { id: "analyzing", label: translateUi(uiLanguage, "Analyzing") },
+                { id: "review", label: t("catalogPage.review") },
               ].map((s) => (
                 <span key={s.id} className={cn(step === s.id ? "text-primary" : "text-muted-foreground")}>
                   {s.label}
@@ -883,14 +883,14 @@ export function AddStudentModal({
           </div>
         </DialogHeader>
 
-        <div className="overflow-y-auto flex-1 px-6 py-5">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           {step === "upload" && (
             <div className="space-y-4">
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{translateUi(uiLanguage, "Application Level")}</p>
                 <div className={cn(
-                  "grid gap-2",
-                  studyLevels.length <= 4 ? "grid-cols-4" : studyLevels.length <= 6 ? "grid-cols-3" : "grid-cols-3"
+                  "grid grid-cols-2 gap-2",
+                  studyLevels.length <= 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"
                 )}>
                   {studyLevels.map((lv, idx) => (
                     <button
@@ -938,7 +938,7 @@ export function AddStudentModal({
                 <p className="text-[11px] text-muted-foreground mb-2">{APPLICATION_DOCUMENT_HELP_TEXT}</p>
                 <div className={cn(
                   "grid gap-2",
-                  currentDocs.length <= 5 ? "grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-4" : "grid-cols-3"
+                  currentDocs.length <= 5 ? "grid-cols-2 sm:grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"
                 )}>
                   {currentDocs.map((dt) => (
                     <DropZone
@@ -1004,7 +1004,7 @@ export function AddStudentModal({
                   <User className="w-4 h-4 text-primary" />
                   <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Personal Information")}</h3>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <FormField required label={t("studentsPage.firstName")} value={form.firstName} onChange={field("firstName")} placeholder={t("studentsPage.firstNamePlaceholder")} aiExtracted={ef.has("firstName")} latinUppercase />
                   <FormField required label={t("studentsPage.lastName")} value={form.lastName} onChange={field("lastName")} placeholder={t("studentsPage.lastNamePlaceholder")} aiExtracted={ef.has("lastName")} latinUppercase />
                   <FormField required label={translateUi(uiLanguage, "Email")} value={form.email} onChange={field("email")} placeholder={translateUi(uiLanguage, "email@example.com")} type="email" aiExtracted={ef.has("email")} />
@@ -1045,7 +1045,7 @@ export function AddStudentModal({
                   </div>
                   <FormField required label={t("studentsPage.motherName")} value={form.motherName} onChange={field("motherName")} placeholder={t("studentsPage.motherNamePlaceholder")} aiExtracted={ef.has("motherName")} latinUppercase />
                   <FormField required label={t("studentsPage.fatherName")} value={form.fatherName} onChange={field("fatherName")} placeholder={t("studentsPage.fatherNamePlaceholder")} aiExtracted={ef.has("fatherName")} latinUppercase />
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <FormField label={t("studentsPage.address")} value={form.address} onChange={field("address")} placeholder={t("studentsPage.addressPlaceholder")} aiExtracted={ef.has("address")} />
                   </div>
                 </div>
@@ -1056,8 +1056,8 @@ export function AddStudentModal({
                   <span className="text-base leading-none">🛂</span>
                   <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Passport / Identity")}</h3>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
                     <FormField required label={translateUi(uiLanguage, "Passport Number")} value={form.passportNumber} onChange={field("passportNumber")} placeholder={translateUi(uiLanguage, "e.g. AB1234567")} aiExtracted={ef.has("passportNumber")} />
                   </div>
                   <FormField required label={translateUi(uiLanguage, "Issue Date")} value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" aiExtracted={ef.has("passportIssueDate")} />
@@ -1070,8 +1070,8 @@ export function AddStudentModal({
                   <GraduationCap className="w-4 h-4 text-primary" />
                   <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{translateUi(uiLanguage, "Education")}</h3>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2 space-y-1.5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2 space-y-1.5">
                     <Label className="font-semibold text-sm">{translateUi(uiLanguage, "Interested Level")}</Label>
                     <Select value={form.interestedLevel} onValueChange={selectApplicationLevel}>
                       <SelectTrigger className="rounded-xl h-9">
@@ -1082,16 +1082,16 @@ export function AddStudentModal({
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <FormField label={translateUi(uiLanguage, "High School")} value={form.highSchool} onChange={field("highSchool")} placeholder={translateUi(uiLanguage, "e.g. Ankara Fen Lisesi")} aiExtracted={ef.has("highSchool")} />
                   </div>
                   {isMasterOrHigher(applicationLevel) && (
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <FormField label={translateUi(uiLanguage, "University (Bachelor)")} value={form.universityBachelor} onChange={field("universityBachelor")} placeholder={translateUi(uiLanguage, "e.g. Istanbul University")} aiExtracted={ef.has("universityBachelor")} />
                     </div>
                   )}
                   {isDoctorate(applicationLevel) && (
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <FormField label={translateUi(uiLanguage, "University (Master)")} value={form.universityMaster} onChange={field("universityMaster")} placeholder={translateUi(uiLanguage, "e.g. Bogazici University")} aiExtracted={ef.has("universityMaster")} />
                     </div>
                   )}
@@ -1122,7 +1122,7 @@ export function AddStudentModal({
                       </Select>
                     </div>
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <FormField label={translateUi(uiLanguage, "Language Score")} value={form.languageScore} onChange={field("languageScore")} placeholder={translateUi(uiLanguage, "e.g. IELTS 7.0, TOEFL 100")} aiExtracted={ef.has("languageScore")} />
                   </div>
                 </div>
@@ -1138,7 +1138,7 @@ export function AddStudentModal({
                 </div>
                 <div className={cn(
                   "grid gap-2",
-                  currentDocs.length <= 5 ? "grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-4" : "grid-cols-3"
+                  currentDocs.length <= 5 ? "grid-cols-2 sm:grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"
                 )}>
                   {currentDocs.map((dt) => (
                     <DropZone
@@ -1166,16 +1166,16 @@ export function AddStudentModal({
           )}
         </div>
 
-        <div className="px-6 pb-5 pt-3 border-t border-border/50 flex items-center justify-between shrink-0 gap-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/50 px-4 pt-3 pb-4 sm:px-6">
           {step === "upload" && (
             <>
               <Button variant="ghost" onClick={handleClose} className="rounded-xl">{translateUi(uiLanguage, "Cancel")}</Button>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setStep("review")} disabled={!canProceedToForm} className="rounded-xl text-muted-foreground"> {translateUi(uiLanguage, "Skip AI Analysis")} </Button>
+              <div className="flex min-w-0 flex-wrap gap-2">
+                <Button variant="outline" onClick={() => setStep("review")} disabled={!canProceedToForm} className="whitespace-normal rounded-xl text-muted-foreground"> {translateUi(uiLanguage, "Skip AI Analysis")} </Button>
                 <Button
                   onClick={analyzeDocuments}
                   disabled={!canProceedToForm}
-                  className="rounded-xl gap-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white border-0"
+                  className="whitespace-normal rounded-xl gap-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white border-0"
                 >
                   <Sparkles className="w-4 h-4" /> {translateUi(uiLanguage, "Analyze")} {uploadedCount > 0 ? translateUi(uiLanguage, "{value0} Doc{value1}", undefined, { value0: String(uploadedCount), value1: String(uploadedCount !== 1 ? "s" : "") }) : translateUi(uiLanguage, "Documents")}
                 </Button>

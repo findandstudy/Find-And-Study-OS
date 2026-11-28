@@ -7144,6 +7144,10 @@
     "applicationCatalog": "Aplicativo → catálogo"
   },
   "workPipelines": {
+    "moveStage": "Mudar de etapa",
+    "dragCard": "Mover {name}",
+    "deleteRecordsHelp": "Os registos selecionados serão removidos deste fluxo.",
+    "bulkLimit": "Selecione até {count} registos de cada vez.",
     "title": "Fluxos de trabalho",
     "simpleIntro": "Gerencie seus registros e etapas.",
     "addRecord": "Adicionar registro",

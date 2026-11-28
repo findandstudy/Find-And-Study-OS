@@ -14,7 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { AdminTabsList } from "@/components/layout/AdminPage";
 import type { Card, FollowUp, Row } from "./useWorkPipelines";
 
 export function WorkPipelineActivity({
@@ -68,7 +69,7 @@ export function WorkPipelineActivity({
       defaultValue="followups"
       className="border-t pt-4"
     >
-      <TabsList className="w-full justify-start">
+      <AdminTabsList className="flex w-full">
         <TabsTrigger value="followups">
           <CalendarClock className="w-4 h-4 me-2" />
           {t("workPipelines.followups")} (
@@ -81,7 +82,7 @@ export function WorkPipelineActivity({
         <TabsTrigger value="history">
           {t("workPipelines.historyText")}
         </TabsTrigger>
-      </TabsList>
+      </AdminTabsList>
       <TabsContent value="followups" className="space-y-3">
         <Button
           type="button"

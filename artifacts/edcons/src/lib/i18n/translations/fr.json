@@ -7144,6 +7144,10 @@
     "applicationCatalog": "Candidature → catalogue"
   },
   "workPipelines": {
+    "moveStage": "Changer d’étape",
+    "dragCard": "Déplacer {name}",
+    "deleteRecordsHelp": "Les dossiers sélectionnés seront retirés de ce pipeline.",
+    "bulkLimit": "Sélectionnez jusqu’à {count} dossiers à la fois.",
     "title": "Pipelines de suivi",
     "simpleIntro": "Gérez vos fiches et vos étapes.",
     "addRecord": "Ajouter",

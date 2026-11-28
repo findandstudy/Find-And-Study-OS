@@ -7144,6 +7144,10 @@
     "applicationCatalog": "الطلب → الكتالوج"
   },
   "workPipelines": {
+    "moveStage": "نقل إلى مرحلة",
+    "dragCard": "نقل {name}",
+    "deleteRecordsHelp": "ستُزال السجلات المحددة من مسار العمل الحالي.",
+    "bulkLimit": "يمكن تحديد ما يصل إلى {count} سجلًا في كل مرة.",
     "title": "مسارات العمل",
     "simpleIntro": "أدر سجلاتك ومراحل العمل.",
     "addRecord": "إضافة سجل",

@@ -7144,6 +7144,10 @@
     "applicationCatalog": "आवेदन → सूचीपत्र"
   },
   "workPipelines": {
+    "moveStage": "चरण बदलें",
+    "dragCard": "{name} को ले जाएँ",
+    "deleteRecordsHelp": "चुने गए रिकॉर्ड इस पाइपलाइन से हटा दिए जाएँगे।",
+    "bulkLimit": "एक बार में अधिकतम {count} रिकॉर्ड चुनें।",
     "title": "पाइपलाइन",
     "simpleIntro": "अपने रिकॉर्ड और चरण प्रबंधित करें।",
     "addRecord": "रिकॉर्ड जोड़ें",
